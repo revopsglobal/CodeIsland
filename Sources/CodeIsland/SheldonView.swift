@@ -2,8 +2,8 @@ import SwiftUI
 
 /// Sheldon - the RevOps Claude mascot.
 ///
-/// CodeIsland mascots are character-first, so Sheldon renders as the turtle
-/// itself instead of a tiny turtle walking through a scene.
+/// Matches CodeIsland's character-first mascot language: chunky pixel art,
+/// transparent background, and a small terminal base instead of a full scene.
 struct SheldonView: View {
     let status: MascotAgentStatus
     var size: CGFloat = 27
@@ -45,7 +45,7 @@ private struct SheldonFrame: View {
         ZStack {
             Canvas { ctx, canvasSize in
                 let g = SheldonGeometry(canvasSize)
-                drawTurtle(ctx, g)
+                drawMascot(ctx, g)
             }
 
             if status == .idle {
@@ -71,8 +71,8 @@ private struct SheldonFrame: View {
         let fontSize = max(6, size * CGFloat(0.18 + phase * 0.09))
         let baseOpacity = 0.72 - ci * 0.12
         let opacity = phase < 0.78 ? baseOpacity : (1.0 - phase) * 3.3 * baseOpacity
-        let xOffset = size * CGFloat(0.03 + ci * 0.08 + sin(phase * Double.pi * 2) * 0.03)
-        let yOffset = -size * CGFloat(0.22 + phase * 0.34)
+        let xOffset = size * CGFloat(0.02 + ci * 0.08 + sin(phase * Double.pi * 2) * 0.03)
+        let yOffset = -size * CGFloat(0.32 + phase * 0.30)
 
         return Text("z")
             .font(.system(size: fontSize, weight: .black, design: .monospaced))
@@ -80,17 +80,16 @@ private struct SheldonFrame: View {
             .offset(x: xOffset, y: yOffset)
     }
 
-    private func drawTurtle(_ ctx: GraphicsContext, _ g: SheldonGeometry) {
+    private func drawMascot(_ ctx: GraphicsContext, _ g: SheldonGeometry) {
         let pose = SheldonPose(status: status, t: t)
-        let y = 25 + pose.yOffset
+        let y = 20 + pose.yOffset
         let breathe = status == .idle ? MascotMotion.breathe(t, period: 4.7) : 0
-        let shellLift = -breathe * 0.7
 
-        drawShadow(ctx, g, yOffset: pose.shadowOffset)
-        drawLegs(ctx, g, y: y, pose: pose)
+        drawTerminalBase(ctx, g, pose: pose)
         drawTail(ctx, g, y: y, pose: pose)
+        drawLegs(ctx, g, y: y, pose: pose)
         drawHead(ctx, g, y: y, pose: pose)
-        drawShell(ctx, g, y: y + shellLift, breathe: breathe, pose: pose)
+        drawShell(ctx, g, y: y - breathe * 0.65, breathe: breathe)
 
         if status == .running {
             drawSparkles(ctx, g, y: y)
@@ -100,11 +99,19 @@ private struct SheldonFrame: View {
         }
     }
 
-    private func drawShadow(_ ctx: GraphicsContext, _ g: SheldonGeometry, yOffset: CGFloat) {
-        ctx.fill(
-            Path(ellipseIn: g.rect(5, 38 + yOffset, 38, 5)),
-            with: .color(.black.opacity(0.28))
-        )
+    private func drawTerminalBase(_ ctx: GraphicsContext, _ g: SheldonGeometry, pose: SheldonPose) {
+        let y = 32 + pose.baseSink
+        let base = Color(red: 0.16, green: 0.18, blue: 0.20)
+        let edge = Color(red: 0.34, green: 0.38, blue: 0.42)
+        let key = Color(red: 0.48, green: 0.54, blue: 0.58)
+
+        ctx.fill(Path(g.rect(5, y + 4, 30, 3)), with: .color(Color.black.opacity(0.32)))
+        ctx.fill(Path(g.rect(5, y, 30, 7)), with: .color(base))
+        ctx.fill(Path(g.rect(5, y, 30, 1)), with: .color(edge))
+        for col in 0..<5 {
+            ctx.fill(Path(g.rect(7 + CGFloat(col) * 5, y + 2, 3, 1.4)), with: .color(key.opacity(0.70)))
+            ctx.fill(Path(g.rect(8 + CGFloat(col) * 5, y + 4, 3, 1.3)), with: .color(key.opacity(0.48)))
+        }
     }
 
     private func drawLegs(_ ctx: GraphicsContext, _ g: SheldonGeometry, y: CGFloat, pose: SheldonPose) {
@@ -112,78 +119,77 @@ private struct SheldonFrame: View {
         let rightLift = pose.step == 0 ? -pose.walkLift * 0.35 : pose.walkLift
 
         if status == .idle {
-            drawLeg(ctx, g, x: 12, y: y + 9)
-            drawLeg(ctx, g, x: 28, y: y + 9)
+            drawLeg(ctx, g, x: 10, y: y + 10)
+            drawLeg(ctx, g, x: 24, y: y + 10)
         } else {
-            drawLeg(ctx, g, x: 11, y: y + 9 - leftLift)
-            drawLeg(ctx, g, x: 29, y: y + 9 - rightLift)
+            drawLeg(ctx, g, x: 9, y: y + 10 - leftLift)
+            drawLeg(ctx, g, x: 25, y: y + 10 - rightLift)
         }
     }
 
     private func drawLeg(_ ctx: GraphicsContext, _ g: SheldonGeometry, x: CGFloat, y: CGFloat) {
-        ctx.fill(Path(g.rect(x, y, 6, 4)), with: .color(palette.skinDark))
-        ctx.fill(Path(g.rect(x + 1, y - 1, 4, 2)), with: .color(palette.skin))
+        ctx.fill(Path(g.rect(x, y, 7, 4)), with: .color(palette.skinDark))
+        ctx.fill(Path(g.rect(x + 1, y - 1, 5, 2)), with: .color(palette.skin))
     }
 
     private func drawTail(_ ctx: GraphicsContext, _ g: SheldonGeometry, y: CGFloat, pose: SheldonPose) {
-        let wag = status == .running ? CGFloat(sin(t * 12)) * 1.1 : 0
-        ctx.fill(Path(g.rect(5, y + 5 + wag, 7, 3)), with: .color(palette.skinDark))
-        ctx.fill(Path(g.rect(4, y + 6 + wag, 3, 2)), with: .color(palette.skin))
+        let wag = status == .running ? CGFloat(sin(t * 12)) * 1.0 : 0
+        ctx.fill(Path(g.rect(2, y + 5 + wag, 8, 3)), with: .color(palette.skinDark))
+        ctx.fill(Path(g.rect(1, y + 6 + wag, 4, 2)), with: .color(palette.skin))
     }
 
     private func drawHead(_ ctx: GraphicsContext, _ g: SheldonGeometry, y: CGFloat, pose: SheldonPose) {
-        let headX: CGFloat = 34 + pose.headLean
+        let headX: CGFloat = 28 + pose.headLean
         let headY = y - 2 + pose.headBob
         let alerting = status == .waitingApproval || status == .waitingQuestion
 
-        ctx.fill(Path(g.rect(headX, headY + 2, 7, 7)), with: .color(palette.skinDark))
-        ctx.fill(Path(g.rect(headX + 2, headY, 10, 10)), with: .color(palette.skin))
+        ctx.fill(Path(g.rect(headX, headY + 3, 7, 7)), with: .color(palette.skinDark))
+        ctx.fill(Path(g.rect(headX + 1, headY, 10, 10)), with: .color(palette.skin))
         ctx.fill(Path(g.rect(headX + 10, headY + 4, 3, 3)), with: .color(palette.skinDark))
 
         if status == .idle {
-            ctx.fill(Path(g.rect(headX + 6, headY + 4, 5, 1.4)), with: .color(.black.opacity(0.75)))
+            ctx.fill(Path(g.rect(headX + 5, headY + 4, 5, 1.4)), with: .color(.black.opacity(0.78)))
         } else {
             let blink = max(0.12, MascotMotion.blink(t, seed: 0x51E1))
-            ctx.fill(Path(g.rect(headX + 7, headY + 3, 2, 3 * blink)), with: .color(.black))
+            ctx.fill(Path(g.rect(headX + 6, headY + 3, 2, 3 * blink)), with: .color(.black))
             if alerting {
-                ctx.fill(Path(g.rect(headX + 10, headY + 3, 1.6, 3 * blink)), with: .color(.black))
+                ctx.fill(Path(g.rect(headX + 9, headY + 3, 1.6, 3 * blink)), with: .color(.black))
             }
         }
     }
 
-    private func drawShell(_ ctx: GraphicsContext, _ g: SheldonGeometry, y: CGFloat, breathe: CGFloat, pose: SheldonPose) {
-        let shellY = y - 6
-        let shellHeight = 19 + breathe * 1.2
+    private func drawShell(_ ctx: GraphicsContext, _ g: SheldonGeometry, y: CGFloat, breathe: CGFloat) {
+        let shellY = y - 8
+        let shellHeight = 20 + breathe * 1.2
 
-        ctx.fill(Path(g.rect(12, shellY + 3, 25, shellHeight - 2)), with: .color(palette.shellDark))
-        ctx.fill(Path(g.rect(14, shellY, 21, shellHeight)), with: .color(palette.shell))
-        ctx.fill(Path(g.rect(16, shellY + 1, 17, 3)), with: .color(palette.shellLight.opacity(0.88)))
-        ctx.fill(Path(g.rect(16, shellY + 8, 17, 3)), with: .color(palette.shellLight.opacity(0.72)))
-
-        ctx.fill(Path(g.rect(20, shellY + 2, 2, shellHeight - 3)), with: .color(palette.shellDark.opacity(0.55)))
-        ctx.fill(Path(g.rect(27, shellY + 3, 2, shellHeight - 5)), with: .color(palette.shellDark.opacity(0.45)))
+        ctx.fill(Path(g.rect(7, shellY + 3, 24, shellHeight - 2)), with: .color(palette.shellDark))
+        ctx.fill(Path(g.rect(9, shellY, 20, shellHeight)), with: .color(palette.shell))
+        ctx.fill(Path(g.rect(11, shellY + 2, 16, 3)), with: .color(palette.shellLight.opacity(0.88)))
+        ctx.fill(Path(g.rect(11, shellY + 9, 16, 3)), with: .color(palette.shellLight.opacity(0.72)))
+        ctx.fill(Path(g.rect(14, shellY + 2, 2, shellHeight - 3)), with: .color(palette.shellDark.opacity(0.55)))
+        ctx.fill(Path(g.rect(22, shellY + 3, 2, shellHeight - 5)), with: .color(palette.shellDark.opacity(0.45)))
 
         if status == .waitingApproval || status == .waitingQuestion {
             let glow = 0.35 + 0.18 * sin(t * 7)
-            ctx.fill(Path(g.rect(15, shellY + 5, 19, 6)), with: .color(palette.glow.opacity(glow)))
+            ctx.fill(Path(g.rect(10, shellY + 5, 18, 7)), with: .color(palette.glow.opacity(glow)))
         }
 
         if status == .processing {
             let pulse = 0.45 + 0.25 * sin(t * 5)
-            ctx.fill(Path(g.rect(17, shellY + 5, 15, 2)), with: .color(Color.white.opacity(pulse)))
+            ctx.fill(Path(g.rect(12, shellY + 6, 14, 2)), with: .color(Color.white.opacity(pulse)))
         }
 
         if status == .running {
-            let shineX = 17 + CGFloat(positiveRemainder(t * 12, 11))
-            ctx.fill(Path(g.rect(shineX, shellY + 4, 2, 9)), with: .color(Color.white.opacity(0.38)))
+            let shineX = 12 + CGFloat(positiveRemainder(t * 12, 11))
+            ctx.fill(Path(g.rect(shineX, shellY + 4, 2, 10)), with: .color(Color.white.opacity(0.38)))
         }
     }
 
     private func drawSparkles(_ ctx: GraphicsContext, _ g: SheldonGeometry, y: CGFloat) {
         for i in 0..<3 {
             let phase = positiveRemainder(t + Double(i) * 0.35, 1.2) / 1.2
-            let sx = CGFloat(8 + i * 11)
-            let sy = y - 15 - CGFloat(phase) * 5
+            let sx = CGFloat(5 + i * 11)
+            let sy = y - 15 - CGFloat(phase) * 4
             ctx.fill(Path(g.rect(sx, sy, 2, 2)), with: .color(Color.white.opacity(1 - phase)))
         }
     }
@@ -194,7 +200,7 @@ private struct SheldonFrame: View {
             Text(text)
                 .font(.system(size: 12, weight: .black, design: .monospaced))
                 .foregroundStyle(palette.glow),
-            at: g.point(39.5, 12.5)
+            at: g.point(33.5, 7.5)
         )
     }
 
@@ -206,10 +212,10 @@ private struct SheldonFrame: View {
 
 private struct SheldonPose {
     let yOffset: CGFloat
-    let shadowOffset: CGFloat
     let headLean: CGFloat
     let headBob: CGFloat
     let walkLift: CGFloat
+    let baseSink: CGFloat
     let step: Int
 
     init(status: MascotAgentStatus, t: Double) {
@@ -219,31 +225,31 @@ private struct SheldonPose {
         case .idle:
             let breath = MascotMotion.breathe(t, period: 4.7)
             yOffset = 1 + breath * 0.8
-            shadowOffset = 0
             headLean = -1
             headBob = breath * 0.4
             walkLift = 0
+            baseSink = 0
         case .processing:
-            yOffset = CGFloat(sin(t * 3.2)) * 0.7
-            shadowOffset = 0
-            headLean = CGFloat(sin(t * 4.2)) * 0.6
-            headBob = CGFloat(cos(t * 4.0)) * 0.5
-            walkLift = 1.5
+            yOffset = CGFloat(sin(t * 3.2)) * 0.55
+            headLean = CGFloat(sin(t * 4.2)) * 0.55
+            headBob = CGFloat(cos(t * 4.0)) * 0.45
+            walkLift = 1.4
+            baseSink = 0
         case .running:
-            let hop = CGFloat(abs(sin(t * 5.6))) * -2.5
+            let hop = CGFloat(abs(sin(t * 5.6))) * -2.2
             yOffset = hop
-            shadowOffset = -hop * 0.35
             headLean = 1
-            headBob = hop * 0.4
-            walkLift = 2.2
+            headBob = hop * 0.35
+            walkLift = 2.0
+            baseSink = -hop * 0.12
         case .waitingApproval, .waitingQuestion:
             let pulse = t.truncatingRemainder(dividingBy: 1.1)
-            let hop = pulse < 0.18 ? MascotMotion.easeOutBack(CGFloat(1 - pulse / 0.18)) * -3.8 : 0
+            let hop = pulse < 0.18 ? MascotMotion.easeOutBack(CGFloat(1 - pulse / 0.18)) * -3.4 : 0
             yOffset = hop
-            shadowOffset = -hop * 0.3
             headLean = 1
             headBob = CGFloat(sin(t * 8)) * 0.45
             walkLift = 0
+            baseSink = -hop * 0.10
         }
     }
 }
@@ -253,8 +259,8 @@ private struct SheldonGeometry {
     let origin: CGPoint
 
     init(_ size: CGSize) {
-        scale = min(size.width, size.height) / 48
-        origin = CGPoint(x: (size.width - 48 * scale) / 2, y: (size.height - 48 * scale) / 2)
+        scale = min(size.width, size.height) / 40
+        origin = CGPoint(x: (size.width - 40 * scale) / 2, y: (size.height - 40 * scale) / 2)
     }
 
     func rect(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) -> CGRect {
