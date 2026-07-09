@@ -1009,7 +1009,7 @@ private struct MascotsPage: View {
     @AppStorage(SettingsKey.defaultSource) private var defaultSource = SettingsDefaults.defaultSource
 
     private let mascotList: [(name: String, source: String, desc: String, color: Color)] = [
-        ("Clawd", "claude", "Claude Code", Color(red: 0.871, green: 0.533, blue: 0.427)),
+        ("Sheldon", "claude", "Claude Code", Color(red: 0.36, green: 0.72, blue: 0.25)),
         ("Dex", "codex", "Codex (OpenAI)", Color(red: 0.92, green: 0.92, blue: 0.93)),
         ("Gemini", "gemini", "Gemini CLI", Color(red: 0.278, green: 0.588, blue: 0.894)),
         ("CursorBot", "cursor", "Cursor", Color(red: 0.96, green: 0.31, blue: 0.0)),

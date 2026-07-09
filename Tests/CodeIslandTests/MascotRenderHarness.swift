@@ -79,6 +79,7 @@ private struct MascotContactSheet: View {
     @ViewBuilder
     private var mascot: some View {
         switch source {
+        case "claude": SheldonView(status: status, size: 54)
         case "codex": DexView(status: status, size: 54)
         case "gemini": GeminiView(status: status, size: 54)
         case "cursor": CursorView(status: status, size: 54)
@@ -98,7 +99,7 @@ private struct MascotContactSheet: View {
         case "kimi": KimiView(status: status, size: 54)
         case "pi": PiView(status: status, size: 54)
         case "cline": ClineView(status: status, size: 54)
-        default: ClawdView(status: status, size: 54)
+        default: SheldonView(status: status, size: 54)
         }
     }
 }

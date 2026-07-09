@@ -24,6 +24,8 @@ struct MascotView: View {
     var body: some View {
         Group {
             switch source {
+            case "claude":
+                SheldonView(status: status, size: size)
             case "codex":
                 DexView(status: status, size: size)
             case "gemini", "google-antigravity":
@@ -66,7 +68,7 @@ struct MascotView: View {
             case "cline":
                 ClineView(status: status, size: size)
             default:
-                ClawdView(status: status, size: size)
+                SheldonView(status: status, size: size)
             }
         }
         .environment(\.mascotSpeed, Double(speedPct) / 100.0)
