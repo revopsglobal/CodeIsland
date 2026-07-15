@@ -30,7 +30,7 @@ It connects to **13 AI coding tools** via Unix socket IPC, displaying session st
 - **Live status tracking** — See active sessions, tool calls, and AI responses in real time
 - **Permission management** — Approve/deny tool permissions directly from the panel
 - **Question answering** — Respond to agent questions without leaving your current app
-- **Pixel-art mascots** — Each AI tool has its own animated character
+- **Pixel-art mascots** — Each AI tool has its own animated character; this RevOps fork gives Claude Code the Sheldon turtle island treatment
 - **One-click jump** — Click a session to jump to its terminal tab or IDE window
 - **Smart suppress** — Tab-level terminal detection: only suppresses notifications when you're looking at the specific session tab, not just the terminal app
 - **Sound effects** — Optional 8-bit sound notifications for session events
