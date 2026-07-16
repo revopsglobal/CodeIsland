@@ -57,6 +57,9 @@ enum SettingsKey {
     static let soundApprovalNeeded = "soundApprovalNeeded"
     static let soundPromptSubmit = "soundPromptSubmit"
     static let soundBoot = "soundBoot"
+    // Post a native macOS notification when an approval/question is pending, so it
+    // reaches you on another Space or over a fullscreen app even if you miss the notch.
+    static let notifyOnApproval = "notifyOnApproval"
     // Quiet hours — minutes since midnight; start > end spans midnight
     static let quietHoursEnabled = "quietHoursEnabled"
     static let quietHoursStart = "quietHoursStart"
@@ -157,6 +160,7 @@ struct SettingsDefaults {
     static let soundApprovalNeeded = true
     static let soundPromptSubmit = false
     static let soundBoot = true
+    static let notifyOnApproval = true
     static let quietHoursEnabled = false
     static let quietHoursStart = 22 * 60
     static let quietHoursEnd = 8 * 60
@@ -237,6 +241,7 @@ class SettingsManager {
             SettingsKey.soundApprovalNeeded: SettingsDefaults.soundApprovalNeeded,
             SettingsKey.soundPromptSubmit: SettingsDefaults.soundPromptSubmit,
             SettingsKey.soundBoot: SettingsDefaults.soundBoot,
+            SettingsKey.notifyOnApproval: SettingsDefaults.notifyOnApproval,
             SettingsKey.quietHoursEnabled: SettingsDefaults.quietHoursEnabled,
             SettingsKey.quietHoursStart: SettingsDefaults.quietHoursStart,
             SettingsKey.quietHoursEnd: SettingsDefaults.quietHoursEnd,
@@ -310,6 +315,11 @@ class SettingsManager {
     var smartSuppress: Bool {
         get { defaults.bool(forKey: SettingsKey.smartSuppress) }
         set { defaults.set(newValue, forKey: SettingsKey.smartSuppress) }
+    }
+
+    var notifyOnApproval: Bool {
+        get { defaults.bool(forKey: SettingsKey.notifyOnApproval) }
+        set { defaults.set(newValue, forKey: SettingsKey.notifyOnApproval) }
     }
 
     var collapseOnMouseLeave: Bool {

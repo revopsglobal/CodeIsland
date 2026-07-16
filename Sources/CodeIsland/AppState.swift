@@ -1038,6 +1038,9 @@ final class AppState {
         if primarySource != effectiveSource { primarySource = effectiveSource }
         if activeSessionCount != summary.activeSessionCount { activeSessionCount = summary.activeSessionCount }
         if totalSessionCount != summary.totalSessionCount { totalSessionCount = summary.totalSessionCount }
+        // Amber menu-bar indicator (Crest parity): visible whenever an approval or
+        // question is waiting, regardless of the hide-when-idle setting.
+        StatusItemController.shared.setPending(!permissionQueue.isEmpty || !questionQueue.isEmpty)
         ESP32StatePublisher.shared.notifyDirty()
         AppleCompanionPublisher.shared.notifyDirty()
     }
@@ -1264,6 +1267,45 @@ final class AppState {
             }
             SoundManager.shared.handleEvent("PermissionRequest")
         }
+        // Native notification (Crest parity): reaches you on another Space / over a
+        // fullscreen app for both Claude and Codex. Deduped per session.
+        NotificationManager.shared.notifyPending(
+            sessionId: sessionId,
+            sourceLabel: Self.sourceLabel(for: event),
+            tool: event.toolName,
+            detail: event.toolDescription
+        )
+        refreshDerivedState()
+    }
+
+    /// Human-facing agent label for notifications (e.g. "Claude Code", "Codex").
+    nonisolated static func sourceLabel(for event: HookEvent) -> String {
+        let raw = (event.rawJSON["_source"] as? String)
+            .flatMap { SessionSnapshot.normalizedSupportedSource($0) } ?? "agent"
+        switch raw {
+        case "claude": return "Claude Code"
+        case "codex": return "Codex"
+        case "gemini": return "Gemini"
+        case "google-antigravity": return "Antigravity"
+        case "cursor", "cursor-cli": return "Cursor"
+        case "copilot": return "Copilot"
+        case "opencode": return "OpenCode"
+        default: return raw.prefix(1).uppercased() + raw.dropFirst()
+        }
+    }
+
+    /// Open the notch to a session's pending card (invoked when its notification
+    /// is clicked). Falls back to the session list if the request already cleared.
+    func focusPendingApproval(sessionId: String) {
+        if permissionQueue.contains(where: { ($0.event.sessionId ?? "default") == sessionId }) {
+            activeSessionId = sessionId
+            surface = .approvalCard(sessionId: sessionId)
+        } else if questionQueue.contains(where: { ($0.event.sessionId ?? "default") == sessionId }) {
+            activeSessionId = sessionId
+            surface = .questionCard(sessionId: sessionId)
+        } else {
+            surface = .sessionList
+        }
         refreshDerivedState()
     }
 
@@ -1272,6 +1314,7 @@ final class AppState {
         let pending = permissionQueue.removeFirst()
         let sessionId = pending.event.sessionId ?? "default"
         dismissedPermissionSessionIds.remove(sessionId)
+        NotificationManager.shared.clearPending(sessionId: sessionId)
         let responseData: Data
         if always, CodexPermissionRules.isCodexEvent(pending.event) {
             _ = CodexPermissionRules().persistAlwaysAllowRule(for: pending.event)
@@ -1424,6 +1467,7 @@ final class AppState {
         let pending = permissionQueue.removeFirst()
         let sessionId = pending.event.sessionId ?? "default"
         dismissedPermissionSessionIds.remove(sessionId)
+        NotificationManager.shared.clearPending(sessionId: sessionId)
         let response = #"{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny"}}}"#
         pending.continuation.resume(returning: Data(response.utf8))
         sessions[sessionId]?.status = .idle
@@ -1777,6 +1821,7 @@ final class AppState {
     /// Drain all queued permissions for a specific session, resuming their continuations with deny
     private func drainPermissions(forSession sessionId: String, reason: String = "unknown") {
         dismissedPermissionSessionIds.remove(sessionId)
+        NotificationManager.shared.clearPending(sessionId: sessionId)
         let denyResponse = Data(#"{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny"}}}"#.utf8)
         permissionQueue.removeAll { item in
             guard item.event.sessionId == sessionId else { return false }

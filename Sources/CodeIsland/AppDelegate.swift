@@ -22,6 +22,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.applicationIconImage = SettingsWindowController.bundleAppIcon()
         SettingsWindowController.shared.appState = appState
         StatusItemController.shared.startObserving()
+        // Native approval notifications (Crest parity) — request auth once, and
+        // route a click back to the notch's pending card.
+        NotificationManager.shared.onOpenSession = { [weak appState] sessionId in
+            appState?.focusPendingApproval(sessionId: sessionId)
+        }
+        NotificationManager.shared.start()
         // Start HookServer BEFORE installing hooks into CLI configs.
         // If we write settings.json first, Claude Code picks up the new hooks
         // immediately but the socket isn't listening yet — PermissionRequest

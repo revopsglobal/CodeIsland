@@ -13,6 +13,8 @@ final class StatusItemController: NSObject {
     private var statusItem: NSStatusItem?
     private var observation: NSKeyValueObservation?
     private lazy var menu: NSMenu = makeMenu()
+    /// True while an approval/question is waiting — forces the item visible and amber.
+    private var pending = false
 
     func startObserving() {
         syncVisibility()
@@ -23,26 +25,58 @@ final class StatusItemController: NSObject {
         }
     }
 
+    /// Crest-parity amber menu-bar indicator. While an approval is pending the
+    /// status item is force-shown with an amber alert glyph, even if the user
+    /// otherwise hides it when idle; it reverts on resolve.
+    func setPending(_ isPending: Bool) {
+        guard isPending != pending else { return }
+        pending = isPending
+        if isPending {
+            showStatusItem()
+        } else {
+            syncVisibility()
+        }
+        refreshButtonAppearance()
+    }
+
     private func syncVisibility() {
-        if SettingsManager.shared.hideWhenNoSession {
+        if pending || SettingsManager.shared.hideWhenNoSession {
             showStatusItem()
         } else {
             hideStatusItem()
         }
+        refreshButtonAppearance()
     }
 
     private func showStatusItem() {
         if statusItem == nil {
             let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-            if let button = item.button {
-                let icon = SettingsWindowController.bundleAppIcon()
-                icon.size = NSSize(width: 18, height: 18)
-                button.image = icon
-                button.imageScaling = .scaleProportionallyDown
-                button.toolTip = "CodeIsland"
-            }
             item.menu = menu
             statusItem = item
+        }
+        refreshButtonAppearance()
+    }
+
+    /// Amber alert glyph while pending, otherwise the normal app icon.
+    private func refreshButtonAppearance() {
+        guard let button = statusItem?.button else { return }
+        if pending {
+            let config = NSImage.SymbolConfiguration(pointSize: 15, weight: .semibold)
+                .applying(.init(paletteColors: [NSColor.systemOrange]))
+            let symbol = NSImage(
+                systemSymbolName: "bell.badge.fill",
+                accessibilityDescription: "Approval waiting"
+            )?.withSymbolConfiguration(config)
+            symbol?.isTemplate = false
+            button.image = symbol
+            button.toolTip = "CodeIsland — approval waiting"
+        } else {
+            let icon = SettingsWindowController.bundleAppIcon()
+            icon.size = NSSize(width: 18, height: 18)
+            icon.isTemplate = false
+            button.image = icon
+            button.imageScaling = .scaleProportionallyDown
+            button.toolTip = "CodeIsland"
         }
     }
 
