@@ -86,26 +86,20 @@ struct KiroView: View {
             }
             MascotTimeline(interval: 0.12) { t in
                 ForEach(0..<2, id: \.self) { i in
-                    floatingZ(t: t, index: i)
+                    let ci = Double(i)
+                    let cycle = 3.1 + ci * 0.4
+                    let p = max(0, ((t - ci * 1.2).truncatingRemainder(dividingBy: cycle)) / cycle)
+                    let fontSize: CGFloat = max(6, size * CGFloat(0.15 + p * 0.08))
+                    let opacity: Double = p < 0.8 ? 0.55 - ci * 0.15 : (1 - p) * 3 * 0.55
+                    let dx = size * CGFloat(0.14 + ci * 0.05)
+                    let dy = -size * CGFloat(0.14 + p * 0.32)
+                    Text("z")
+                        .font(.system(size: fontSize, weight: .black, design: .monospaced))
+                        .foregroundStyle(.white.opacity(opacity))
+                        .offset(x: dx, y: dy)
                 }
             }
         }
-    }
-
-    private func floatingZ(t: Double, index: Int) -> some View {
-        let ci = Double(index)
-        let cycle = 3.1 + ci * 0.4
-        let rawPhase = (t - ci * 1.2).truncatingRemainder(dividingBy: cycle) / cycle
-        let phase = max(0, rawPhase)
-        let fontSize = max(6, size * CGFloat(0.15 + phase * 0.08))
-        let opacity = phase < 0.8 ? 0.55 - ci * 0.15 : (1 - phase) * 3 * 0.55
-        let xOffset = size * CGFloat(0.14 + ci * 0.05)
-        let yOffset = -size * CGFloat(0.14 + phase * 0.32)
-
-        return Text("z")
-            .font(.system(size: fontSize, weight: .black, design: .monospaced))
-            .foregroundStyle(.white.opacity(opacity))
-            .offset(x: xOffset, y: yOffset)
     }
 
     // ── WORK: focused hover-bob, eyes lean into the work, natural blinks ──
