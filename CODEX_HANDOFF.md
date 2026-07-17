@@ -11,8 +11,10 @@ out of scope.
 
 - The Crest/mobile completion implementation and its verification handoff
   merged through PR #19. The Xcode 26 SwiftUI compatibility refactor merged
-  through PR #20. The current merged product source is
-  `2f7a6b1bb66e14baad870d45fd0767553f816968` on `main`.
+  through PR #20. The completion implementation source is
+  `2f7a6b1bb66e14baad870d45fd0767553f816968`; PR #24 added the Apple-required
+  App Intent metadata correction and release guard. Current `main` is
+  `4c3e274d4cdc3f231459a2a10e5a73557dc4e47e`.
 - Signed macOS `1.0.39` from that merged source is installed at
   `/Applications/CodeIsland.app`, running as Team `44JG2Y95CH`, CDHash
   `e0f24c10a72e631b05de10fef17d3a6c4ca57458`.
@@ -20,7 +22,7 @@ out of scope.
   `/Users/gregharned/Downloads/CodeIsland-1.0.39-run-29616108584/CodeIsland.dmg`,
   SHA-256
   `17d45d870aa8cb8267eeabd537026889b068784e2342fc3e724bae8cdff74041`.
-- iOS `1.0.0 (20260717120420)` is Apple `VALID`, audience
+- iOS `1.0.0 (20260717225004)` is Apple `VALID`, audience
   `APP_STORE_ELIGIBLE`, and available to the all-builds internal group
   `CodeIsland Internal` in TestFlight.
 - `gregharned@gmail.com` is now verified as an `ACCOUNT_HOLDER,ADMIN` App Store
@@ -72,19 +74,26 @@ single-user setup rather than scale.
 ### iOS / TestFlight
 
 - Workflow: `Build and Upload iOS TestFlight`
-- Run: `29578952503`
-- Artifact: `8406281069`
-- Version/build: `1.0.0 (20260717120420)`
+- Run: `29619011267`
+- Signed IPA artifact: `8421590778`
+- Tester receipt artifact: `8421528342`
+- Version/build: `1.0.0 (20260717225004)`
 - Bundle: `com.revopsglobal.codeisland.buddy`
+- Source SHA: `4c3e274d4cdc3f231459a2a10e5a73557dc4e47e`
 - Apple processing: `VALID`, `APP_STORE_ELIGIBLE`
 - Internal group: `CodeIsland Internal`, all-build access
 - Internal tester: `gregharned@gmail.com`, enrollment `ready`
+- Upload delivery: `dc6f1d45-d4ab-448e-9d73-49be811710ee`
+- Downloaded IPA:
+  `/Users/gregharned/Downloads/CodeIsland-TestFlight-20260717225004-run-29619011267/CodeIsland-Buddy-TestFlight-20260717225004/CodeIslandCompanion.ipa`
+- IPA SHA-256:
+  `431960f551777405b059e09c26bb7e624eb6edc5456ae55f686631354e048ff2`
 - Fresh invitation receipt: run `29591716380`, artifact `8411326331`,
   invitation `9679ce07-ac35-4b29-b007-461e0b418801`
 
 The installed Mac build comes from the completion source SHA above. The current
-Apple-VALID TestFlight build remains the prior signed baseline until Apple
-finishes processing the newly uploaded completion build.
+Apple-VALID TestFlight build includes that completion source plus the App Intent
+metadata correction and pre-upload validation merged through PR #24.
 
 ## Implemented product surface
 
@@ -150,6 +159,10 @@ physical phone. Do not turn implementation presence into a live claim.
   rejection, exact bytes/filename, 100 MB enforcement, and traversal rejection.
 - The native Downloads test proves a completed file reaches the iOS share
   sheet.
+- Six App Intent metadata regression tests pass. Xcode generated
+  `Metadata.appintents/extract.actionsdata` from the corrected Release target,
+  and both source and compiled metadata pass the `ITMS-90626` guard. The signed
+  archive repeated the compiled-metadata check before upload.
 
 The Downloads watcher intentionally runs blocking protected-filesystem work on
 a dedicated utility dispatch queue. Do not move it back to `Task.detached`;
@@ -160,9 +173,10 @@ full-suite load demonstrated cooperative-executor starvation.
 Greg must perform the physical/TCC steps in
 `docs/crest-mobile-parity.md#physical-acceptance-run`. The short version:
 
-1. Open the fresh Apple TestFlight invitation sent to
-   `gregharned@gmail.com`, accept it in TestFlight, then install CodeIsland
-   Buddy `1.0.0 (20260717120420)`. Enable Tailscale on the iPhone.
+1. Open TestFlight while signed in as `gregharned@gmail.com`, refresh, then
+   install or update CodeIsland Buddy to `1.0.0 (20260717225004)`. The tester is
+   already enrolled and no public App Store review is required. Enable
+   Tailscale on the iPhone.
 2. On the unlocked Mac, use CodeIsland Settings permission buttons and approve
    Calendar, Reminders, Location Services, Camera, Microphone/Speech, and
    Accessibility when prompted.
