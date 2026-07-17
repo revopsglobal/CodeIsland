@@ -75,4 +75,24 @@ final class PersonalHubDataModelTests: XCTestCase {
         XCTAssertEqual(pullRequest.title, "Finish mobile parity")
         XCTAssertFalse(pullRequest.isDraft)
     }
+
+    func testLegacyTextShelfEntryDecodesWithoutFilePath() throws {
+        let data = try XCTUnwrap(#"{"id":"clip-1","value":"git push origin main","capturedAt":0}"#.data(using: .utf8))
+
+        let entry = try JSONDecoder().decode(PersonalHubDataModel.ShelfEntry.self, from: data)
+
+        XCTAssertEqual(entry.title, "git push origin main")
+        XCTAssertNil(entry.filePath)
+    }
+
+    func testFileShelfEntryUsesFilenameAsTitle() {
+        let entry = PersonalHubDataModel.ShelfEntry(
+            id: "file-1",
+            value: "Quarterly-plan.pdf",
+            capturedAt: Date(),
+            filePath: "/Users/greg/Quarterly-plan.pdf"
+        )
+
+        XCTAssertEqual(entry.title, "Quarterly-plan.pdf")
+    }
 }
