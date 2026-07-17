@@ -12,6 +12,8 @@ setup() {
   export TESTER_EMAIL="gregharned@gmail.com"
   export ADD_BUNDLE_ID="com.harned.estate"
   export REMOVE_APP_NAME="Orca IDE"
+  export FORCE_READD="0"
+  export RESEND_TESTFLIGHT_INVITATION="0"
   export ASC_RECEIPT_PATH="$TEST_TMPDIR/receipt.json"
   : > "$ASC_PRIVATE_KEY_PATH"
 
@@ -41,7 +43,8 @@ case "$path" in
     printf '%s\n' '{"data":[{"id":"group-o","attributes":{"name":"Orca Internal","isInternalGroup":true,"hasAccessToAllBuilds":true}}]}'
     ;;
   /v1/betaGroups/group-h/betaTesters)
-    if [[ -f "$TEST_TMPDIR/harned-added" ]]; then
+    if [[ "${MOCK_SCENARIO:-}" == "force-readd" && ! -f "$TEST_TMPDIR/harned-removed" ]] ||
+       [[ -f "$TEST_TMPDIR/harned-added" ]]; then
       printf '%s\n' '{"data":[{"id":"tester-1","attributes":{"email":"gregharned@gmail.com"}}]}'
     else
       printf '%s\n' '{"data":[]}'
@@ -55,14 +58,26 @@ case "$path" in
     fi
     ;;
   /v1/betaGroups/group-h/relationships/betaTesters)
-    [[ "$method" == "POST" ]]
-    : > "$TEST_TMPDIR/harned-added"
+    if [[ "$method" == "DELETE" ]]; then
+      : > "$TEST_TMPDIR/harned-removed"
+    else
+      [[ "$method" == "POST" ]]
+      : > "$TEST_TMPDIR/harned-added"
+    fi
     printf '%s\n' '{}'
     ;;
   /v1/betaGroups/group-o/relationships/betaTesters)
     [[ "$method" == "DELETE" ]]
     : > "$TEST_TMPDIR/orca-removed"
     printf '%s\n' '{}'
+    ;;
+  /v1/betaTesterInvitations)
+    [[ "$method" == "POST" ]]
+    if [[ "${MOCK_SCENARIO:-}" == "already-accepted" ]]; then
+      printf '%s\n' '{"data":null,"meta":{"alreadyAccepted":true}}'
+    else
+      printf '%s\n' '{"data":{"type":"betaTesterInvitations","id":"invite-harned-1"}}'
+    fi
     ;;
   *)
     echo "unexpected request: $method $path" >&2
@@ -71,6 +86,30 @@ case "$path" in
 esac
 MOCK
   chmod +x "$ASC_REQUEST_COMMAND"
+}
+
+@test "force re-adds Harned Estate and sends an app-specific invitation" {
+  export MOCK_SCENARIO="force-readd"
+  export FORCE_READD="1"
+  export RESEND_TESTFLIGHT_INVITATION="1"
+
+  run "$REPO_ROOT/scripts/relocate-testflight-tester.sh"
+
+  [ "$status" -eq 0 ]
+  grep -q $'DELETE\t/v1/betaGroups/group-h/relationships/betaTesters' "$ASC_REQUEST_LOG"
+  grep -q $'POST\t/v1/betaGroups/group-h/relationships/betaTesters' "$ASC_REQUEST_LOG"
+  grep -q $'POST\t/v1/betaTesterInvitations' "$ASC_REQUEST_LOG"
+  jq -e '.state == "ready" and .invitationState == "sent" and .invitationId == "invite-harned-1"' "$ASC_RECEIPT_PATH"
+}
+
+@test "keeps Harned Estate ready when Apple says the invitation is already accepted" {
+  export MOCK_SCENARIO="already-accepted"
+  export RESEND_TESTFLIGHT_INVITATION="1"
+
+  run "$REPO_ROOT/scripts/relocate-testflight-tester.sh"
+
+  [ "$status" -eq 0 ]
+  jq -e '.state == "ready" and .invitationState == "already-accepted" and .invitationId == ""' "$ASC_RECEIPT_PATH"
 }
 
 @test "restores Harned Estate and removes Orca IDE with verification" {

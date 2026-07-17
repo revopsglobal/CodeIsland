@@ -45,6 +45,16 @@ on:
         required: false
         default: Orca IDE
         type: string
+      force_readd_harned_membership:
+        description: Remove and recreate only the Harned Estate beta-group relationship.
+        required: false
+        default: false
+        type: boolean
+      resend_harned_invitation:
+        description: Send a fresh Harned Estate TestFlight invitation after enrollment.
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -88,6 +98,8 @@ jobs:
           TESTER_EMAIL: ${{ inputs.tester_email || 'gregharned@gmail.com' }}
           ADD_BUNDLE_ID: ${{ inputs.add_bundle_id || 'com.harned.estate' }}
           REMOVE_APP_NAME: ${{ inputs.remove_app_name || 'Orca IDE' }}
+          FORCE_READD: ${{ inputs.force_readd_harned_membership && '1' || '0' }}
+          RESEND_TESTFLIGHT_INVITATION: ${{ inputs.resend_harned_invitation && '1' || '0' }}
           ASC_RECEIPT_PATH: ${{ runner.temp }}/testflight-membership-receipt.json
         run: scripts/relocate-testflight-tester.sh
 
