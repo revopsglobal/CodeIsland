@@ -155,6 +155,7 @@ jobs:
           mkdir -p "$KEY_DIR"
           printf '%s' "$ASC_KEY_P8" | base64 --decode > "$KEY_DIR/AuthKey_$ASC_KEY.p8"
           chmod 600 "$KEY_DIR/AuthKey_$ASC_KEY.p8"
+          echo "ASC_PRIVATE_KEY_PATH=$KEY_DIR/AuthKey_$ASC_KEY.p8" >> "$GITHUB_ENV"
 
       - name: Upload to App Store Connect
         env:
@@ -166,6 +167,14 @@ jobs:
             --type ios \
             --apiKey "$ASC_KEY" \
             --apiIssuer "$ASC_ISSUER"
+
+      - name: Verify TestFlight processing and internal availability
+        shell: bash
+        env:
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          BUNDLE_ID: com.codeisland.buddy
+        run: scripts/wait-for-testflight-build.sh
 
       - name: Upload signed IPA artifact
         uses: actions/upload-artifact@v4
