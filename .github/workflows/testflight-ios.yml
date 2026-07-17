@@ -10,13 +10,95 @@ on:
         description: Optional numeric CFBundleVersion. Defaults to a UTC timestamp.
         required: false
         type: string
+      tester_email:
+        description: Internal tester email to verify or invite.
+        required: false
+        default: gregharned@gmail.com
+        type: string
+      force_new_tester_invitation:
+        description: Cancel any pending team invitation and send a fresh one.
+        required: false
+        default: false
+        type: boolean
+      manage_tester_only:
+        description: Repair TestFlight tester access without building another IPA.
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
 
 jobs:
+  manage-tester:
+    name: Verify internal TestFlight tester
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate App Store Connect secrets
+        shell: bash
+        env:
+          ASC_ISSUER: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY: ${{ secrets.ASC_KEY_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8_BASE64 }}
+        run: |
+          missing=0
+          for name in ASC_ISSUER ASC_KEY ASC_KEY_P8; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is required"
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Install App Store Connect API key
+        shell: bash
+        env:
+          ASC_KEY: ${{ secrets.ASC_KEY_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8_BASE64 }}
+        run: |
+          KEY_DIR="$HOME/.appstoreconnect/private_keys"
+          mkdir -p "$KEY_DIR"
+          printf '%s' "$ASC_KEY_P8" | base64 --decode > "$KEY_DIR/AuthKey_$ASC_KEY.p8"
+          chmod 600 "$KEY_DIR/AuthKey_$ASC_KEY.p8"
+          echo "ASC_PRIVATE_KEY_PATH=$KEY_DIR/AuthKey_$ASC_KEY.p8" >> "$GITHUB_ENV"
+
+      - name: Verify or invite internal tester
+        shell: bash
+        env:
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          TESTER_EMAIL: ${{ inputs.tester_email || 'gregharned@gmail.com' }}
+          FORCE_NEW_INVITATION: ${{ inputs.force_new_tester_invitation && '1' || '0' }}
+          ASC_RECEIPT_PATH: ${{ runner.temp }}/testflight-tester-receipt.json
+        run: |
+          scripts/manage-testflight-internal-tester.sh | tee "$RUNNER_TEMP/testflight-tester-output.txt"
+          state="$(jq -r '.state' "$ASC_RECEIPT_PATH")"
+          {
+            echo "### Internal TestFlight tester"
+            echo
+            echo "- Email: \`$TESTER_EMAIL\`"
+            echo "- State: \`$state\`"
+            if [ "$state" = "acceptance-required" ]; then
+              echo "- Apple sent a fresh App Store Connect invitation. Accept it once from email; group enrollment can then be rerun."
+            else
+              echo "- The tester is enrolled in \`CodeIsland Internal\`."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload tester receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: CodeIsland-TestFlight-tester-receipt
+          path: ${{ runner.temp }}/testflight-tester-receipt.json
+          if-no-files-found: error
+
   testflight:
     name: Signed iPhone archive and TestFlight upload
+    needs: manage-tester
+    if: ${{ !inputs.manage_tester_only }}
     runs-on: macos-15
     env:
       TEAM_ID: 44JG2Y95CH
