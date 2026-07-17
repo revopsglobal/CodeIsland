@@ -73,7 +73,7 @@ let minimal = """
 """.data(using: .utf8)!
 do {
     let state = try decoder.decode(CompanionStatePayload.self, from: minimal)
-    check("minimal payload decodes", state.messages.isEmpty && state.sessions.isEmpty)
+    check("minimal payload decodes", state.messages.isEmpty && state.sessions.isEmpty && state.personalStatus == nil)
 } catch { check("minimal payload decodes at all", false) }
 
 // 7. Round-trip: what today's Mac sends still decodes exactly.
@@ -93,5 +93,19 @@ do {
     check("full payload keeps sessions", state.sessions.count == 1)
     check("full payload keeps messages", state.messages.count == 2)
 } catch { check("full payload decodes at all", false) }
+
+// 8. Optional personal signals decode without changing the established agent state.
+let personal = """
+{"version":1,"sequence":49,"source":"codex","status":"running",
+ "personalStatus":{"download":{"name":"Crest-4.9.0.dmg","bytesReceived":50,"totalBytes":100},
+ "devices":[{"name":"AirPods","percent":18,"detail":"L 18% · R 22%"}]},
+ "updatedAt":"2026-07-05T12:00:00Z"}
+""".data(using: .utf8)!
+do {
+    let state = try decoder.decode(CompanionStatePayload.self, from: personal)
+    check("personal download decodes", state.personalStatus?.download?.progress == 0.5)
+    check("personal battery decodes", state.personalStatus?.devices.first?.percent == 18)
+    check("personal state preserves agent status", state.status == .running)
+} catch { check("personal payload decodes at all", false) }
 
 print("ALL PASS")

@@ -70,6 +70,19 @@ jobs:
       - name: Test personal utilities
         run: swift test --filter PersonalUtilitiesModelTests
 
+      - name: Test iPhone companion models
+        run: ios/CodeIslandCompanion/scripts/run-model-tests.sh
+
+      - name: Build iPhone Buddy for Simulator
+        run: |
+          xcodebuild \
+            -project ios/CodeIslandCompanion/CodeIslandCompanion.xcodeproj \
+            -scheme CodeIslandCompanion \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
       - name: Validate signing inputs
         if: ${{ inputs.sign_and_notarize }}
         shell: bash

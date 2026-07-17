@@ -223,7 +223,7 @@ private struct GlancesSettingsPage: View {
                     Text(personalUtilities.downloads.isEmpty
                         ? "Watching ~/Downloads"
                         : "\(personalUtilities.downloads.count) active")
-                        .foregroundStyle(personalUtilities.downloads.isEmpty ? .secondary : .green)
+                        .foregroundStyle(personalUtilities.downloads.isEmpty ? Color.secondary : Color.green)
                 }
                 Button("Open Downloads") { personalUtilities.openDownloads() }
 

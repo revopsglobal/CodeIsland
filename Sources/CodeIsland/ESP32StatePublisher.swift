@@ -378,7 +378,33 @@ extension AppState {
             messages: messages,
             pendingAction: pendingAction,
             question: questionPayload,
-            sessions: appleCompanionSessionPreviews(primarySessionId: sessionId)
+            sessions: appleCompanionSessionPreviews(primarySessionId: sessionId),
+            personalStatus: appleCompanionPersonalStatus()
+        )
+    }
+
+    private func appleCompanionPersonalStatus() -> AppleCompanionPersonalStatus? {
+        let personal = PersonalUtilitiesModel.shared
+        let download = personal.primaryDownload.map {
+            AppleCompanionDownloadStatus(
+                name: String($0.name.prefix(80)),
+                bytesReceived: $0.bytesReceived,
+                totalBytes: $0.totalBytes
+            )
+        }
+        let completion = personal.recentDownloadCompleted.map { String($0.prefix(80)) }
+        let devices = personal.deviceBatteries.prefix(4).map {
+            AppleCompanionDeviceBatteryStatus(
+                name: String($0.name.prefix(56)),
+                percent: $0.primaryPercent,
+                detail: String($0.summary.prefix(72))
+            )
+        }
+        guard download != nil || completion != nil || !devices.isEmpty else { return nil }
+        return AppleCompanionPersonalStatus(
+            download: download,
+            recentDownloadCompleted: completion,
+            devices: devices
         )
     }
 

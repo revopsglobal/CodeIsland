@@ -155,6 +155,7 @@ final class PersonalUtilitiesModel: ObservableObject {
 
     private func scanDownloads() {
         let previous = downloads
+        let previousCompletion = recentDownloadCompleted
         let current = Self.scanDownloadEntries(in: downloadsURL)
         downloads = current
 
@@ -164,12 +165,18 @@ final class PersonalUtilitiesModel: ObservableObject {
                 recentDownloadCompleted = finished.name
                 completionClearTimer?.invalidate()
                 completionClearTimer = Timer.scheduledTimer(withTimeInterval: 6, repeats: false) { [weak self] _ in
-                    Task { @MainActor in self?.recentDownloadCompleted = nil }
+                    Task { @MainActor in
+                        self?.recentDownloadCompleted = nil
+                        AppleCompanionPublisher.shared.notifyDirty()
+                    }
                 }
             }
         }
         hasScannedDownloads = true
         updateProgressTimer()
+        if current != previous || recentDownloadCompleted != previousCompletion {
+            AppleCompanionPublisher.shared.notifyDirty()
+        }
     }
 
     private func updateProgressTimer() {
@@ -303,9 +310,13 @@ final class PersonalUtilitiesModel: ObservableObject {
             }.value
 
             guard let self else { return }
+            let previous = self.deviceBatteries
             self.deviceBatteries = result
             self.bluetoothError = result.isEmpty ? "No battery readings from connected accessories" : nil
             self.isRefreshingBluetooth = false
+            if result != previous {
+                AppleCompanionPublisher.shared.notifyDirty()
+            }
         }
     }
 
