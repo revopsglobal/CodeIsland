@@ -83,12 +83,13 @@ MOCK
   jq -e '.state == "ready" and .addedBundleId == "com.harned.estate" and .removedApp == "Orca IDE"' "$ASC_RECEIPT_PATH"
 }
 
-@test "fails safely when the app to remove is not visible" {
+@test "restores Harned Estate when Orca belongs to another Apple team" {
   export MOCK_SCENARIO="missing-orca"
 
   run "$REPO_ROOT/scripts/relocate-testflight-tester.sh"
 
-  [ "$status" -ne 0 ]
-  [[ "$output" == *"No app named Orca IDE found"* ]]
-  ! grep -q $'POST\t/v1/betaGroups/group-h/relationships/betaTesters' "$ASC_REQUEST_LOG"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Orca IDE requires Stop Testing"* ]]
+  grep -q $'POST\t/v1/betaGroups/group-h/relationships/betaTesters' "$ASC_REQUEST_LOG"
+  jq -e '.state == "ready" and .removedAppState == "not-visible"' "$ASC_RECEIPT_PATH"
 }

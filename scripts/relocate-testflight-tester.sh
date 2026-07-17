@@ -51,7 +51,11 @@ remove_app_id="$(printf '%s' "$apps" | jq -r --arg name "$REMOVE_APP_NAME" \
     '.data[] | select(.attributes.name == $name) | .id' | head -n 1)"
 
 [[ -n "$add_app_id" ]] || { echo "::error::No app found for $ADD_BUNDLE_ID"; exit 1; }
-[[ -n "$remove_app_id" ]] || { echo "::error::No app named $REMOVE_APP_NAME found"; exit 1; }
+remove_app_state="removed"
+if [[ -z "$remove_app_id" ]]; then
+    remove_app_state="not-visible"
+    echo "::warning::$REMOVE_APP_NAME is not visible to this App Store Connect team; remove it from its TestFlight detail page."
+fi
 
 testers="$(asc_request GET /v1/betaTesters "" \
     "filter[email]=$TESTER_EMAIL" "fields[betaTesters]=email,state" "limit=200")"
@@ -79,8 +83,11 @@ if [[ "$add_member_count" -eq 0 ]]; then
     asc_request POST "/v1/betaGroups/$add_group_id/relationships/betaTesters" "$tester_linkage" >/dev/null
 fi
 
-remove_groups="$(asc_request GET "/v1/apps/$remove_app_id/betaGroups" "" \
-    "fields[betaGroups]=name,isInternalGroup,hasAccessToAllBuilds" "limit=200")"
+remove_groups='{"data":[]}'
+if [[ -n "$remove_app_id" ]]; then
+    remove_groups="$(asc_request GET "/v1/apps/$remove_app_id/betaGroups" "" \
+        "fields[betaGroups]=name,isInternalGroup,hasAccessToAllBuilds" "limit=200")"
+fi
 removed_group_ids=()
 while IFS= read -r group_id; do
     [[ -n "$group_id" ]] || continue
@@ -120,10 +127,15 @@ jq -n \
     --arg addedBundleId "$ADD_BUNDLE_ID" \
     --arg addedGroup "$add_group_name" \
     --arg removedApp "$REMOVE_APP_NAME" \
+    --arg removedAppState "$remove_app_state" \
     --arg checkedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     --argjson removedGroupIds "$removed_groups_json" \
-    '{state:$state,testerEmail:$testerEmail,testerId:$testerId,addedApp:$addedApp,addedBundleId:$addedBundleId,addedGroup:$addedGroup,removedApp:$removedApp,removedGroupIds:$removedGroupIds,checkedAt:$checkedAt}' \
+    '{state:$state,testerEmail:$testerEmail,testerId:$testerId,addedApp:$addedApp,addedBundleId:$addedBundleId,addedGroup:$addedGroup,removedApp:$removedApp,removedAppState:$removedAppState,removedGroupIds:$removedGroupIds,checkedAt:$checkedAt}' \
     > "$ASC_RECEIPT_PATH"
 
-echo "Added $TESTER_EMAIL to $add_app_name / $add_group_name and removed it from $REMOVE_APP_NAME."
+if [[ "$remove_app_state" == "removed" ]]; then
+    echo "Added $TESTER_EMAIL to $add_app_name / $add_group_name and removed it from $REMOVE_APP_NAME."
+else
+    echo "Added $TESTER_EMAIL to $add_app_name / $add_group_name. $REMOVE_APP_NAME requires Stop Testing in its owning account."
+fi
 jq -c . "$ASC_RECEIPT_PATH"
