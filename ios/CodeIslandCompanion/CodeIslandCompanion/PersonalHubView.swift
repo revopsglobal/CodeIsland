@@ -879,6 +879,7 @@ private struct CameraPreviewScreen: View {
             CameraPreviewHost()
                 .ignoresSafeArea()
             Button("Done") { dismiss() }
+                .accessibilityIdentifier("hub.camera.done")
                 .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(.black)
                 .padding(.horizontal, 16)
@@ -887,6 +888,8 @@ private struct CameraPreviewScreen: View {
                 .padding(.top, 16)
                 .padding(.trailing, 16)
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("hub.camera.preview")
         .background(Color.black.ignoresSafeArea())
     }
 }
