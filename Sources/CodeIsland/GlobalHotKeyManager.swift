@@ -41,6 +41,20 @@ final class GlobalHotKeyManager {
         return mods
     }
 
+    /// Validate the complete shortcut set before asking Carbon to register it.
+    /// This keeps built-in defaults deterministic and lets callers avoid
+    /// silently losing a later action when two settings resolve to one chord.
+    static func hasUniqueChords(_ bindings: [ShortcutBinding]) -> Bool {
+        var chords = Set<String>()
+        for binding in bindings {
+            let modifiers = carbonModifiers(from: binding.modifiers)
+            guard chords.insert("\(binding.keyCode)-\(modifiers)").inserted else {
+                return false
+            }
+        }
+        return true
+    }
+
     /// Register a global hotkey. The handler is invoked on the main thread when
     /// the key combo is pressed from any app. Returns false if registration
     /// fails (e.g. the combo is already owned by another app).

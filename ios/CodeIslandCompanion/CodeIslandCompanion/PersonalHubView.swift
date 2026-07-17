@@ -10,14 +10,25 @@ private enum HubTheme {
     static let border = Color.white.opacity(0.09)
 }
 
+enum BuddyQuickJotDestination: String, CaseIterable, Identifiable {
+    case task
+    case note
+
+    var id: String { rawValue }
+    var title: String { self == .task ? "Task" : "Note" }
+    var symbol: String { self == .task ? "checklist" : "note.text" }
+}
+
 struct PersonalHubSurface: View {
     @EnvironmentObject private var client: RemoteApprovalClient
     @State private var showingRackEditor = false
     @State private var pendingRack: (PersonalHubMode, [PersonalHubModuleID])?
+    @State private var pendingQuickJot: (BuddyQuickJotDestination, String)?
 
     var body: some View {
         VStack(spacing: 10) {
             modeStrip
+            quickJotStrip
 
             if let snapshot = client.hubSnapshot {
                 HStack(spacing: 8) {
@@ -125,7 +136,29 @@ struct PersonalHubSurface: View {
                 }
             }
         }
+        .sheet(item: $client.quickJotDestination, onDismiss: preparePendingQuickJot) { destination in
+            BuddyQuickJotSheet(destination: destination) { text in
+                pendingQuickJot = (destination, text)
+                client.quickJotDestination = nil
+            }
+        }
         .accessibilityIdentifier("hub.surface")
+    }
+
+    private var quickJotStrip: some View {
+        HStack(spacing: 7) {
+            ForEach(BuddyQuickJotDestination.allCases) { destination in
+                Button {
+                    client.quickJotDestination = destination
+                } label: {
+                    Label("New \(destination.title)", systemImage: destination.symbol)
+                        .font(.system(size: 11, weight: .bold))
+                        .frame(maxWidth: .infinity, minHeight: 34)
+                }
+                .buttonStyle(HubSecondaryButtonStyle())
+                .accessibilityIdentifier("hub.quickJot.\(destination.rawValue)")
+            }
+        }
     }
 
     private func toggleDashboard(_ snapshot: PersonalHubSnapshot) {
@@ -152,6 +185,23 @@ struct PersonalHubSurface: View {
                 value: mutation.encodedActionValue()
             ))
         }
+    }
+
+    private func preparePendingQuickJot() {
+        guard let (destination, text) = pendingQuickJot else { return }
+        pendingQuickJot = nil
+        let intent: PersonalHubActionIntent
+        switch destination {
+        case .task:
+            intent = .init(
+                moduleID: .reminders,
+                actionID: "add",
+                value: PersonalHubReminderDraft(title: text).encodedActionValue()
+            )
+        case .note:
+            intent = .init(moduleID: .notes, actionID: "add", value: text)
+        }
+        Task { await client.prepareHubAction(intent) }
     }
 
     private var modeStrip: some View {
@@ -194,6 +244,56 @@ struct PersonalHubSurface: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 22)
+    }
+}
+
+private struct BuddyQuickJotSheet: View {
+    let destination: BuddyQuickJotDestination
+    let onReview: (String) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var text = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 14) {
+                Label("Save to \(destination.title)", systemImage: destination.symbol)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(HubTheme.accent)
+                TextField(
+                    destination == .task ? "What needs doing?" : "What do you want to remember?",
+                    text: $text,
+                    axis: .vertical
+                )
+                .lineLimit(1...6)
+                .textFieldStyle(.plain)
+                .font(.system(size: 16, weight: .medium))
+                .padding(12)
+                .background(HubTheme.surface, in: RoundedRectangle(cornerRadius: 11))
+                .focused($focused)
+                .accessibilityIdentifier("hub.quickJot.text")
+                Spacer()
+            }
+            .padding(16)
+            .background(Color.black)
+            .navigationTitle("New \(destination.title)")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Review") {
+                        onReview(text.trimmingCharacters(in: .whitespacesAndNewlines))
+                    }
+                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+        .preferredColorScheme(.dark)
+        .onAppear { focused = true }
+        .accessibilityIdentifier("hub.quickJot.sheet")
     }
 }
 

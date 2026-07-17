@@ -9,5 +9,15 @@ struct CodeIslandApp: App {
         Settings {
             SettingsView(appState: appDelegate.appState)
         }
+        .commands {
+            CommandMenu("Capture") {
+                Button("New Task") {
+                    QuickJotWindowController.shared.show(destination: .task)
+                }
+                Button("New Note") {
+                    QuickJotWindowController.shared.show(destination: .note)
+                }
+            }
+        }
     }
 }

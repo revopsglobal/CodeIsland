@@ -129,6 +129,30 @@ final class CodeIslandCompanionUITests: XCTestCase {
     }
 
     @MainActor
+    func testQuickNoteEntryRequiresReviewAndExplicitExecution() throws {
+        let app = launchHubApp(mode: "work")
+        XCTAssertTrue(app.otherElements["hub.surface"].waitForExistence(timeout: 8))
+
+        let newNote = app.buttons["New Note"].firstMatch
+        XCTAssertTrue(newNote.waitForExistence(timeout: 4))
+        newNote.tap()
+
+        XCTAssertTrue(app.otherElements["hub.quickJot.sheet"].waitForExistence(timeout: 5))
+        let field = app.textFields["What do you want to remember?"].firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 4))
+        field.tap()
+        field.typeText("Buddy quick note")
+        app.buttons["Review"].tap()
+
+        XCTAssertTrue(app.otherElements["hub.action.confirmation"].waitForExistence(timeout: 5))
+        app.buttons["Do it"].tap()
+
+        let message = app.staticTexts["hub.action.message"].firstMatch
+        XCTAssertTrue(message.waitForExistence(timeout: 5))
+        XCTAssertTrue(message.label.contains("Executed notes.add"))
+    }
+
+    @MainActor
     func testClaudeDoProposalRequiresReviewAndExplicitExecution() throws {
         let app = launchHubApp(mode: "code")
         XCTAssertTrue(app.otherElements["hub.surface"].waitForExistence(timeout: 8))

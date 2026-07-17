@@ -34,6 +34,7 @@ struct CodeIslandCompanionApp: App {
                 .onChange(of: scenePhase) { _, newPhase in
                     remoteApprovals.setActive(newPhase == .active)
                 }
+                .onOpenURL { remoteApprovals.openDeepLink($0) }
         }
     }
 

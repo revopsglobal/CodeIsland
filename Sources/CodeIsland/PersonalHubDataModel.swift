@@ -188,16 +188,18 @@ final class PersonalHubDataModel: ObservableObject {
     private static let notesKey = "codeisland.personalHub.notes.v1"
     private static let shelfKey = "codeisland.personalHub.shelf.v1"
     private static let teleprompterKey = "codeisland.personalHub.teleprompter.v1"
+    private let defaults: UserDefaults
     private var clipboardTimer: Timer?
     private var systemTimer: Timer?
     private var mediaTimer: Timer?
     private var lastPasteboardChangeCount = NSPasteboard.general.changeCount
     private var started = false
 
-    private init() {
-        notes = Self.load([Note].self, key: Self.notesKey) ?? []
-        shelf = Self.load([ShelfEntry].self, key: Self.shelfKey) ?? []
-        teleprompterText = UserDefaults.standard.string(forKey: Self.teleprompterKey) ?? ""
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        notes = Self.load([Note].self, key: Self.notesKey, defaults: defaults) ?? []
+        shelf = Self.load([ShelfEntry].self, key: Self.shelfKey, defaults: defaults) ?? []
+        teleprompterText = defaults.string(forKey: Self.teleprompterKey) ?? ""
     }
 
     func start() {
@@ -332,7 +334,7 @@ final class PersonalHubDataModel: ObservableObject {
         let text = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, text.count <= 50_000 else { return false }
         teleprompterText = text
-        UserDefaults.standard.set(text, forKey: Self.teleprompterKey)
+        defaults.set(text, forKey: Self.teleprompterKey)
         return true
     }
 
@@ -620,11 +622,15 @@ final class PersonalHubDataModel: ObservableObject {
 
     private func persist<T: Encodable>(_ value: T, key: String) {
         guard let data = try? JSONEncoder().encode(value) else { return }
-        UserDefaults.standard.set(data, forKey: key)
+        defaults.set(data, forKey: key)
     }
 
-    nonisolated private static func load<T: Decodable>(_ type: T.Type, key: String) -> T? {
-        guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
+    private static func load<T: Decodable>(
+        _ type: T.Type,
+        key: String,
+        defaults: UserDefaults
+    ) -> T? {
+        guard let data = defaults.data(forKey: key) else { return nil }
         return try? JSONDecoder().decode(type, from: data)
     }
 

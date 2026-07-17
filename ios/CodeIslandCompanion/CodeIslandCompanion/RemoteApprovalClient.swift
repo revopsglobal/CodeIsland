@@ -32,6 +32,7 @@ final class RemoteApprovalClient: ObservableObject {
     @Published private(set) var hubActionInFlight = false
     @Published private(set) var hubActionMessage: String?
     @Published var preparedAction: PersonalHubPreparedAction?
+    @Published var quickJotDestination: BuddyQuickJotDestination?
     @Published var selectedMode: PersonalHubMode {
         didSet {
             UserDefaults.standard.set(selectedMode.rawValue, forKey: Self.selectedModeKey)
@@ -349,6 +350,15 @@ final class RemoteApprovalClient: ObservableObject {
 
     func dismissHubActionMessage() {
         hubActionMessage = nil
+    }
+
+    func openDeepLink(_ url: URL) {
+        guard url.scheme?.lowercased() == "codeisland",
+              url.host?.lowercased() == "quick-jot",
+              let destination = url.pathComponents.dropFirst().first,
+              let destination = BuddyQuickJotDestination(rawValue: destination.lowercased())
+        else { return }
+        quickJotDestination = destination
     }
 
     func downloadHubFile(moduleID: PersonalHubModuleID, id: String, filename: String) async -> URL? {
