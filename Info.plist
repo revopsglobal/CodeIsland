@@ -15,9 +15,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0.29</string>
+	<string>1.0.30</string>
 	<key>CFBundleVersion</key>
-	<string>1.0.29</string>
+	<string>1.0.30</string>
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSAppTransportSecurity</key>
@@ -35,15 +35,12 @@
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>CodeIsland advertises itself on the local network so iPhone can mirror the island state.</string>
+	<!-- Fork build: Sparkle updates disabled so the upstream appcast can never
+	     replace this build with the official release (which would drop the fork's
+	     customizations). Ship updates by rebuilding from this repo. -->
 	<key>SUAutomaticallyUpdate</key>
 	<false/>
 	<key>SUEnableAutomaticChecks</key>
-	<true/>
-	<key>SUFeedURL</key>
-	<string>https://raw.githubusercontent.com/wxtsky/CodeIsland/main/appcast.xml</string>
-	<key>SUPublicEDKey</key>
-	<string>oqLtx5s2hc8Xgsp4rEuTwnQ8UGRT4ma4tjlf+1i3YHA=</string>
-	<key>SUScheduledCheckInterval</key>
-	<integer>14400</integer>
+	<false/>
 </dict>
 </plist>

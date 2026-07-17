@@ -104,25 +104,19 @@ struct OpenClawView: View {
     private func floatingZs(t: Double) -> some View {
         ZStack {
             ForEach(0..<2, id: \.self) { i in
-                floatingZ(t: t, index: i)
+                let ci = Double(i)
+                let cycle = 3.0 + ci * 0.4
+                let p = max(0, ((t - ci * 1.1).truncatingRemainder(dividingBy: cycle)) / cycle)
+                let fontSize: CGFloat = max(6, size * CGFloat(0.16 + p * 0.08))
+                let opacity: Double = p < 0.8 ? 0.6 - ci * 0.15 : (1 - p) * 3 * 0.6
+                let dx = size * CGFloat(0.12 + ci * 0.06)
+                let dy = -size * CGFloat(0.12 + p * 0.34)
+                Text("z")
+                    .font(.system(size: fontSize, weight: .black, design: .monospaced))
+                    .foregroundStyle(.white.opacity(opacity))
+                    .offset(x: dx, y: dy)
             }
         }
-    }
-
-    private func floatingZ(t: Double, index: Int) -> some View {
-        let ci = Double(index)
-        let cycle = 3.0 + ci * 0.4
-        let rawPhase = (t - ci * 1.1).truncatingRemainder(dividingBy: cycle) / cycle
-        let phase = max(0, rawPhase)
-        let fontSize = max(6, size * CGFloat(0.16 + phase * 0.08))
-        let opacity = phase < 0.8 ? 0.6 - ci * 0.15 : (1 - phase) * 3 * 0.6
-        let xOffset = size * CGFloat(0.12 + ci * 0.06)
-        let yOffset = -size * CGFloat(0.12 + phase * 0.34)
-
-        return Text("z")
-            .font(.system(size: fontSize, weight: .black, design: .monospaced))
-            .foregroundStyle(.white.opacity(opacity))
-            .offset(x: xOffset, y: yOffset)
     }
 
     // ── WORK: claws snip-typing with humanized cadence ──

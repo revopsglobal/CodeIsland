@@ -18,7 +18,7 @@ enum NotchHeightMode: String, CaseIterable {
 
 enum SettingsKey {
     // Language
-    static let appLanguage = "appLanguage"                 // "system", "en", "zh", "de", "ja", "ko", "tr"
+    static let appLanguage = "appLanguage"                 // "system", "en", "zh", "zh-Hant", "de", "ja", "ko", "tr"
 
     // General - System
     static let launchAtLogin = "launchAtLogin"
@@ -57,6 +57,23 @@ enum SettingsKey {
     static let soundApprovalNeeded = "soundApprovalNeeded"
     static let soundPromptSubmit = "soundPromptSubmit"
     static let soundBoot = "soundBoot"
+    // Post a native macOS notification when an approval/question is pending, so it
+    // reaches you on another Space or over a fullscreen app even if you miss the notch.
+    static let notifyOnApproval = "notifyOnApproval"
+    // Quiet hours — minutes since midnight; start > end spans midnight
+    static let quietHoursEnabled = "quietHoursEnabled"
+    static let quietHoursStart = "quietHoursStart"
+    static let quietHoursEnd = "quietHoursEnd"
+
+    // Session cards
+    static let showGitBranch = "showGitBranch"
+
+    // Token-usage footer (local Claude transcript aggregation)
+    static let showUsageStats = "showUsageStats"
+
+    // Completion notification: "expand" | "glance" | "off". Successor of the
+    // boolean autoExpandOnCompletion — see AppState.completionStyle migration.
+    static let completionNotificationStyle = "completionNotificationStyle"
 
     // Shortcuts (per-action: shortcut_{action}_enabled, shortcut_{action}_keyCode, shortcut_{action}_modifiers)
     static func shortcutEnabled(_ action: String) -> String { "shortcut_\(action)_enabled" }
@@ -143,6 +160,12 @@ struct SettingsDefaults {
     static let soundApprovalNeeded = true
     static let soundPromptSubmit = false
     static let soundBoot = true
+    static let notifyOnApproval = true
+    static let quietHoursEnabled = false
+    static let quietHoursStart = 22 * 60
+    static let quietHoursEnd = 8 * 60
+    static let showGitBranch = true
+    static let showUsageStats = true
 
     static let rotationInterval = 5
 
@@ -218,6 +241,12 @@ class SettingsManager {
             SettingsKey.soundApprovalNeeded: SettingsDefaults.soundApprovalNeeded,
             SettingsKey.soundPromptSubmit: SettingsDefaults.soundPromptSubmit,
             SettingsKey.soundBoot: SettingsDefaults.soundBoot,
+            SettingsKey.notifyOnApproval: SettingsDefaults.notifyOnApproval,
+            SettingsKey.quietHoursEnabled: SettingsDefaults.quietHoursEnabled,
+            SettingsKey.quietHoursStart: SettingsDefaults.quietHoursStart,
+            SettingsKey.quietHoursEnd: SettingsDefaults.quietHoursEnd,
+            SettingsKey.showGitBranch: SettingsDefaults.showGitBranch,
+            SettingsKey.showUsageStats: SettingsDefaults.showUsageStats,
             SettingsKey.rotationInterval: SettingsDefaults.rotationInterval,
             SettingsKey.maxToolHistory: SettingsDefaults.maxToolHistory,
             SettingsKey.mascotSpeed: SettingsDefaults.mascotSpeed,
@@ -286,6 +315,11 @@ class SettingsManager {
     var smartSuppress: Bool {
         get { defaults.bool(forKey: SettingsKey.smartSuppress) }
         set { defaults.set(newValue, forKey: SettingsKey.smartSuppress) }
+    }
+
+    var notifyOnApproval: Bool {
+        get { defaults.bool(forKey: SettingsKey.notifyOnApproval) }
+        set { defaults.set(newValue, forKey: SettingsKey.notifyOnApproval) }
     }
 
     var collapseOnMouseLeave: Bool {
