@@ -24,28 +24,28 @@ Sources used for the baseline:
 
 | Capability | macOS | iPhone / away | Required completion proof |
 | --- | --- | --- | --- |
-| Auto, Home, Work, Code modes | Missing | Missing | Mode resolver tests plus native mode-switch and auto-switch runtime evidence |
-| Now Playing, queue, lyrics, controls | Partial: Music/Spotify metadata and controls | Partial: mirrored controls | Real Apple Music and Spotify playback plus remaining queue/lyrics tests |
-| Shelf, clipboard history, file handoff | Partial: guarded local clipboard history/copy/remove | Partial: remote copy/remove | Persist/re-copy plus remaining file drop/download/open tests across Mac and iPhone |
-| Calendar list/month, CRUD, Join | Partial: next event and trusted Join | Missing | Permission, list/month, add/edit/delete, link editing, and Join tests |
-| Tasks/lists/due dates/reorder/archive | Partial: selected lists, add, complete | Missing | Real list selection and full mutation tests on both platforms |
-| Notes/jot/categories/checklists/merge | Partial: persistent add/copy/delete | Partial: remote add/copy/delete | Append, edit, undo, merge, and conflict tests |
+| Auto, Home, Work, Code modes | Ready: shared catalog, manual selection, and automatic context | Ready: shared modes and remote selection | Native runtime evidence for automatic switching |
+| Now Playing, queue, lyrics, controls | Partial: Music/Spotify metadata, progress, Music lyrics, and controls | Partial: mirrored metadata, lyrics, progress, and controls | Real Apple Music and Spotify playback; queue, seek, and artwork remain |
+| Shelf, clipboard history, file handoff | Unverified: guarded clipboard history, file capture, reveal, copy, and remove | Unverified: authenticated file download/share plus copy/remove | Runtime file round trip across Mac, iPhone, and web; 100 MB cap is enforced |
+| Calendar list/month, CRUD, Join | Unverified: two-week agenda, add/delete, trusted Join, and stable signed TCC identity | Unverified: agenda, add/delete, and trusted Join | Grant Calendar once to the newly signed app and verify real events; month view and edit remain |
+| Tasks/lists/due dates/reorder/archive | Partial: list filter, due dates, add, complete, and delete | Partial: mirrored list, due-date, add, complete, and delete actions | Real Reminders runtime mutations; reorder and archive remain |
+| Notes/jot/categories/checklists/merge | Partial: persistent add/copy/delete/edit/append/replace | Partial: mirrored add/copy/delete/edit/append/replace | Runtime conflict tests; categories, checklists, merge, and undo remain |
 | System CPU/memory/load | Ready: host load/memory/disk/thermal/uptime | Ready: mirrored readings and refresh | Runtime accuracy and remote refresh tests |
-| Weather | Ready on Mac with ZIP fallback | Missing | iPhone local/remote refresh and offline-state tests |
-| Notifications | Partial: CodeIsland alerts only | Partial: approval pushes only | Permission and delivery tests for every supported alert class |
-| Claude co-pilot/voice/proposals | Missing | Missing | Ask and Do proposal confirmation, structured mutations, voice, and cancellation tests |
-| AI Coding sessions/approvals/questions | Ready | Partial: approvals and nearby session state | Tailscale session/question parity and physical-iPhone decision tests |
-| GitHub pull requests and CI | Missing | Missing | Authenticated PR list/status/open tests |
-| Audio device switcher | Partial: enumerate/defaults/open Settings | Partial: mirrored devices/open Settings | Switch, volume, and failure-state tests |
-| Bluetooth devices/connect/disconnect | Partial: battery readings | Partial: mirrored readings nearby | Host action and remote action tests |
-| Battery health | Partial: Mac/accessory percentages and charge state | Partial: mirrored readings | Cycle/condition health plus accessory detail tests |
-| Quick toggles | Partial: confirmed Lock Mac | Partial: confirmed remote Lock Mac | Additional allow-listed state/action tests |
+| Weather | Unverified: WeatherKit/location with manual ZIP fallback | Unverified: mirrored remote weather and refresh | Permission, remote refresh, and offline-state runtime tests |
+| Notifications | Partial: CodeIsland alerts, APNs provider, and time-sensitive entitlement | Partial: approval pushes, Live Activity, and Dynamic Island UI | Physical-iPhone permission, token, delivery, and Live Activity tests |
+| Claude co-pilot/voice/proposals | Partial: read-only Ask through authenticated local Claude Code | Partial: remote Ask with copyable response | Voice and reviewed Do proposals remain; mutations stay on CodeIsland's exact-confirmation path |
+| AI Coding sessions/approvals/questions | Ready: sessions, questions, approvals, and exact-confirmation actions | Unverified: native and private-web parity over Tailscale | Physical-iPhone approval/question/action tests away from the Mac |
+| GitHub pull requests and CI | Ready: authenticated `gh` PR list/status/deep links | Ready: mirrored list/status/deep links | Runtime refresh/open test from iPhone |
+| Audio device switcher | Unverified: enumerate/default input/output and switch | Unverified: mirrored devices and confirmed remote switch | Physical device switch and failure-state tests; volume remains |
+| Bluetooth devices/connect/disconnect | Unverified: connected/remembered devices, battery, connect/disconnect | Unverified: mirrored devices and confirmed remote actions | Physical accessory connect/disconnect tests |
+| Battery health | Ready: charge, cycles, health percentage, and condition | Ready: mirrored health and accessory readings | Runtime comparison with macOS System Information |
+| Quick toggles | Unverified: dark/light, mute/unmute, display sleep, and Lock Mac | Unverified: exact-confirmation remote actions | Physical state/action tests, including expected permission failures |
 | Active Downloads | Ready on Mac | Partial: nearby summary only | Remote list/progress/open/download tests over Tailscale |
-| Camera pre-check | Missing | Missing | Permission, preview, mic/camera selection, and failure tests |
-| Teleprompter/present mode | Missing | Missing | Local and remote presentation, speed, visibility, and resume tests |
-| Window snapping/remote window actions | Missing | Missing | Accessibility permission and allow-listed action tests |
-| Private web fallback | Partial: approvals only | Partial: approvals only | Responsive module/action parity tests |
-| TestFlight distribution | Missing | Missing | Signed archive, App Store Connect processing, install, launch, and receipt evidence |
+| Camera pre-check | Partial: opens Photo Booth | Unverified: private front-camera preview with permission/failure UI | Physical camera permission/preview test; mic and camera selection remain |
+| Teleprompter/present mode | Unverified: persistent floating reader, play/pause, WPM, and font size | Unverified: full-screen reader, play/pause, WPM, and font size | Mac and physical-iPhone presentation/resume tests |
+| Window snapping/remote window actions | Unverified: allow-listed left/right/maximize via Accessibility | Unverified: confirmed remote left/right/maximize | Grant Accessibility and verify real windows |
+| Private web fallback | Unverified: responsive modules, actions, Calendar/Tasks/Notes/Claude composers, Join, and Shelf download | Unverified: Tailscale-authenticated browser client | Live Tailscale module/action/file round trip |
+| TestFlight distribution | Ready: signed archive/upload pipeline and internal group | Unverified: build processing/group access proven; physical install pending | Install, launch, permissions, push, Live Activity, and receipt evidence on Greg's iPhone |
 
 ## Architecture invariant
 

@@ -282,6 +282,32 @@ final class RemoteApprovalClient: ObservableObject {
         hubActionMessage = message
     }
 
+    func downloadShelfFile(id: String, filename: String) async -> URL? {
+        guard let url = endpoint("/api/hub/shelf/\(id)/file"), let deviceToken else { return nil }
+        do {
+            var request = URLRequest(url: url)
+            request.httpMethod = "GET"
+            request.timeoutInterval = 45
+            request.setValue("Bearer \(deviceToken)", forHTTPHeaderField: "Authorization")
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse,
+                  (200..<300).contains(http.statusCode) else {
+                throw RemoteClientError.server("Mac could not transfer the Shelf file")
+            }
+            let safeName = filename.replacingOccurrences(of: "/", with: "-")
+            let destination = FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString, isDirectory: true)
+            try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+            let fileURL = destination.appendingPathComponent(safeName.isEmpty ? "CodeIsland-file" : safeName)
+            try data.write(to: fileURL, options: [.atomic])
+            hubActionMessage = "Downloaded \(fileURL.lastPathComponent)"
+            return fileURL
+        } catch {
+            hubActionMessage = error.localizedDescription
+            return nil
+        }
+    }
+
     func executeHubAction(_ prepared: PersonalHubPreparedAction) async {
         guard !hubActionInFlight,
               let url = endpoint("/api/hub/actions/execute")

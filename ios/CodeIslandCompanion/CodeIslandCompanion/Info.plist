@@ -26,6 +26,8 @@
 	<string>Buddy discovers your Mac on the local network to sync CodeIsland sessions and approvals.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Buddy uses Bluetooth to receive nearby CodeIsland status and approval updates from your Mac.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>CodeIsland Buddy uses the front camera only for your private camera pre-check preview.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>UIBackgroundModes</key>

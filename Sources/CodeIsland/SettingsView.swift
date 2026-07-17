@@ -137,8 +137,12 @@ private struct GlancesSettingsPage: View {
 
                 if model.calendarAuthorized {
                     Button("Refresh Calendar") { model.refreshCalendar() }
-                } else if model.calendarAuthorizationStatus == .notDetermined {
-                    Button("Grant Calendar Access") { model.requestCalendarAccess() }
+                } else if GlancesModel.canRequestFullCalendarAccess(model.calendarAuthorizationStatus) {
+                    Button(model.calendarAuthorizationStatus == .writeOnly
+                        ? "Upgrade to Full Calendar Access"
+                        : "Grant Calendar Access") {
+                        model.requestCalendarAccess()
+                    }
                 } else {
                     Button("Open Calendar Privacy Settings") {
                         openPrivacySettings("Privacy_Calendars")

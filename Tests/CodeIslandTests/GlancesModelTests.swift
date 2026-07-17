@@ -3,6 +3,13 @@ import XCTest
 
 @MainActor
 final class GlancesModelTests: XCTestCase {
+    func testCalendarCanUpgradeWriteOnlyAccess() {
+        XCTAssertTrue(GlancesModel.canRequestFullCalendarAccess(.notDetermined))
+        XCTAssertTrue(GlancesModel.canRequestFullCalendarAccess(.writeOnly))
+        XCTAssertFalse(GlancesModel.canRequestFullCalendarAccess(.fullAccess))
+        XCTAssertFalse(GlancesModel.canRequestFullCalendarAccess(.denied))
+    }
+
     func testReminderSelectionKeepsValidStoredLists() {
         let selected = GlancesModel.resolveReminderCalendarIDs(
             stored: ["work", "stale"],

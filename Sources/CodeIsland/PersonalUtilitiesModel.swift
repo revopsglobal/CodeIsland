@@ -12,6 +12,8 @@ import os.log
 final class PersonalUtilitiesModel: ObservableObject {
     static let shared = PersonalUtilitiesModel()
 
+    typealias DirectoryOpener = @Sendable (String) -> Int32
+
     struct DownloadInfo: Identifiable, Equatable, Sendable {
         let id: String
         let url: URL
@@ -55,9 +57,18 @@ final class PersonalUtilitiesModel: ObservableObject {
         }
     }
 
+    struct BluetoothDevice: Identifiable, Equatable, Sendable {
+        let id: String
+        let name: String
+        let address: String
+        let kind: String?
+        let isConnected: Bool
+    }
+
     @Published private(set) var downloads: [DownloadInfo] = []
     @Published private(set) var recentDownloadCompleted: String?
     @Published private(set) var deviceBatteries: [DeviceBattery] = []
+    @Published private(set) var bluetoothDevices: [BluetoothDevice] = []
     @Published private(set) var bluetoothError: String?
     @Published private(set) var isRefreshingBluetooth = false
 
@@ -80,21 +91,33 @@ final class PersonalUtilitiesModel: ObservableObject {
         "crdownload", "download", "opdownload", "part", "partial",
     ]
 
-    private let downloadsURL = FileManager.default.homeDirectoryForCurrentUser
+    nonisolated private static let defaultDownloadsURL = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Downloads", isDirectory: true)
+    private let downloadsURL: URL
+    private let directoryOpener: DirectoryOpener
     private var directorySource: DispatchSourceFileSystemObject?
     private var progressTimer: Timer?
     private var batteryTimer: Timer?
     private var completionClearTimer: Timer?
     private var hasScannedDownloads = false
     private var started = false
+    private var downloadsGeneration = 0
+    private var downloadScanInFlight = false
+    private var downloadScanPending = false
     private var lastBluetoothRefresh = Date.distantPast
 
-    private init() {}
+    init(
+        downloadsURL: URL = PersonalUtilitiesModel.defaultDownloadsURL,
+        directoryOpener: @escaping DirectoryOpener = { open($0, O_EVTONLY) }
+    ) {
+        self.downloadsURL = downloadsURL
+        self.directoryOpener = directoryOpener
+    }
 
     func start() {
         guard !started else { return }
         started = true
+        downloadsGeneration &+= 1
         startDownloadsWatcher()
         scanDownloads()
         refreshBluetooth(force: true)
@@ -113,6 +136,9 @@ final class PersonalUtilitiesModel: ObservableObject {
         completionClearTimer?.invalidate()
         completionClearTimer = nil
         started = false
+        downloadsGeneration &+= 1
+        downloadScanInFlight = false
+        downloadScanPending = false
     }
 
     func refreshAll() {
@@ -132,12 +158,33 @@ final class PersonalUtilitiesModel: ObservableObject {
     // MARK: - Downloads
 
     private func startDownloadsWatcher() {
-        let descriptor = open(downloadsURL.path, O_EVTONLY)
-        guard descriptor >= 0 else {
-            Self.log.error("Unable to watch Downloads at \(self.downloadsURL.path, privacy: .public)")
-            return
+        let path = downloadsURL.path
+        let generation = downloadsGeneration
+        let opener = directoryOpener
+        Task { [weak self] in
+            // Downloads is protected by Files & Folders TCC. A newly signed app
+            // can block in open(2) while macOS resolves that permission, so the
+            // syscall must never run on the app's main actor during launch.
+            let descriptor = await Task.detached(priority: .utility) {
+                opener(path)
+            }.value
+            guard let self else {
+                if descriptor >= 0 { close(descriptor) }
+                return
+            }
+            guard self.started, self.downloadsGeneration == generation else {
+                if descriptor >= 0 { close(descriptor) }
+                return
+            }
+            guard descriptor >= 0 else {
+                Self.log.error("Unable to watch Downloads at \(path, privacy: .public)")
+                return
+            }
+            self.installDownloadsWatcher(descriptor: descriptor)
         }
+    }
 
+    private func installDownloadsWatcher(descriptor: Int32) {
         let source = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: descriptor,
             eventMask: [.write, .extend, .attrib, .link, .rename, .delete],
@@ -154,9 +201,31 @@ final class PersonalUtilitiesModel: ObservableObject {
     }
 
     private func scanDownloads() {
+        if downloadScanInFlight {
+            downloadScanPending = true
+            return
+        }
+        downloadScanInFlight = true
+        let directory = downloadsURL
+        let generation = downloadsGeneration
+        Task { [weak self] in
+            let current = await Task.detached(priority: .utility) {
+                Self.scanDownloadEntries(in: directory)
+            }.value
+            guard let self else { return }
+            self.downloadScanInFlight = false
+            guard self.started, self.downloadsGeneration == generation else { return }
+            self.applyDownloadEntries(current)
+            if self.downloadScanPending {
+                self.downloadScanPending = false
+                self.scanDownloads()
+            }
+        }
+    }
+
+    private func applyDownloadEntries(_ current: [DownloadInfo]) {
         let previous = downloads
         let previousCompletion = recentDownloadCompleted
-        let current = Self.scanDownloadEntries(in: downloadsURL)
         downloads = current
 
         if hasScannedDownloads, !previous.isEmpty {
@@ -311,16 +380,18 @@ final class PersonalUtilitiesModel: ObservableObject {
                     arguments: ["-a", "-r", "-c", "AppleDeviceManagementHIDEventService"]
                 )
                 let profiler = profilerData.map(PersonalUtilitiesModel.parseBluetoothProfiler) ?? []
+                let devices = profilerData.map(PersonalUtilitiesModel.parseBluetoothDevices) ?? []
                 let hid = hidData.map(PersonalUtilitiesModel.parseHIDBatteries) ?? []
-                return PersonalUtilitiesModel.mergeBatteries(profiler + hid)
+                return (PersonalUtilitiesModel.mergeBatteries(profiler + hid), devices)
             }.value
 
             guard let self else { return }
             let previous = self.deviceBatteries
-            self.deviceBatteries = result
-            self.bluetoothError = result.isEmpty ? "No battery readings from connected accessories" : nil
+            self.deviceBatteries = result.0
+            self.bluetoothDevices = result.1
+            self.bluetoothError = result.1.isEmpty ? "No paired Bluetooth devices" : nil
             self.isRefreshingBluetooth = false
-            if result != previous {
+            if result.0 != previous {
                 AppleCompanionPublisher.shared.notifyDirty()
             }
         }
@@ -340,6 +411,39 @@ final class PersonalUtilitiesModel: ObservableObject {
                 return DeviceBattery(id: name.lowercased(), name: name, levels: levels)
             }
         }
+    }
+
+    nonisolated static func parseBluetoothDevices(_ data: Data) -> [BluetoothDevice] {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let sections = root["SPBluetoothDataType"] as? [[String: Any]],
+              let section = sections.first else { return [] }
+
+        func devices(key: String, connected: Bool) -> [BluetoothDevice] {
+            guard let rows = section[key] as? [[String: Any]] else { return [] }
+            return rows.flatMap { row in
+                row.compactMap { name, raw -> BluetoothDevice? in
+                    guard let details = raw as? [String: Any],
+                          let address = details["device_address"] as? String,
+                          !address.isEmpty else { return nil }
+                    return .init(
+                        id: address,
+                        name: name,
+                        address: address,
+                        kind: details["device_minorType"] as? String,
+                        isConnected: connected
+                    )
+                }
+            }
+        }
+
+        return (devices(key: "device_connected", connected: true)
+            + devices(key: "device_not_connected", connected: false))
+            .reduce(into: [String: BluetoothDevice]()) { $0[$1.id] = $1 }
+            .values
+            .sorted {
+                if $0.isConnected != $1.isConnected { return $0.isConnected }
+                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
     }
 
     nonisolated static func parseHIDBatteries(_ data: Data) -> [DeviceBattery] {

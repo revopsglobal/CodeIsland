@@ -3,6 +3,27 @@ import XCTest
 
 @MainActor
 final class PersonalUtilitiesModelTests: XCTestCase {
+    func testStartDoesNotBlockOnProtectedDownloadsDirectory() throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let openerEntered = expectation(description: "directory opener runs off the main actor")
+        let releaseOpener = DispatchSemaphore(value: 0)
+        let model = PersonalUtilitiesModel(downloadsURL: directory) { _ in
+            openerEntered.fulfill()
+            releaseOpener.wait()
+            return -1
+        }
+
+        let startedAt = Date()
+        model.start()
+        let startDuration = Date().timeIntervalSince(startedAt)
+
+        XCTAssertLessThan(startDuration, 0.1)
+        wait(for: [openerEntered], timeout: 1)
+        model.stop()
+        releaseOpener.signal()
+    }
+
     func testParsesConnectedBluetoothBatteryLevels() throws {
         let data = Data(
             """
@@ -37,6 +58,25 @@ final class PersonalUtilitiesModelTests: XCTestCase {
         )
 
         XCTAssertTrue(PersonalUtilitiesModel.parseBluetoothProfiler(data).isEmpty)
+    }
+
+    func testParsesConnectedAndRememberedBluetoothDevices() throws {
+        let data = Data(
+            """
+            {"SPBluetoothDataType":[{
+              "device_connected":[{"Keyboard":{"device_address":"AA:BB:CC:DD:EE:01","device_minorType":"Keyboard"}}],
+              "device_not_connected":[{"AirPods":{"device_address":"AA:BB:CC:DD:EE:02","device_minorType":"Headphones"}}]
+            }]}
+            """.utf8
+        )
+
+        let devices = PersonalUtilitiesModel.parseBluetoothDevices(data)
+
+        XCTAssertEqual(devices.count, 2)
+        XCTAssertEqual(devices[0].name, "Keyboard")
+        XCTAssertTrue(devices[0].isConnected)
+        XCTAssertEqual(devices[1].address, "AA:BB:CC:DD:EE:02")
+        XCTAssertFalse(devices[1].isConnected)
     }
 
     func testParsesHIDBatteryAndSkipsInternalKeyboard() throws {
