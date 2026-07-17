@@ -45,7 +45,7 @@ Sources used for the baseline:
 | Teleprompter/present mode | Unverified: persistent floating reader, play/pause, WPM, and font size | Unverified: full-screen reader, play/pause, WPM, and font size | Mac and physical-iPhone presentation/resume tests |
 | Window snapping/remote window actions | Unverified: allow-listed left/right/maximize via Accessibility | Unverified: confirmed remote left/right/maximize | Grant Accessibility and verify real windows |
 | Private web fallback | Partial: responsive client plus live Tailscale root/401 proof and isolated real-listener pairing/auth/mode/action tests | Partial: authenticated Home/Work/Code, approval, question, push registration, exact-action and replay protection are automated | Physical Tailscale browser module/action/file round trip |
-| TestFlight distribution | Ready: signed archive/upload pipeline and internal group | Unverified on the physical phone: build `1.0.0 (20260717113810)` is Apple `VALID` and available to the all-builds internal group; install pending | Install, launch, permissions, push, Live Activity, and receipt evidence on Greg's iPhone |
+| TestFlight distribution | Ready: signed archive/upload pipeline and internal group | Unverified on the physical phone: build `1.0.0 (20260717120420)` is Apple `VALID` and available to the all-builds internal group; install pending | Install, launch, permissions, push, Live Activity, and receipt evidence on Greg's iPhone |
 
 ## Architecture invariant
 
@@ -92,21 +92,22 @@ native Simulator evidence, not physical-iPhone or cellular/Tailscale proof.
 These receipts were captured on 2026-07-17. They prove the automated delivery
 surfaces, not the remaining physical-device interactions.
 
-- macOS `1.0.35`: merged commit `0337d0e7d4ee4dcc408d2feb53fb2c2c5f7a5bed`,
-  Actions run `29576716261`, artifact `8405419352`, DMG SHA-256
-  `59cf43805024991400b0cffc8a290b8c6ffc2402ef334ed1e6aabe58681f8d39`.
+- macOS `1.0.36`: merged commit `6ad428e952fb200c51f68182471c38fe7c32e796`,
+  Actions run `29578951355`, artifact `8406349680`, DMG SHA-256
+  `7025c470ab22782f3ebc505ba9c358d97def778758b9955e374f906e675079fb`.
   The downloaded DMG passed `codesign --verify --deep --strict` directly from
   its mounted image, and that exact app is installed at
-  `/Applications/CodeIsland.app` with team `44JG2Y95CH`.
-- iOS `1.0.0 (20260717113810)`: merged commit
-  `08b8e6ec69759a6294c3c9e46417b0d4a60ce266`, Actions run `29577487124`,
-  signed IPA artifact `8405674273`. App Store Connect reported bundle
+  `/Applications/CodeIsland.app` with team `44JG2Y95CH` and CDHash
+  `e7749f3369d10cac87e6495843de22d683a5a425`.
+- iOS `1.0.0 (20260717120420)`: merged commit
+  `6ad428e952fb200c51f68182471c38fe7c32e796`, Actions run `29578952503`,
+  signed IPA artifact `8406281069`. App Store Connect reported bundle
   `com.revopsglobal.codeisland.buddy` as `VALID`, audience
   `APP_STORE_ELIGIBLE`; internal group `CodeIsland Internal` has access to all
   builds.
 - The installed Mac host answered both local and Tailscale `/health` with
   `running: true`; the Tailscale root returned the expected CSP/frame/referrer
-  headers and unauthenticated `/api/hub` access returned `401`.
+  headers and unauthenticated Downloads-file access returned `401`.
 
 ## Physical acceptance run
 
@@ -115,7 +116,7 @@ requires Greg's physical iPhone, biometric/permission taps, real accessories,
 and real Calendar/Reminders data.
 
 1. On iPhone, install Apple's **TestFlight** app from the App Store. In
-   TestFlight, install **CodeIsland Buddy** `1.0.0 (20260717113810)` from
+   TestFlight, install **CodeIsland Buddy** `1.0.0 (20260717120420)` from
    `CodeIsland Internal`. Install or enable Tailscale and confirm the phone is
    on Greg's tailnet.
 2. Unlock the Mac and open CodeIsland Settings. Use the app's permission
