@@ -27,6 +27,7 @@ final class RemoteApprovalClient: ObservableObject {
     @Published private(set) var lastUpdatedAt: Date?
     @Published private(set) var busyRequestIDs: Set<String> = []
     @Published private(set) var highlightedApprovalID: String?
+    @Published private(set) var highlightedQuestionID: String?
     @Published private(set) var highlightedHubModuleID: PersonalHubModuleID?
     @Published private(set) var hubSnapshot: PersonalHubSnapshot?
     private var calendarReferenceDate: Date?
@@ -57,6 +58,7 @@ final class RemoteApprovalClient: ObservableObject {
     private static let tokenAccount = "device-token"
     private static let pendingPushTokenKey = "codeisland.remote.pendingPushToken"
     private static let pendingApprovalIDKey = "codeisland.remote.pendingApprovalID"
+    private static let pendingQuestionIDKey = "codeisland.remote.pendingQuestionID"
     private static let selectedModeKey = "codeisland.hub.selectedMode.v1"
 
     private let usesMockHub: Bool
@@ -65,6 +67,7 @@ final class RemoteApprovalClient: ObservableObject {
     private var pollTask: Task<Void, Never>?
     private var isActive = true
     private var notificationObservers: [NSObjectProtocol] = []
+    var onSnapshotReceived: ((RemoteApprovalSnapshot) -> Void)?
 
     var hasPairingCredential: Bool {
         deviceToken != nil
@@ -115,13 +118,25 @@ final class RemoteApprovalClient: ObservableObject {
             Task { @MainActor in await self?.registerPendingPushToken() }
         })
         notificationObservers.append(NotificationCenter.default.addObserver(
-            forName: .codeIslandRemoteApprovalOpened,
+            forName: .codeIslandRemoteAttentionChanged,
             object: nil,
             queue: .main
         ) { [weak self] notification in
             Task { @MainActor in
-                self?.highlightedApprovalID = notification.userInfo?["approvalId"] as? String
-                await self?.refresh()
+                guard let self else { return }
+                let requestID = notification.userInfo?["requestId"] as? String
+                let kind = (notification.userInfo?["kind"] as? String).flatMap(RemoteAttentionKind.init(rawValue:))
+                let attentionState = (notification.userInfo?["state"] as? String).flatMap(RemoteAttentionState.init(rawValue:))
+                if attentionState == .pending, kind == .approval {
+                    self.highlightedApprovalID = requestID
+                } else if attentionState == .pending, kind == .question {
+                    self.highlightedQuestionID = requestID
+                } else if kind == .approval, self.highlightedApprovalID == requestID {
+                    self.highlightedApprovalID = nil
+                } else if kind == .question, self.highlightedQuestionID == requestID {
+                    self.highlightedQuestionID = nil
+                }
+                await self.refresh()
             }
         })
         notificationObservers.append(NotificationCenter.default.addObserver(
@@ -167,6 +182,10 @@ final class RemoteApprovalClient: ObservableObject {
             if let pendingID = UserDefaults.standard.string(forKey: Self.pendingApprovalIDKey) {
                 highlightedApprovalID = pendingID
                 UserDefaults.standard.removeObject(forKey: Self.pendingApprovalIDKey)
+            }
+            if let pendingID = UserDefaults.standard.string(forKey: Self.pendingQuestionIDKey) {
+                highlightedQuestionID = pendingID
+                UserDefaults.standard.removeObject(forKey: Self.pendingQuestionIDKey)
             }
             await refresh()
             await registerPendingPushToken()
@@ -281,6 +300,7 @@ final class RemoteApprovalClient: ObservableObject {
                 RemoteQuestionAnswerRequest(answers: answers, actionToken: actionToken)
             )
             let _: RemoteQuestionAnswerResponse = try await perform(request, authenticated: true)
+            highlightedQuestionID = nil
             await refresh()
         } catch {
             state = .offline(error.localizedDescription)
@@ -315,9 +335,18 @@ final class RemoteApprovalClient: ObservableObject {
             let snapshot: RemoteApprovalSnapshot = try await perform(request, authenticated: true)
             approvals = snapshot.approvals
             questions = snapshot.questions
+            if let highlightedApprovalID,
+               !approvals.contains(where: { $0.id == highlightedApprovalID }) {
+                self.highlightedApprovalID = nil
+            }
+            if let highlightedQuestionID,
+               !questions.contains(where: { $0.id == highlightedQuestionID }) {
+                self.highlightedQuestionID = nil
+            }
             serverName = snapshot.serverName
             lastUpdatedAt = Date()
             state = .connected
+            onSnapshotReceived?(snapshot)
             await refreshHub()
         } catch RemoteClientError.unauthorized {
             unpair()
@@ -969,5 +998,5 @@ final class RemoteApprovalClient: ObservableObject {
 
 extension Notification.Name {
     static let codeIslandPushTokenAvailable = Notification.Name("codeisland.push-token-available")
-    static let codeIslandRemoteApprovalOpened = Notification.Name("codeisland.remote-approval-opened")
+    static let codeIslandRemoteAttentionChanged = Notification.Name("codeisland.remote-attention-changed")
 }

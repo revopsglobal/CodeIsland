@@ -159,7 +159,12 @@ private struct RemoteQuestionCard: View {
         }
         .padding(14)
         .background(IslandShellShape().fill(Color.ciSurface))
-        .overlay(IslandShellShape().stroke(Color.cyan.opacity(0.48), lineWidth: 1))
+        .overlay(
+            IslandShellShape().stroke(
+                client.highlightedQuestionID == question.id ? Color.cyan : Color.cyan.opacity(0.48),
+                lineWidth: client.highlightedQuestionID == question.id ? 2 : 1
+            )
+        )
         .confirmationDialog(
             "Send this answer to the exact waiting agent request?",
             isPresented: $confirming

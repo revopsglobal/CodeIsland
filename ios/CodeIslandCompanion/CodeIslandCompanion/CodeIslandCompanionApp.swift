@@ -17,6 +17,12 @@ struct CodeIslandCompanionApp: App {
                 liveActivity?.updateIfRunning(with: state)
             }
         }
+        remoteApprovals.onSnapshotReceived = { [weak liveActivity] snapshot in
+            guard let state = CompanionStatePayload(remoteApprovalSnapshot: snapshot) else { return }
+            Task { @MainActor in
+                liveActivity?.updateIfRunning(with: state)
+            }
+        }
 #if DEBUG
         Self.configureSmokeTestHooks(connection: connection, liveActivity: liveActivity)
 #endif
@@ -56,7 +62,15 @@ struct CodeIslandCompanionApp: App {
                   arguments.indices.contains(flagIndex + 1)
             else { return }
 
-            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            let delaySeconds: Double
+            if let delayIndex = arguments.firstIndex(of: "-CodeIslandCompanionSmokeDelayedSeconds"),
+               arguments.indices.contains(delayIndex + 1),
+               let configured = Double(arguments[delayIndex + 1]) {
+                delaySeconds = max(0.5, configured)
+            } else {
+                delaySeconds = 4
+            }
+            try? await Task.sleep(nanoseconds: UInt64(delaySeconds * 1_000_000_000))
             connection.injectMockState(named: arguments[flagIndex + 1])
         }
     }

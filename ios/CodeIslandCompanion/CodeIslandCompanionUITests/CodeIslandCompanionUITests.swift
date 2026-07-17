@@ -40,6 +40,39 @@ final class CodeIslandCompanionUITests: XCTestCase {
     }
 
     @MainActor
+    func testLiveActivityEndsWhenWaitingRequestResolves() throws {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-CodeIslandCompanionMockState", "question",
+            "-CodeIslandCompanionSmokeLiveActivity",
+            "-CodeIslandCompanionSmokeDelayedState", "idle",
+            "-CodeIslandCompanionSmokeDelayedSeconds", "10",
+        ]
+        app.launch()
+
+        let inline = app.buttons["companion.liveActivity.inlineButton"]
+        XCTAssertTrue(inline.waitForExistence(timeout: 8))
+        let running = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label CONTAINS[c] %@", "Stop Live Activity"),
+            object: inline
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [running], timeout: 5), .completed)
+
+        let primary = app.buttons["companion.liveActivity.primaryButton"]
+        XCTAssertTrue(primary.waitForExistence(timeout: 10))
+        let ended = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label CONTAINS[c] %@", "Start Live Activity"),
+            object: primary
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [ended], timeout: 15), .completed)
+        let inlineGone = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"),
+            object: inline
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [inlineGone], timeout: 4), .completed)
+    }
+
+    @MainActor
     func testPairingSurfaceKeepsRecoveryInline() throws {
         let app = XCUIApplication()
         app.launchArguments = [

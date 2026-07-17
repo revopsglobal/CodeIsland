@@ -36,6 +36,8 @@ final class AppleCompanionPublisher: NSObject, ObservableObject {
     private var sequence: UInt64 = 0
     private let bluetooth = AppleCompanionBluetoothPeripheral()
 
+    var currentSequence: UInt64 { sequence }
+
     private let encoder: JSONEncoder = {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601

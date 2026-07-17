@@ -29,6 +29,7 @@ final class RemoteApprovalService: ObservableObject {
     private let tailscaleConfigurator: @Sendable (Int, Int) throws -> String
     private var pairAttemptLimiter = RemotePairAttemptLimiter()
     private var lastPendingIDs: Set<String> = []
+    private var lastPendingQuestionIDs: Set<String> = []
     private var sleepActivity: NSObjectProtocol?
 
     init(
@@ -153,17 +154,45 @@ final class RemoteApprovalService: ObservableObject {
     func stateDidChange() {
         guard let appState else { return }
         let currentIDs = Set(appState.permissionQueue.map(\.id))
-        updateSleepActivity(hasPending: !currentIDs.isEmpty)
+        let currentQuestionIDs = Set(appState.questionQueue.map(\.id))
+        updateSleepActivity(hasPending: !currentIDs.isEmpty || !currentQuestionIDs.isEmpty)
 
         let newIDs = currentIDs.subtracting(lastPendingIDs)
+        let resolvedIDs = lastPendingIDs.subtracting(currentIDs)
+        let newQuestionIDs = currentQuestionIDs.subtracting(lastPendingQuestionIDs)
+        let resolvedQuestionIDs = lastPendingQuestionIDs.subtracting(currentQuestionIDs)
         lastPendingIDs = currentIDs
-        guard !newIDs.isEmpty else { return }
+        lastPendingQuestionIDs = currentQuestionIDs
 
         for request in appState.permissionQueue where newIDs.contains(request.id) {
             APNSNotificationSender.shared.notify(
                 requestID: request.id,
-                source: AppState.sourceLabel(for: request.event),
-                tool: request.event.toolName ?? "Approval",
+                kind: .approval,
+                state: .pending,
+                devices: deviceStore.devices
+            )
+        }
+        for request in appState.questionQueue where newQuestionIDs.contains(request.id) {
+            APNSNotificationSender.shared.notify(
+                requestID: request.id,
+                kind: .question,
+                state: .pending,
+                devices: deviceStore.devices
+            )
+        }
+        for requestID in resolvedIDs {
+            APNSNotificationSender.shared.notify(
+                requestID: requestID,
+                kind: .approval,
+                state: .resolved,
+                devices: deviceStore.devices
+            )
+        }
+        for requestID in resolvedQuestionIDs {
+            APNSNotificationSender.shared.notify(
+                requestID: requestID,
+                kind: .question,
+                state: .resolved,
                 devices: deviceStore.devices
             )
         }
@@ -278,7 +307,11 @@ final class RemoteApprovalService: ObservableObject {
         }
 
         if request.method == "GET", request.path == "/api/approvals" {
-            let snapshot = coordinator.snapshot(appState: appState, deviceID: authenticated.id)
+            let snapshot = coordinator.snapshot(
+                appState: appState,
+                deviceID: authenticated.id,
+                companionSequence: AppleCompanionPublisher.shared.currentSequence
+            )
             return .json(status: 200, encodable: snapshot)
         }
 
@@ -688,7 +721,11 @@ final class RemoteApprovalCoordinator {
             .appendingPathComponent("remote-approval-audit.jsonl")
     }
 
-    func snapshot(appState: AppState, deviceID: String) -> RemoteApprovalSnapshot {
+    func snapshot(
+        appState: AppState,
+        deviceID: String,
+        companionSequence: UInt64? = nil
+    ) -> RemoteApprovalSnapshot {
         let now = Date()
 
         let approvals = appState.permissionQueue.map { request -> RemoteApprovalItem in
@@ -765,6 +802,7 @@ final class RemoteApprovalCoordinator {
         }
         return RemoteApprovalSnapshot(
             serverName: Host.current().localizedName ?? "CodeIsland Mac",
+            companionSequence: companionSequence,
             approvals: approvals,
             questions: questions
         )

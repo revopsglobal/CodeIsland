@@ -1980,7 +1980,7 @@ private struct BuddyPage: View {
                         .textSelection(.enabled)
                 }
 
-                Text("The private key stays on this Mac. Push messages contain only the agent and tool name; Buddy fetches the live request over Tailscale after you open it.")
+                Text("The private key stays on this Mac. Push messages contain only an opaque request ID and state; Buddy fetches the private details over authenticated Tailscale HTTPS after you open it.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

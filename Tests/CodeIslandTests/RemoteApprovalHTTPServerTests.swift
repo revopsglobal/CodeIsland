@@ -561,6 +561,21 @@ final class RemoteApprovalHTTPServerTests: XCTestCase {
         XCTAssertEqual(deviceStore.devices.first?.pushToken, pushToken)
         XCTAssertEqual(deviceStore.devices.first?.pushEnvironment, "production")
 
+        let rotatedPushToken = String(repeating: "b", count: 64)
+        let rotated = try await send(
+            port: port,
+            method: "POST",
+            path: "/api/push-token",
+            bearer: pair.deviceToken,
+            body: try encode(RemotePushRegistrationRequest(
+                token: rotatedPushToken,
+                environment: "development"
+            ))
+        )
+        XCTAssertEqual(rotated.response.statusCode, 200)
+        XCTAssertEqual(deviceStore.devices.first?.pushToken, rotatedPushToken)
+        XCTAssertEqual(deviceStore.devices.first?.pushEnvironment, "development")
+
         let audit = try String(contentsOf: auditURL, encoding: .utf8)
         XCTAssertTrue(audit.contains("\"event\":\"pair\""))
         XCTAssertTrue(audit.contains("\"event\":\"decision\""))
