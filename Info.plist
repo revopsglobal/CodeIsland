@@ -31,6 +31,12 @@
 	<string>CodeIsland uses Bluetooth to mirror the island onto Buddy.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>CodeIsland shows your next meeting in the notch's Glances so you can join the call with one tap.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>CodeIsland uses the camera only while you run a private local camera pre-check.</string>
+	<key>NSCameraUseContinuityCameraDeviceType</key>
+	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>CodeIsland uses the microphone only while you run a private local microphone pre-check or dictate a request.</string>
 	<key>NSRemindersFullAccessUsageDescription</key>
 	<string>CodeIsland shows your reminders in the notch's Glances so you can check them off.</string>
 	<key>NSScreenCaptureUsageDescription</key>

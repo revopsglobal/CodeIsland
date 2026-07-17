@@ -457,6 +457,7 @@ private struct MacHubModuleCard: View {
     @State private var selectedReminderCalendarID = ""
     @State private var mediaSeekPosition = 0.0
     @State private var isMediaSeeking = false
+    @State private var showsMediaPreflight = false
 
     private var definition: PersonalHubModuleDefinition {
         PersonalHubCatalog.definition(for: module.id)
@@ -599,6 +600,9 @@ private struct MacHubModuleCard: View {
                 selectedReminderCalendarID = reminderLists.first?.id ?? ""
             }
         }
+        .sheet(isPresented: $showsMediaPreflight) {
+            MediaPreflightView()
+        }
     }
 
     private func itemCard(_ item: PersonalHubItem) -> some View {
@@ -694,6 +698,8 @@ private struct MacHubModuleCard: View {
                             composerActionID = action.id
                             taskTitle = ""
                             showsTaskComposer.toggle()
+                        } else if module.id == .camera, action.id == "previewLocal" {
+                            showsMediaPreflight = true
                         } else {
                             prepare(module.id, action, itemID, itemDetail)
                         }

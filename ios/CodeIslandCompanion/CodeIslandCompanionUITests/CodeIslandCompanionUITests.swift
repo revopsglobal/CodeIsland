@@ -321,6 +321,10 @@ final class CodeIslandCompanionUITests: XCTestCase {
         XCTAssertTrue(app.otherElements["hub.camera.preview"].waitForExistence(timeout: 8))
         let done = app.buttons["hub.camera.done"]
         XCTAssertTrue(done.waitForExistence(timeout: 4))
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "Camera microphone private preflight"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
         done.tap()
         XCTAssertFalse(app.otherElements["hub.camera.preview"].waitForExistence(timeout: 3))
     }

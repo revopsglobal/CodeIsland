@@ -3,7 +3,7 @@ import UIKit
 import AVFoundation
 import Speech
 
-private enum HubTheme {
+enum HubTheme {
     static let accent = Color(red: 1.0, green: 0.69, blue: 0.0)
     static let foreground = Color.white
     static let surface = Color.white.opacity(0.055)
@@ -560,7 +560,7 @@ private struct PersonalHubModuleCard: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("hub.module.\(module.id.rawValue)")
         .fullScreenCover(isPresented: $showsCameraPreview) {
-            CameraPreviewScreen()
+            MediaPreflightView()
         }
         .onAppear {
             if selectedReminderCalendarID.isEmpty {
@@ -592,7 +592,7 @@ private struct PersonalHubModuleCard: View {
     }
 
     private func prepare(_ action: PersonalHubAction) {
-        if module.id == .camera, action.id == "previewOnDevice" {
+        if module.id == .camera, action.id == "previewLocal" {
             showsCameraPreview = true
             return
         }
@@ -1381,110 +1381,6 @@ private struct TeleprompterReader: View {
             .toolbarBackground(.black, for: .navigationBar, .bottomBar)
             .toolbarColorScheme(.dark, for: .navigationBar, .bottomBar)
         }
-    }
-}
-
-private struct CameraPreviewScreen: View {
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        ZStack(alignment: .topTrailing) {
-            CameraPreviewHost()
-                .ignoresSafeArea()
-            Button("Done") { dismiss() }
-                .accessibilityIdentifier("hub.camera.done")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(.black)
-                .padding(.horizontal, 16)
-                .frame(minHeight: 40)
-                .background(HubTheme.accent, in: Capsule())
-                .padding(.top, 16)
-                .padding(.trailing, 16)
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("hub.camera.preview")
-        .background(Color.black.ignoresSafeArea())
-    }
-}
-
-private struct CameraPreviewHost: UIViewControllerRepresentable {
-    func makeUIViewController(context: Context) -> CameraPreviewController {
-        CameraPreviewController()
-    }
-
-    func updateUIViewController(_ uiViewController: CameraPreviewController, context: Context) {}
-}
-
-private final class CameraPreviewController: UIViewController {
-    private let session = AVCaptureSession()
-    private let sessionQueue = DispatchQueue(label: "codeisland.camera-preview")
-    private var previewLayer: AVCaptureVideoPreviewLayer?
-
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        view.backgroundColor = .black
-        switch AVCaptureDevice.authorizationStatus(for: .video) {
-        case .authorized:
-            configureSession()
-        case .notDetermined:
-            AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
-                DispatchQueue.main.async {
-                    if granted { self?.configureSession() }
-                    else { self?.showUnavailable("Camera access is off") }
-                }
-            }
-        default:
-            showUnavailable("Enable Camera access in Settings → Privacy & Security → Camera")
-        }
-    }
-
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        previewLayer?.frame = view.bounds
-    }
-
-    override func viewWillDisappear(_ animated: Bool) {
-        super.viewWillDisappear(animated)
-        sessionQueue.async { [session] in
-            if session.isRunning { session.stopRunning() }
-        }
-    }
-
-    private func configureSession() {
-        guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front),
-              let input = try? AVCaptureDeviceInput(device: camera),
-              session.canAddInput(input)
-        else {
-            showUnavailable("Front camera is unavailable")
-            return
-        }
-        session.beginConfiguration()
-        session.sessionPreset = .high
-        session.addInput(input)
-        session.commitConfiguration()
-
-        let layer = AVCaptureVideoPreviewLayer(session: session)
-        layer.videoGravity = .resizeAspectFill
-        layer.frame = view.bounds
-        view.layer.insertSublayer(layer, at: 0)
-        previewLayer = layer
-        sessionQueue.async { [session] in session.startRunning() }
-    }
-
-    private func showUnavailable(_ message: String) {
-        let label = UILabel()
-        label.text = message
-        label.textColor = .white
-        label.font = .systemFont(ofSize: 17, weight: .semibold)
-        label.numberOfLines = 0
-        label.textAlignment = .center
-        label.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(label)
-        NSLayoutConstraint.activate([
-            label.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 32),
-            label.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -32),
-            label.centerYAnchor.constraint(equalTo: view.centerYAnchor)
-        ])
     }
 }
 

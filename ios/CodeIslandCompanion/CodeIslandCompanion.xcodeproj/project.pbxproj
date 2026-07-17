@@ -69,6 +69,7 @@
 		E15456F718660AE320B7F65F /* CodeIslandLiveActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1079D20C61C1AF51C7F24A /* CodeIslandLiveActivityWidget.swift */; };
 		EB3D23EDE1100113E8909302 /* ClineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F96CB90CA9C700A293F0F841 /* ClineView.swift */; };
 		ED41E65AAA673D9FBFD48377 /* CompanionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78474E5ED47A37C22FB49F33 /* CompanionModels.swift */; };
+		EE9571C25D71CBAA30B036D1 /* MediaPreflightView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01F72779CD82A22C093C837B /* MediaPreflightView.swift */; };
 		EF55FCB89771F97175749ECF /* CodeIslandActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCA23CC7B351415E136CC947 /* CodeIslandActivityAttributes.swift */; };
 		F29B008893CA6F336BE93A42 /* DexView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6470A3909D478701A3B07E5 /* DexView.swift */; };
 		F2A37C4EDA80546E6307A8D6 /* CompanionBluetoothCentral.swift in Sources */ = {isa = PBXBuildFile; fileRef = 827D708763E7622166DF3F8B /* CompanionBluetoothCentral.swift */; };
@@ -113,6 +114,7 @@
 
 /* Begin PBXFileReference section */
 		014DEC37F3B34948F2B630E4 /* CodeIslandCompanionWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeIslandCompanionWidgetBundle.swift; sourceTree = "<group>"; };
+		01F72779CD82A22C093C837B /* MediaPreflightView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaPreflightView.swift; sourceTree = "<group>"; };
 		030876B03E408787BD569C05 /* LiveActivityController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityController.swift; sourceTree = "<group>"; };
 		0A1079D20C61C1AF51C7F24A /* CodeIslandLiveActivityWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeIslandLiveActivityWidget.swift; sourceTree = "<group>"; };
 		0A7D0B4EC41F3FEC24838746 /* TraeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TraeView.swift; sourceTree = "<group>"; };
@@ -235,6 +237,7 @@
 				0CD94C0DFD8C9C1E2D0FA2CD /* Info.plist */,
 				DE41181FECB15FC695E14CCA /* LaunchScreen.storyboard */,
 				030876B03E408787BD569C05 /* LiveActivityController.swift */,
+				01F72779CD82A22C093C837B /* MediaPreflightView.swift */,
 				76D8A0775C5E0593E6BD3927 /* PersonalHubView.swift */,
 				9CD8A43D80EDE6E68D478FE3 /* RemoteApprovalClient.swift */,
 				8DE9B49B0CC8560A642B3750 /* RemoteApprovalView.swift */,
@@ -445,6 +448,7 @@
 				3AEB7FB2BC4A5B04E4FE6FEB /* LiveActivityController.swift in Sources */,
 				53DCB0D0D0D9FBBF1E6E7560 /* MascotMotion.swift in Sources */,
 				CB75CCB077BD30395637DFCA /* MascotTimeline.swift in Sources */,
+				EE9571C25D71CBAA30B036D1 /* MediaPreflightView.swift in Sources */,
 				60EDB1D15F768EF9BEA51D31 /* OpenCodeView.swift in Sources */,
 				627A394BE38C43B7815C44B1 /* PersonalHubProtocol.swift in Sources */,
 				5FFF36D08AECEF380207B9A8 /* PersonalHubView.swift in Sources */,

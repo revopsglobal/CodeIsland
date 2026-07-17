@@ -111,6 +111,19 @@ enum RemoteApprovalWebApp {
         .calendar-count { display:block; width:4px; height:4px; margin:2px auto 0; border-radius:50%; background:var(--amber); box-shadow:0 0 7px #ffb34799; }
         .calendar-selected { margin-top:8px; }
         progress { width:100%; height:5px; margin-top:7px; accent-color:var(--amber); }
+        .media-preflight { position:fixed; inset:0; z-index:100; display:grid; place-items:center; background:#010201; color:#f4f7f4; }
+        .media-preflight video { width:100%; height:100%; object-fit:cover; transform:scaleX(-1); }
+        .media-preflight-scrim { position:absolute; inset:0; pointer-events:none; background:linear-gradient(180deg,#000b 0,#0000 28%,#0000 58%,#000d 100%); }
+        .media-preflight-top { position:absolute; top:max(18px,env(safe-area-inset-top)); left:18px; right:18px; display:flex; align-items:flex-start; justify-content:space-between; gap:16px; }
+        .media-preflight-copy { max-width:440px; text-shadow:0 2px 18px #000; }
+        .media-preflight-copy strong { display:block; font-size:20px; letter-spacing:-.02em; }
+        .media-preflight-copy span { display:block; margin-top:5px; color:#d2dad4; font-size:12px; line-height:1.4; }
+        .media-preflight-close { min-width:72px; min-height:42px; border-radius:999px; background:#f4f7f4; color:#071008; box-shadow:0 8px 28px #0008; }
+        .media-preflight-bottom { position:absolute; left:18px; right:18px; bottom:max(22px,env(safe-area-inset-bottom)); padding:14px; border:1px solid #ffffff24; border-radius:17px; background:#071008dd; backdrop-filter:blur(18px); box-shadow:0 18px 60px #0008; }
+        .media-preflight-private { color:var(--green); font:800 10px ui-monospace,SFMono-Regular,Menlo,monospace; letter-spacing:.11em; text-transform:uppercase; }
+        .media-preflight-status { margin-top:5px; color:#aeb8b0; font-size:12px; }
+        .media-preflight-meter { height:7px; margin-top:11px; overflow:hidden; border-radius:999px; background:#ffffff14; }
+        .media-preflight-level { width:0; height:100%; border-radius:inherit; background:linear-gradient(90deg,var(--green),var(--amber)); transition:width 90ms linear; }
         .hidden { display:none !important; }
         #error { color:#ff9da0; font-size:13px; margin-top:10px; white-space:pre-wrap; }
         footer { text-align:center; color:#657067; font-size:11px; padding:18px 0; }
@@ -157,6 +170,19 @@ enum RemoteApprovalWebApp {
         </section>
         <footer>Tailnet-only · exact-request validation · single-use actions</footer>
       </main>
+      <section id="mediaPreflight" class="media-preflight hidden" role="dialog" aria-modal="true" aria-labelledby="mediaPreflightTitle">
+        <video id="mediaPreflightVideo" autoplay muted playsinline></video>
+        <div class="media-preflight-scrim" aria-hidden="true"></div>
+        <div class="media-preflight-top">
+          <div class="media-preflight-copy"><strong id="mediaPreflightTitle">Camera & microphone check</strong><span>Preview what your camera sees and confirm microphone input before a call or recording.</span></div>
+          <button id="mediaPreflightDone" class="media-preflight-close">Done</button>
+        </div>
+        <div class="media-preflight-bottom">
+          <div class="media-preflight-private">Local only</div>
+          <div id="mediaPreflightStatus" class="media-preflight-status">Requesting camera and microphone access…</div>
+          <div class="media-preflight-meter" aria-label="Microphone input level"><div id="mediaPreflightLevel" class="media-preflight-level"></div></div>
+        </div>
+      </section>
       <script>
         const tokenKey = 'codeisland.remote.deviceToken.v1';
         const modeKey = 'codeisland.hub.mode.v1';
@@ -167,6 +193,7 @@ enum RemoteApprovalWebApp {
         let busy = new Set();
         let lastHubSnapshot = { value: null };
         const mediaSeekState = { active: false };
+        const localMedia = { stream:null, audioContext:null, source:null, analyser:null, frame:0, lastMeterAt:0, priorFocus:null };
         const pair = document.getElementById('pair');
         const approvals = document.getElementById('approvals');
         const questions = document.getElementById('questions');
@@ -180,6 +207,11 @@ enum RemoteApprovalWebApp {
         const hubTitle = document.getElementById('hubTitle');
         const approvalTitle = document.getElementById('approvalTitle');
         const questionTitle = document.getElementById('questionTitle');
+        const mediaPreflight = document.getElementById('mediaPreflight');
+        const mediaPreflightVideo = document.getElementById('mediaPreflightVideo');
+        const mediaPreflightStatus = document.getElementById('mediaPreflightStatus');
+        const mediaPreflightLevel = document.getElementById('mediaPreflightLevel');
+        const mediaPreflightDone = document.getElementById('mediaPreflightDone');
 
         const moduleNames = {
           nowPlaying:'Now Playing',shelf:'Shelf',calendar:'Calendar',reminders:'Tasks',notes:'Notes',
@@ -326,6 +358,56 @@ enum RemoteApprovalWebApp {
           return `${Math.floor(whole/60)}:${String(whole%60).padStart(2,'0')}`;
         }
 
+        function releaseLocalMedia() {
+          if(localMedia.frame) cancelAnimationFrame(localMedia.frame);
+          localMedia.frame=0; localMedia.lastMeterAt=0;
+          if(localMedia.source) { try { localMedia.source.disconnect(); } catch(error) {} }
+          localMedia.source=null; localMedia.analyser=null;
+          if(localMedia.audioContext) localMedia.audioContext.close().catch(()=>{});
+          localMedia.audioContext=null;
+          if(localMedia.stream) localMedia.stream.getTracks().forEach(track=>track.stop());
+          localMedia.stream=null; mediaPreflightVideo.srcObject=null; mediaPreflightLevel.style.width='0%';
+        }
+
+        function closeMediaPreflight() {
+          releaseLocalMedia(); mediaPreflight.classList.add('hidden'); document.querySelector('main').inert=false;
+          if(localMedia.priorFocus&&typeof localMedia.priorFocus.focus==='function') localMedia.priorFocus.focus();
+          localMedia.priorFocus=null;
+        }
+
+        function updateMediaMeter(timestamp) {
+          if(!localMedia.analyser||!localMedia.stream) return;
+          if(timestamp-localMedia.lastMeterAt>=80) {
+            const samples=new Float32Array(localMedia.analyser.fftSize); localMedia.analyser.getFloatTimeDomainData(samples);
+            let squares=0; let peak=0;
+            for(const sample of samples) { squares+=sample*sample; peak=Math.max(peak,Math.abs(sample)); }
+            const rms=Math.sqrt(squares/samples.length); const level=Math.min(100,Math.round(Math.max(rms*420,peak*100)));
+            mediaPreflightLevel.style.width=`${level}%`; localMedia.lastMeterAt=timestamp;
+          }
+          localMedia.frame=requestAnimationFrame(updateMediaMeter);
+        }
+
+        async function openMediaPreflight() {
+          releaseLocalMedia(); localMedia.priorFocus=document.activeElement;
+          mediaPreflightStatus.textContent='Requesting camera and microphone access…';
+          mediaPreflight.classList.remove('hidden'); document.querySelector('main').inert=true; mediaPreflightDone.focus();
+          try {
+            if(!navigator.mediaDevices?.getUserMedia) throw new Error('This browser does not provide camera and microphone access.');
+            const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user'},audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+            if(mediaPreflight.classList.contains('hidden')) { stream.getTracks().forEach(track=>track.stop()); return; }
+            localMedia.stream=stream; mediaPreflightVideo.srcObject=stream; await mediaPreflightVideo.play().catch(()=>{});
+            const AudioContextClass=window.AudioContext||window.webkitAudioContext;
+            if(AudioContextClass&&stream.getAudioTracks().length) {
+              localMedia.audioContext=new AudioContextClass(); localMedia.source=localMedia.audioContext.createMediaStreamSource(stream);
+              localMedia.analyser=localMedia.audioContext.createAnalyser(); localMedia.analyser.fftSize=512; localMedia.source.connect(localMedia.analyser);
+              localMedia.frame=requestAnimationFrame(updateMediaMeter);
+            }
+            mediaPreflightStatus.textContent='Camera and microphone are available. Nothing leaves this browser.';
+          } catch(error) {
+            releaseLocalMedia(); mediaPreflightStatus.textContent=error?.message||'Camera or microphone access was denied.';
+          }
+        }
+
         function renderCalendarMonth(module) {
           const month=module.calendarMonth; if(!month) return '';
           const title=new Intl.DateTimeFormat(undefined,{month:'long',year:'numeric'}).format(new Date(month.displayedMonth));
@@ -403,16 +485,8 @@ enum RemoteApprovalWebApp {
             } catch(error) { alert(error.message); }
             return;
           }
-          if(moduleID==='camera'&&actionID==='previewOnDevice') {
-            try {
-              const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user'},audio:false});
-              const popup=window.open('','_blank'); if(!popup) { stream.getTracks().forEach(track=>track.stop()); alert('Allow pop-ups to open camera preview'); return; }
-              popup.document.title='CodeIsland Camera Check';
-              const style=popup.document.createElement('style'); style.textContent='body{margin:0;background:#000;display:grid;place-items:center;height:100vh}video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}button{position:fixed;z-index:2;top:18px;right:18px;padding:10px 16px;background:#ffb000;color:#000;border:0;border-radius:999px;font-weight:800}'; popup.document.head.appendChild(style);
-              const video=popup.document.createElement('video'); video.autoplay=true; video.muted=true; video.playsInline=true; video.srcObject=stream; popup.document.body.appendChild(video);
-              const close=popup.document.createElement('button'); close.textContent='Done'; close.onclick=()=>{stream.getTracks().forEach(track=>track.stop()); popup.close();}; popup.document.body.appendChild(close);
-              popup.addEventListener('beforeunload',()=>stream.getTracks().forEach(track=>track.stop()));
-            } catch(error) { alert('Camera permission was denied or unavailable'); }
+          if(moduleID==='camera'&&(actionID==='previewLocal'||actionID==='previewOnDevice')) {
+            await openMediaPreflight();
             return;
           }
           if(actionID==='presentOnDevice') {
@@ -535,9 +609,11 @@ enum RemoteApprovalWebApp {
         document.getElementById('pairButton').addEventListener('click',pairDevice);
         document.getElementById('code').addEventListener('keydown',event=>{if(event.key==='Enter')pairDevice();});
         modes.querySelectorAll('[data-mode]').forEach(button=>button.addEventListener('click',()=>setMode(button.dataset.mode)));
+        mediaPreflightDone.addEventListener('click',closeMediaPreflight);
         if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
         refresh(); setInterval(()=>{if(document.visibilityState==='visible')refresh();},4000);
-        document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')refresh();});
+        document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')closeMediaPreflight(); else refresh();});
+        window.addEventListener('pagehide',releaseLocalMedia);
       </script>
     </body>
     </html>

@@ -855,7 +855,12 @@ final class RemoteApprovalClient: ObservableObject {
                 actions: [.init(id: "refresh", label: "Refresh")]
             )
         case .camera:
-            return .init(id: id, availability: ready, summary: "Front camera preview", actions: [.init(id: "previewOnDevice", label: "Preview", symbol: "camera.fill")])
+            return .init(
+                id: id,
+                availability: ready,
+                summary: "Private camera and microphone pre-check",
+                actions: [.init(id: "previewLocal", label: "Preview", symbol: "camera.fill")]
+            )
         case .teleprompter:
             return .init(id: id, availability: ready, summary: "Ready · 140 WPM", detail: "Launch remarks", actions: [.init(id: "set", label: "Edit script", value: "Welcome to CodeIsland"), .init(id: "playPause", label: "Play"), .init(id: "slower", label: "Slower"), .init(id: "faster", label: "Faster")])
         case .windowManager:

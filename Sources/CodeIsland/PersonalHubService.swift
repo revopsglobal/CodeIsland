@@ -1581,10 +1581,10 @@ final class PersonalHubService {
             return .init(
                 id: id,
                 availability: .ready,
-                summary: "Private camera pre-check",
-                detail: "Preview stays on the device and is never sent to the Mac",
+                summary: "Private camera and microphone pre-check",
+                detail: "Preview and input levels stay on the device running the check. No media enters the remote snapshot.",
                 actions: [
-                    .init(id: "previewOnDevice", label: "Open preview", symbol: "camera.fill", role: .primary)
+                    .init(id: "previewLocal", label: "Preview", symbol: "camera.fill", role: .primary)
                 ]
             )
 
