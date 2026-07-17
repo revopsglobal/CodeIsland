@@ -135,6 +135,27 @@ final class CodeIslandCompanionUITests: XCTestCase {
     }
 
     @MainActor
+    func testCompletedDownloadOpensNativeShareSheet() throws {
+        let app = launchHubApp(mode: "code")
+        XCTAssertTrue(app.otherElements["hub.surface"].waitForExistence(timeout: 8))
+
+        let downloadsModule = findHubElement("hub.module.downloads", in: app)
+        XCTAssertTrue(downloadsModule.exists)
+
+        let download = app.buttons["hub.action.downloads.downloadToDevice"].firstMatch
+        for _ in 0..<4 where !download.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(download.waitForExistence(timeout: 4))
+        download.tap()
+
+        let activityList = app.otherElements["ActivityListView"].firstMatch
+        let nativeSheetAppeared = app.sheets.firstMatch.waitForExistence(timeout: 5)
+            || activityList.waitForExistence(timeout: 2)
+        XCTAssertTrue(nativeSheetAppeared, "Completed download did not open the native share sheet")
+    }
+
+    @MainActor
     private func launchApp(mockState: String) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-CodeIslandCompanionMockState", mockState]

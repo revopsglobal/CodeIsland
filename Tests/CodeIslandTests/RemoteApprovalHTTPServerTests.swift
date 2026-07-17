@@ -37,6 +37,125 @@ final class RemoteApprovalHTTPServerTests: XCTestCase {
         XCTAssertEqual(object["running"], true)
     }
 
+    func testAuthenticatedRecentDownloadTransfersToPairedDevice() async throws {
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CodeIslandDownloadE2E-\(UUID().uuidString)", isDirectory: true)
+        let downloadsDirectory = temporaryDirectory.appendingPathComponent("Downloads", isDirectory: true)
+        try FileManager.default.createDirectory(at: downloadsDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let completedFile = downloadsDirectory.appendingPathComponent("morning-handoff.txt")
+        let oversizedFile = downloadsDirectory.appendingPathComponent("over-limit.dmg")
+        let expectedBody = Data("CodeIsland mobile download E2E".utf8)
+        try expectedBody.write(to: completedFile)
+        _ = FileManager.default.createFile(atPath: oversizedFile.path, contents: Data())
+        let oversizedHandle = try FileHandle(forWritingTo: oversizedFile)
+        try oversizedHandle.truncate(
+            atOffset: UInt64(PersonalUtilitiesModel.maximumRemoteTransferBytes + 1)
+        )
+        try oversizedHandle.close()
+
+        let utilities = PersonalUtilitiesModel(downloadsURL: downloadsDirectory) { _ in -1 }
+        let hub = PersonalHubService(utilities: utilities)
+        let service = RemoteApprovalService(
+            deviceStore: RemoteApprovalDeviceStore(
+                stateURL: temporaryDirectory.appendingPathComponent("devices.json")
+            ),
+            coordinator: RemoteApprovalCoordinator(
+                auditURL: temporaryDirectory.appendingPathComponent("audit.jsonl")
+            ),
+            personalHub: hub,
+            localPortOverride: 0,
+            enabledOverride: true,
+            tailscaleConfigurator: { _, _ in "https://codeisland-download-e2e.invalid" }
+        )
+        let appState = AppState()
+        utilities.start()
+        let scanDeadline = ContinuousClock.now + .seconds(10)
+        while !utilities.downloadsScanComplete, ContinuousClock.now < scanDeadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertTrue(utilities.downloadsScanComplete, "Downloads scan did not complete")
+        XCTAssertEqual(
+            Set(utilities.recentDownloads.map(\.name)),
+            Set([completedFile.lastPathComponent, oversizedFile.lastPathComponent])
+        )
+
+        service.start(appState: appState)
+        defer {
+            service.stop()
+            utilities.stop()
+        }
+        let port = try await waitForPort(service)
+
+        let paired = try await send(
+            port: port,
+            method: "POST",
+            path: "/api/pair",
+            body: try encode(RemotePairRequest(code: service.pairingCode, deviceName: "Download E2E iPhone"))
+        )
+        let pair = try decode(RemotePairResponse.self, from: paired.data)
+
+        let result = try await send(
+            port: port,
+            method: "POST",
+            path: "/api/hub/snapshot",
+            bearer: pair.deviceToken,
+            body: try encode(PersonalHubSnapshotRequest(requestedMode: .work))
+        )
+        let snapshot = try decode(PersonalHubSnapshot.self, from: result.data)
+        let downloadModule = try XCTUnwrap(snapshot.modules.first(where: { $0.id == .downloads }))
+        let item = try XCTUnwrap(
+            downloadModule.items.first(where: { $0.title == completedFile.lastPathComponent })
+        )
+        XCTAssertEqual(item.actions.first(where: { $0.id == "downloadToDevice" })?.role, .primary)
+        let oversizedItem = try XCTUnwrap(
+            downloadModule.items.first(where: { $0.title == oversizedFile.lastPathComponent })
+        )
+        XCTAssertNil(oversizedItem.actions.first(where: { $0.id == "downloadToDevice" }))
+
+        var pathAllowed = CharacterSet.urlPathAllowed
+        pathAllowed.remove(charactersIn: "/")
+        let encodedID = try XCTUnwrap(item.id.addingPercentEncoding(withAllowedCharacters: pathAllowed))
+        let filePath = "/api/hub/downloads/\(encodedID)/file"
+
+        let unauthenticated = try await send(port: port, method: "GET", path: filePath)
+        XCTAssertEqual(unauthenticated.response.statusCode, 401)
+
+        let transferred = try await send(
+            port: port,
+            method: "GET",
+            path: filePath,
+            bearer: pair.deviceToken
+        )
+        XCTAssertEqual(transferred.response.statusCode, 200)
+        XCTAssertEqual(transferred.data, expectedBody)
+        XCTAssertTrue(
+            transferred.response.value(forHTTPHeaderField: "Content-Disposition")?
+                .contains("morning-handoff.txt") == true
+        )
+
+        let oversizedID = try XCTUnwrap(
+            oversizedItem.id.addingPercentEncoding(withAllowedCharacters: pathAllowed)
+        )
+        let oversizedTransfer = try await send(
+            port: port,
+            method: "GET",
+            path: "/api/hub/downloads/\(oversizedID)/file",
+            bearer: pair.deviceToken
+        )
+        XCTAssertEqual(oversizedTransfer.response.statusCode, 404)
+
+        let outsideID = try XCTUnwrap("/etc/hosts".addingPercentEncoding(withAllowedCharacters: pathAllowed))
+        let traversal = try await send(
+            port: port,
+            method: "GET",
+            path: "/api/hub/downloads/\(outsideID)/file",
+            bearer: pair.deviceToken
+        )
+        XCTAssertEqual(traversal.response.statusCode, 404)
+    }
+
     func testAuthenticatedHostLifecycleOverRealListener() async throws {
         let temporaryDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("CodeIslandRemoteE2E-(UUID().uuidString)", isDirectory: true)

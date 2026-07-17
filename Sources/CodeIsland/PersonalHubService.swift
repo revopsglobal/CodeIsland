@@ -28,14 +28,26 @@ final class PersonalHubService {
     }
 
     private var actionTokens = RemoteActionTokenVault()
-    private let glances = GlancesModel.shared
-    private let utilities = PersonalUtilitiesModel.shared
-    private let data = PersonalHubDataModel.shared
+    private let glances: GlancesModel
+    private let utilities: PersonalUtilitiesModel
+    private let data: PersonalHubDataModel
 
-    private init() {}
+    init(
+        glances: GlancesModel? = nil,
+        utilities: PersonalUtilitiesModel? = nil,
+        data: PersonalHubDataModel? = nil
+    ) {
+        self.glances = glances ?? .shared
+        self.utilities = utilities ?? .shared
+        self.data = data ?? .shared
+    }
 
     func shelfFileURL(id: String) -> URL? {
         data.shelfFileURL(id: id)
+    }
+
+    func recentDownloadFileURL(id: String) -> URL? {
+        utilities.recentDownloadFileURL(id: id)
     }
 
     func snapshot(
@@ -410,11 +422,15 @@ final class PersonalHubService {
             NSWorkspace.shared.open(joinURL)
             return .success(.init(executed: true, message: "Meeting opened on the Mac"))
 
+        case (.downloads, "refresh"):
+            utilities.refreshDownloads()
+            return .success(.init(executed: true, message: "Downloads refreshed"))
+
         case (.downloads, "reveal"):
             guard let targetID = intent.targetID,
-                  let download = utilities.downloads.first(where: { $0.id == targetID })
+                  let downloadURL = utilities.downloadItemURL(id: targetID)
             else { return .failure(.invalid("Download is no longer available")) }
-            NSWorkspace.shared.activateFileViewerSelecting([download.url])
+            NSWorkspace.shared.activateFileViewerSelecting([downloadURL])
             return .success(.init(executed: true, message: "Download revealed on the Mac"))
 
         case (.bluetooth, "refresh"):
@@ -757,11 +773,14 @@ final class PersonalHubService {
             else { return .failure(.invalid("Meeting link is no longer available")) }
             return .success("Open “\(event.title)” on the Mac")
 
+        case (.downloads, "refresh"):
+            return .success("Refresh Downloads")
+
         case (.downloads, "reveal"):
             guard let targetID = intent.targetID,
-                  let download = utilities.downloads.first(where: { $0.id == targetID })
+                  let downloadURL = utilities.downloadItemURL(id: targetID)
             else { return .failure(.invalid("Download is no longer available")) }
-            return .success("Reveal “\(download.name)” on the Mac")
+            return .success("Reveal “\(downloadURL.lastPathComponent)” on the Mac")
 
         case (.bluetooth, "refresh"):
             return .success("Refresh Bluetooth devices")
@@ -1175,30 +1194,66 @@ final class PersonalHubService {
             )
 
         case .downloads:
+            let activeItems = utilities.downloads.map { download in
+                PersonalHubItem(
+                    id: download.id,
+                    title: download.name,
+                    subtitle: [
+                        download.percent.map { "\($0)%" },
+                        download.isStalled ? "Stalled" : "Active",
+                    ].compactMap { $0 }.joined(separator: " · "),
+                    detail: "Downloading on the Mac",
+                    symbol: "arrow.down.circle",
+                    progress: download.progress,
+                    actions: [
+                        .init(id: "reveal", label: "Reveal on Mac", symbol: "folder", targetID: download.id)
+                    ]
+                )
+            }
+            let recentItems = utilities.recentDownloads.map { download in
+                var actions: [PersonalHubAction] = [
+                    .init(id: "reveal", label: "Reveal on Mac", symbol: "folder", targetID: download.id)
+                ]
+                if download.isTransferable {
+                    actions.insert(
+                        .init(
+                            id: "downloadToDevice",
+                            label: "Download",
+                            symbol: "square.and.arrow.down",
+                            role: .primary,
+                            targetID: download.id
+                        ),
+                        at: 0
+                    )
+                }
+                return PersonalHubItem(
+                    id: download.id,
+                    title: download.name,
+                    subtitle: "Completed · \(Self.fileSize(download.bytes)) · \(Self.relativeDate(download.modifiedAt))",
+                    detail: download.isTransferable
+                        ? "Available to this paired device"
+                        : "Over the 100 MB private transfer limit",
+                    symbol: "checkmark.circle.fill",
+                    actions: actions
+                )
+            }
             let summary: String
             if let download = utilities.primaryDownload {
                 summary = download.percent.map { "\(download.name) · \($0)%" } ?? download.name
             } else if let completed = utilities.recentDownloadCompleted {
                 summary = "Finished \(completed)"
+            } else if !utilities.recentDownloads.isEmpty {
+                summary = "\(utilities.recentDownloads.count) recent downloads"
             } else {
-                summary = "No active downloads"
+                summary = utilities.downloadsScanComplete ? "No active or recent downloads" : "Reading Downloads"
             }
             return .init(
                 id: id,
-                availability: .partial,
+                availability: utilities.downloadsScanComplete ? .ready : .loading,
                 summary: summary,
-                items: utilities.downloads.map { download in
-                    .init(
-                        id: download.id,
-                        title: download.name,
-                        subtitle: download.percent.map { "\($0)%" },
-                        symbol: "arrow.down.circle",
-                        progress: download.progress,
-                        actions: [
-                            .init(id: "reveal", label: "Reveal on Mac", symbol: "folder", targetID: download.id)
-                        ]
-                    )
-                }
+                detail: "Active progress and the 12 most recent completed files from ~/Downloads",
+                items: activeItems + recentItems,
+                actions: [.init(id: "refresh", label: "Refresh", symbol: "arrow.clockwise")]
             )
 
         case .bluetooth:
@@ -1525,6 +1580,10 @@ final class PersonalHubService {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .short
         return formatter.localizedString(for: date, relativeTo: Date())
+    }
+
+    private static func fileSize(_ bytes: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
     }
 
     private static func duration(_ seconds: TimeInterval) -> String {

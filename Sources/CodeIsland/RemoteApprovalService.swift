@@ -298,28 +298,23 @@ final class RemoteApprovalService: ObservableObject {
             let start = request.path.index(request.path.startIndex, offsetBy: shelfFilePrefix.count)
             let end = request.path.index(request.path.endIndex, offsetBy: -shelfFileSuffix.count)
             let itemID = String(request.path[start..<end]).removingPercentEncoding ?? ""
-            guard !itemID.isEmpty,
-                  let fileURL = personalHub.shelfFileURL(id: itemID),
-                  let values = try? fileURL.resourceValues(forKeys: [.fileSizeKey]),
-                  let fileSize = values.fileSize else {
-                return .json(status: 404, object: ["error": "shelf file is no longer available"])
-            }
-            guard fileSize <= 100_000_000 else {
-                return .json(status: 413, object: ["error": "shelf files are limited to 100 MB"])
-            }
-            guard let body = try? Data(contentsOf: fileURL, options: [.mappedIfSafe]) else {
-                return .json(status: 404, object: ["error": "shelf file could not be read"])
-            }
-            let encodedName = fileURL.lastPathComponent.addingPercentEncoding(
-                withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "._-"))
-            ) ?? "CodeIsland-file"
-            return RemoteHTTPResponse(
-                status: 200,
-                headers: [
-                    "Content-Type": "application/octet-stream",
-                    "Content-Disposition": "attachment; filename*=UTF-8''\(encodedName)"
-                ],
-                body: body
+            return downloadableFileResponse(
+                fileURL: itemID.isEmpty ? nil : personalHub.shelfFileURL(id: itemID),
+                unavailableMessage: "shelf file is no longer available"
+            )
+        }
+
+        let downloadFilePrefix = "/api/hub/downloads/"
+        let downloadFileSuffix = "/file"
+        if request.method == "GET",
+           request.path.hasPrefix(downloadFilePrefix),
+           request.path.hasSuffix(downloadFileSuffix) {
+            let start = request.path.index(request.path.startIndex, offsetBy: downloadFilePrefix.count)
+            let end = request.path.index(request.path.endIndex, offsetBy: -downloadFileSuffix.count)
+            let itemID = String(request.path[start..<end]).removingPercentEncoding ?? ""
+            return downloadableFileResponse(
+                fileURL: itemID.isEmpty ? nil : personalHub.recentDownloadFileURL(id: itemID),
+                unavailableMessage: "download is no longer available or exceeds 100 MB"
             )
         }
 
@@ -452,6 +447,36 @@ final class RemoteApprovalService: ObservableObject {
         }
 
         return .json(status: 404, object: ["error": "not found"])
+    }
+
+    private func downloadableFileResponse(
+        fileURL: URL?,
+        unavailableMessage: String
+    ) -> RemoteHTTPResponse {
+        guard let fileURL,
+              let values = try? fileURL.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey]),
+              values.isRegularFile == true,
+              values.isSymbolicLink != true,
+              let fileSize = values.fileSize else {
+            return .json(status: 404, object: ["error": unavailableMessage])
+        }
+        guard fileSize <= PersonalUtilitiesModel.maximumRemoteTransferBytes else {
+            return .json(status: 413, object: ["error": "private file transfers are limited to 100 MB"])
+        }
+        guard let body = try? Data(contentsOf: fileURL, options: [.mappedIfSafe]) else {
+            return .json(status: 404, object: ["error": "file could not be read"])
+        }
+        let encodedName = fileURL.lastPathComponent.addingPercentEncoding(
+            withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "._-"))
+        ) ?? "CodeIsland-file"
+        return RemoteHTTPResponse(
+            status: 200,
+            headers: [
+                "Content-Type": "application/octet-stream",
+                "Content-Disposition": "attachment; filename*=UTF-8''\(encodedName)"
+            ],
+            body: body
+        )
     }
 
     private func authenticate(_ request: RemoteHTTPRequest) -> RemoteApprovalDevice? {

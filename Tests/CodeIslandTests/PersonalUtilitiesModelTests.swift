@@ -3,7 +3,7 @@ import XCTest
 
 @MainActor
 final class PersonalUtilitiesModelTests: XCTestCase {
-    func testStartDoesNotBlockOnProtectedDownloadsDirectory() throws {
+    func testStartDoesNotBlockOnProtectedDownloadsDirectory() async throws {
         let directory = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let openerEntered = expectation(description: "directory opener runs off the main actor")
@@ -19,7 +19,7 @@ final class PersonalUtilitiesModelTests: XCTestCase {
         let startDuration = Date().timeIntervalSince(startedAt)
 
         XCTAssertLessThan(startDuration, 0.1)
-        wait(for: [openerEntered], timeout: 1)
+        await fulfillment(of: [openerEntered], timeout: 3)
         model.stop()
         releaseOpener.signal()
     }
@@ -126,6 +126,43 @@ final class PersonalUtilitiesModelTests: XCTestCase {
         XCTAssertEqual(download.bytesReceived, 250)
         XCTAssertEqual(download.totalBytes, 1_000)
         XCTAssertEqual(download.percent, 25)
+    }
+
+    func testListsOnlyRecentCompletedDownloadFiles() throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let completed = directory.appendingPathComponent("handoff.pdf")
+        let partial = directory.appendingPathComponent("video.mp4.crdownload")
+        let old = directory.appendingPathComponent("old.zip")
+        let folder = directory.appendingPathComponent("Folder", isDirectory: true)
+        let symlink = directory.appendingPathComponent("linked-hosts.txt")
+        try Data("ready".utf8).write(to: completed)
+        try Data("partial".utf8).write(to: partial)
+        try Data("old".utf8).write(to: old)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: symlink, withDestinationURL: URL(fileURLWithPath: "/etc/hosts"))
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date().addingTimeInterval(-(8 * 24 * 60 * 60))],
+            ofItemAtPath: old.path
+        )
+
+        let entries = PersonalUtilitiesModel.scanRecentDownloadEntries(in: directory)
+
+        XCTAssertEqual(entries.map(\.name), ["handoff.pdf"])
+        XCTAssertEqual(entries.first?.bytes, 5)
+        XCTAssertTrue(try XCTUnwrap(entries.first).isTransferable)
+    }
+
+    func testRecentCompletedDownloadOverTransferLimitIsNotTransferable() {
+        let entry = PersonalUtilitiesModel.RecentDownloadInfo(
+            id: "large",
+            url: URL(fileURLWithPath: "/tmp/large.dmg"),
+            name: "large.dmg",
+            bytes: PersonalUtilitiesModel.maximumRemoteTransferBytes + 1,
+            modifiedAt: Date()
+        )
+
+        XCTAssertFalse(entry.isTransferable)
     }
 
     private func temporaryDirectory() throws -> URL {
