@@ -29,6 +29,8 @@ targets:
       - path: ../../Sources/CodeIsland/GeminiView.swift
       - path: ../../Sources/CodeIsland/HermesView.swift
       - path: ../../Sources/CodeIsland/KimiView.swift
+      - path: ../../Sources/CodeIsland/MascotMotion.swift
+      - path: ../../Sources/CodeIsland/MascotTimeline.swift
       - path: ../../Sources/CodeIsland/OpenCodeView.swift
       - path: ../../Sources/CodeIsland/PixelCharacterView.swift
       - path: ../../Sources/CodeIsland/QoderView.swift
@@ -67,6 +69,8 @@ targets:
       - path: ../../Sources/CodeIsland/GeminiView.swift
       - path: ../../Sources/CodeIsland/HermesView.swift
       - path: ../../Sources/CodeIsland/KimiView.swift
+      - path: ../../Sources/CodeIsland/MascotMotion.swift
+      - path: ../../Sources/CodeIsland/MascotTimeline.swift
       - path: ../../Sources/CodeIsland/OpenCodeView.swift
       - path: ../../Sources/CodeIsland/PixelCharacterView.swift
       - path: ../../Sources/CodeIsland/QoderView.swift
@@ -101,6 +105,8 @@ targets:
       - path: ../../Sources/CodeIsland/GeminiView.swift
       - path: ../../Sources/CodeIsland/HermesView.swift
       - path: ../../Sources/CodeIsland/KimiView.swift
+      - path: ../../Sources/CodeIsland/MascotMotion.swift
+      - path: ../../Sources/CodeIsland/MascotTimeline.swift
       - path: ../../Sources/CodeIsland/OpenCodeView.swift
       - path: ../../Sources/CodeIsland/PixelCharacterView.swift
       - path: ../../Sources/CodeIsland/QoderView.swift
@@ -139,6 +145,8 @@ targets:
       - path: ../../Sources/CodeIsland/GeminiView.swift
       - path: ../../Sources/CodeIsland/HermesView.swift
       - path: ../../Sources/CodeIsland/KimiView.swift
+      - path: ../../Sources/CodeIsland/MascotMotion.swift
+      - path: ../../Sources/CodeIsland/MascotTimeline.swift
       - path: ../../Sources/CodeIsland/OpenCodeView.swift
       - path: ../../Sources/CodeIsland/PixelCharacterView.swift
       - path: ../../Sources/CodeIsland/QoderView.swift
