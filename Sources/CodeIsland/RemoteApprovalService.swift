@@ -21,19 +21,43 @@ final class RemoteApprovalService: ObservableObject {
 
     private weak var appState: AppState?
     private var server: RemoteApprovalHTTPServer?
-    private let deviceStore = RemoteApprovalDeviceStore()
-    private let coordinator = RemoteApprovalCoordinator()
+    private let deviceStore: RemoteApprovalDeviceStore
+    private let coordinator: RemoteApprovalCoordinator
+    private let personalHub: PersonalHubService
+    private let localPortOverride: UInt16?
+    private let enabledOverride: Bool?
+    private let tailscaleConfigurator: @Sendable (Int, Int) throws -> String
     private var pairAttemptLimiter = RemotePairAttemptLimiter()
     private var lastPendingIDs: Set<String> = []
     private var sleepActivity: NSObjectProtocol?
 
-    private init() {
+    init(
+        deviceStore: RemoteApprovalDeviceStore? = nil,
+        coordinator: RemoteApprovalCoordinator? = nil,
+        personalHub: PersonalHubService? = nil,
+        localPortOverride: UInt16? = nil,
+        enabledOverride: Bool? = nil,
+        tailscaleConfigurator: @escaping @Sendable (Int, Int) throws -> String = { localPort, tailscalePort in
+            try TailscaleServeManager.configure(localPort: localPort, httpsPort: tailscalePort)
+        }
+    ) {
+        self.deviceStore = deviceStore ?? RemoteApprovalDeviceStore()
+        self.coordinator = coordinator ?? RemoteApprovalCoordinator()
+        self.personalHub = personalHub ?? .shared
+        self.localPortOverride = localPortOverride
+        self.enabledOverride = enabledOverride
+        self.tailscaleConfigurator = tailscaleConfigurator
         syncPublishedState()
     }
 
     var localPort: Int {
+        if let localPortOverride { return Int(localPortOverride) }
         let value = UserDefaults.standard.integer(forKey: SettingsKey.remoteApprovalLocalPort)
         return value > 0 ? value : SettingsDefaults.remoteApprovalLocalPort
+    }
+
+    var boundLocalPort: UInt16? {
+        server?.boundPort
     }
 
     var tailscalePort: Int {
@@ -48,9 +72,12 @@ final class RemoteApprovalService: ObservableObject {
 
     func start(appState: AppState) {
         self.appState = appState
-        guard UserDefaults.standard.object(forKey: SettingsKey.remoteApprovalsEnabled) == nil
+        let enabled = enabledOverride ?? (
+            UserDefaults.standard.object(forKey: SettingsKey.remoteApprovalsEnabled) == nil
                 ? SettingsDefaults.remoteApprovalsEnabled
                 : UserDefaults.standard.bool(forKey: SettingsKey.remoteApprovalsEnabled)
+        )
+        guard enabled
         else {
             stop()
             return
@@ -160,13 +187,11 @@ final class RemoteApprovalService: ObservableObject {
     private func configureTailscaleServe() {
         let localPort = localPort
         let tailscalePort = tailscalePort
+        let configurator = tailscaleConfigurator
         Task { [weak self] in
             let result = await Task.detached(priority: .utility) { () -> Result<String, Error> in
                 do {
-                    return .success(try TailscaleServeManager.configure(
-                        localPort: localPort,
-                        httpsPort: tailscalePort
-                    ))
+                    return .success(try configurator(localPort, tailscalePort))
                 } catch {
                     return .failure(error)
                 }
@@ -247,7 +272,7 @@ final class RemoteApprovalService: ObservableObject {
         }
 
         if request.method == "GET", request.path == "/api/hub" {
-            let snapshot = PersonalHubService.shared.snapshot(
+            let snapshot = personalHub.snapshot(
                 appState: appState,
                 requestedMode: .auto
             )
@@ -258,7 +283,7 @@ final class RemoteApprovalService: ObservableObject {
             guard let snapshotRequest = request.decode(PersonalHubSnapshotRequest.self) else {
                 return .json(status: 400, object: ["error": "invalid hub snapshot request"])
             }
-            let snapshot = PersonalHubService.shared.snapshot(
+            let snapshot = personalHub.snapshot(
                 appState: appState,
                 requestedMode: snapshotRequest.requestedMode
             )
@@ -274,7 +299,7 @@ final class RemoteApprovalService: ObservableObject {
             let end = request.path.index(request.path.endIndex, offsetBy: -shelfFileSuffix.count)
             let itemID = String(request.path[start..<end]).removingPercentEncoding ?? ""
             guard !itemID.isEmpty,
-                  let fileURL = PersonalHubService.shared.shelfFileURL(id: itemID),
+                  let fileURL = personalHub.shelfFileURL(id: itemID),
                   let values = try? fileURL.resourceValues(forKeys: [.fileSizeKey]),
                   let fileSize = values.fileSize else {
                 return .json(status: 404, object: ["error": "shelf file is no longer available"])
@@ -302,7 +327,7 @@ final class RemoteApprovalService: ObservableObject {
             guard let prepareRequest = request.decode(PersonalHubPrepareActionRequest.self) else {
                 return .json(status: 400, object: ["error": "invalid action intent"])
             }
-            switch PersonalHubService.shared.prepare(
+            switch personalHub.prepare(
                 intent: prepareRequest.intent,
                 deviceID: authenticated.id
             ) {
@@ -317,7 +342,7 @@ final class RemoteApprovalService: ObservableObject {
             guard let executeRequest = request.decode(PersonalHubExecuteActionRequest.self) else {
                 return .json(status: 400, object: ["error": "invalid action confirmation"])
             }
-            switch PersonalHubService.shared.execute(
+            switch personalHub.execute(
                 request: executeRequest,
                 deviceID: authenticated.id
             ) {
@@ -453,7 +478,7 @@ struct RemoteApprovalDevice: Codable, Equatable, Identifiable {
 }
 
 @MainActor
-private final class RemoteApprovalDeviceStore {
+final class RemoteApprovalDeviceStore {
     private struct PersistedState: Codable {
         var devices: [RemoteApprovalDevice]
     }
@@ -464,8 +489,8 @@ private final class RemoteApprovalDeviceStore {
     private let stateURL: URL
     private var lastSavedSeenAt: [String: Date] = [:]
 
-    init() {
-        stateURL = Self.applicationSupportDirectory()
+    init(stateURL: URL? = nil) {
+        self.stateURL = stateURL ?? Self.applicationSupportDirectory()
             .appendingPathComponent("remote-approval-devices.json")
         load()
         rotatePairingCode()
@@ -588,7 +613,7 @@ private final class RemoteApprovalDeviceStore {
 }
 
 @MainActor
-private final class RemoteApprovalCoordinator {
+final class RemoteApprovalCoordinator {
     enum ResolutionResult {
         case resolved
         case expired
@@ -611,8 +636,12 @@ private final class RemoteApprovalCoordinator {
     }
 
     private var actionTokens = RemoteActionTokenVault()
-    private let auditURL = RemoteApprovalDeviceStore.applicationSupportDirectory()
-        .appendingPathComponent("remote-approval-audit.jsonl")
+    private let auditURL: URL
+
+    init(auditURL: URL? = nil) {
+        self.auditURL = auditURL ?? RemoteApprovalDeviceStore.applicationSupportDirectory()
+            .appendingPathComponent("remote-approval-audit.jsonl")
+    }
 
     func snapshot(appState: AppState, deviceID: String) -> RemoteApprovalSnapshot {
         let now = Date()

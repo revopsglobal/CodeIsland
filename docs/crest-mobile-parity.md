@@ -30,11 +30,11 @@ Sources used for the baseline:
 | Calendar two-week agenda, CRUD, Join | Unverified: two-week agenda, add/edit/delete, trusted Join, and stable signed TCC identity | Unverified: agenda, add/edit/delete, and trusted Join | Grant Calendar once to the newly signed app and verify real events and mutations |
 | Tasks/lists/due dates/reorder/archive | Unverified: list create/delete/filter, due dates, add, complete, reorder, archive/restore, and delete | Unverified: same list and task actions with explicit list selection | Grant Reminders once and run real list/task/reorder/archive mutations |
 | Notes/jot/categories/checklists/merge | Unverified: persistent add/copy/delete/edit/append, categories, checklist toggles, 20-step undo, and revision-safe replacement | Unverified: same editors/actions with stale-revision rejection | Runtime add/edit/conflict/checklist/undo round trip across Mac and iPhone |
-| System CPU/memory/load | Ready: host load/memory/disk/thermal/uptime | Ready: mirrored readings and refresh | Runtime accuracy and remote refresh tests |
+| System CPU/memory/load | Ready: host load/memory/disk/thermal/uptime | Ready: mirrored readings and refresh through an authenticated, exact-confirmation host action | Compare readings with Activity Monitor on the physical Mac/iPhone pair |
 | Weather | Unverified: WeatherKit/location with manual ZIP fallback | Unverified: mirrored remote weather and refresh | Permission, remote refresh, and offline-state runtime tests |
 | Notifications | Partial: CodeIsland alerts, APNs provider, and time-sensitive entitlement | Partial: approval pushes, Live Activity, and Dynamic Island UI | Physical-iPhone permission, token, delivery, and Live Activity tests |
 | Claude co-pilot/voice/proposals | Unverified: read-only Ask plus typed Do proposals through authenticated local Claude Code, with tools disabled | Unverified: Ask/Do, iPhone speech recognition, proposal review, and a second exact confirmation | Real Claude Ask and multi-action Do run; physical-iPhone microphone/speech permission and task creation |
-| AI Coding sessions/approvals/questions | Ready: sessions, questions, approvals, and exact-confirmation actions | Unverified: native and private-web parity over Tailscale | Physical-iPhone approval/question/action tests away from the Mac |
+| AI Coding sessions/approvals/questions | Ready: sessions, questions, approvals, and exact-confirmation actions | Partial: real-listener pairing/auth/approval/question/replay protection is automated; physical native/Tailscale use is unverified | Physical-iPhone approval/question/action tests away from the Mac |
 | GitHub pull requests and CI | Ready: authenticated `gh` PR list/status/deep links | Ready: mirrored list/status/deep links | Runtime refresh/open test from iPhone |
 | Audio device switcher | Unverified: enumerate/default input/output, switch, mute, and exact 0–100 output volume | Unverified: mirrored device actions, ±10, and native/web volume editor | Physical device switch, volume update, and expected failure states |
 | Bluetooth devices/connect/disconnect | Unverified: connected/remembered devices, battery, connect/disconnect | Unverified: mirrored devices and confirmed remote actions | Physical accessory connect/disconnect tests |
@@ -44,7 +44,7 @@ Sources used for the baseline:
 | Camera pre-check | Partial: opens Photo Booth | Unverified: private front-camera preview with permission/failure UI | Physical camera permission/preview test; mic and camera selection remain |
 | Teleprompter/present mode | Unverified: persistent floating reader, play/pause, WPM, and font size | Unverified: full-screen reader, play/pause, WPM, and font size | Mac and physical-iPhone presentation/resume tests |
 | Window snapping/remote window actions | Unverified: allow-listed left/right/maximize via Accessibility | Unverified: confirmed remote left/right/maximize | Grant Accessibility and verify real windows |
-| Private web fallback | Unverified: responsive modules, actions, Calendar/Tasks/Notes/Claude composers, Join, and Shelf download | Unverified: Tailscale-authenticated browser client | Live Tailscale module/action/file round trip |
+| Private web fallback | Partial: responsive client plus live Tailscale root/401 proof and isolated real-listener pairing/auth/mode/action tests | Partial: authenticated Home/Work/Code, approval, question, push registration, exact-action and replay protection are automated | Physical Tailscale browser module/action/file round trip |
 | TestFlight distribution | Ready: signed archive/upload pipeline and internal group | Unverified: build processing/group access proven; physical install pending | Install, launch, permissions, push, Live Activity, and receipt evidence on Greg's iPhone |
 
 ## Architecture invariant
@@ -59,3 +59,16 @@ module action, binds a short-lived token to the exact device, action, and target
 then revalidates current state before executing it. Telegram may notify Greg and
 link into the private client; it is not a second state store or inbound control
 daemon.
+
+## Automated host E2E proof
+
+`RemoteApprovalHTTPServerTests.testAuthenticatedHostLifecycleOverRealListener`
+starts the real loopback listener with isolated device/audit storage and proves:
+
+- security headers and unauthenticated API rejection;
+- invalid-code rejection followed by six-digit pairing and bearer authentication;
+- authenticated Home, Work, and Code snapshots from the shared catalog;
+- a real `AppState` approval continuation, exact decision, audit receipt, and replay rejection;
+- a real `AskUserQuestion` continuation, answer delivery, and replay rejection;
+- reviewed action prepare/execute, altered-intent rejection, single-use enforcement; and
+- production push-token registration without touching Greg's real paired-device store.
