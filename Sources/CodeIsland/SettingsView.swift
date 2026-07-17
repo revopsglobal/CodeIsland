@@ -77,7 +77,7 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
+        HStack(spacing: 0) {
             List(selection: $selectedPage) {
                 ForEach(sidebarGroups, id: \.title) { group in
                     Section {
@@ -93,8 +93,10 @@ struct SettingsView: View {
                 }
             }
             .listStyle(.sidebar)
-            .navigationSplitViewColumnWidth(200)
-        } detail: {
+            .frame(width: 200)
+
+            Divider()
+
             Group {
                 switch selectedPage {
                 case .general: GeneralPage()
@@ -110,8 +112,10 @@ struct SettingsView: View {
                 case .about: AboutPage()
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .toolbar(removing: .sidebarToggle)
+        .frame(minWidth: 560, minHeight: 420)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 }
 
