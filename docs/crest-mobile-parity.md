@@ -48,7 +48,7 @@ Sources used for the baseline:
 | Media-key HUD and Crest ambient polish | Ready supported implementation: short-lived notch HUD for CodeIsland media/volume/brightness actions, bounded artwork, progress, thermal/Reduce Motion-aware ambient bars | Ready useful mirror: artwork/progress and exact host controls; no need to mimic a Mac bezel HUD | Capture multi-display/full-screen evidence; macOS has no public API for intercepting all hardware brightness-key events |
 | Custom dashboard/day-progress surface | Ready implementation: one shared saved dashboard toggle, per-mode rack configuration, and local-day progress header | Ready implementation: same configuration and day progress with native editing | Verify saved state and day rollover on the physical pair |
 | Private web fallback | Ready automated implementation: responsive authenticated Home/Work/Code, approvals, questions, opaque push registration, exact actions, file transfer, retry/offline state, and replay protection | Ready as an iPhone browser fallback; physical Tailscale browser use is unverified | Physical Tailscale browser module/action/file round trip |
-| TestFlight distribution | Ready: signed archive/upload pipeline and internal group | Ready for acceptance: build `1.0.0 (20260717120420)` is Apple `VALID`; `gregharned@gmail.com` is enrolled in the all-builds internal group and Apple explicitly resent invitation `9679ce07-ac35-4b29-b007-461e0b418801`; physical install remains unverified | Accept the fresh invitation, then install, launch, grant permissions, pair, and prove push/Live Activity on Greg's iPhone |
+| TestFlight distribution | Ready: signed archive/upload pipeline, source plus compiled App Intent metadata validation, and internal group | Ready for acceptance: build `1.0.0 (20260717225004)` is Apple `VALID`; `gregharned@gmail.com` is `ready` in the all-builds internal group; physical install of this build remains unverified | Refresh TestFlight, install/update, launch, grant permissions, pair, and prove push/Live Activity on Greg's iPhone |
 
 ## Behavior-level completion adjudication
 
@@ -147,12 +147,17 @@ surfaces, not the remaining physical-device interactions.
   `/Applications/CodeIsland.app` with team `44JG2Y95CH` and CDHash
   `e0f24c10a72e631b05de10fef17d3a6c4ca57458`. The prior installed 1.0.38 app
   is preserved at `/Applications/CodeIsland-backup-1.0.38-20260717-1449.app`.
-- iOS `1.0.0 (20260717120420)`: merged commit
-  `6ad428e952fb200c51f68182471c38fe7c32e796`, Actions run `29578952503`,
-  signed IPA artifact `8406281069`. App Store Connect reported bundle
+- iOS `1.0.0 (20260717225004)`: merged commit
+  `4c3e274d4cdc3f231459a2a10e5a73557dc4e47e`, Actions run `29619011267`,
+  signed IPA artifact `8421590778`. App Store Connect reported bundle
   `com.revopsglobal.codeisland.buddy` as `VALID`, audience
   `APP_STORE_ELIGIBLE`; internal group `CodeIsland Internal` has access to all
-  builds.
+  builds. Upload delivery `dc6f1d45-d4ab-448e-9d73-49be811710ee` completed,
+  and tester receipt artifact `8421528342` records `gregharned@gmail.com` as
+  `ready`. The downloaded IPA SHA-256 is
+  `431960f551777405b059e09c26bb7e624eb6edc5456ae55f686631354e048ff2`;
+  strict signature verification passed for both app and widget under Team
+  `44JG2Y95CH`, and compiled App Intent metadata passed the `ITMS-90626` guard.
 - App Store Connect tester repair run `29591716380` verified
   `gregharned@gmail.com` as an `ACCOUNT_HOLDER,ADMIN` user with all-app access,
   enrolled tester `4510ab81-87ea-4967-bde4-47d3f2e083af` in
@@ -182,10 +187,12 @@ This is the remaining morning run. It cannot be completed by CI because it
 requires Greg's physical iPhone, biometric/permission taps, real accessories,
 and real Calendar/Reminders data.
 
-1. On iPhone, open the fresh Apple invitation sent to
-   `gregharned@gmail.com`, accept it in Apple's **TestFlight** app, and install
-   **CodeIsland Buddy** `1.0.0 (20260717120420)` from `CodeIsland Internal`.
-   Install or enable Tailscale and confirm the phone is on Greg's tailnet.
+1. On iPhone, open Apple's **TestFlight** app while signed in as
+   `gregharned@gmail.com`, refresh, and install or update **CodeIsland Buddy**
+   to `1.0.0 (20260717225004)` from `CodeIsland Internal`. The tester is already
+   enrolled; this private internal build does not require public App Store
+   review. Install or enable Tailscale and confirm the phone is on Greg's
+   tailnet.
 2. Unlock the Mac and open CodeIsland Settings. Use the app's permission
    buttons, then approve CodeIsland in System Settings under Calendars,
    Reminders, Location Services, Camera, and Accessibility as each test needs.
