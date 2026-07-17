@@ -29,6 +29,14 @@
 	<string>CodeIsland needs to control terminal apps to jump to the correct window and tab when you click a session.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>CodeIsland uses Bluetooth to mirror the island onto Buddy.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>CodeIsland shows your next meeting in the notch's Glances so you can join the call with one tap.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>CodeIsland shows your reminders in the notch's Glances so you can check them off.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>CodeIsland shows local weather in the notch's Glances.</string>
+	<key>NSLocationUsageDescription</key>
+	<string>CodeIsland shows local weather in the notch's Glances.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_codeisland._tcp</string>

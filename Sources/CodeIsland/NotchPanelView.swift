@@ -108,6 +108,8 @@ struct NotchPanelView: View {
     @State private var curtainOffset: CGFloat = 0
     @State private var curtainOpacity: Double = 1
     @State private var displayedToolStatus: Bool = SettingsDefaults.showToolStatus
+    /// Glances (weather / next meeting / reminders) overlay toggle on the session-list surface.
+    @State private var showGlances = false
 
     private var isActive: Bool { !appState.sessions.isEmpty }
     /// First launch / no-session state should still render a visible marker so the app
@@ -255,8 +257,16 @@ struct NotchPanelView: View {
                         SessionListView(appState: appState, onlySessionId: appState.justCompletedSessionId)
                             .transition(.blurFade.combined(with: .move(edge: .top)))
                     case .sessionList:
-                        SessionListView(appState: appState, onlySessionId: nil)
-                            .transition(.blurFade.combined(with: .move(edge: .top)))
+                        VStack(spacing: 0) {
+                            GlancesToggleRow(showGlances: $showGlances)
+                            if showGlances {
+                                GlancesView()
+                                    .transition(.blurFade)
+                            } else {
+                                SessionListView(appState: appState, onlySessionId: nil)
+                            }
+                        }
+                        .transition(.blurFade.combined(with: .move(edge: .top)))
                     case .collapsed:
                         EmptyView()
                     }

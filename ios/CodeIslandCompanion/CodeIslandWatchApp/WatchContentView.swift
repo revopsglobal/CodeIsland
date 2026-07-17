@@ -123,7 +123,7 @@ private struct WatchMessagePage: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 HStack(spacing: 5) {
-                    WatchChip(text: CompanionDisplayText.workspace(state.workspaceName) ?? "工作区", icon: "folder")
+                    WatchChip(text: CompanionDisplayText.workspace(state.workspaceName) ?? "Workspace", icon: "folder")
                     if let toolText = CompanionDisplayText.tool(state.toolName) {
                         WatchChip(text: toolText, icon: "hammer")
                     }
@@ -149,11 +149,11 @@ private struct WatchMessagePage: View {
         if let message = CompanionDisplayText.message(state.messages.last?.text) {
             return message
         }
-        return "当前没有新的消息"
+        return "No new messages"
     }
 
     private var messageTitle: String {
-        state.pendingAction == .question ? "需要回答" : "当前消息"
+        state.pendingAction == .question ? "Answer needed" : "Current message"
     }
 
     private var messageIcon: String {
@@ -171,7 +171,7 @@ private struct WatchActionsPage: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            WatchPageTitle(title: "快捷操作", systemImage: "bolt.fill", color: .green)
+            WatchPageTitle(title: "Quick actions", systemImage: "bolt.fill", color: .green)
 
             Spacer(minLength: 0)
 
@@ -189,7 +189,7 @@ private struct WatchActivityPage: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 8) {
-                WatchPageTitle(title: "最近动态", systemImage: "waveform.path.ecg", color: .purple)
+                WatchPageTitle(title: "Recent activity", systemImage: "waveform.path.ecg", color: .purple)
                 WatchRecentView(messages: messages)
             }
             .padding(10)
@@ -339,7 +339,7 @@ private struct WatchSessionCard: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: 5) {
-                WatchChip(text: CompanionDisplayText.workspace(state.workspaceName) ?? "工作区", icon: "folder")
+                WatchChip(text: CompanionDisplayText.workspace(state.workspaceName) ?? "Workspace", icon: "folder")
                 if let toolText = CompanionDisplayText.tool(state.toolName) {
                     WatchChip(text: toolText, icon: "hammer")
                 }
@@ -364,7 +364,7 @@ private struct WatchSessionCard: View {
         if let message = CompanionDisplayText.message(state.messages.last?.text) {
             return message
         }
-        return "当前没有新的消息"
+        return "No new messages"
     }
 }
 
@@ -377,7 +377,7 @@ private struct WatchActionStrip: View {
             Button {
                 connection.send(.focus)
             } label: {
-                WatchActionLabel(title: "打开 Mac", systemImage: "arrow.up.forward.app.fill", color: .green)
+                WatchActionLabel(title: "Open Mac", systemImage: "arrow.up.forward.app.fill", color: .green)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.plain)
@@ -387,14 +387,14 @@ private struct WatchActionStrip: View {
                     Button {
                         connection.send(.approveCurrentPermission)
                     } label: {
-                        WatchActionLabel(title: "批准", systemImage: "checkmark", color: .orange)
+                        WatchActionLabel(title: "Approve", systemImage: "checkmark", color: .orange)
                     }
                     .buttonStyle(.plain)
 
                     Button {
                         connection.send(.denyCurrentPermission)
                     } label: {
-                        WatchActionLabel(title: "拒绝", systemImage: "xmark", color: .red)
+                        WatchActionLabel(title: "Deny", systemImage: "xmark", color: .red)
                     }
                     .buttonStyle(.plain)
                 }
@@ -402,7 +402,7 @@ private struct WatchActionStrip: View {
                 Button {
                     connection.send(.focus)
                 } label: {
-                    WatchActionLabel(title: "去 iPhone 回答", systemImage: "questionmark.bubble.fill", color: .blue)
+                    WatchActionLabel(title: "Answer on iPhone", systemImage: "questionmark.bubble.fill", color: .blue)
                 }
                 .buttonStyle(.plain)
             }
@@ -418,7 +418,7 @@ private struct WatchRecentView: View {
 
         if !recent.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
-                Text("最近动态")
+                Text("Recent activity")
                     .font(.system(size: 13, weight: .black, design: .rounded))
                     .foregroundStyle(.white.opacity(0.56))
 
@@ -470,13 +470,13 @@ private struct WatchEmptyView: View {
 
                     SharedMascotView(source: "codex", status: .idle, size: isCompact ? 48 : 56)
 
-                    Text("等待 iPhone 同步")
+                    Text("Waiting for iPhone sync")
                         .font(.system(size: isCompact ? 15 : 16, weight: .black, design: .rounded))
                         .foregroundStyle(.white)
                         .lineLimit(1)
                         .minimumScaleFactor(0.78)
 
-                    Text(error ?? "打开 iPhone 上的 Code Island，并连接 Mac")
+                    Text(error ?? "Open Code Island on your iPhone and connect your Mac")
                         .font(.system(size: isCompact ? 10 : 11, weight: .medium, design: .rounded))
                         .foregroundStyle(.white.opacity(0.58))
                         .multilineTextAlignment(.center)

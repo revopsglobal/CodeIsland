@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import EventKit
 import UniformTypeIdentifiers
 import CodeIslandCore
 
@@ -12,6 +13,7 @@ enum SettingsPage: String, Identifiable, Hashable {
     case mascots
     case sound
     case shortcuts
+    case glances
     case remote
     case hooks
     case buddy
@@ -27,6 +29,7 @@ enum SettingsPage: String, Identifiable, Hashable {
         case .mascots: return "person.2.fill"
         case .sound: return "speaker.wave.2.fill"
         case .shortcuts: return "command.circle.fill"
+        case .glances: return "sparkles"
         case .remote: return "network"
         case .hooks: return "link.circle.fill"
         case .buddy: return "dot.radiowaves.left.and.right"
@@ -42,6 +45,7 @@ enum SettingsPage: String, Identifiable, Hashable {
         case .mascots: return .pink
         case .sound: return .green
         case .shortcuts: return .indigo
+        case .glances: return .green
         case .remote: return .mint
         case .hooks: return .purple
         case .buddy: return .red
@@ -57,15 +61,20 @@ private struct SidebarGroup: Hashable {
 
 private let sidebarGroups: [SidebarGroup] = [
     SidebarGroup(title: nil, pages: [.general, .behavior, .appearance, .mascots, .sound, .shortcuts]),
-    SidebarGroup(title: "CodeIsland", pages: [.remote, .hooks, .buddy, .about]),
+    SidebarGroup(title: "CodeIsland", pages: [.glances, .remote, .hooks, .buddy, .about]),
 ]
 
 // MARK: - Main View
 
 struct SettingsView: View {
     @ObservedObject private var l10n = L10n.shared
-    @State private var selectedPage: SettingsPage = .general
+    @State private var selectedPage: SettingsPage
     var appState: AppState?
+
+    init(appState: AppState? = nil, initialPage: SettingsPage = .general) {
+        self.appState = appState
+        _selectedPage = State(initialValue: initialPage)
+    }
 
     var body: some View {
         NavigationSplitView {
@@ -94,6 +103,7 @@ struct SettingsView: View {
                 case .mascots: MascotsPage()
                 case .sound: SoundPage()
                 case .shortcuts: ShortcutsPage()
+                case .glances: GlancesSettingsPage()
                 case .remote: RemoteHostsPage()
                 case .hooks: HooksPage()
                 case .buddy: BuddyPage()
@@ -102,6 +112,141 @@ struct SettingsView: View {
             }
         }
         .toolbar(removing: .sidebarToggle)
+    }
+}
+
+// MARK: - Glances Page
+
+private struct GlancesSettingsPage: View {
+    @StateObject private var model = GlancesModel()
+    @AppStorage(SettingsKey.glancesWeatherLocation)
+    private var weatherLocation = SettingsDefaults.glancesWeatherLocation
+
+    var body: some View {
+        Form {
+            Section("Calendar") {
+                LabeledContent("Access") {
+                    Text(eventKitStatusText(model.calendarAuthorizationStatus))
+                        .foregroundStyle(model.calendarAuthorized ? .green : .secondary)
+                }
+
+                if model.calendarAuthorized {
+                    Button("Refresh Calendar") { model.refreshCalendar() }
+                } else if model.calendarAuthorizationStatus == .notDetermined {
+                    Button("Grant Calendar Access") { model.requestCalendarAccess() }
+                } else {
+                    Button("Open Calendar Privacy Settings") {
+                        openPrivacySettings("Privacy_Calendars")
+                    }
+                }
+
+                Text("Calendar access is requested while this Settings window is frontmost so macOS can show the permission prompt reliably.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Reminders Lists") {
+                LabeledContent("Access") {
+                    Text(eventKitStatusText(model.remindersAuthorizationStatus))
+                        .foregroundStyle(model.remindersAuthorized ? .green : .secondary)
+                }
+
+                if model.remindersAuthorized {
+                    if model.reminderCalendars.isEmpty {
+                        Text("No Reminders lists are available.")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(model.reminderCalendars) { calendar in
+                            Toggle(isOn: reminderCalendarBinding(calendar.id)) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(calendar.title)
+                                    Text(calendar.sourceTitle)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        Text("Glances shows incomplete reminders from the selected lists. At least one list stays selected.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } else if model.remindersAuthorizationStatus == .notDetermined {
+                    Button("Grant Reminders Access") { model.requestRemindersAccess() }
+                } else {
+                    Button("Open Reminders Privacy Settings") {
+                        openPrivacySettings("Privacy_Reminders")
+                    }
+                }
+            }
+
+            Section("Weather") {
+                TextField("City or ZIP (optional)", text: $weatherLocation)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit { model.refreshWeather() }
+
+                Text("A saved city or ZIP uses Open-Meteo and works without Location Services. Leave it blank to use this Mac's location.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                HStack {
+                    Button("Check Weather") { model.refreshWeather() }
+                        .disabled(weatherLocation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            && !model.locationAuthorized)
+
+                    if weatherLocation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        if model.locationAuthorizationStatus == .notDetermined {
+                            Button("Grant Location Access") { model.requestLocationAccess() }
+                        } else if !model.locationAuthorized {
+                            Button("Open Location Privacy Settings") {
+                                openPrivacySettings("Privacy_LocationServices")
+                            }
+                        }
+                    }
+                }
+
+                if let weather = model.weather {
+                    Label(
+                        "\(weather.temperatureF)° · \(weather.summary)\(model.weatherLocationLabel.map { " · \($0)" } ?? "")",
+                        systemImage: weather.symbolName
+                    )
+                    .foregroundStyle(.secondary)
+                } else if let status = model.statusLine {
+                    Text(status)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .onAppear { model.refreshPermissions() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            model.refreshPermissions()
+        }
+    }
+
+    private func reminderCalendarBinding(_ id: String) -> Binding<Bool> {
+        Binding(
+            get: { model.selectedReminderCalendarIDs.contains(id) },
+            set: { model.setReminderCalendar(id: id, selected: $0) }
+        )
+    }
+
+    private func eventKitStatusText(_ status: EKAuthorizationStatus) -> String {
+        switch status {
+        case .fullAccess: return "Full Access"
+        case .writeOnly: return "Write Only"
+        case .denied: return "Denied"
+        case .restricted: return "Restricted"
+        case .notDetermined: return "Not Requested"
+        default: return "Unknown"
+        }
+    }
+
+    private func openPrivacySettings(_ pane: String) {
+        guard let url = URL(
+            string: "x-apple.systempreferences:com.apple.preference.security?\(pane)"
+        ) else { return }
+        NSWorkspace.shared.open(url)
     }
 }
 

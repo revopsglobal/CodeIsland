@@ -29,9 +29,9 @@ enum CompanionDisplayText {
 
         switch trimmed {
         case "[Request interrupted by user]", "Request interrupted by user":
-            return "请求已被你中断"
+            return "Request interrupted by you"
         case "[Request interrupted by user for tool use]", "Request interrupted by user for tool use":
-            return "工具调用已被你中断"
+            return "Tool call interrupted by you"
         default:
             return trimmed
         }
@@ -42,21 +42,21 @@ enum CompanionDisplayText {
 
         switch trimmed.lowercased() {
         case "askuserquestion":
-            return "提问"
+            return "Ask"
         case "bash", "shell":
-            return "终端"
+            return "Terminal"
         case "read":
-            return "读取"
+            return "Read"
         case "edit", "write", "multiedit":
-            return "编辑"
+            return "Edit"
         case "grep", "glob", "search":
-            return "搜索"
+            return "Search"
         case "webfetch", "websearch":
-            return "网页"
+            return "Web"
         case "todowrite":
-            return "计划"
+            return "Plan"
         case "notebookedit":
-            return "笔记"
+            return "Note"
         default:
             return trimmed
         }
@@ -67,7 +67,7 @@ enum CompanionDisplayText {
 
         switch trimmed.lowercased() {
         case "workspace":
-            return "工作区"
+            return "Workspace"
         default:
             return trimmed
         }
@@ -93,19 +93,19 @@ enum CompanionDisplayText {
     private static var markdownCache: [String: AttributedString] = [:]
     private static let markdownCacheLimit = 128
 
-    /// 消息正文渲染，与 Mac notch 的 ChatMessageTextFormatter 一致：
-    /// 用户消息按纯文本（不渲染 markdown，避免把输入里的符号当语法）；
-    /// 助手消息先去掉 `::directive{...}` 指令块、合并多余空行，再做行内 markdown。
+    /// Message body rendering, matching the Mac notch's ChatMessageTextFormatter:
+    /// user messages render as plain text (no markdown, so symbols in the input aren't treated as syntax);
+    /// assistant messages first strip `::directive{...}` blocks, merge extra blank lines, then apply inline markdown.
     static func messageMarkdown(_ text: String, isUser: Bool) -> AttributedString {
         isUser ? AttributedString(text) : inlineMarkdown(compactText(stripDirectives(text)))
     }
 
-    /// 行内 markdown 渲染（粗体 / 斜体 / 代码 / 链接 / ``` 围栏代码块），与 Mac notch 一致。
-    /// 仅用于消息正文与问题等散文内容，不要用于来源名 / 工作区 / 工具名
-    /// （含下划线的路径会被误判为斜体）。
+    /// Inline markdown rendering (bold / italic / code / links / ``` fenced code blocks), matching the Mac notch.
+    /// Only for prose like message bodies and questions; not for source names / workspace / tool names
+    /// (paths with underscores get mistaken for italics).
     ///
-    /// 结果按文本缓存：同一段文字始终返回同一个 AttributedString，避免看板被活动会话
-    /// 频繁刷新时，静止的空闲会话因重复解析出新实例而被 SwiftUI 反复重绘/动画（闪烁）。
+    /// Results are cached by text: the same text always returns the same AttributedString, so that when the board
+    /// refreshes often for active sessions, static idle sessions aren't repeatedly redrawn/animated (flickering) by SwiftUI from re-parsing into new instances.
     static func inlineMarkdown(_ text: String) -> AttributedString {
         if let cached = markdownCache[text] {
             return cached
@@ -120,7 +120,7 @@ enum CompanionDisplayText {
         return result
     }
 
-    /// 行内解析；失败或解析出空内容（链接定义、未闭合标签等）时回退纯文本。
+    /// Inline parsing; falls back to plain text on failure or empty parsed content (link definitions, unclosed tags, etc.).
     private static func renderInlineOnly(_ text: String) -> AttributedString {
         if let attributed = try? AttributedString(
             markdown: text,
@@ -131,8 +131,8 @@ enum CompanionDisplayText {
         return AttributedString(text)
     }
 
-    /// Apple 的行内解析会把 ``` 当作行内代码定界、折叠围栏代码块并泄漏语言名。
-    /// 按围栏拆分，代码体按纯文本逐行保留，其余按行内 markdown。
+    /// Apple's inline parser treats ``` as an inline-code delimiter, collapsing fenced code blocks and leaking the language name.
+    /// Split on the fences, keep the code body as plain text line by line, and render the rest as inline markdown.
     private static func renderWithFencedCodeBlocks(_ text: String) -> AttributedString {
         var result = AttributedString()
         var buffer = ""
@@ -161,7 +161,7 @@ enum CompanionDisplayText {
         return result
     }
 
-    /// 去掉 `::directive{...}`（可能跨行）指令块。
+    /// Strip `::directive{...}` blocks (which may span multiple lines).
     private static func stripDirectives(_ text: String) -> String {
         var result: [String] = []
         var inDirective = false
@@ -194,7 +194,7 @@ enum CompanionDisplayText {
         return result.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// 逐行 trim 并合并连续空行。
+    /// Trim each line and merge consecutive blank lines.
     private static func compactText(_ text: String) -> String {
         text.components(separatedBy: "\n")
             .map { $0.trimmingCharacters(in: .whitespaces) }

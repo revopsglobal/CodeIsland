@@ -116,6 +116,14 @@ enum SettingsKey {
     static let appleCompanionEnabled = "appleCompanionEnabled"
     static let appleCompanionHeartbeatSeconds = "appleCompanionHeartbeatSeconds"
 
+    // Glances utilities
+    // Comma-separated EventKit reminder calendar identifiers. An empty value is
+    // normalized to the default Reminders list when access is first available.
+    static let glancesReminderCalendarIDs = "glancesReminderCalendarIDs"
+    // Optional city or ZIP passed to Open-Meteo geocoding. When set, weather no
+    // longer depends on Core Location authorization.
+    static let glancesWeatherLocation = "glancesWeatherLocation"
+
     // Auto-approve tools (comma-separated tool names)
     static let autoApproveTools = "autoApproveTools"
 
@@ -191,6 +199,9 @@ struct SettingsDefaults {
     static let appleCompanionEnabled = false
     static let appleCompanionHeartbeatSeconds = 5.0
 
+    static let glancesReminderCalendarIDs = ""
+    static let glancesWeatherLocation = ""
+
     // Default to no auto-approval — every tool call goes through the
     // approval flow and the user opts in per tool. The previous default
     // silently approved 9 internal agent tools (TaskCreate, TodoWrite,
@@ -261,6 +272,8 @@ class SettingsManager {
             SettingsKey.selectedBuddyName: SettingsDefaults.selectedBuddyName,
             SettingsKey.appleCompanionEnabled: SettingsDefaults.appleCompanionEnabled,
             SettingsKey.appleCompanionHeartbeatSeconds: SettingsDefaults.appleCompanionHeartbeatSeconds,
+            SettingsKey.glancesReminderCalendarIDs: SettingsDefaults.glancesReminderCalendarIDs,
+            SettingsKey.glancesWeatherLocation: SettingsDefaults.glancesWeatherLocation,
             SettingsKey.defaultSource: SettingsDefaults.defaultSource,
             SettingsKey.autoApproveTools: SettingsDefaults.autoApproveTools,
             SettingsKey.excludedHookCwdSubstrings: SettingsDefaults.excludedHookCwdSubstrings,
@@ -388,6 +401,28 @@ class SettingsManager {
     var defaultSource: String {
         get { defaults.string(forKey: SettingsKey.defaultSource) ?? SettingsDefaults.defaultSource }
         set { defaults.set(newValue, forKey: SettingsKey.defaultSource) }
+    }
+
+    var glancesReminderCalendarIDs: Set<String> {
+        get {
+            let raw = defaults.string(forKey: SettingsKey.glancesReminderCalendarIDs)
+                ?? SettingsDefaults.glancesReminderCalendarIDs
+            return Set(raw.split(separator: ",").map(String.init).filter { !$0.isEmpty })
+        }
+        set {
+            defaults.set(
+                newValue.sorted().joined(separator: ","),
+                forKey: SettingsKey.glancesReminderCalendarIDs
+            )
+        }
+    }
+
+    var glancesWeatherLocation: String {
+        get {
+            defaults.string(forKey: SettingsKey.glancesWeatherLocation)
+                ?? SettingsDefaults.glancesWeatherLocation
+        }
+        set { defaults.set(newValue, forKey: SettingsKey.glancesWeatherLocation) }
     }
 
     /// All known auto-approvable tool names (for UI display).
