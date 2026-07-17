@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 private enum HubTheme {
     static let accent = Color(red: 1.0, green: 0.69, blue: 0.0)
@@ -126,8 +127,8 @@ private struct PersonalHubModuleCard: View {
     let module: PersonalHubModuleSnapshot
     @EnvironmentObject private var client: RemoteApprovalClient
     @Environment(\.openURL) private var openURL
-    @State private var newTaskTitle = ""
-    @State private var showsTaskComposer = false
+    @State private var composerText = ""
+    @State private var showsComposer = false
 
     private var definition: PersonalHubModuleDefinition {
         PersonalHubCatalog.definition(for: module.id)
@@ -162,29 +163,29 @@ private struct PersonalHubModuleCard: View {
                     .foregroundStyle(.ciForeground.opacity(0.38))
             }
 
-            if showsTaskComposer {
+            if showsComposer {
                 HStack(spacing: 7) {
-                    TextField("New task", text: $newTaskTitle)
+                    TextField(module.id == .notes ? "New note" : "New task", text: $composerText)
                         .textFieldStyle(.plain)
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(.ciForeground)
                         .padding(.horizontal, 10)
                         .frame(minHeight: 38)
                         .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
-                        .accessibilityIdentifier("hub.reminders.newTask")
+                        .accessibilityIdentifier("hub.\(module.id.rawValue).composer")
                     Button("Review") {
-                        let value = newTaskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let value = composerText.trimmingCharacters(in: .whitespacesAndNewlines)
                         guard !value.isEmpty else { return }
                         Task {
                             await client.prepareHubAction(.init(
-                                moduleID: .reminders,
+                                moduleID: module.id,
                                 actionID: "add",
                                 value: value
                             ))
                         }
                     }
                     .buttonStyle(HubPrimaryButtonStyle())
-                    .disabled(newTaskTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
 
@@ -204,8 +205,8 @@ private struct PersonalHubModuleCard: View {
                 HStack(spacing: 7) {
                     ForEach(module.actions) { action in
                         Button {
-                            if module.id == .reminders, action.id == "add" {
-                                withAnimation(.easeOut(duration: 0.16)) { showsTaskComposer.toggle() }
+                            if [.reminders, .notes].contains(module.id), action.id == "add" {
+                                withAnimation(.easeOut(duration: 0.16)) { showsComposer.toggle() }
                             } else {
                                 prepare(action)
                             }
@@ -302,7 +303,10 @@ private struct PersonalHubItemRow: View {
                 HStack(spacing: 6) {
                     ForEach(item.actions) { action in
                         Button {
-                            if let deepLink = action.deepLink {
+                            if action.id == "copyToDevice", let value = item.detail {
+                                UIPasteboard.general.string = value
+                                client.reportHubClientAction("Copied to iPhone")
+                            } else if let deepLink = action.deepLink {
                                 openURL(deepLink)
                             } else {
                                 Task {

@@ -30,6 +30,7 @@ final class PersonalHubService {
     private var actionTokens = RemoteActionTokenVault()
     private let glances = GlancesModel.shared
     private let utilities = PersonalUtilitiesModel.shared
+    private let data = PersonalHubDataModel.shared
 
     private init() {}
 
@@ -40,6 +41,7 @@ final class PersonalHubService {
     ) -> PersonalHubSnapshot {
         glances.refresh()
         utilities.start()
+        data.start()
 
         let minutesUntilMeeting = glances.nextEvent.map {
             Int($0.start.timeIntervalSinceNow / 60)
@@ -105,6 +107,48 @@ final class PersonalHubService {
 
         let intent = request.intent
         switch (intent.moduleID, intent.actionID) {
+        case (.notes, "add"):
+            guard let value = intent.value, data.addNote(value) else {
+                return .failure(.failed("Could not add the note"))
+            }
+            return .success(.init(executed: true, message: "Note added"))
+
+        case (.notes, "delete"):
+            guard let targetID = intent.targetID, data.deleteNote(id: targetID) else {
+                return .failure(.invalid("Note is no longer available"))
+            }
+            return .success(.init(executed: true, message: "Note deleted"))
+
+        case (.shelf, "remove"):
+            guard let targetID = intent.targetID, data.removeShelfEntry(id: targetID) else {
+                return .failure(.invalid("Shelf item is no longer available"))
+            }
+            return .success(.init(executed: true, message: "Shelf item removed"))
+
+        case (.nowPlaying, "playPause"), (.nowPlaying, "next"), (.nowPlaying, "previous"):
+            guard data.runMediaCommand(intent.actionID) else {
+                return .failure(.failed("Could not control the current media app"))
+            }
+            return .success(.init(executed: true, message: "Media control sent"))
+
+        case (.system, "refresh"):
+            data.refreshHostData()
+            return .success(.init(executed: true, message: "System readings refreshed"))
+
+        case (.audio, "openSettings"):
+            guard let url = URL(string: "x-apple.systempreferences:com.apple.Sound-Settings.extension") else {
+                return .failure(.failed("Sound Settings is unavailable"))
+            }
+            NSWorkspace.shared.open(url)
+            return .success(.init(executed: true, message: "Sound Settings opened on the Mac"))
+
+        case (.quickToggles, "lockMac"):
+            let script = #"tell application "System Events" to keystroke "q" using {control down, command down}"#
+            guard ProcessRunner.run(path: "/usr/bin/osascript", args: ["-e", script], timeout: 5) != nil else {
+                return .failure(.failed("CodeIsland needs Accessibility access to lock the Mac"))
+            }
+            return .success(.init(executed: true, message: "Mac locked"))
+
         case (.reminders, "add"):
             guard let value = intent.value, glances.addReminder(title: value) else {
                 return .failure(.failed(glances.reminderMutationError ?? "Could not add the task"))
@@ -149,6 +193,45 @@ final class PersonalHubService {
 
     private func validate(intent: PersonalHubActionIntent) -> Result<String, ActionError> {
         switch (intent.moduleID, intent.actionID) {
+        case (.notes, "add"):
+            let value = intent.value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !value.isEmpty else { return .failure(.invalid("Enter a note")) }
+            guard value.count <= 20_000 else { return .failure(.invalid("Note is too long")) }
+            return .success("Add note: “\(value.prefix(120))\(value.count > 120 ? "…" : "")”")
+
+        case (.notes, "delete"):
+            guard let targetID = intent.targetID,
+                  let note = data.notes.first(where: { $0.id == targetID })
+            else { return .failure(.invalid("Note is no longer available")) }
+            return .success("Delete note “\(note.title)”")
+
+        case (.shelf, "remove"):
+            guard let targetID = intent.targetID,
+                  let entry = data.shelf.first(where: { $0.id == targetID })
+            else { return .failure(.invalid("Shelf item is no longer available")) }
+            return .success("Remove “\(entry.title)” from Shelf")
+
+        case (.nowPlaying, "playPause"):
+            guard let media = data.nowPlaying else { return .failure(.invalid("Nothing is playing")) }
+            return .success("\(media.isPlaying ? "Pause" : "Play") “\(media.title)”")
+
+        case (.nowPlaying, "next"):
+            guard data.nowPlaying != nil else { return .failure(.invalid("Nothing is playing")) }
+            return .success("Skip to the next track")
+
+        case (.nowPlaying, "previous"):
+            guard data.nowPlaying != nil else { return .failure(.invalid("Nothing is playing")) }
+            return .success("Return to the previous track")
+
+        case (.system, "refresh"):
+            return .success("Refresh system readings")
+
+        case (.audio, "openSettings"):
+            return .success("Open Sound Settings on the Mac")
+
+        case (.quickToggles, "lockMac"):
+            return .success("Lock this Mac now")
+
         case (.reminders, "add"):
             let value = GlancesModel.normalizedReminderTitle(intent.value ?? "")
             guard glances.remindersAuthorized else {
@@ -194,6 +277,96 @@ final class PersonalHubService {
         appState: AppState
     ) -> PersonalHubModuleSnapshot {
         switch id {
+        case .nowPlaying:
+            if let media = data.nowPlaying {
+                return .init(
+                    id: id,
+                    availability: .ready,
+                    summary: media.title,
+                    detail: [media.artist, media.album, media.appName].filter { !$0.isEmpty }.joined(separator: " · "),
+                    items: [
+                        .init(
+                            id: "current",
+                            title: media.title,
+                            subtitle: media.artist,
+                            detail: media.album,
+                            symbol: media.isPlaying ? "speaker.wave.2.fill" : "pause.fill"
+                        )
+                    ],
+                    actions: [
+                        .init(id: "previous", label: "Previous", symbol: "backward.fill"),
+                        .init(
+                            id: "playPause",
+                            label: media.isPlaying ? "Pause" : "Play",
+                            symbol: media.isPlaying ? "pause.fill" : "play.fill",
+                            role: .primary
+                        ),
+                        .init(id: "next", label: "Next", symbol: "forward.fill")
+                    ]
+                )
+            }
+            return .init(
+                id: id,
+                availability: data.mediaPermissionError == nil ? .partial : .permissionRequired,
+                summary: data.mediaPermissionError ?? "Play something in Music or Spotify"
+            )
+
+        case .shelf:
+            return .init(
+                id: id,
+                availability: .ready,
+                summary: data.shelf.isEmpty ? "Clipboard history is empty" : "\(data.shelf.count) recent clips",
+                detail: "Stored locally on this Mac",
+                items: data.shelf.prefix(12).map { entry in
+                    .init(
+                        id: entry.id,
+                        title: entry.title,
+                        subtitle: Self.relativeDate(entry.capturedAt),
+                        detail: entry.value,
+                        symbol: "doc.on.clipboard",
+                        actions: [
+                            .init(id: "copyToDevice", label: "Copy here", symbol: "doc.on.doc", role: .primary),
+                            .init(id: "remove", label: "Remove", symbol: "trash", role: .destructive, targetID: entry.id)
+                        ]
+                    )
+                }
+            )
+
+        case .notes:
+            return .init(
+                id: id,
+                availability: .ready,
+                summary: data.notes.isEmpty ? "No notes yet" : "\(data.notes.count) notes",
+                items: data.notes.prefix(20).map { note in
+                    .init(
+                        id: note.id,
+                        title: note.title,
+                        subtitle: Self.relativeDate(note.updatedAt),
+                        detail: note.text,
+                        symbol: "note.text",
+                        actions: [
+                            .init(id: "copyToDevice", label: "Copy here", symbol: "doc.on.doc"),
+                            .init(id: "delete", label: "Delete", symbol: "trash", role: .destructive, targetID: note.id)
+                        ]
+                    )
+                },
+                actions: [.init(id: "add", label: "Add note", symbol: "plus", role: .primary)]
+            )
+
+        case .system:
+            guard let system = data.system else {
+                return .init(id: id, availability: .loading, summary: "Reading this Mac")
+            }
+            let load = String(format: "%.2f", system.load1)
+            let memory = system.memoryPercent.map { " · memory \($0)%" } ?? ""
+            return .init(
+                id: id,
+                availability: .ready,
+                summary: "Load \(load)\(memory)",
+                detail: "\(system.processorCount) cores · thermal \(system.thermalState) · up \(Self.duration(system.uptime))",
+                actions: [.init(id: "refresh", label: "Refresh", symbol: "arrow.clockwise")]
+            )
+
         case .calendar:
             guard glances.calendarAuthorized else {
                 return .init(
@@ -354,14 +527,57 @@ final class PersonalHubService {
             )
 
         case .battery:
+            var batteryItems: [PersonalHubItem] = []
+            if let mac = data.macBattery {
+                batteryItems.append(.init(
+                    id: "mac",
+                    title: "MacBook",
+                    subtitle: "\(mac.percent)% · \(mac.status) · \(mac.powerSource)",
+                    symbol: "laptopcomputer"
+                ))
+            }
+            batteryItems.append(contentsOf: utilities.deviceBatteries.map { device in
+                .init(id: device.id, title: device.name, subtitle: device.summary, symbol: "battery.75percent")
+            })
+            return .init(
+                id: id,
+                availability: data.macBattery == nil ? .partial : .ready,
+                summary: data.macBattery.map { "Mac \($0.percent)% · \($0.status)" }
+                    ?? utilities.lowBattery.map { "\($0.name) · \($0.summary)" }
+                    ?? "Battery readings unavailable",
+                items: batteryItems
+            )
+
+        case .audio:
+            let devices = data.audioDevices.filter { $0.isInput || $0.isOutput }
+            let active = devices.filter { $0.isDefaultInput || $0.isDefaultOutput }
+            return .init(
+                id: id,
+                availability: devices.isEmpty ? .loading : .partial,
+                summary: active.isEmpty
+                    ? "\(devices.count) audio devices"
+                    : active.map(\.name).joined(separator: " · "),
+                detail: "Device switching is pending; Sound Settings can be opened remotely",
+                items: devices.prefix(12).map { device in
+                    let roles = [
+                        device.isDefaultInput ? "Default input" : nil,
+                        device.isDefaultOutput ? "Default output" : nil,
+                        device.isInput && !device.isDefaultInput ? "Input" : nil,
+                        device.isOutput && !device.isDefaultOutput ? "Output" : nil,
+                    ].compactMap { $0 }.joined(separator: " · ")
+                    return .init(id: device.id, title: device.name, subtitle: roles, symbol: "speaker.wave.2")
+                },
+                actions: [.init(id: "openSettings", label: "Open Sound Settings", symbol: "slider.horizontal.3")]
+            )
+
+        case .quickToggles:
             return .init(
                 id: id,
                 availability: .partial,
-                summary: utilities.lowBattery.map { "\($0.name) · \($0.summary)" }
-                    ?? "Accessory batteries available; Mac health is pending",
-                items: utilities.deviceBatteries.map { device in
-                    .init(id: device.id, title: device.name, subtitle: device.summary, symbol: "battery.75percent")
-                }
+                summary: "Lock this Mac from iPhone or web",
+                actions: [
+                    .init(id: "lockMac", label: "Lock Mac", symbol: "lock.fill", role: .destructive)
+                ]
             )
 
         case .notifications:
@@ -394,5 +610,17 @@ final class PersonalHubService {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .short
         return "Due \(formatter.localizedString(for: date, relativeTo: Date()))"
+    }
+
+    private static func relativeDate(_ date: Date) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        return formatter.localizedString(for: date, relativeTo: Date())
+    }
+
+    private static func duration(_ seconds: TimeInterval) -> String {
+        let days = Int(seconds) / 86_400
+        let hours = (Int(seconds) % 86_400) / 3_600
+        return days > 0 ? "\(days)d \(hours)h" : "\(hours)h"
     }
 }

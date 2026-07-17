@@ -41,7 +41,7 @@ struct PersonalHubMacView: View {
                             MacHubModuleCard(
                                 module: module,
                                 prepare: prepare,
-                                addTask: addTask
+                                addText: addText
                             )
                         }
                     }
@@ -110,7 +110,19 @@ struct PersonalHubMacView: View {
         snapshot = service.snapshot(appState: appState, requestedMode: requestedMode)
     }
 
-    private func prepare(moduleID: PersonalHubModuleID, action: PersonalHubAction, itemID: String?) {
+    private func prepare(
+        moduleID: PersonalHubModuleID,
+        action: PersonalHubAction,
+        itemID: String?,
+        itemDetail: String?
+    ) {
+        if action.id == "copyToDevice", let itemDetail {
+            NSPasteboard.general.clearContents()
+            if NSPasteboard.general.setString(itemDetail, forType: .string) {
+                actionMessage = "Copied to this Mac"
+            }
+            return
+        }
         if let deepLink = action.deepLink {
             NSWorkspace.shared.open(deepLink)
             return
@@ -123,9 +135,9 @@ struct PersonalHubMacView: View {
         acceptPrepared(service.prepare(intent: intent, deviceID: "local-mac"))
     }
 
-    private func addTask(_ title: String) {
+    private func addText(moduleID: PersonalHubModuleID, value: String) {
         acceptPrepared(service.prepare(
-            intent: .init(moduleID: .reminders, actionID: "add", value: title),
+            intent: .init(moduleID: moduleID, actionID: "add", value: value),
             deviceID: "local-mac"
         ))
     }
@@ -158,8 +170,8 @@ struct PersonalHubMacView: View {
 
 private struct MacHubModuleCard: View {
     let module: PersonalHubModuleSnapshot
-    let prepare: (PersonalHubModuleID, PersonalHubAction, String?) -> Void
-    let addTask: (String) -> Void
+    let prepare: (PersonalHubModuleID, PersonalHubAction, String?, String?) -> Void
+    let addText: (PersonalHubModuleID, String) -> Void
 
     @State private var showsTaskComposer = false
     @State private var taskTitle = ""
@@ -190,7 +202,7 @@ private struct MacHubModuleCard: View {
 
             if showsTaskComposer {
                 HStack(spacing: 5) {
-                    TextField("New task", text: $taskTitle)
+                    TextField(module.id == .notes ? "New note" : "New task", text: $taskTitle)
                         .textFieldStyle(.plain)
                         .font(.system(size: 10, weight: .medium))
                         .padding(6)
@@ -198,7 +210,7 @@ private struct MacHubModuleCard: View {
                     Button("Review") {
                         let title = taskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
                         guard !title.isEmpty else { return }
-                        addTask(title)
+                        addText(module.id, title)
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(.orange)
@@ -223,13 +235,13 @@ private struct MacHubModuleCard: View {
                     if let progress = item.progress {
                         ProgressView(value: progress).tint(.orange)
                     }
-                    actionRow(item.actions, itemID: item.id)
+                    actionRow(item.actions, itemID: item.id, itemDetail: item.detail)
                 }
                 .padding(6)
                 .background(Color.black.opacity(0.24), in: RoundedRectangle(cornerRadius: 6))
             }
 
-            actionRow(module.actions, itemID: nil)
+            actionRow(module.actions, itemID: nil, itemDetail: nil)
         }
         .padding(8)
         .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 9))
@@ -237,15 +249,19 @@ private struct MacHubModuleCard: View {
     }
 
     @ViewBuilder
-    private func actionRow(_ actions: [PersonalHubAction], itemID: String?) -> some View {
+    private func actionRow(
+        _ actions: [PersonalHubAction],
+        itemID: String?,
+        itemDetail: String?
+    ) -> some View {
         if !actions.isEmpty {
             HStack(spacing: 5) {
                 ForEach(actions) { action in
                     Button {
-                        if module.id == .reminders, action.id == "add" {
+                        if [.reminders, .notes].contains(module.id), action.id == "add" {
                             showsTaskComposer.toggle()
                         } else {
-                            prepare(module.id, action, itemID)
+                            prepare(module.id, action, itemID, itemDetail)
                         }
                     } label: {
                         Label(action.label, systemImage: action.symbol ?? "arrow.right")

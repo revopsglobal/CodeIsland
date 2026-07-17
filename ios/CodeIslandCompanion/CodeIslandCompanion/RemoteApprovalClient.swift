@@ -252,6 +252,10 @@ final class RemoteApprovalClient: ObservableObject {
         }
     }
 
+    func reportHubClientAction(_ message: String) {
+        hubActionMessage = message
+    }
+
     func executeHubAction(_ prepared: PersonalHubPreparedAction) async {
         guard !hubActionInFlight,
               let url = endpoint("/api/hub/actions/execute")

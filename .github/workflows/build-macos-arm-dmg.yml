@@ -71,6 +71,7 @@ jobs:
         run: |
           swift test --filter PersonalUtilitiesModelTests
           swift test --filter PersonalHubProtocolTests
+          swift test --filter PersonalHubDataModelTests
 
       - name: Test remote approval security and exact-request routing
         run: |

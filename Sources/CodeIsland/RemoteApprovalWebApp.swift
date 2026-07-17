@@ -214,22 +214,27 @@ enum RemoteApprovalWebApp {
           modes.querySelectorAll('[data-mode]').forEach(button=>button.classList.toggle('active',button.dataset.mode===selectedMode));
           hub.innerHTML=(snapshot.modules||[]).map(module=>`<article class="module">
             <div class="module-head"><div><div class="module-title">${escapeHTML(moduleNames[module.id]||module.id)}</div><div class="module-summary">${escapeHTML(module.summary||'')}</div></div><div class="availability">${escapeHTML(module.availability)}</div></div>
-            ${(module.items||[]).map(item=>`<div class="hub-item"><div class="hub-item-title">${escapeHTML(item.title)}</div>${item.subtitle?`<div class="hub-item-subtitle">${escapeHTML(item.subtitle)}</div>`:''}${item.progress!==null&&item.progress!==undefined?`<progress value="${Number(item.progress)}" max="1"></progress>`:''}${renderHubActions(module.id,item.actions||[],item.id)}</div>`).join('')}
-            ${renderHubActions(module.id,module.actions||[],null)}
+            ${(module.items||[]).map(item=>`<div class="hub-item"><div class="hub-item-title">${escapeHTML(item.title)}</div>${item.subtitle?`<div class="hub-item-subtitle">${escapeHTML(item.subtitle)}</div>`:''}${item.progress!==null&&item.progress!==undefined?`<progress value="${Number(item.progress)}" max="1"></progress>`:''}${renderHubActions(module.id,item.actions||[],item.id,item.detail||'')}</div>`).join('')}
+            ${renderHubActions(module.id,module.actions||[],null,'')}
           </article>`).join('');
-          hub.querySelectorAll('[data-hub-action]').forEach(button=>button.addEventListener('click',()=>runHubAction(button.dataset.module,button.dataset.action,button.dataset.target||null,button.dataset.deeplink||null)));
+          hub.querySelectorAll('[data-hub-action]').forEach(button=>button.addEventListener('click',()=>runHubAction(button.dataset.module,button.dataset.action,button.dataset.target||null,button.dataset.deeplink||null,button.dataset.payload||'')));
         }
 
-        function renderHubActions(moduleID,actions,targetID) {
+        function renderHubActions(moduleID,actions,targetID,payload) {
           if(!actions.length) return '';
-          return `<div class="hub-actions">${actions.map(action=>`<button class="hub-action ${action.role==='primary'?'primary':''}" data-hub-action="1" data-module="${escapeHTML(moduleID)}" data-action="${escapeHTML(action.id)}" data-target="${escapeHTML(action.targetID||targetID||'')}" data-deeplink="${escapeHTML(action.deepLink||'')}">${escapeHTML(action.label)}</button>`).join('')}</div>`;
+          return `<div class="hub-actions">${actions.map(action=>`<button class="hub-action ${action.role==='primary'?'primary':''}" data-hub-action="1" data-module="${escapeHTML(moduleID)}" data-action="${escapeHTML(action.id)}" data-target="${escapeHTML(action.targetID||targetID||'')}" data-deeplink="${escapeHTML(action.deepLink||'')}" data-payload="${escapeHTML(payload)}">${escapeHTML(action.label)}</button>`).join('')}</div>`;
         }
 
-        async function runHubAction(moduleID,actionID,targetID,deepLink) {
+        async function runHubAction(moduleID,actionID,targetID,deepLink,payload) {
+          if(actionID==='copyToDevice') {
+            try { await navigator.clipboard.writeText(payload); alert('Copied to this device'); }
+            catch(error) { alert('Clipboard permission was denied'); }
+            return;
+          }
           if(deepLink) { window.location.href=deepLink; return; }
           let value=null;
-          if(moduleID==='reminders'&&actionID==='add') {
-            value=prompt('New task'); if(!value||!value.trim()) return; value=value.trim();
+          if((moduleID==='reminders'||moduleID==='notes')&&actionID==='add') {
+            value=prompt(moduleID==='notes'?'New note':'New task'); if(!value||!value.trim()) return; value=value.trim();
           }
           try {
             const preparedResponse=await fetch('/api/hub/actions/prepare',{method:'POST',headers:{...authHeaders(),'Content-Type':'application/json'},body:JSON.stringify({intent:{moduleID,actionID,targetID,value}})});
