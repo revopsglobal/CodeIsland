@@ -35,6 +35,8 @@
 	<string>CodeIsland shows your reminders in the notch's Glances so you can check them off.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>CodeIsland shows local weather in the notch's Glances.</string>
+	<key>NSLocationUsageDescription</key>
+	<string>CodeIsland shows local weather in the notch's Glances.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_codeisland._tcp</string>

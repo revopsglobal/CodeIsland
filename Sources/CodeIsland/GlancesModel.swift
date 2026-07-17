@@ -2,16 +2,15 @@ import Foundation
 import Combine
 import EventKit
 import CoreLocation
-import SwiftUI
+import AppKit
 import os.log
 
 /// Backing store for the Glances surface: next calendar event (+ one-tap join),
-/// reminders you can check off, and local weather. Crest-parity notch utility.
+/// selected reminder lists, and local weather. Crest-parity notch utility.
 ///
-/// The app is non-sandboxed, so EventKit + CoreLocation need only Info.plist
-/// usage strings (NSCalendars/RemindersFullAccessUsageDescription,
-/// NSLocationWhenInUseUsageDescription). Weather uses Open-Meteo (no API key,
-/// no WeatherKit entitlement).
+/// EventKit and Core Location authorization are requested only from explicit
+/// controls in the frontmost Settings window. Weather can instead use a saved
+/// city or ZIP through Open-Meteo's geocoder, with no API key or location grant.
 @MainActor
 final class GlancesModel: NSObject, ObservableObject {
     struct EventInfo: Equatable {
@@ -28,18 +27,37 @@ final class GlancesModel: NSObject, ObservableObject {
         let due: Date?
     }
 
+    struct ReminderCalendarInfo: Identifiable, Equatable {
+        let id: String
+        let title: String
+        let sourceTitle: String
+    }
+
     struct WeatherInfo: Equatable {
         let temperatureF: Int
         let symbolName: String
         let summary: String
     }
 
-    @Published var nextEvent: EventInfo?
-    @Published var reminders: [ReminderInfo] = []
-    @Published var weather: WeatherInfo?
-    @Published var calendarAuthorized = false
-    @Published var remindersAuthorized = false
-    @Published var statusLine: String?
+    struct GeocodedLocation: Equatable {
+        let latitude: Double
+        let longitude: Double
+        let label: String
+    }
+
+    @Published private(set) var nextEvent: EventInfo?
+    @Published private(set) var reminders: [ReminderInfo] = []
+    @Published private(set) var reminderCalendars: [ReminderCalendarInfo] = []
+    @Published private(set) var selectedReminderCalendarIDs: Set<String> = []
+    @Published private(set) var weather: WeatherInfo?
+    @Published private(set) var weatherLocationLabel: String?
+    @Published private(set) var calendarAuthorized = false
+    @Published private(set) var remindersAuthorized = false
+    @Published private(set) var locationAuthorized = false
+    @Published private(set) var calendarAuthorizationStatus: EKAuthorizationStatus = .notDetermined
+    @Published private(set) var remindersAuthorizationStatus: EKAuthorizationStatus = .notDetermined
+    @Published private(set) var locationAuthorizationStatus: CLAuthorizationStatus = .notDetermined
+    @Published private(set) var statusLine: String?
 
     private let eventStore = EKEventStore()
     private let locationManager = CLLocationManager()
@@ -51,40 +69,104 @@ final class GlancesModel: NSObject, ObservableObject {
         super.init()
         locationManager.delegate = self
         locationManager.desiredAccuracy = kCLLocationAccuracyKilometer
+        updateAuthorizationStatuses()
     }
 
     /// Refresh everything. Throttled so opening the surface repeatedly doesn't
-    /// hammer EventKit / the weather endpoint.
+    /// hammer EventKit or the weather endpoints. This never prompts for access.
     func refresh(force: Bool = false) {
         let now = Date()
         if !force, refreshing || now.timeIntervalSince(lastRefresh) < 30 { return }
         refreshing = true
         lastRefresh = now
-        requestAccessAndLoad()
+        refreshPermissions()
         requestWeather()
+        refreshing = false
     }
 
-    // MARK: - EventKit
+    /// Re-read TCC state after a person changes System Settings. Authorized
+    /// stores load immediately; unresolved access waits for an explicit button.
+    func refreshPermissions() {
+        updateAuthorizationStatuses()
+        if calendarAuthorized { loadNextEvent() }
+        if remindersAuthorized { loadReminderCalendarsAndReminders() }
+    }
 
-    private func requestAccessAndLoad() {
+    // MARK: - EventKit authorization
+
+    func requestCalendarAccess() {
+        NSApp.activate(ignoringOtherApps: true)
+        let status = EKEventStore.authorizationStatus(for: .event)
+        calendarAuthorizationStatus = status
+        if status == .fullAccess {
+            calendarAuthorized = true
+            loadNextEvent()
+            return
+        }
+        guard status == .notDetermined else { return }
+
         eventStore.requestFullAccessToEvents { [weak self] granted, error in
             Task { @MainActor in
                 guard let self else { return }
-                self.calendarAuthorized = granted
-                if let error { self.log.error("calendar access: \(error.localizedDescription, privacy: .public)") }
-                if granted { self.loadNextEvent() }
-                self.refreshing = false
-            }
-        }
-        eventStore.requestFullAccessToReminders { [weak self] granted, error in
-            Task { @MainActor in
-                guard let self else { return }
-                self.remindersAuthorized = granted
-                if let error { self.log.error("reminders access: \(error.localizedDescription, privacy: .public)") }
-                if granted { self.loadReminders() }
+                if let error {
+                    self.log.error("calendar access: \(error.localizedDescription, privacy: .public)")
+                }
+                self.eventStore.reset()
+                self.updateAuthorizationStatuses()
+                if granted || self.calendarAuthorized { self.loadNextEvent() }
             }
         }
     }
+
+    func requestRemindersAccess() {
+        NSApp.activate(ignoringOtherApps: true)
+        let status = EKEventStore.authorizationStatus(for: .reminder)
+        remindersAuthorizationStatus = status
+        if status == .fullAccess {
+            remindersAuthorized = true
+            loadReminderCalendarsAndReminders()
+            return
+        }
+        guard status == .notDetermined else { return }
+
+        eventStore.requestFullAccessToReminders { [weak self] granted, error in
+            Task { @MainActor in
+                guard let self else { return }
+                if let error {
+                    self.log.error("reminders access: \(error.localizedDescription, privacy: .public)")
+                }
+                self.eventStore.reset()
+                self.updateAuthorizationStatuses()
+                if granted || self.remindersAuthorized {
+                    self.loadReminderCalendarsAndReminders()
+                }
+            }
+        }
+    }
+
+    func refreshCalendar() {
+        updateAuthorizationStatuses()
+        if calendarAuthorized { loadNextEvent() }
+    }
+
+    private func updateAuthorizationStatuses() {
+        calendarAuthorizationStatus = EKEventStore.authorizationStatus(for: .event)
+        remindersAuthorizationStatus = EKEventStore.authorizationStatus(for: .reminder)
+        locationAuthorizationStatus = locationManager.authorizationStatus
+        calendarAuthorized = Self.hasFullAccess(calendarAuthorizationStatus)
+        remindersAuthorized = Self.hasFullAccess(remindersAuthorizationStatus)
+        locationAuthorized = Self.hasLocationAccess(locationAuthorizationStatus)
+    }
+
+    nonisolated private static func hasFullAccess(_ status: EKAuthorizationStatus) -> Bool {
+        status == .fullAccess
+    }
+
+    nonisolated private static func hasLocationAccess(_ status: CLAuthorizationStatus) -> Bool {
+        status == .authorized || status == .authorizedAlways
+    }
+
+    // MARK: - Calendar
 
     private func loadNextEvent() {
         let now = Date()
@@ -107,14 +189,107 @@ final class GlancesModel: NSObject, ObservableObject {
         )
     }
 
-    private func loadReminders() {
+    /// Find a video-call link in the event's URL, location, or notes.
+    static func extractJoinURL(from event: EKEvent) -> URL? {
+        if let url = event.url, Self.isJoinURL(url.absoluteString) { return url }
+        let haystacks = [event.location, event.notes].compactMap { $0 }
+        let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
+        for text in haystacks {
+            let range = NSRange(text.startIndex..., in: text)
+            let matches = detector?.matches(in: text, options: [], range: range) ?? []
+            for match in matches {
+                if let url = match.url, Self.isJoinURL(url.absoluteString) { return url }
+            }
+        }
+        return nil
+    }
+
+    private static func isJoinURL(_ string: String) -> Bool {
+        let lower = string.lowercased()
+        return lower.contains("zoom.us/j/")
+            || lower.contains("zoom.us/my/")
+            || lower.contains("meet.google.com/")
+            || lower.contains("teams.microsoft.com/l/meetup")
+            || lower.contains("teams.live.com/meet")
+            || lower.contains("webex.com/meet")
+    }
+
+    // MARK: - Reminders
+
+    private func loadReminderCalendarsAndReminders() {
+        let calendars = eventStore.calendars(for: .reminder)
+        reminderCalendars = calendars
+            .map {
+                ReminderCalendarInfo(
+                    id: $0.calendarIdentifier,
+                    title: $0.title,
+                    sourceTitle: $0.source.title
+                )
+            }
+            .sorted {
+                if $0.sourceTitle == $1.sourceTitle { return $0.title < $1.title }
+                return $0.sourceTitle < $1.sourceTitle
+            }
+
+        let stored = SettingsManager.shared.glancesReminderCalendarIDs
+        let available = Set(calendars.map(\.calendarIdentifier))
+        let selected = Self.resolveReminderCalendarIDs(
+            stored: stored,
+            available: available,
+            defaultID: eventStore.defaultCalendarForNewReminders()?.calendarIdentifier
+        )
+        selectedReminderCalendarIDs = selected
+        if selected != stored {
+            SettingsManager.shared.glancesReminderCalendarIDs = selected
+        }
+        loadReminders(from: calendars.filter { selected.contains($0.calendarIdentifier) })
+    }
+
+    nonisolated static func resolveReminderCalendarIDs(
+        stored: Set<String>,
+        available: Set<String>,
+        defaultID: String?
+    ) -> Set<String> {
+        let validStored = stored.intersection(available)
+        if !validStored.isEmpty { return validStored }
+        if let defaultID, available.contains(defaultID) { return [defaultID] }
+        if let first = available.sorted().first { return [first] }
+        return []
+    }
+
+    func setReminderCalendar(id: String, selected: Bool) {
+        guard reminderCalendars.contains(where: { $0.id == id }) else { return }
+        var next = selectedReminderCalendarIDs
+        if selected {
+            next.insert(id)
+        } else {
+            guard next.count > 1 else { return }
+            next.remove(id)
+        }
+        guard next != selectedReminderCalendarIDs else { return }
+        selectedReminderCalendarIDs = next
+        SettingsManager.shared.glancesReminderCalendarIDs = next
+
+        let calendars = eventStore.calendars(for: .reminder)
+            .filter { next.contains($0.calendarIdentifier) }
+        loadReminders(from: calendars)
+    }
+
+    private func loadReminders(from calendars: [EKCalendar]) {
+        guard !calendars.isEmpty else {
+            reminders = []
+            return
+        }
         let predicate = eventStore.predicateForIncompleteReminders(
-            withDueDateStarting: nil, ending: nil, calendars: nil
+            withDueDateStarting: nil,
+            ending: nil,
+            calendars: calendars
         )
         eventStore.fetchReminders(matching: predicate) { [weak self] fetched in
             let items = (fetched ?? [])
                 .sorted { lhs, rhs in
-                    (lhs.dueDateComponents?.date ?? .distantFuture) < (rhs.dueDateComponents?.date ?? .distantFuture)
+                    (lhs.dueDateComponents?.date ?? .distantFuture)
+                        < (rhs.dueDateComponents?.date ?? .distantFuture)
                 }
                 .prefix(8)
                 .map { reminder in
@@ -142,69 +317,154 @@ final class GlancesModel: NSObject, ObservableObject {
         }
     }
 
-    /// Find a video-call link in the event's url / location / notes.
-    static func extractJoinURL(from event: EKEvent) -> URL? {
-        if let url = event.url, Self.isJoinURL(url.absoluteString) { return url }
-        let haystacks = [event.location, event.notes].compactMap { $0 }
-        let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
-        for text in haystacks {
-            let range = NSRange(text.startIndex..., in: text)
-            let matches = detector?.matches(in: text, options: [], range: range) ?? []
-            for match in matches {
-                if let url = match.url, Self.isJoinURL(url.absoluteString) { return url }
-            }
+    // MARK: - Weather (Core Location or Open-Meteo geocoding)
+
+    func refreshWeather() {
+        weather = nil
+        weatherLocationLabel = nil
+        statusLine = nil
+        requestWeather()
+    }
+
+    func requestLocationAccess() {
+        SettingsManager.shared.glancesWeatherLocation = ""
+        weather = nil
+        weatherLocationLabel = nil
+        statusLine = nil
+        updateAuthorizationStatuses()
+        if locationAuthorized {
+            locationManager.requestLocation()
+            return
         }
-        return nil
+        guard locationAuthorizationStatus == .notDetermined else {
+            statusLine = "Location access is off — use a city or ZIP instead"
+            return
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        locationManager.requestWhenInUseAuthorization()
     }
-
-    private static func isJoinURL(_ string: String) -> Bool {
-        let lower = string.lowercased()
-        return lower.contains("zoom.us/j/")
-            || lower.contains("zoom.us/my/")
-            || lower.contains("meet.google.com/")
-            || lower.contains("teams.microsoft.com/l/meetup")
-            || lower.contains("teams.live.com/meet")
-            || lower.contains("webex.com/meet")
-    }
-
-    // MARK: - Weather (CoreLocation + Open-Meteo)
 
     private func requestWeather() {
-        switch locationManager.authorizationStatus {
-        case .authorizedAlways, .authorized:
-            locationManager.requestLocation()
-        case .notDetermined:
-            locationManager.requestWhenInUseAuthorization()
-        default:
-            statusLine = "Location off — enable it for weather"
+        let manualLocation = SettingsManager.shared.glancesWeatherLocation
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !manualLocation.isEmpty {
+            geocodeAndFetchWeather(manualLocation)
+            return
         }
+
+        updateAuthorizationStatuses()
+        if locationAuthorized {
+            locationManager.requestLocation()
+        } else {
+            statusLine = "Set a city or ZIP in Glances settings"
+        }
+    }
+
+    nonisolated static func geocodingURL(for query: String) -> URL? {
+        let searchTerm = geocodingSearchTerm(for: query)
+        var components = URLComponents(string: "https://geocoding-api.open-meteo.com/v1/search")
+        components?.queryItems = [
+            URLQueryItem(name: "name", value: searchTerm),
+            URLQueryItem(name: "count", value: "1"),
+            URLQueryItem(name: "language", value: "en"),
+            URLQueryItem(name: "format", value: "json"),
+        ]
+        return components?.url
+    }
+
+    /// Open-Meteo accepts either a place name or postal code, but not a mixed
+    /// phrase such as "San Francisco 94107". Prefer an embedded five-digit ZIP
+    /// so the Settings field supports the natural combined form too.
+    nonisolated static func geocodingSearchTerm(for query: String) -> String {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let digitRuns = trimmed.components(separatedBy: CharacterSet.decimalDigits.inverted)
+        if let zip = digitRuns.first(where: { $0.count == 5 }) { return zip }
+        return trimmed
+    }
+
+    nonisolated static func parseGeocodedLocation(from data: Data) -> GeocodedLocation? {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let results = json["results"] as? [[String: Any]],
+              let first = results.first,
+              let latitude = first["latitude"] as? Double,
+              let longitude = first["longitude"] as? Double,
+              let name = first["name"] as? String else { return nil }
+        let region = first["admin1"] as? String
+        let label = [name, region]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: ", ")
+        return GeocodedLocation(latitude: latitude, longitude: longitude, label: label)
+    }
+
+    private func geocodeAndFetchWeather(_ query: String) {
+        statusLine = "Finding \(query)…"
+        guard let url = Self.geocodingURL(for: query) else {
+            statusLine = "Invalid weather location"
+            return
+        }
+        URLSession.shared.dataTask(with: url) { [weak self] data, _, error in
+            guard let self else { return }
+            guard let data, let location = Self.parseGeocodedLocation(from: data) else {
+                Task { @MainActor in
+                    if let error {
+                        self.log.error("weather geocoding: \(error.localizedDescription, privacy: .public)")
+                    }
+                    self.statusLine = "Location not found — check Glances settings"
+                }
+                return
+            }
+            Task { @MainActor in
+                self.weatherLocationLabel = location.label
+                self.fetchWeather(latitude: location.latitude, longitude: location.longitude)
+            }
+        }.resume()
     }
 
     fileprivate func fetchWeather(for location: CLLocation) {
-        let lat = location.coordinate.latitude
-        let lon = location.coordinate.longitude
-        let urlString = "https://api.open-meteo.com/v1/forecast?latitude=\(lat)&longitude=\(lon)&current=temperature_2m,weather_code&temperature_unit=fahrenheit"
-        guard let url = URL(string: urlString) else { return }
+        weatherLocationLabel = "Current location"
+        fetchWeather(latitude: location.coordinate.latitude, longitude: location.coordinate.longitude)
+    }
+
+    private func fetchWeather(latitude: Double, longitude: Double) {
+        var components = URLComponents(string: "https://api.open-meteo.com/v1/forecast")
+        components?.queryItems = [
+            URLQueryItem(name: "latitude", value: String(latitude)),
+            URLQueryItem(name: "longitude", value: String(longitude)),
+            URLQueryItem(name: "current", value: "temperature_2m,weather_code"),
+            URLQueryItem(name: "temperature_unit", value: "fahrenheit"),
+        ]
+        guard let url = components?.url else { return }
         URLSession.shared.dataTask(with: url) { [weak self] data, _, error in
             guard let data,
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let current = json["current"] as? [String: Any],
                   let temp = current["temperature_2m"] as? Double else {
-                if let error {
-                    Task { @MainActor in self?.log.error("weather: \(error.localizedDescription, privacy: .public)") }
+                Task { @MainActor in
+                    if let error {
+                        self?.log.error("weather: \(error.localizedDescription, privacy: .public)")
+                    }
+                    self?.statusLine = "Weather unavailable"
                 }
                 return
             }
-            let code = (current["weather_code"] as? Int) ?? (current["weather_code"] as? Double).map(Int.init) ?? 0
+            let code = (current["weather_code"] as? Int)
+                ?? (current["weather_code"] as? Double).map(Int.init)
+                ?? 0
             let (symbol, summary) = Self.describe(weatherCode: code)
             Task { @MainActor in
-                self?.weather = WeatherInfo(temperatureF: Int(temp.rounded()), symbolName: symbol, summary: summary)
+                self?.weather = WeatherInfo(
+                    temperatureF: Int(temp.rounded()),
+                    symbolName: symbol,
+                    summary: summary
+                )
+                self?.statusLine = nil
             }
         }.resume()
     }
 
-    /// Map WMO weather codes (Open-Meteo) to an SF Symbol + short label.
-    static func describe(weatherCode code: Int) -> (String, String) {
+    /// Map WMO weather codes (Open-Meteo) to an SF Symbol and short label.
+    nonisolated static func describe(weatherCode code: Int) -> (String, String) {
         switch code {
         case 0: return ("sun.max.fill", "Clear")
         case 1, 2: return ("cloud.sun.fill", "Partly cloudy")
@@ -228,17 +488,19 @@ extension GlancesModel: CLLocationManagerDelegate {
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        Task { @MainActor in self.log.error("location: \(error.localizedDescription, privacy: .public)") }
+        Task { @MainActor in
+            self.log.error("location: \(error.localizedDescription, privacy: .public)")
+            self.statusLine = "Location unavailable — use a city or ZIP instead"
+        }
     }
 
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         Task { @MainActor in
-            switch manager.authorizationStatus {
-            case .authorizedAlways, .authorized:
-                manager.requestLocation()
-            default:
-                break
-            }
+            self.locationAuthorizationStatus = manager.authorizationStatus
+            self.locationAuthorized = Self.hasLocationAccess(manager.authorizationStatus)
+            let manualLocation = SettingsManager.shared.glancesWeatherLocation
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if self.locationAuthorized, manualLocation.isEmpty { manager.requestLocation() }
         }
     }
 }

@@ -35,10 +35,19 @@ struct GlancesView: View {
                 Text("\(weather.temperatureF)°")
                     .font(.system(size: 24, weight: .semibold, design: .monospaced))
                     .foregroundStyle(.white)
-                Text(weather.summary)
-                    .font(Self.monoSmall)
-                    .foregroundStyle(.white.opacity(0.55))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(weather.summary)
+                        .font(Self.monoSmall)
+                        .foregroundStyle(.white.opacity(0.55))
+                    if let label = model.weatherLocationLabel {
+                        Text(label)
+                            .font(.system(size: 8, weight: .regular, design: .monospaced))
+                            .foregroundStyle(.white.opacity(0.3))
+                            .lineLimit(1)
+                    }
+                }
                 Spacer()
+                settingsButton(label: "Weather settings")
             } else {
                 Image(systemName: "location.slash")
                     .font(.system(size: 16))
@@ -47,6 +56,7 @@ struct GlancesView: View {
                     .font(Self.monoSmall)
                     .foregroundStyle(.white.opacity(0.4))
                 Spacer()
+                settingsButton(label: "Weather settings")
             }
         }
     }
@@ -83,7 +93,11 @@ struct GlancesView: View {
             } else if model.calendarAuthorized {
                 emptyText("Nothing on the calendar")
             } else {
-                emptyText("Calendar access needed")
+                HStack {
+                    emptyText("Calendar access needed")
+                    Spacer()
+                    settingsButton(label: "Calendar settings")
+                }
             }
         }
     }
@@ -92,7 +106,11 @@ struct GlancesView: View {
 
     private var remindersSection: some View {
         VStack(alignment: .leading, spacing: 6) {
-            sectionLabel("REMINDERS")
+            HStack {
+                sectionLabel("REMINDERS")
+                Spacer()
+                settingsButton(label: "Choose Reminders lists")
+            }
             if !model.reminders.isEmpty {
                 ForEach(model.reminders) { reminder in
                     HStack(spacing: 8) {
@@ -117,7 +135,7 @@ struct GlancesView: View {
                     }
                 }
             } else if model.remindersAuthorized {
-                emptyText("All clear")
+                emptyText("All clear in selected lists")
             } else {
                 emptyText("Reminders access needed")
             }
@@ -137,6 +155,20 @@ struct GlancesView: View {
         Text(text)
             .font(Self.monoSmall)
             .foregroundStyle(.white.opacity(0.4))
+    }
+
+    private func settingsButton(label: String) -> some View {
+        Button {
+            SettingsWindowController.shared.show(page: .glances)
+        } label: {
+            Image(systemName: "slider.horizontal.3")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(Self.accent.opacity(0.8))
+                .padding(3)
+        }
+        .buttonStyle(.plain)
+        .help(label)
+        .accessibilityLabel(label)
     }
 
     private static func timeText(for event: GlancesModel.EventInfo) -> String {
