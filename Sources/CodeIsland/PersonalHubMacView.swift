@@ -123,6 +123,26 @@ struct PersonalHubMacView: View {
             }
             return
         }
+        if action.id == "presentOnDevice", let itemDetail {
+            TeleprompterWindowController.shared.show(text: itemDetail)
+            return
+        }
+        if moduleID == .camera, action.id == "previewOnDevice" {
+            let photoBooth = URL(fileURLWithPath: "/System/Applications/Photo Booth.app")
+            NSWorkspace.shared.open(photoBooth)
+            return
+        }
+        if moduleID == .notes, ["append", "replace"].contains(action.id), let itemID {
+            guard let value = promptForNote(
+                title: action.id == "append" ? "Append to note" : "Edit note",
+                initialValue: action.id == "replace" ? (itemDetail ?? "") : ""
+            ) else { return }
+            acceptPrepared(service.prepare(
+                intent: .init(moduleID: .notes, actionID: action.id, targetID: itemID, value: value),
+                deviceID: "local-mac"
+            ))
+            return
+        }
         if let deepLink = action.deepLink {
             NSWorkspace.shared.open(deepLink)
             return
@@ -135,9 +155,9 @@ struct PersonalHubMacView: View {
         acceptPrepared(service.prepare(intent: intent, deviceID: "local-mac"))
     }
 
-    private func addText(moduleID: PersonalHubModuleID, value: String) {
+    private func addText(moduleID: PersonalHubModuleID, actionID: String, value: String) {
         acceptPrepared(service.prepare(
-            intent: .init(moduleID: moduleID, actionID: "add", value: value),
+            intent: .init(moduleID: moduleID, actionID: actionID, value: value),
             deviceID: "local-mac"
         ))
     }
@@ -166,15 +186,38 @@ struct PersonalHubMacView: View {
             actionMessage = error.localizedDescription
         }
     }
+
+    private func promptForNote(title: String, initialValue: String) -> String? {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.addButton(withTitle: "Review")
+        alert.addButton(withTitle: "Cancel")
+
+        let scrollView = NSScrollView(frame: NSRect(x: 0, y: 0, width: 420, height: 170))
+        scrollView.hasVerticalScroller = true
+        scrollView.borderType = .bezelBorder
+        let textView = NSTextView(frame: scrollView.bounds)
+        textView.isRichText = false
+        textView.font = .systemFont(ofSize: 13)
+        textView.string = initialValue
+        scrollView.documentView = textView
+        alert.accessoryView = scrollView
+
+        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
+        let value = textView.string.trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
+    }
 }
 
 private struct MacHubModuleCard: View {
     let module: PersonalHubModuleSnapshot
     let prepare: (PersonalHubModuleID, PersonalHubAction, String?, String?) -> Void
-    let addText: (PersonalHubModuleID, String) -> Void
+    let addText: (PersonalHubModuleID, String, String) -> Void
 
     @State private var showsTaskComposer = false
     @State private var taskTitle = ""
+    @State private var eventStart = Date().addingTimeInterval(3_600)
+    @State private var eventEnd = Date().addingTimeInterval(7_200)
 
     private var definition: PersonalHubModuleDefinition {
         PersonalHubCatalog.definition(for: module.id)
@@ -201,20 +244,50 @@ private struct MacHubModuleCard: View {
             }
 
             if showsTaskComposer {
-                HStack(spacing: 5) {
-                    TextField(module.id == .notes ? "New note" : "New task", text: $taskTitle)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 10, weight: .medium))
-                        .padding(6)
-                        .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 5))
-                    Button("Review") {
-                        let title = taskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-                        guard !title.isEmpty else { return }
-                        addText(module.id, title)
+                if module.id == .calendar {
+                    VStack(alignment: .leading, spacing: 5) {
+                        composerTextField(prompt: "Event title")
+                        DatePicker("Starts", selection: $eventStart, in: Date()...)
+                            .datePickerStyle(.compact)
+                            .font(.system(size: 9, weight: .medium))
+                        DatePicker("Ends", selection: $eventEnd, in: eventStart...)
+                            .datePickerStyle(.compact)
+                            .font(.system(size: 9, weight: .medium))
+                        reviewButton(value: PersonalHubCalendarDraft(
+                            title: taskTitle.trimmingCharacters(in: .whitespacesAndNewlines),
+                            start: eventStart,
+                            end: eventEnd
+                        ).encodedActionValue())
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.orange)
-                    .controlSize(.small)
+                } else if module.id == .teleprompter {
+                    VStack(alignment: .leading, spacing: 5) {
+                        TextEditor(text: $taskTitle)
+                            .font(.system(size: 10, weight: .medium))
+                            .frame(minHeight: 80)
+                            .scrollContentBackground(.hidden)
+                            .padding(5)
+                            .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 5))
+                        reviewButton(
+                            actionID: "set",
+                            value: taskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                        )
+                    }
+                } else if module.id == .claude {
+                    HStack(spacing: 5) {
+                        composerTextField(prompt: "Ask Claude")
+                        reviewButton(
+                            actionID: "ask",
+                            value: taskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                        )
+                    }
+                } else {
+                    HStack(spacing: 5) {
+                        composerTextField(prompt: module.id == .notes ? "New note" : "New task")
+                        let title = taskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                        reviewButton(value: module.id == .reminders
+                            ? PersonalHubReminderDraft(title: title).encodedActionValue()
+                            : title)
+                    }
                 }
             }
 
@@ -258,7 +331,9 @@ private struct MacHubModuleCard: View {
             HStack(spacing: 5) {
                 ForEach(actions) { action in
                     Button {
-                        if [.reminders, .notes].contains(module.id), action.id == "add" {
+                        if ([.calendar, .reminders, .notes].contains(module.id) && action.id == "add")
+                            || (module.id == .teleprompter && action.id == "set")
+                            || (module.id == .claude && action.id == "ask") {
                             showsTaskComposer.toggle()
                         } else {
                             prepare(module.id, action, itemID, itemDetail)
@@ -290,5 +365,26 @@ private struct MacHubModuleCard: View {
         case .unavailable:
             Text("NEXT").foregroundStyle(.white.opacity(0.25))
         }
+    }
+
+    private func composerTextField(prompt: String) -> some View {
+        TextField(prompt, text: $taskTitle)
+            .textFieldStyle(.plain)
+            .font(.system(size: 10, weight: .medium))
+            .padding(6)
+            .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 5))
+    }
+
+    private func reviewButton(actionID: String = "add", value: String?) -> some View {
+        Button("Review") {
+            guard let value,
+                  !taskTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            else { return }
+            addText(module.id, actionID, value)
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(.orange)
+        .controlSize(.small)
+        .disabled(value == nil || taskTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 }

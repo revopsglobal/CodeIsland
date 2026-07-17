@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import CodeIslandCore
 import EventKit
 import CoreLocation
 import AppKit
@@ -22,12 +23,14 @@ final class GlancesModel: NSObject, ObservableObject {
         let end: Date
         let joinURL: URL?
         let isAllDay: Bool
+        let calendarTitle: String
     }
 
     struct ReminderInfo: Identifiable, Equatable {
         let id: String
         let title: String
         let due: Date?
+        let calendarTitle: String
     }
 
     struct ReminderCalendarInfo: Identifiable, Equatable {
@@ -49,6 +52,7 @@ final class GlancesModel: NSObject, ObservableObject {
     }
 
     @Published private(set) var nextEvent: EventInfo?
+    @Published private(set) var upcomingEvents: [EventInfo] = []
     @Published private(set) var reminders: [ReminderInfo] = []
     @Published private(set) var reminderCalendars: [ReminderCalendarInfo] = []
     @Published private(set) var selectedReminderCalendarIDs: Set<String> = []
@@ -62,6 +66,7 @@ final class GlancesModel: NSObject, ObservableObject {
     @Published private(set) var locationAuthorizationStatus: CLAuthorizationStatus = .notDetermined
     @Published private(set) var statusLine: String?
     @Published private(set) var reminderMutationError: String?
+    @Published private(set) var calendarMutationError: String?
 
     private let eventStore = EKEventStore()
     private let locationManager = CLLocationManager()
@@ -92,7 +97,7 @@ final class GlancesModel: NSObject, ObservableObject {
     /// stores load immediately; unresolved access waits for an explicit button.
     func refreshPermissions() {
         updateAuthorizationStatuses()
-        if calendarAuthorized { loadNextEvent() }
+        if calendarAuthorized { loadUpcomingEvents() }
         if remindersAuthorized { loadReminderCalendarsAndReminders() }
     }
 
@@ -104,7 +109,7 @@ final class GlancesModel: NSObject, ObservableObject {
         calendarAuthorizationStatus = status
         if status == .fullAccess {
             calendarAuthorized = true
-            loadNextEvent()
+            loadUpcomingEvents()
             return
         }
         guard status == .notDetermined else { return }
@@ -117,7 +122,7 @@ final class GlancesModel: NSObject, ObservableObject {
                 }
                 self.eventStore.reset()
                 self.updateAuthorizationStatuses()
-                if granted || self.calendarAuthorized { self.loadNextEvent() }
+                if granted || self.calendarAuthorized { self.loadUpcomingEvents() }
             }
         }
     }
@@ -150,7 +155,7 @@ final class GlancesModel: NSObject, ObservableObject {
 
     func refreshCalendar() {
         updateAuthorizationStatuses()
-        if calendarAuthorized { loadNextEvent() }
+        if calendarAuthorized { loadUpcomingEvents() }
     }
 
     private func updateAuthorizationStatuses() {
@@ -172,7 +177,7 @@ final class GlancesModel: NSObject, ObservableObject {
 
     // MARK: - Calendar
 
-    private func loadNextEvent() {
+    private func loadUpcomingEvents() {
         let now = Date()
         guard let end = Calendar.current.date(byAdding: .day, value: 14, to: now) else { return }
         let calendars = eventStore.calendars(for: .event)
@@ -180,18 +185,82 @@ final class GlancesModel: NSObject, ObservableObject {
         let events = eventStore.events(matching: predicate)
             .filter { $0.endDate > now }
             .sorted { $0.startDate < $1.startDate }
-        guard let next = events.first else {
-            nextEvent = nil
-            return
-        }
-        nextEvent = EventInfo(
-            id: next.calendarItemIdentifier,
-            title: next.title ?? "Untitled event",
-            start: next.startDate,
-            end: next.endDate,
-            joinURL: Self.extractJoinURL(from: next),
-            isAllDay: next.isAllDay
+        upcomingEvents = events.prefix(40).compactMap(Self.eventInfo)
+        nextEvent = upcomingEvents.first
+    }
+
+    nonisolated private static func eventInfo(_ event: EKEvent) -> EventInfo? {
+        guard let id = event.eventIdentifier else { return nil }
+        return EventInfo(
+            id: id,
+            title: event.title ?? "Untitled event",
+            start: event.startDate,
+            end: event.endDate,
+            joinURL: extractJoinURL(from: event),
+            isAllDay: event.isAllDay,
+            calendarTitle: event.calendar.title
         )
+    }
+
+    @discardableResult
+    func addEvent(_ draft: PersonalHubCalendarDraft) -> Bool {
+        calendarMutationError = nil
+        guard calendarAuthorized else {
+            calendarMutationError = "Calendar access is required"
+            return false
+        }
+        let title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else {
+            calendarMutationError = "Enter an event title"
+            return false
+        }
+        guard draft.end > draft.start else {
+            calendarMutationError = "Event end must be after its start"
+            return false
+        }
+        guard let calendar = eventStore.defaultCalendarForNewEvents else {
+            calendarMutationError = "No writable default calendar is available"
+            return false
+        }
+
+        let event = EKEvent(eventStore: eventStore)
+        event.title = title
+        event.startDate = draft.start
+        event.endDate = draft.end
+        event.calendar = calendar
+        event.notes = draft.notes?.trimmingCharacters(in: .whitespacesAndNewlines)
+        event.url = draft.joinURL
+        do {
+            try eventStore.save(event, span: .thisEvent, commit: true)
+            loadUpcomingEvents()
+            return true
+        } catch {
+            log.error("add event: \(error.localizedDescription, privacy: .public)")
+            calendarMutationError = "Could not add the event"
+            return false
+        }
+    }
+
+    @discardableResult
+    func deleteEvent(id: String) -> Bool {
+        calendarMutationError = nil
+        guard calendarAuthorized else {
+            calendarMutationError = "Calendar access is required"
+            return false
+        }
+        guard let event = eventStore.event(withIdentifier: id) else {
+            calendarMutationError = "Event is no longer available"
+            return false
+        }
+        do {
+            try eventStore.remove(event, span: .thisEvent, commit: true)
+            loadUpcomingEvents()
+            return true
+        } catch {
+            log.error("delete event: \(error.localizedDescription, privacy: .public)")
+            calendarMutationError = "Could not delete the event"
+            return false
+        }
     }
 
     /// Find a video-call link in the event's URL, location, or notes.
@@ -343,7 +412,8 @@ final class GlancesModel: NSObject, ObservableObject {
                     ReminderInfo(
                         id: reminder.calendarItemIdentifier,
                         title: reminder.title ?? "Untitled",
-                        due: reminder.dueDateComponents?.date
+                        due: reminder.dueDateComponents?.date,
+                        calendarTitle: reminder.calendar.title
                     )
                 }
             Task { @MainActor in
@@ -355,7 +425,7 @@ final class GlancesModel: NSObject, ObservableObject {
     /// Add a quick task to one of the lists selected for Glances. Natural-language
     /// parsing can call this same write path later after presenting a preview.
     @discardableResult
-    func addReminder(title rawTitle: String) -> Bool {
+    func addReminder(title rawTitle: String, due: Date? = nil) -> Bool {
         reminderMutationError = nil
         guard remindersAuthorized else {
             reminderMutationError = "Reminders access is required"
@@ -382,6 +452,12 @@ final class GlancesModel: NSObject, ObservableObject {
         let item = EKReminder(eventStore: eventStore)
         item.title = title
         item.calendar = calendar
+        if let due {
+            item.dueDateComponents = Calendar.current.dateComponents(
+                [.calendar, .timeZone, .year, .month, .day, .hour, .minute],
+                from: due
+            )
+        }
         do {
             try eventStore.save(item, commit: true)
             loadReminders(from: calendars.filter {
@@ -408,6 +484,24 @@ final class GlancesModel: NSObject, ObservableObject {
             reminders.removeAll { $0.id == reminder.id }
         } catch {
             log.error("complete reminder: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    @discardableResult
+    func deleteReminder(_ reminder: ReminderInfo) -> Bool {
+        reminderMutationError = nil
+        guard let item = eventStore.calendarItem(withIdentifier: reminder.id) as? EKReminder else {
+            reminderMutationError = "Task is no longer available"
+            return false
+        }
+        do {
+            try eventStore.remove(item, commit: true)
+            reminders.removeAll { $0.id == reminder.id }
+            return true
+        } catch {
+            log.error("delete reminder: \(error.localizedDescription, privacy: .public)")
+            reminderMutationError = "Could not delete the task"
+            return false
         }
     }
 

@@ -272,6 +272,25 @@ enum RemoteApprovalWebApp {
         }
 
         async function runHubAction(moduleID,actionID,targetID,deepLink,payload) {
+          if(moduleID==='camera'&&actionID==='previewOnDevice') {
+            try {
+              const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user'},audio:false});
+              const popup=window.open('','_blank'); if(!popup) { stream.getTracks().forEach(track=>track.stop()); alert('Allow pop-ups to open camera preview'); return; }
+              popup.document.title='CodeIsland Camera Check';
+              const style=popup.document.createElement('style'); style.textContent='body{margin:0;background:#000;display:grid;place-items:center;height:100vh}video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}button{position:fixed;z-index:2;top:18px;right:18px;padding:10px 16px;background:#ffb000;color:#000;border:0;border-radius:999px;font-weight:800}'; popup.document.head.appendChild(style);
+              const video=popup.document.createElement('video'); video.autoplay=true; video.muted=true; video.playsInline=true; video.srcObject=stream; popup.document.body.appendChild(video);
+              const close=popup.document.createElement('button'); close.textContent='Done'; close.onclick=()=>{stream.getTracks().forEach(track=>track.stop()); popup.close();}; popup.document.body.appendChild(close);
+              popup.addEventListener('beforeunload',()=>stream.getTracks().forEach(track=>track.stop()));
+            } catch(error) { alert('Camera permission was denied or unavailable'); }
+            return;
+          }
+          if(actionID==='presentOnDevice') {
+            const popup=window.open('','_blank'); if(!popup) { alert('Allow pop-ups to open the teleprompter'); return; }
+            popup.document.title='CodeIsland Teleprompter';
+            const style=popup.document.createElement('style'); style.textContent='body{margin:0;background:#050505;color:#f5f5f5;font:600 42px/1.55 system-ui;padding:15vh 9vw 30vh}button{position:fixed;top:18px;right:18px;padding:10px 16px;background:#ffb000;color:#000;border:0;border-radius:10px;font-weight:800}'; popup.document.head.appendChild(style);
+            const close=popup.document.createElement('button'); close.textContent='Done'; close.onclick=()=>popup.close(); popup.document.body.appendChild(close);
+            const script=popup.document.createElement('div'); script.textContent=payload; popup.document.body.appendChild(script); return;
+          }
           if(actionID==='copyToDevice') {
             try { await navigator.clipboard.writeText(payload); alert('Copied to this device'); }
             catch(error) { alert('Clipboard permission was denied'); }
@@ -281,6 +300,28 @@ enum RemoteApprovalWebApp {
           let value=null;
           if((moduleID==='reminders'||moduleID==='notes')&&actionID==='add') {
             value=prompt(moduleID==='notes'?'New note':'New task'); if(!value||!value.trim()) return; value=value.trim();
+            if(moduleID==='reminders') value=JSON.stringify({title:value,due:null});
+          }
+          if(moduleID==='calendar'&&actionID==='add') {
+            const title=prompt('Event title'); if(!title||!title.trim()) return;
+            const suggested=new Date(Date.now()+3600000); suggested.setMinutes(0,0,0);
+            const pad=n=>String(n).padStart(2,'0');
+            const local=`${suggested.getFullYear()}-${pad(suggested.getMonth()+1)}-${pad(suggested.getDate())} ${pad(suggested.getHours())}:${pad(suggested.getMinutes())}`;
+            const startText=prompt('Start (YYYY-MM-DD HH:MM)',local); if(!startText) return;
+            const start=new Date(startText.replace(' ','T')); if(Number.isNaN(start.getTime())) { alert('Invalid start time'); return; }
+            const minutes=Number(prompt('Duration in minutes','60')); if(!Number.isFinite(minutes)||minutes<=0) { alert('Invalid duration'); return; }
+            const link=(prompt('Meeting link (optional)','')||'').trim();
+            value=JSON.stringify({title:title.trim(),start:start.toISOString(),end:new Date(start.getTime()+minutes*60000).toISOString(),joinURL:link||null,notes:null});
+          }
+          if(moduleID==='teleprompter'&&actionID==='set') {
+            value=prompt('Teleprompter script'); if(!value||!value.trim()) return; value=value.trim();
+          }
+          if(moduleID==='notes'&&(actionID==='append'||actionID==='replace')) {
+            value=prompt(actionID==='append'?'Append to note':'Edit note',actionID==='replace'?payload:'');
+            if(!value||!value.trim()) return; value=value.trim();
+          }
+          if(moduleID==='claude'&&actionID==='ask') {
+            value=prompt('Ask Claude'); if(!value||!value.trim()) return; value=value.trim();
           }
           try {
             const preparedResponse=await fetch('/api/hub/actions/prepare',{method:'POST',headers:{...authHeaders(),'Content-Type':'application/json'},body:JSON.stringify({intent:{moduleID,actionID,targetID,value}})});

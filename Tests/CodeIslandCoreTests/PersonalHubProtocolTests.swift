@@ -138,4 +138,34 @@ final class PersonalHubProtocolTests: XCTestCase {
             ).bindingID
         )
     }
+
+    func testCalendarDraftRoundTripsThroughActionValue() throws {
+        let draft = PersonalHubCalendarDraft(
+            title: "Design review",
+            start: Date(timeIntervalSince1970: 1_800_000_000),
+            end: Date(timeIntervalSince1970: 1_800_003_600),
+            joinURL: try XCTUnwrap(URL(string: "https://meet.google.com/abc-defg-hij")),
+            notes: "Bring the latest mockups"
+        )
+
+        XCTAssertEqual(
+            PersonalHubCalendarDraft.decodeActionValue(try XCTUnwrap(draft.encodedActionValue())),
+            draft
+        )
+    }
+
+    func testReminderDraftSupportsStructuredAndLegacyValues() throws {
+        let draft = PersonalHubReminderDraft(
+            title: "Finish the deck",
+            due: Date(timeIntervalSince1970: 1_800_000_000)
+        )
+        XCTAssertEqual(
+            PersonalHubReminderDraft.decodeActionValue(try XCTUnwrap(draft.encodedActionValue())),
+            draft
+        )
+        XCTAssertEqual(
+            PersonalHubReminderDraft.decodeActionValue("Call the bank"),
+            PersonalHubReminderDraft(title: "Call the bank")
+        )
+    }
 }

@@ -52,6 +52,9 @@ final class PersonalHubDataModel: ObservableObject {
         let percent: Int
         let status: String
         let powerSource: String
+        let cycleCount: Int?
+        let healthPercent: Int?
+        let condition: String?
     }
 
     struct AudioDevice: Equatable, Identifiable, Sendable {
@@ -69,6 +72,24 @@ final class PersonalHubDataModel: ObservableObject {
         let artist: String
         let album: String
         let isPlaying: Bool
+        let position: Double?
+        let duration: Double?
+        let lyrics: String?
+    }
+
+    struct GitHubPullRequest: Equatable, Identifiable, Sendable {
+        let id: String
+        let repository: String
+        let number: Int
+        let title: String
+        let url: URL
+        let isDraft: Bool
+        let updatedAt: Date?
+    }
+
+    struct QuickSettings: Equatable, Sendable {
+        let darkMode: Bool
+        let outputMuted: Bool
     }
 
     @Published private(set) var notes: [Note] = []
@@ -78,9 +99,17 @@ final class PersonalHubDataModel: ObservableObject {
     @Published private(set) var audioDevices: [AudioDevice] = []
     @Published private(set) var nowPlaying: NowPlaying?
     @Published private(set) var mediaPermissionError: String?
+    @Published private(set) var githubPullRequests: [GitHubPullRequest]?
+    @Published private(set) var quickSettings: QuickSettings?
+    @Published private(set) var teleprompterText = ""
+    @Published private(set) var claudeLastPrompt: String?
+    @Published private(set) var claudeLastResponse: String?
+    @Published private(set) var claudeBusy = false
+    @Published private(set) var claudeError: String?
 
     private static let notesKey = "codeisland.personalHub.notes.v1"
     private static let shelfKey = "codeisland.personalHub.shelf.v1"
+    private static let teleprompterKey = "codeisland.personalHub.teleprompter.v1"
     private var clipboardTimer: Timer?
     private var systemTimer: Timer?
     private var mediaTimer: Timer?
@@ -90,6 +119,7 @@ final class PersonalHubDataModel: ObservableObject {
     private init() {
         notes = Self.load([Note].self, key: Self.notesKey) ?? []
         shelf = Self.load([ShelfEntry].self, key: Self.shelfKey) ?? []
+        teleprompterText = UserDefaults.standard.string(forKey: Self.teleprompterKey) ?? ""
     }
 
     func start() {
@@ -122,6 +152,76 @@ final class PersonalHubDataModel: ObservableObject {
         notes.removeAll { $0.id == id }
         guard notes.count != before else { return false }
         persist(notes, key: Self.notesKey)
+        return true
+    }
+
+    func replaceNote(id: String, rawText: String) -> Bool {
+        let text = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, text.count <= 20_000,
+              let index = notes.firstIndex(where: { $0.id == id }) else { return false }
+        notes[index].text = text
+        notes[index].updatedAt = Date()
+        notes.sort { $0.updatedAt > $1.updatedAt }
+        persist(notes, key: Self.notesKey)
+        return true
+    }
+
+    func appendToNote(id: String, rawText: String) -> Bool {
+        let addition = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !addition.isEmpty,
+              let note = notes.first(where: { $0.id == id }) else { return false }
+        let combined = "\(note.text)\n\(addition)"
+        return replaceNote(id: id, rawText: combined)
+    }
+
+    func setTeleprompterText(_ rawText: String) -> Bool {
+        let text = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, text.count <= 50_000 else { return false }
+        teleprompterText = text
+        UserDefaults.standard.set(text, forKey: Self.teleprompterKey)
+        return true
+    }
+
+    func askClaude(_ rawPrompt: String) -> Bool {
+        let prompt = rawPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !claudeBusy, !prompt.isEmpty, prompt.count <= 20_000 else { return false }
+        let candidates = ["/usr/local/bin/claude", "/opt/homebrew/bin/claude"]
+        guard let path = candidates.first(where: FileManager.default.isExecutableFile(atPath:)) else {
+            claudeError = "Claude Code is not installed on the Mac"
+            return false
+        }
+
+        claudeBusy = true
+        claudeError = nil
+        claudeLastPrompt = prompt
+        Task { [weak self] in
+            let result = await Task.detached(priority: .userInitiated) {
+                ProcessRunner.run(
+                    path: path,
+                    args: [
+                        "--print",
+                        "--output-format", "text",
+                        "--permission-mode", "dontAsk",
+                        "--tools", "",
+                        "--safe-mode",
+                        "--no-session-persistence",
+                        "--system-prompt",
+                        "You are the private CodeIsland copilot. Answer concisely. Do not use tools or claim to perform actions.",
+                        prompt
+                    ],
+                    timeout: 90
+                ).flatMap { String(data: $0, encoding: .utf8) }?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            }.value
+            guard let self else { return }
+            self.claudeBusy = false
+            if let result, !result.isEmpty {
+                self.claudeLastResponse = result
+                self.claudeError = nil
+            } else {
+                self.claudeError = "Claude did not return a response"
+            }
+        }
         return true
     }
 
@@ -161,13 +261,17 @@ final class PersonalHubDataModel: ObservableObject {
                 (
                     Self.readSystemSnapshot(),
                     Self.readMacBattery(),
-                    Self.readAudioDevices()
+                    Self.readAudioDevices(),
+                    Self.readGitHubPullRequests(),
+                    Self.readQuickSettings()
                 )
             }.value
             guard let self else { return }
             self.system = values.0
             self.macBattery = values.1
             self.audioDevices = values.2
+            self.githubPullRequests = values.3
+            self.quickSettings = values.4
         }
     }
 
@@ -274,16 +378,38 @@ final class PersonalHubDataModel: ObservableObject {
         guard let data = ProcessRunner.run(path: "/usr/bin/pmset", args: ["-g", "batt"], timeout: 3),
               let output = String(data: data, encoding: .utf8)
         else { return nil }
-        return parseMacBattery(output)
+        let healthOutput = ProcessRunner.run(
+            path: "/usr/sbin/ioreg",
+            args: ["-r", "-n", "AppleSmartBattery"],
+            timeout: 4
+        ).flatMap { String(data: $0, encoding: .utf8) }
+        return parseMacBattery(output, healthOutput: healthOutput)
     }
 
-    nonisolated static func parseMacBattery(_ output: String) -> MacBattery? {
+    nonisolated static func parseMacBattery(_ output: String, healthOutput: String? = nil) -> MacBattery? {
         guard let percentText = output.firstMatch(#"([0-9]{1,3})%;"#),
               let percent = Int(percentText)
         else { return nil }
         let source = output.firstMatch(#"Now drawing from '([^']+)'"#) ?? "Unknown"
         let status = output.firstMatch(#"[0-9]{1,3}%;\s*([^;]+);"#) ?? "Unknown"
-        return .init(percent: min(max(percent, 0), 100), status: status, powerSource: source)
+        let cycleCount = healthOutput?.firstMatch(#"\"CycleCount\"\s*=\s*([0-9]+)"#).flatMap(Int.init)
+        let rawMaximum = healthOutput?.firstMatch(#"\"AppleRawMaxCapacity\"\s*=\s*([0-9]+)"#).flatMap(Double.init)
+        let design = healthOutput?.firstMatch(#"\"DesignCapacity\"\s*=\s*([0-9]+)"#).flatMap(Double.init)
+        let healthPercent: Int?
+        if let rawMaximum, let design, design > 0 {
+            healthPercent = min(max(Int((rawMaximum / design * 100).rounded()), 0), 100)
+        } else {
+            healthPercent = nil
+        }
+        let condition = healthOutput?.firstMatch(#"\"Condition\"\s*=\s*\"([^\"]+)\""#)
+        return .init(
+            percent: min(max(percent, 0), 100),
+            status: status,
+            powerSource: source,
+            cycleCount: cycleCount,
+            healthPercent: healthPercent,
+            condition: condition
+        )
     }
 
     nonisolated static func readAudioDevices() -> [AudioDevice] {
@@ -326,7 +452,17 @@ final class PersonalHubDataModel: ObservableObject {
             set ciTitle to (name of current track as string)
             set ciArtist to (artist of current track as string)
             set ciAlbum to (album of current track as string)
-            return ciState & (ASCII character 31) & ciTitle & (ASCII character 31) & ciArtist & (ASCII character 31) & ciAlbum
+            set ciPosition to ""
+            set ciDuration to ""
+            set ciLyrics to ""
+            try
+                set ciPosition to (player position as string)
+                set ciDuration to (duration of current track as string)
+            end try
+            try
+                set ciLyrics to (lyrics of current track as string)
+            end try
+            return ciState & (ASCII character 31) & ciTitle & (ASCII character 31) & ciArtist & (ASCII character 31) & ciAlbum & (ASCII character 31) & ciPosition & (ASCII character 31) & ciDuration & (ASCII character 31) & ciLyrics
         end tell
         """
         guard let data = ProcessRunner.run(path: "/usr/bin/osascript", args: ["-e", script], timeout: 5),
@@ -334,13 +470,94 @@ final class PersonalHubDataModel: ObservableObject {
         else { return nil }
         let parts = output.components(separatedBy: String(UnicodeScalar(31)))
         guard parts.count >= 4 else { return nil }
+        let lyrics = parts.count > 6
+            ? parts[6].trimmingCharacters(in: .whitespacesAndNewlines)
+            : ""
         return .init(
             appName: appName,
             title: parts[1],
             artist: parts[2],
             album: parts[3],
-            isPlaying: parts[0].localizedCaseInsensitiveContains("playing")
+            isPlaying: parts[0].localizedCaseInsensitiveContains("playing"),
+            position: parts.count > 4 ? Double(parts[4]) : nil,
+            duration: parts.count > 5 ? Double(parts[5]) : nil,
+            lyrics: lyrics.isEmpty ? nil : lyrics
         )
+    }
+
+    nonisolated static func readGitHubPullRequests() -> [GitHubPullRequest]? {
+        let candidates = ["/opt/homebrew/bin/gh", "/usr/local/bin/gh", "/usr/bin/gh"]
+        guard let path = candidates.first(where: FileManager.default.isExecutableFile(atPath:)) else {
+            return nil
+        }
+        guard let data = ProcessRunner.run(
+            path: path,
+            args: [
+                "search", "prs", "--author", "@me", "--state", "open", "--limit", "20",
+                "--json", "number,title,repository,url,isDraft,updatedAt"
+            ],
+            timeout: 12
+        ) else { return nil }
+        return parseGitHubPullRequests(data)
+    }
+
+    nonisolated static func parseGitHubPullRequests(_ data: Data) -> [GitHubPullRequest]? {
+        guard let rows = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+            return nil
+        }
+        let formatter = ISO8601DateFormatter()
+        return rows.compactMap { row in
+            guard let number = row["number"] as? Int,
+                  let title = row["title"] as? String,
+                  let urlText = row["url"] as? String,
+                  let url = URL(string: urlText),
+                  let repository = row["repository"] as? [String: Any],
+                  let name = (repository["nameWithOwner"] ?? repository["name"]) as? String
+            else { return nil }
+            return .init(
+                id: "\(name)#\(number)",
+                repository: name,
+                number: number,
+                title: title,
+                url: url,
+                isDraft: row["isDraft"] as? Bool ?? false,
+                updatedAt: (row["updatedAt"] as? String).flatMap { formatter.date(from: $0) }
+            )
+        }
+    }
+
+    func toggleDarkMode() -> Bool {
+        let script = #"tell application "System Events" to tell appearance preferences to set dark mode to not dark mode"#
+        guard ProcessRunner.run(path: "/usr/bin/osascript", args: ["-e", script], timeout: 6) != nil else {
+            return false
+        }
+        refreshHostData()
+        return true
+    }
+
+    func toggleMute() -> Bool {
+        let script = #"set volume output muted not (output muted of (get volume settings))"#
+        guard ProcessRunner.run(path: "/usr/bin/osascript", args: ["-e", script], timeout: 5) != nil else {
+            return false
+        }
+        refreshHostData()
+        return true
+    }
+
+    nonisolated static func readQuickSettings() -> QuickSettings {
+        let darkMode = ProcessRunner.run(
+            path: "/usr/bin/defaults",
+            args: ["read", "-g", "AppleInterfaceStyle"],
+            timeout: 3
+        ) != nil
+        let mutedText = ProcessRunner.run(
+            path: "/usr/bin/osascript",
+            args: ["-e", "output muted of (get volume settings)"],
+            timeout: 4
+        ).flatMap { String(data: $0, encoding: .utf8) }
+        let muted = mutedText?.trimmingCharacters(in: .whitespacesAndNewlines)
+            .localizedCaseInsensitiveCompare("true") == .orderedSame
+        return .init(darkMode: darkMode, outputMuted: muted)
     }
 }
 

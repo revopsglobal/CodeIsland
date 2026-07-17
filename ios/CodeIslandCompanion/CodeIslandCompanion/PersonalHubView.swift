@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import AVFoundation
 
 private enum HubTheme {
     static let accent = Color(red: 1.0, green: 0.69, blue: 0.0)
@@ -129,6 +130,12 @@ private struct PersonalHubModuleCard: View {
     @Environment(\.openURL) private var openURL
     @State private var composerText = ""
     @State private var showsComposer = false
+    @State private var eventStart = Date().addingTimeInterval(3_600)
+    @State private var eventEnd = Date().addingTimeInterval(7_200)
+    @State private var meetingLink = ""
+    @State private var reminderHasDue = false
+    @State private var reminderDue = Date().addingTimeInterval(3_600)
+    @State private var showsCameraPreview = false
 
     private var definition: PersonalHubModuleDefinition {
         PersonalHubCatalog.definition(for: module.id)
@@ -164,29 +171,7 @@ private struct PersonalHubModuleCard: View {
             }
 
             if showsComposer {
-                HStack(spacing: 7) {
-                    TextField(module.id == .notes ? "New note" : "New task", text: $composerText)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.ciForeground)
-                        .padding(.horizontal, 10)
-                        .frame(minHeight: 38)
-                        .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
-                        .accessibilityIdentifier("hub.\(module.id.rawValue).composer")
-                    Button("Review") {
-                        let value = composerText.trimmingCharacters(in: .whitespacesAndNewlines)
-                        guard !value.isEmpty else { return }
-                        Task {
-                            await client.prepareHubAction(.init(
-                                moduleID: module.id,
-                                actionID: "add",
-                                value: value
-                            ))
-                        }
-                    }
-                    .buttonStyle(HubPrimaryButtonStyle())
-                    .disabled(composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
+                composer
             }
 
             if !module.items.isEmpty {
@@ -205,7 +190,9 @@ private struct PersonalHubModuleCard: View {
                 HStack(spacing: 7) {
                     ForEach(module.actions) { action in
                         Button {
-                            if [.reminders, .notes].contains(module.id), action.id == "add" {
+                            if ([.calendar, .reminders, .notes].contains(module.id) && action.id == "add")
+                                || (module.id == .teleprompter && action.id == "set")
+                                || (module.id == .claude && action.id == "ask") {
                                 withAnimation(.easeOut(duration: 0.16)) { showsComposer.toggle() }
                             } else {
                                 prepare(action)
@@ -227,6 +214,9 @@ private struct PersonalHubModuleCard: View {
                 .stroke(HubTheme.border, lineWidth: 1)
         )
         .accessibilityIdentifier("hub.module.\(module.id.rawValue)")
+        .fullScreenCover(isPresented: $showsCameraPreview) {
+            CameraPreviewScreen()
+        }
     }
 
     @ViewBuilder
@@ -252,6 +242,10 @@ private struct PersonalHubModuleCard: View {
     }
 
     private func prepare(_ action: PersonalHubAction) {
+        if module.id == .camera, action.id == "previewOnDevice" {
+            showsCameraPreview = true
+            return
+        }
         if let deepLink = action.deepLink {
             openURL(deepLink)
             return
@@ -264,6 +258,105 @@ private struct PersonalHubModuleCard: View {
             ))
         }
     }
+
+    @ViewBuilder
+    private var composer: some View {
+        if module.id == .calendar {
+            VStack(alignment: .leading, spacing: 8) {
+                hubTextField("Event title", text: $composerText)
+                DatePicker("Starts", selection: $eventStart, in: Date()..., displayedComponents: [.date, .hourAndMinute])
+                    .datePickerStyle(.compact)
+                    .font(.system(size: 11, weight: .semibold))
+                DatePicker("Ends", selection: $eventEnd, in: eventStart..., displayedComponents: [.date, .hourAndMinute])
+                    .datePickerStyle(.compact)
+                    .font(.system(size: 11, weight: .semibold))
+                hubTextField("Meeting link (optional)", text: $meetingLink)
+                    .textInputAutocapitalization(.never)
+                    .keyboardType(.URL)
+                reviewButton(value: calendarActionValue)
+            }
+        } else if module.id == .reminders {
+            VStack(alignment: .leading, spacing: 8) {
+                hubTextField("New task", text: $composerText)
+                Toggle("Set due date", isOn: $reminderHasDue)
+                    .font(.system(size: 11, weight: .semibold))
+                if reminderHasDue {
+                    DatePicker("Due", selection: $reminderDue, in: Date()..., displayedComponents: [.date, .hourAndMinute])
+                        .datePickerStyle(.compact)
+                        .font(.system(size: 11, weight: .semibold))
+                }
+                reviewButton(value: PersonalHubReminderDraft(
+                    title: composerText.trimmingCharacters(in: .whitespacesAndNewlines),
+                    due: reminderHasDue ? reminderDue : nil
+                ).encodedActionValue())
+            }
+        } else if module.id == .teleprompter {
+            VStack(alignment: .leading, spacing: 8) {
+                TextEditor(text: $composerText)
+                    .scrollContentBackground(.hidden)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.ciForeground)
+                    .frame(minHeight: 110)
+                    .padding(7)
+                    .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+                reviewButton(
+                    actionID: "set",
+                    value: composerText.trimmingCharacters(in: .whitespacesAndNewlines)
+                )
+            }
+        } else if module.id == .claude {
+            HStack(spacing: 7) {
+                hubTextField("Ask Claude", text: $composerText)
+                reviewButton(
+                    actionID: "ask",
+                    value: composerText.trimmingCharacters(in: .whitespacesAndNewlines)
+                )
+            }
+        } else {
+            HStack(spacing: 7) {
+                hubTextField("New note", text: $composerText)
+                reviewButton(value: composerText.trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+        }
+    }
+
+    private func hubTextField(_ prompt: String, text: Binding<String>) -> some View {
+        TextField(prompt, text: text)
+            .textFieldStyle(.plain)
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(.ciForeground)
+            .padding(.horizontal, 10)
+            .frame(minHeight: 38)
+            .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+            .accessibilityIdentifier("hub.\(module.id.rawValue).composer")
+    }
+
+    private func reviewButton(actionID: String = "add", value: String?) -> some View {
+        Button("Review") {
+            guard let value, !composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+            Task {
+                await client.prepareHubAction(.init(
+                    moduleID: module.id,
+                    actionID: actionID,
+                    value: value
+                ))
+            }
+        }
+        .buttonStyle(HubPrimaryButtonStyle())
+        .disabled(composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || value == nil)
+    }
+
+    private var calendarActionValue: String? {
+        let trimmedLink = meetingLink.trimmingCharacters(in: .whitespacesAndNewlines)
+        let url = trimmedLink.isEmpty ? nil : URL(string: trimmedLink)
+        guard trimmedLink.isEmpty || url != nil else { return nil }
+        return PersonalHubCalendarDraft(
+            title: composerText.trimmingCharacters(in: .whitespacesAndNewlines),
+            start: eventStart,
+            end: eventEnd,
+            joinURL: url
+        ).encodedActionValue()
+    }
 }
 
 private struct PersonalHubItemRow: View {
@@ -271,6 +364,8 @@ private struct PersonalHubItemRow: View {
     let item: PersonalHubItem
     @EnvironmentObject private var client: RemoteApprovalClient
     @Environment(\.openURL) private var openURL
+    @State private var showsTeleprompter = false
+    @State private var noteMutation: NoteMutation?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -303,7 +398,15 @@ private struct PersonalHubItemRow: View {
                 HStack(spacing: 6) {
                     ForEach(item.actions) { action in
                         Button {
-                            if action.id == "copyToDevice", let value = item.detail {
+                            if moduleID == .notes, ["append", "replace"].contains(action.id) {
+                                noteMutation = .init(
+                                    actionID: action.id,
+                                    targetID: action.targetID ?? item.id,
+                                    initialText: action.id == "replace" ? (item.detail ?? "") : ""
+                                )
+                            } else if action.id == "presentOnDevice", item.detail != nil {
+                                showsTeleprompter = true
+                            } else if action.id == "copyToDevice", let value = item.detail {
                                 UIPasteboard.general.string = value
                                 client.reportHubClientAction("Copied to iPhone")
                             } else if let deepLink = action.deepLink {
@@ -328,6 +431,238 @@ private struct PersonalHubItemRow: View {
         }
         .padding(.horizontal, 9)
         .padding(.vertical, 8)
+        .fullScreenCover(isPresented: $showsTeleprompter) {
+            TeleprompterReader(text: item.detail ?? "")
+        }
+        .sheet(item: $noteMutation) { mutation in
+            NoteMutationSheet(mutation: mutation)
+                .environmentObject(client)
+                .presentationDetents([.medium, .large])
+        }
+    }
+}
+
+private struct NoteMutation: Identifiable {
+    let actionID: String
+    let targetID: String
+    let initialText: String
+    var id: String { "\(actionID):\(targetID)" }
+}
+
+private struct NoteMutationSheet: View {
+    let mutation: NoteMutation
+    @EnvironmentObject private var client: RemoteApprovalClient
+    @Environment(\.dismiss) private var dismiss
+    @State private var text: String
+
+    init(mutation: NoteMutation) {
+        self.mutation = mutation
+        _text = State(initialValue: mutation.initialText)
+    }
+
+    var body: some View {
+        NavigationStack {
+            TextEditor(text: $text)
+                .font(.body)
+                .padding(12)
+                .navigationTitle(mutation.actionID == "append" ? "Append to note" : "Edit note")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Review") {
+                            let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                            guard !value.isEmpty else { return }
+                            Task {
+                                await client.prepareHubAction(.init(
+                                    moduleID: .notes,
+                                    actionID: mutation.actionID,
+                                    targetID: mutation.targetID,
+                                    value: value
+                                ))
+                                dismiss()
+                            }
+                        }
+                        .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+        }
+    }
+}
+
+private struct TeleprompterReader: View {
+    let text: String
+    @Environment(\.dismiss) private var dismiss
+    @State private var fontSize: Double = 34
+    @State private var wordsPerMinute = 90
+    @State private var currentSegment = 0
+    @State private var isPlaying = false
+
+    private var segments: [String] {
+        let words = text.split(whereSeparator: \Character.isWhitespace).map(String.init)
+        return stride(from: 0, to: words.count, by: 12).map { index in
+            words[index..<min(index + 12, words.count)].joined(separator: " ")
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 34) {
+                        ForEach(Array(segments.enumerated()), id: \.offset) { index, segment in
+                            Text(segment)
+                                .font(.system(size: fontSize, weight: .semibold, design: .rounded))
+                                .foregroundStyle(index < currentSegment ? .white.opacity(0.28) : .white)
+                                .lineSpacing(10)
+                                .id(index)
+                        }
+                    }
+                    .padding(.horizontal, 28)
+                    .padding(.vertical, 120)
+                }
+                .background(Color.black.ignoresSafeArea())
+                .onChange(of: currentSegment) { _, value in
+                    withAnimation(.linear(duration: 0.45)) {
+                        proxy.scrollTo(value, anchor: .center)
+                    }
+                }
+                .task(id: isPlaying) {
+                    guard isPlaying else { return }
+                    while !Task.isCancelled, isPlaying, currentSegment < max(segments.count - 1, 0) {
+                        let seconds = 720.0 / Double(max(wordsPerMinute, 1))
+                        try? await Task.sleep(for: .seconds(seconds))
+                        guard !Task.isCancelled, isPlaying else { return }
+                        currentSegment += 1
+                    }
+                    if currentSegment >= max(segments.count - 1, 0) { isPlaying = false }
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Done") { dismiss() }
+                }
+                ToolbarItemGroup(placement: .bottomBar) {
+                    Button { fontSize = max(22, fontSize - 2) } label: { Image(systemName: "textformat.size.smaller") }
+                    Spacer()
+                    Button {
+                        if currentSegment >= max(segments.count - 1, 0) { currentSegment = 0 }
+                        isPlaying.toggle()
+                    } label: {
+                        Label(isPlaying ? "Pause" : "Play", systemImage: isPlaying ? "pause.fill" : "play.fill")
+                    }
+                    Spacer()
+                    Stepper("\(wordsPerMinute) WPM", value: $wordsPerMinute, in: 30...210, step: 15)
+                        .labelsHidden()
+                    Text("\(wordsPerMinute) WPM")
+                        .font(.caption.monospacedDigit())
+                    Spacer()
+                    Button { fontSize = min(64, fontSize + 2) } label: { Image(systemName: "textformat.size.larger") }
+                }
+            }
+            .toolbarBackground(.black, for: .navigationBar, .bottomBar)
+            .toolbarColorScheme(.dark, for: .navigationBar, .bottomBar)
+        }
+    }
+}
+
+private struct CameraPreviewScreen: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            CameraPreviewHost()
+                .ignoresSafeArea()
+            Button("Done") { dismiss() }
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(.black)
+                .padding(.horizontal, 16)
+                .frame(minHeight: 40)
+                .background(HubTheme.accent, in: Capsule())
+                .padding(.top, 16)
+                .padding(.trailing, 16)
+        }
+        .background(Color.black.ignoresSafeArea())
+    }
+}
+
+private struct CameraPreviewHost: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> CameraPreviewController {
+        CameraPreviewController()
+    }
+
+    func updateUIViewController(_ uiViewController: CameraPreviewController, context: Context) {}
+}
+
+private final class CameraPreviewController: UIViewController {
+    private let session = AVCaptureSession()
+    private let sessionQueue = DispatchQueue(label: "codeisland.camera-preview")
+    private var previewLayer: AVCaptureVideoPreviewLayer?
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .black
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            configureSession()
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
+                DispatchQueue.main.async {
+                    if granted { self?.configureSession() }
+                    else { self?.showUnavailable("Camera access is off") }
+                }
+            }
+        default:
+            showUnavailable("Enable Camera access in Settings → Privacy & Security → Camera")
+        }
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        previewLayer?.frame = view.bounds
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        sessionQueue.async { [session] in
+            if session.isRunning { session.stopRunning() }
+        }
+    }
+
+    private func configureSession() {
+        guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front),
+              let input = try? AVCaptureDeviceInput(device: camera),
+              session.canAddInput(input)
+        else {
+            showUnavailable("Front camera is unavailable")
+            return
+        }
+        session.beginConfiguration()
+        session.sessionPreset = .high
+        session.addInput(input)
+        session.commitConfiguration()
+
+        let layer = AVCaptureVideoPreviewLayer(session: session)
+        layer.videoGravity = .resizeAspectFill
+        layer.frame = view.bounds
+        view.layer.insertSublayer(layer, at: 0)
+        previewLayer = layer
+        sessionQueue.async { [session] in session.startRunning() }
+    }
+
+    private func showUnavailable(_ message: String) {
+        let label = UILabel()
+        label.text = message
+        label.textColor = .white
+        label.font = .systemFont(ofSize: 17, weight: .semibold)
+        label.numberOfLines = 0
+        label.textAlignment = .center
+        label.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 32),
+            label.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -32),
+            label.centerYAnchor.constraint(equalTo: view.centerYAnchor)
+        ])
     }
 }
 

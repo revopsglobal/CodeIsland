@@ -39,6 +39,25 @@ final class PersonalUtilitiesModelTests: XCTestCase {
         XCTAssertTrue(PersonalUtilitiesModel.parseBluetoothProfiler(data).isEmpty)
     }
 
+    func testParsesConnectedAndRememberedBluetoothDevices() throws {
+        let data = Data(
+            """
+            {"SPBluetoothDataType":[{
+              "device_connected":[{"Keyboard":{"device_address":"AA:BB:CC:DD:EE:01","device_minorType":"Keyboard"}}],
+              "device_not_connected":[{"AirPods":{"device_address":"AA:BB:CC:DD:EE:02","device_minorType":"Headphones"}}]
+            }]}
+            """.utf8
+        )
+
+        let devices = PersonalUtilitiesModel.parseBluetoothDevices(data)
+
+        XCTAssertEqual(devices.count, 2)
+        XCTAssertEqual(devices[0].name, "Keyboard")
+        XCTAssertTrue(devices[0].isConnected)
+        XCTAssertEqual(devices[1].address, "AA:BB:CC:DD:EE:02")
+        XCTAssertFalse(devices[1].isConnected)
+    }
+
     func testParsesHIDBatteryAndSkipsInternalKeyboard() throws {
         let plist: [[String: Any]] = [
             ["Product": "MX Master 3S", "BatteryPercent": 47],

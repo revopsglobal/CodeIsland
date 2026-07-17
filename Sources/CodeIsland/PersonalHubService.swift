@@ -119,6 +119,34 @@ final class PersonalHubService {
             }
             return .success(.init(executed: true, message: "Note deleted"))
 
+        case (.notes, "replace"):
+            guard let targetID = intent.targetID,
+                  let value = intent.value,
+                  data.replaceNote(id: targetID, rawText: value) else {
+                return .failure(.invalid("Note is no longer available"))
+            }
+            return .success(.init(executed: true, message: "Note updated"))
+
+        case (.notes, "append"):
+            guard let targetID = intent.targetID,
+                  let value = intent.value,
+                  data.appendToNote(id: targetID, rawText: value) else {
+                return .failure(.invalid("Note is no longer available"))
+            }
+            return .success(.init(executed: true, message: "Text appended to note"))
+
+        case (.teleprompter, "set"):
+            guard let value = intent.value, data.setTeleprompterText(value) else {
+                return .failure(.failed("Could not save the teleprompter script"))
+            }
+            return .success(.init(executed: true, message: "Teleprompter script saved"))
+
+        case (.claude, "ask"):
+            guard let value = intent.value, data.askClaude(value) else {
+                return .failure(.failed(data.claudeError ?? "Claude is already answering another question"))
+            }
+            return .success(.init(executed: true, message: "Question sent to Claude on the Mac"))
+
         case (.shelf, "remove"):
             guard let targetID = intent.targetID, data.removeShelfEntry(id: targetID) else {
                 return .failure(.invalid("Shelf item is no longer available"))
@@ -142,6 +170,20 @@ final class PersonalHubService {
             NSWorkspace.shared.open(url)
             return .success(.init(executed: true, message: "Sound Settings opened on the Mac"))
 
+        case (.audio, "setInput"), (.audio, "setOutput"):
+            guard let targetID = intent.targetID else {
+                return .failure(.invalid("Audio device is no longer available"))
+            }
+            let role: AudioDeviceController.Role = intent.actionID == "setInput" ? .input : .output
+            guard AudioDeviceController.setDefaultDevice(named: targetID, role: role) else {
+                return .failure(.failed("Could not switch the Mac audio device"))
+            }
+            data.refreshHostData()
+            return .success(.init(
+                executed: true,
+                message: "Default \(intent.actionID == "setInput" ? "input" : "output") set to \(targetID)"
+            ))
+
         case (.quickToggles, "lockMac"):
             let script = #"tell application "System Events" to keystroke "q" using {control down, command down}"#
             guard ProcessRunner.run(path: "/usr/bin/osascript", args: ["-e", script], timeout: 5) != nil else {
@@ -149,8 +191,46 @@ final class PersonalHubService {
             }
             return .success(.init(executed: true, message: "Mac locked"))
 
+        case (.quickToggles, "darkMode"):
+            guard data.toggleDarkMode() else {
+                return .failure(.failed("Allow CodeIsland to control System Events in Privacy & Security → Automation"))
+            }
+            return .success(.init(executed: true, message: "Appearance toggled"))
+
+        case (.quickToggles, "mute"):
+            guard data.toggleMute() else {
+                return .failure(.failed("Could not change Mac audio mute"))
+            }
+            return .success(.init(executed: true, message: "Mac audio mute toggled"))
+
+        case (.quickToggles, "displaySleep"):
+            guard ProcessRunner.run(path: "/usr/bin/pmset", args: ["displaysleepnow"], timeout: 5) != nil else {
+                return .failure(.failed("Could not sleep the Mac display"))
+            }
+            return .success(.init(executed: true, message: "Mac display put to sleep"))
+
+        case (.windowManager, "openAccessibility"):
+            guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") else {
+                return .failure(.failed("Accessibility Settings is unavailable"))
+            }
+            NSWorkspace.shared.open(url)
+            return .success(.init(executed: true, message: "Accessibility Settings opened on the Mac"))
+
+        case (.windowManager, "left"), (.windowManager, "right"), (.windowManager, "maximize"):
+            let placement: WindowManagerController.Placement
+            switch intent.actionID {
+            case "left": placement = .left
+            case "right": placement = .right
+            default: placement = .maximize
+            }
+            guard WindowManagerController.placeFrontWindow(placement) else {
+                return .failure(.failed("Grant CodeIsland Accessibility access and keep a normal app window frontmost"))
+            }
+            return .success(.init(executed: true, message: "Front window moved"))
+
         case (.reminders, "add"):
-            guard let value = intent.value, glances.addReminder(title: value) else {
+            guard let draft = PersonalHubReminderDraft.decodeActionValue(intent.value),
+                  glances.addReminder(title: draft.title, due: draft.due) else {
                 return .failure(.failed(glances.reminderMutationError ?? "Could not add the task"))
             }
             return .success(.init(executed: true, message: "Task added"))
@@ -162,10 +242,31 @@ final class PersonalHubService {
             glances.complete(reminder)
             return .success(.init(executed: true, message: "Task completed"))
 
+        case (.reminders, "delete"):
+            guard let targetID = intent.targetID,
+                  let reminder = glances.reminders.first(where: { $0.id == targetID })
+            else { return .failure(.invalid("Task is no longer available")) }
+            guard glances.deleteReminder(reminder) else {
+                return .failure(.failed(glances.reminderMutationError ?? "Could not delete the task"))
+            }
+            return .success(.init(executed: true, message: "Task deleted"))
+
+        case (.calendar, "add"):
+            guard let draft = PersonalHubCalendarDraft.decodeActionValue(intent.value),
+                  glances.addEvent(draft) else {
+                return .failure(.failed(glances.calendarMutationError ?? "Could not add the event"))
+            }
+            return .success(.init(executed: true, message: "Event added"))
+
+        case (.calendar, "delete"):
+            guard let targetID = intent.targetID, glances.deleteEvent(id: targetID) else {
+                return .failure(.failed(glances.calendarMutationError ?? "Could not delete the event"))
+            }
+            return .success(.init(executed: true, message: "Event deleted"))
+
         case (.calendar, "openOnMac"):
             guard let targetID = intent.targetID,
-                  let event = glances.nextEvent,
-                  event.id == targetID,
+                  let event = glances.upcomingEvents.first(where: { $0.id == targetID }),
                   let joinURL = event.joinURL
             else { return .failure(.invalid("Meeting link is no longer available")) }
             NSWorkspace.shared.open(joinURL)
@@ -181,6 +282,19 @@ final class PersonalHubService {
         case (.bluetooth, "refresh"):
             utilities.refreshBluetooth(force: true)
             return .success(.init(executed: true, message: "Bluetooth devices refreshed"))
+
+        case (.bluetooth, "connect"), (.bluetooth, "disconnect"):
+            guard let targetID = intent.targetID else {
+                return .failure(.invalid("Bluetooth device is no longer available"))
+            }
+            let succeeded = intent.actionID == "connect"
+                ? BluetoothDeviceController.connect(address: targetID)
+                : BluetoothDeviceController.disconnect(address: targetID)
+            guard succeeded else {
+                return .failure(.failed("Could not \(intent.actionID) the Bluetooth device"))
+            }
+            utilities.refreshBluetooth(force: true)
+            return .success(.init(executed: true, message: "Bluetooth \(intent.actionID) request completed"))
 
         case (.weather, "refresh"):
             glances.refreshWeather()
@@ -204,6 +318,31 @@ final class PersonalHubService {
                   let note = data.notes.first(where: { $0.id == targetID })
             else { return .failure(.invalid("Note is no longer available")) }
             return .success("Delete note “\(note.title)”")
+
+        case (.notes, "replace"), (.notes, "append"):
+            guard let targetID = intent.targetID,
+                  let note = data.notes.first(where: { $0.id == targetID })
+            else { return .failure(.invalid("Note is no longer available")) }
+            let value = intent.value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !value.isEmpty else { return .failure(.invalid("Enter note text")) }
+            let limit = intent.actionID == "append" ? max(20_000 - note.text.count - 1, 0) : 20_000
+            guard value.count <= limit else { return .failure(.invalid("Note is too long")) }
+            return .success(intent.actionID == "append"
+                ? "Append text to “\(note.title)”"
+                : "Replace the contents of “\(note.title)”")
+
+        case (.teleprompter, "set"):
+            let value = intent.value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !value.isEmpty else { return .failure(.invalid("Enter a teleprompter script")) }
+            guard value.count <= 50_000 else { return .failure(.invalid("Script is too long")) }
+            return .success("Replace the teleprompter script with \(value.count) characters")
+
+        case (.claude, "ask"):
+            let value = intent.value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !data.claudeBusy else { return .failure(.invalid("Claude is already answering")) }
+            guard !value.isEmpty else { return .failure(.invalid("Enter a question")) }
+            guard value.count <= 20_000 else { return .failure(.invalid("Question is too long")) }
+            return .success("Ask Claude: “\(value.prefix(160))\(value.count > 160 ? "…" : "")”")
 
         case (.shelf, "remove"):
             guard let targetID = intent.targetID,
@@ -229,17 +368,55 @@ final class PersonalHubService {
         case (.audio, "openSettings"):
             return .success("Open Sound Settings on the Mac")
 
+        case (.audio, "setInput"), (.audio, "setOutput"):
+            guard let targetID = intent.targetID,
+                  let device = data.audioDevices.first(where: { $0.id == targetID })
+            else { return .failure(.invalid("Audio device is no longer available")) }
+            let input = intent.actionID == "setInput"
+            guard input ? device.isInput : device.isOutput else {
+                return .failure(.invalid("That device does not support the selected audio role"))
+            }
+            return .success("Set “\(device.name)” as the Mac's default \(input ? "input" : "output")")
+
         case (.quickToggles, "lockMac"):
             return .success("Lock this Mac now")
 
+        case (.quickToggles, "darkMode"):
+            return .success("Switch this Mac to \(data.quickSettings?.darkMode == true ? "Light" : "Dark") Mode")
+
+        case (.quickToggles, "mute"):
+            return .success("\(data.quickSettings?.outputMuted == true ? "Unmute" : "Mute") Mac audio")
+
+        case (.quickToggles, "displaySleep"):
+            return .success("Turn off this Mac's display now")
+
+        case (.windowManager, "openAccessibility"):
+            return .success("Open Accessibility Settings on the Mac")
+
+        case (.windowManager, "left"), (.windowManager, "right"), (.windowManager, "maximize"):
+            guard WindowManagerController.isAuthorized else {
+                return .failure(.invalid("Accessibility access is required on the Mac"))
+            }
+            let label: String
+            switch intent.actionID {
+            case "left": label = "left half"
+            case "right": label = "right half"
+            default: label = "full screen area"
+            }
+            return .success("Move the Mac's front window to the \(label)")
+
         case (.reminders, "add"):
-            let value = GlancesModel.normalizedReminderTitle(intent.value ?? "")
+            guard let draft = PersonalHubReminderDraft.decodeActionValue(intent.value) else {
+                return .failure(.invalid("Enter a task"))
+            }
+            let value = GlancesModel.normalizedReminderTitle(draft.title)
             guard glances.remindersAuthorized else {
                 return .failure(.invalid("Reminders access is required on the Mac"))
             }
             guard !value.isEmpty else { return .failure(.invalid("Enter a task")) }
             guard value.count <= 500 else { return .failure(.invalid("Task is too long")) }
-            return .success("Add “\(value)” to the selected Reminders list")
+            let due = draft.due.map { " due \(Self.actionDate($0))" } ?? ""
+            return .success("Add “\(value)” to the selected Reminders list\(due)")
 
         case (.reminders, "complete"):
             guard let targetID = intent.targetID,
@@ -247,10 +424,40 @@ final class PersonalHubService {
             else { return .failure(.invalid("Task is no longer available")) }
             return .success("Mark “\(reminder.title)” complete")
 
+        case (.reminders, "delete"):
+            guard let targetID = intent.targetID,
+                  let reminder = glances.reminders.first(where: { $0.id == targetID })
+            else { return .failure(.invalid("Task is no longer available")) }
+            return .success("Delete task “\(reminder.title)”")
+
+        case (.calendar, "add"):
+            guard glances.calendarAuthorized else {
+                return .failure(.invalid("Calendar access is required on the Mac"))
+            }
+            guard let draft = PersonalHubCalendarDraft.decodeActionValue(intent.value) else {
+                return .failure(.invalid("Enter an event title and time"))
+            }
+            let title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !title.isEmpty else { return .failure(.invalid("Enter an event title")) }
+            guard title.count <= 500 else { return .failure(.invalid("Event title is too long")) }
+            guard draft.end > draft.start else { return .failure(.invalid("Event end must be after its start")) }
+            guard draft.start > Date().addingTimeInterval(-300) else {
+                return .failure(.invalid("Choose a future event time"))
+            }
+            if let url = draft.joinURL, !GlancesModel.isTrustedJoinURL(url) {
+                return .failure(.invalid("Use a supported HTTPS meeting link"))
+            }
+            return .success("Add “\(title)” on \(Self.actionDate(draft.start))")
+
+        case (.calendar, "delete"):
+            guard let targetID = intent.targetID,
+                  let event = glances.upcomingEvents.first(where: { $0.id == targetID })
+            else { return .failure(.invalid("Event is no longer available")) }
+            return .success("Delete event “\(event.title)”")
+
         case (.calendar, "openOnMac"):
             guard let targetID = intent.targetID,
-                  let event = glances.nextEvent,
-                  event.id == targetID,
+                  let event = glances.upcomingEvents.first(where: { $0.id == targetID }),
                   event.joinURL != nil
             else { return .failure(.invalid("Meeting link is no longer available")) }
             return .success("Open “\(event.title)” on the Mac")
@@ -263,6 +470,18 @@ final class PersonalHubService {
 
         case (.bluetooth, "refresh"):
             return .success("Refresh Bluetooth devices")
+
+        case (.bluetooth, "connect"), (.bluetooth, "disconnect"):
+            guard let targetID = intent.targetID,
+                  let device = utilities.bluetoothDevices.first(where: { $0.id == targetID })
+            else { return .failure(.invalid("Bluetooth device is no longer available")) }
+            if intent.actionID == "connect", device.isConnected {
+                return .failure(.invalid("\(device.name) is already connected"))
+            }
+            if intent.actionID == "disconnect", !device.isConnected {
+                return .failure(.invalid("\(device.name) is already disconnected"))
+            }
+            return .success("\(intent.actionID.capitalized) “\(device.name)”")
 
         case (.weather, "refresh"):
             return .success("Refresh weather")
@@ -279,6 +498,15 @@ final class PersonalHubService {
         switch id {
         case .nowPlaying:
             if let media = data.nowPlaying {
+                let progress: Double?
+                if let position = media.position, let duration = media.duration, duration > 0 {
+                    progress = min(max(position / duration, 0), 1)
+                } else {
+                    progress = nil
+                }
+                let itemActions: [PersonalHubAction] = media.lyrics == nil ? [] : [
+                    .init(id: "copyToDevice", label: "Copy lyrics", symbol: "text.quote")
+                ]
                 return .init(
                     id: id,
                     availability: .ready,
@@ -289,8 +517,10 @@ final class PersonalHubService {
                             id: "current",
                             title: media.title,
                             subtitle: media.artist,
-                            detail: media.album,
-                            symbol: media.isPlaying ? "speaker.wave.2.fill" : "pause.fill"
+                            detail: media.lyrics ?? media.album,
+                            symbol: media.isPlaying ? "speaker.wave.2.fill" : "pause.fill",
+                            progress: progress,
+                            actions: itemActions
                         )
                     ],
                     actions: [
@@ -346,6 +576,8 @@ final class PersonalHubService {
                         symbol: "note.text",
                         actions: [
                             .init(id: "copyToDevice", label: "Copy here", symbol: "doc.on.doc"),
+                            .init(id: "append", label: "Append", symbol: "text.append", targetID: note.id),
+                            .init(id: "replace", label: "Edit", symbol: "square.and.pencil", targetID: note.id),
                             .init(id: "delete", label: "Delete", symbol: "trash", role: .destructive, targetID: note.id)
                         ]
                     )
@@ -375,40 +607,46 @@ final class PersonalHubService {
                     summary: "Calendar access is required on the Mac"
                 )
             }
-            guard let event = glances.nextEvent else {
-                return .init(id: id, availability: .partial, summary: "No upcoming events")
-            }
-            var actions: [PersonalHubAction] = []
-            if let joinURL = event.joinURL {
-                actions.append(.init(
-                    id: "join",
-                    label: "Join on iPhone",
-                    symbol: "video.fill",
-                    role: .primary,
-                    targetID: event.id,
-                    deepLink: joinURL
-                ))
-                actions.append(.init(
-                    id: "openOnMac",
-                    label: "Open on Mac",
-                    symbol: "macbook",
-                    targetID: event.id
-                ))
-            }
+            let events = glances.upcomingEvents
             return .init(
                 id: id,
-                availability: .partial,
-                summary: event.title,
-                detail: Self.eventTime(event),
-                items: [
-                    .init(
+                availability: .ready,
+                summary: events.isEmpty ? "No events in the next two weeks" : "\(events.count) upcoming",
+                detail: "Two-week agenda from the Mac's calendars",
+                items: events.map { event in
+                    var actions: [PersonalHubAction] = []
+                    if let joinURL = event.joinURL {
+                        actions.append(.init(
+                            id: "join",
+                            label: "Join here",
+                            symbol: "video.fill",
+                            role: .primary,
+                            targetID: event.id,
+                            deepLink: joinURL
+                        ))
+                        actions.append(.init(
+                            id: "openOnMac",
+                            label: "Open on Mac",
+                            symbol: "macbook",
+                            targetID: event.id
+                        ))
+                    }
+                    actions.append(.init(
+                        id: "delete",
+                        label: "Delete",
+                        symbol: "trash",
+                        role: .destructive,
+                        targetID: event.id
+                    ))
+                    return .init(
                         id: event.id,
                         title: event.title,
-                        subtitle: Self.eventTime(event),
+                        subtitle: "\(Self.eventTime(event)) · \(event.calendarTitle)",
                         symbol: "calendar",
                         actions: actions
                     )
-                ]
+                },
+                actions: [.init(id: "add", label: "Add event", symbol: "plus", role: .primary)]
             )
 
         case .reminders:
@@ -421,7 +659,7 @@ final class PersonalHubService {
             }
             return .init(
                 id: id,
-                availability: .partial,
+                availability: .ready,
                 summary: glances.reminders.isEmpty
                     ? "No open tasks in the selected lists"
                     : "\(glances.reminders.count) open",
@@ -429,7 +667,9 @@ final class PersonalHubService {
                     .init(
                         id: reminder.id,
                         title: reminder.title,
-                        subtitle: reminder.due.map(Self.taskDue),
+                        subtitle: [reminder.due.map(Self.taskDue), reminder.calendarTitle]
+                            .compactMap { $0 }
+                            .joined(separator: " · "),
                         symbol: "circle",
                         actions: [
                             .init(
@@ -437,6 +677,13 @@ final class PersonalHubService {
                                 label: "Complete",
                                 symbol: "checkmark.circle.fill",
                                 role: .primary,
+                                targetID: reminder.id
+                            ),
+                            .init(
+                                id: "delete",
+                                label: "Delete",
+                                symbol: "trash",
+                                role: .destructive,
                                 targetID: reminder.id
                             )
                         ]
@@ -511,16 +758,30 @@ final class PersonalHubService {
         case .bluetooth:
             return .init(
                 id: id,
-                availability: .partial,
-                summary: utilities.deviceBatteries.isEmpty
-                    ? (utilities.bluetoothError ?? "No battery-capable devices")
-                    : "\(utilities.deviceBatteries.count) devices",
-                items: utilities.deviceBatteries.map { device in
-                    .init(
+                availability: utilities.bluetoothDevices.isEmpty ? .loading : .ready,
+                summary: utilities.bluetoothDevices.isEmpty
+                    ? (utilities.bluetoothError ?? "Reading paired devices")
+                    : "\(utilities.bluetoothDevices.filter(\.isConnected).count) connected · \(utilities.bluetoothDevices.count) paired",
+                items: utilities.bluetoothDevices.map { device in
+                    let battery = utilities.deviceBatteries.first {
+                        $0.name.localizedCaseInsensitiveCompare(device.name) == .orderedSame
+                    }
+                    return .init(
                         id: device.id,
                         title: device.name,
-                        subtitle: device.summary,
-                        symbol: "antenna.radiowaves.left.and.right"
+                        subtitle: [device.isConnected ? "Connected" : "Not connected", device.kind, battery?.summary]
+                            .compactMap { $0 }
+                            .joined(separator: " · "),
+                        symbol: device.isConnected ? "antenna.radiowaves.left.and.right" : "antenna.radiowaves.left.and.right.slash",
+                        actions: [
+                            .init(
+                                id: device.isConnected ? "disconnect" : "connect",
+                                label: device.isConnected ? "Disconnect" : "Connect",
+                                symbol: device.isConnected ? "xmark.circle" : "link",
+                                role: device.isConnected ? .destructive : .primary,
+                                targetID: device.id
+                            )
+                        ]
                     )
                 },
                 actions: [.init(id: "refresh", label: "Refresh", symbol: "arrow.clockwise")]
@@ -532,7 +793,14 @@ final class PersonalHubService {
                 batteryItems.append(.init(
                     id: "mac",
                     title: "MacBook",
-                    subtitle: "\(mac.percent)% · \(mac.status) · \(mac.powerSource)",
+                    subtitle: [
+                        "\(mac.percent)%",
+                        mac.status,
+                        mac.powerSource,
+                        mac.healthPercent.map { "health \($0)%" },
+                        mac.cycleCount.map { "\($0) cycles" },
+                        mac.condition
+                    ].compactMap { $0 }.joined(separator: " · "),
                     symbol: "laptopcomputer"
                 ))
             }
@@ -553,11 +821,10 @@ final class PersonalHubService {
             let active = devices.filter { $0.isDefaultInput || $0.isDefaultOutput }
             return .init(
                 id: id,
-                availability: devices.isEmpty ? .loading : .partial,
+                availability: devices.isEmpty ? .loading : .ready,
                 summary: active.isEmpty
                     ? "\(devices.count) audio devices"
                     : active.map(\.name).joined(separator: " · "),
-                detail: "Device switching is pending; Sound Settings can be opened remotely",
                 items: devices.prefix(12).map { device in
                     let roles = [
                         device.isDefaultInput ? "Default input" : nil,
@@ -565,17 +832,48 @@ final class PersonalHubService {
                         device.isInput && !device.isDefaultInput ? "Input" : nil,
                         device.isOutput && !device.isDefaultOutput ? "Output" : nil,
                     ].compactMap { $0 }.joined(separator: " · ")
-                    return .init(id: device.id, title: device.name, subtitle: roles, symbol: "speaker.wave.2")
+                    var actions: [PersonalHubAction] = []
+                    if device.isInput, !device.isDefaultInput {
+                        actions.append(.init(
+                            id: "setInput",
+                            label: "Use input",
+                            symbol: "mic.fill",
+                            targetID: device.id
+                        ))
+                    }
+                    if device.isOutput, !device.isDefaultOutput {
+                        actions.append(.init(
+                            id: "setOutput",
+                            label: "Use output",
+                            symbol: "speaker.wave.2.fill",
+                            role: .primary,
+                            targetID: device.id
+                        ))
+                    }
+                    return .init(
+                        id: device.id,
+                        title: device.name,
+                        subtitle: roles,
+                        symbol: "speaker.wave.2",
+                        actions: actions
+                    )
                 },
                 actions: [.init(id: "openSettings", label: "Open Sound Settings", symbol: "slider.horizontal.3")]
             )
 
         case .quickToggles:
+            let settings = data.quickSettings
             return .init(
                 id: id,
-                availability: .partial,
-                summary: "Lock this Mac from iPhone or web",
+                availability: .ready,
+                summary: [
+                    settings?.darkMode == true ? "Dark" : "Light",
+                    settings?.outputMuted == true ? "Muted" : "Sound on"
+                ].joined(separator: " · "),
                 actions: [
+                    .init(id: "darkMode", label: settings?.darkMode == true ? "Light" : "Dark", symbol: "circle.lefthalf.filled"),
+                    .init(id: "mute", label: settings?.outputMuted == true ? "Unmute" : "Mute", symbol: "speaker.slash.fill"),
+                    .init(id: "displaySleep", label: "Display off", symbol: "display", role: .destructive),
                     .init(id: "lockMac", label: "Lock Mac", symbol: "lock.fill", role: .destructive)
                 ]
             )
@@ -586,6 +884,115 @@ final class PersonalHubService {
                 id: id,
                 availability: .partial,
                 summary: count == 0 ? "No CodeIsland alerts" : "\(count) CodeIsland alerts"
+            )
+
+        case .github:
+            guard let pullRequests = data.githubPullRequests else {
+                return .init(
+                    id: id,
+                    availability: .permissionRequired,
+                    summary: "Install and authenticate GitHub CLI on the Mac"
+                )
+            }
+            return .init(
+                id: id,
+                availability: .ready,
+                summary: pullRequests.isEmpty ? "No open pull requests" : "\(pullRequests.count) open pull requests",
+                detail: "Authored by your current GitHub account",
+                items: pullRequests.map { pullRequest in
+                    .init(
+                        id: pullRequest.id,
+                        title: pullRequest.title,
+                        subtitle: "\(pullRequest.repository)#\(pullRequest.number)\(pullRequest.isDraft ? " · Draft" : "")",
+                        symbol: "arrow.triangle.pull",
+                        actions: [
+                            .init(
+                                id: "open",
+                                label: "Open",
+                                symbol: "safari",
+                                role: .primary,
+                                targetID: pullRequest.id,
+                                deepLink: pullRequest.url
+                            )
+                        ]
+                    )
+                }
+            )
+
+        case .windowManager:
+            guard WindowManagerController.isAuthorized else {
+                return .init(
+                    id: id,
+                    availability: .permissionRequired,
+                    summary: "Accessibility access is required",
+                    actions: [
+                        .init(id: "openAccessibility", label: "Open Settings", symbol: "gearshape")
+                    ]
+                )
+            }
+            return .init(
+                id: id,
+                availability: .ready,
+                summary: "Place the front Mac window",
+                actions: [
+                    .init(id: "left", label: "Left", symbol: "rectangle.lefthalf.inset.filled"),
+                    .init(id: "maximize", label: "Maximize", symbol: "arrow.up.left.and.arrow.down.right", role: .primary),
+                    .init(id: "right", label: "Right", symbol: "rectangle.righthalf.inset.filled")
+                ]
+            )
+
+        case .teleprompter:
+            let text = data.teleprompterText
+            return .init(
+                id: id,
+                availability: .ready,
+                summary: text.isEmpty ? "No script loaded" : "\(text.split(whereSeparator: \.isWhitespace).count) words ready",
+                detail: "Saved locally on the Mac and mirrored only through the private hub",
+                items: text.isEmpty ? [] : [
+                    .init(
+                        id: "current",
+                        title: text.split(whereSeparator: \Character.isNewline).first.map(String.init) ?? "Current script",
+                        detail: text,
+                        symbol: "text.alignleft",
+                        actions: [
+                            .init(id: "presentOnDevice", label: "Present", symbol: "play.rectangle.fill", role: .primary),
+                            .init(id: "copyToDevice", label: "Copy", symbol: "doc.on.doc")
+                        ]
+                    )
+                ],
+                actions: [.init(id: "set", label: text.isEmpty ? "Add script" : "Replace script", symbol: "square.and.pencil")]
+            )
+
+        case .camera:
+            return .init(
+                id: id,
+                availability: .ready,
+                summary: "Private camera pre-check",
+                detail: "Preview stays on the device and is never sent to the Mac",
+                actions: [
+                    .init(id: "previewOnDevice", label: "Open preview", symbol: "camera.fill", role: .primary)
+                ]
+            )
+
+        case .claude:
+            var items: [PersonalHubItem] = []
+            if let response = data.claudeLastResponse {
+                items.append(.init(
+                    id: "latest",
+                    title: data.claudeLastPrompt ?? "Latest answer",
+                    subtitle: "Claude Code · read-only",
+                    detail: response,
+                    symbol: "sparkles",
+                    actions: [.init(id: "copyToDevice", label: "Copy", symbol: "doc.on.doc")]
+                ))
+            }
+            return .init(
+                id: id,
+                availability: data.claudeBusy ? .loading : .ready,
+                summary: data.claudeBusy ? "Claude is answering" : (data.claudeError ?? "Ask your authenticated Claude Code"),
+                detail: "Read-only: tools are disabled; actions stay in CodeIsland's reviewed controls",
+                items: items,
+                actions: [.init(id: "ask", label: "Ask Claude", symbol: "sparkles", role: .primary)]
             )
 
         default:
@@ -610,6 +1017,13 @@ final class PersonalHubService {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .short
         return "Due \(formatter.localizedString(for: date, relativeTo: Date()))"
+    }
+
+    private static func actionDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
     }
 
     private static func relativeDate(_ date: Date) -> String {

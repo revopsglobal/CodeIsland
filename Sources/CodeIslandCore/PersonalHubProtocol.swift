@@ -143,6 +143,73 @@ public struct PersonalHubActionIntent: Codable, Equatable, Sendable {
     }
 }
 
+/// Structured calendar input shared by the native iPhone client, private web
+/// client, and the Mac EventKit owner. It is JSON-encoded into an allow-listed
+/// action intent so the existing short-lived confirmation token still binds to
+/// the exact title, time, duration, and meeting link the person reviewed.
+public struct PersonalHubCalendarDraft: Codable, Equatable, Sendable {
+    public let title: String
+    public let start: Date
+    public let end: Date
+    public let joinURL: URL?
+    public let notes: String?
+
+    public init(
+        title: String,
+        start: Date,
+        end: Date,
+        joinURL: URL? = nil,
+        notes: String? = nil
+    ) {
+        self.title = title
+        self.start = start
+        self.end = end
+        self.joinURL = joinURL
+        self.notes = notes
+    }
+
+    public func encodedActionValue() -> String? {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        guard let data = try? encoder.encode(self) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    public static func decodeActionValue(_ value: String?) -> Self? {
+        guard let value, let data = value.data(using: .utf8) else { return nil }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try? decoder.decode(Self.self, from: data)
+    }
+}
+
+public struct PersonalHubReminderDraft: Codable, Equatable, Sendable {
+    public let title: String
+    public let due: Date?
+
+    public init(title: String, due: Date? = nil) {
+        self.title = title
+        self.due = due
+    }
+
+    public func encodedActionValue() -> String? {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        guard let data = try? encoder.encode(self) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    public static func decodeActionValue(_ value: String?) -> Self? {
+        guard let value else { return nil }
+        if let data = value.data(using: .utf8) {
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            if let decoded = try? decoder.decode(Self.self, from: data) { return decoded }
+        }
+        return .init(title: value)
+    }
+}
+
 public struct PersonalHubPrepareActionRequest: Codable, Equatable, Sendable {
     public let intent: PersonalHubActionIntent
 
@@ -342,7 +409,7 @@ public enum PersonalHubCatalog {
         case .home:
             return [.nowPlaying, .calendar, .weather, .quickToggles, .audio, .bluetooth, .battery]
         case .work:
-            return [.calendar, .reminders, .notes, .shelf, .notifications, .downloads]
+            return [.calendar, .reminders, .notes, .teleprompter, .camera, .shelf, .notifications, .downloads]
         case .code:
             return [.agents, .github, .claude, .shelf, .system, .downloads, .windowManager]
         }

@@ -12,6 +12,11 @@ on:
         required: false
         default: false
         type: boolean
+      sign_for_internal_testing:
+        description: Sign with the private Apple Development identity so macOS permissions persist across builds.
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -61,11 +66,57 @@ jobs:
           fi
 
       - name: Configure unsigned build
-        if: ${{ !inputs.sign_and_notarize }}
+        if: ${{ !inputs.sign_and_notarize && !inputs.sign_for_internal_testing }}
         run: |
           echo "SKIP_SIGN=1" >> "$GITHUB_ENV"
           echo "SKIP_NOTARIZE=1" >> "$GITHUB_ENV"
           echo "::warning::Building an unsigned, non-notarized DMG. macOS Gatekeeper will block it after download unless quarantine is removed or the app is opened manually."
+
+      - name: Validate internal signing inputs
+        if: ${{ !inputs.sign_and_notarize && inputs.sign_for_internal_testing }}
+        shell: bash
+        env:
+          CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_APPLE_DEVELOPMENT_P12_BASE64 }}
+          CERTIFICATE_P12_PASSWORD: ${{ secrets.MACOS_APPLE_DEVELOPMENT_P12_PASSWORD }}
+        run: |
+          test -n "$CERTIFICATE_P12_BASE64" || { echo "::error::MACOS_APPLE_DEVELOPMENT_P12_BASE64 is required"; exit 1; }
+          test -n "$CERTIFICATE_P12_PASSWORD" || { echo "::error::MACOS_APPLE_DEVELOPMENT_P12_PASSWORD is required"; exit 1; }
+
+      - name: Import internal Apple Development identity
+        if: ${{ !inputs.sign_and_notarize && inputs.sign_for_internal_testing }}
+        shell: bash
+        env:
+          CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_APPLE_DEVELOPMENT_P12_BASE64 }}
+          CERTIFICATE_P12_PASSWORD: ${{ secrets.MACOS_APPLE_DEVELOPMENT_P12_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/internal-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          CERTIFICATE_PATH="$RUNNER_TEMP/apple-development.p12"
+
+          echo "$CERTIFICATE_P12_BASE64" | base64 --decode > "$CERTIFICATE_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" \
+            -P "$CERTIFICATE_P12_PASSWORD" \
+            -A \
+            -t cert \
+            -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+          security default-keychain -s "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          security set-key-partition-list \
+            -S apple-tool:,apple: \
+            -s \
+            -k "$KEYCHAIN_PASSWORD" \
+            "$KEYCHAIN_PATH"
+
+          SIGN_IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" \
+            | awk -F'"' '/Apple Development:/ { print $2; exit }')"
+          test -n "$SIGN_IDENTITY" || { echo "::error::No Apple Development identity found"; exit 1; }
+          echo "SIGN_IDENTITY=$SIGN_IDENTITY" >> "$GITHUB_ENV"
+          echo "SKIP_SIGN=0" >> "$GITHUB_ENV"
+          echo "SKIP_NOTARIZE=1" >> "$GITHUB_ENV"
 
       - name: Test personal utilities
         run: |
@@ -178,6 +229,13 @@ jobs:
           codesign -d --entitlements :- .build/dmg-staging/CodeIsland.app 2>&1 \
             | grep -q '<key>com.apple.security.personal-information.calendars</key>'
           ls -lh .build/CodeIsland.dmg
+
+      - name: Verify stable internal signing identity
+        if: ${{ !inputs.sign_and_notarize && inputs.sign_for_internal_testing }}
+        run: |
+          SIGNING_DETAILS="$(codesign -d --verbose=4 .build/dmg-staging/CodeIsland.app 2>&1)"
+          grep -q 'TeamIdentifier=44JG2Y95CH' <<< "$SIGNING_DETAILS"
+          grep -q 'Authority=Apple Development:' <<< "$SIGNING_DETAILS"
 
       - name: Verify notarized app launch policy
         if: ${{ inputs.sign_and_notarize }}
