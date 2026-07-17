@@ -5,6 +5,45 @@ import CodeIslandCore
 
 @MainActor
 final class RemoteApprovalHTTPServerTests: XCTestCase {
+    func testWebFallbackServesInstallableIdentityAssets() async throws {
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CodeIslandWebAssets-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let service = RemoteApprovalService(
+            deviceStore: RemoteApprovalDeviceStore(
+                stateURL: temporaryDirectory.appendingPathComponent("devices.json")
+            ),
+            coordinator: RemoteApprovalCoordinator(
+                auditURL: temporaryDirectory.appendingPathComponent("audit.jsonl")
+            ),
+            localPortOverride: 0,
+            enabledOverride: true,
+            tailscaleConfigurator: { _, _ in "https://codeisland-web-assets.invalid" }
+        )
+        let appState = AppState()
+        service.start(appState: appState)
+        defer { service.stop() }
+        let port = try await waitForPort(service)
+
+        let manifest = try await send(port: port, method: "GET", path: "/manifest.webmanifest")
+        XCTAssertEqual(manifest.response.statusCode, 200)
+        XCTAssertEqual(
+            manifest.response.value(forHTTPHeaderField: "Content-Type"),
+            "application/manifest+json; charset=utf-8"
+        )
+        XCTAssertTrue(String(decoding: manifest.data, as: UTF8.self).contains("/app-icon.svg"))
+
+        let icon = try await send(port: port, method: "GET", path: "/app-icon.svg")
+        XCTAssertEqual(icon.response.statusCode, 200)
+        XCTAssertEqual(
+            icon.response.value(forHTTPHeaderField: "Content-Type"),
+            "image/svg+xml; charset=utf-8"
+        )
+        XCTAssertTrue(String(decoding: icon.data, as: UTF8.self).contains("<svg"))
+    }
+
     func testServerRetainsConnectionUntilResponseCompletes() async throws {
         let ready = expectation(description: "listener ready")
         var startupError: Error?

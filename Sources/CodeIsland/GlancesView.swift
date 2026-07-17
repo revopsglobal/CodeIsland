@@ -452,9 +452,9 @@ struct GlancesToggleRow: View {
 
     var body: some View {
         HStack(spacing: 1) {
-            tab(label: "SESSIONS", selection: .sessions)
-            tab(label: "GLANCES", selection: .glances)
-            tab(label: "HUB", selection: .hub)
+            tab(label: "NOW", selection: .sessions)
+            tab(label: "TODAY", selection: .glances)
+            tab(label: "TOOLS", selection: .hub)
             Spacer()
         }
         .padding(.horizontal, 12)
@@ -467,11 +467,11 @@ struct GlancesToggleRow: View {
             withAnimation(.easeInOut(duration: 0.15)) { selection = target }
         } label: {
             Text(label)
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
-                .tracking(1.2)
+                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                .tracking(0.4)
                 .foregroundStyle(selection == target ? Self.accent : .white.opacity(0.3))
-                .padding(.horizontal, 7)
-                .padding(.vertical, 4)
+                .padding(.horizontal, 10)
+                .frame(minHeight: 28)
                 .background(Rectangle().fill(selection == target ? Color.white.opacity(0.1) : .clear))
         }
         .buttonStyle(.plain)

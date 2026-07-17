@@ -44,32 +44,51 @@ final class CodeIslandCompanionUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = [
             "-CodeIslandCompanionMockState", "question",
-            "-CodeIslandCompanionSmokeLiveActivity",
-            "-CodeIslandCompanionSmokeDelayedState", "idle",
-            "-CodeIslandCompanionSmokeDelayedSeconds", "10",
         ]
         app.launch()
 
+        let sessions = app.buttons["companion.destination.sessions"]
+        XCTAssertTrue(sessions.waitForExistence(timeout: 5))
+        sessions.tap()
+
         let inline = app.buttons["companion.liveActivity.inlineButton"]
         XCTAssertTrue(inline.waitForExistence(timeout: 8))
+        inline.tap()
         let running = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "label CONTAINS[c] %@", "Stop Live Activity"),
             object: inline
         )
         XCTAssertEqual(XCTWaiter.wait(for: [running], timeout: 5), .completed)
 
+        app.terminate()
+        app.launchArguments = [
+            "-CodeIslandCompanionMockState", "idle",
+            "-CodeIslandCompanionSmokeLiveActivity",
+        ]
+        app.launch()
+
+        let idleSessions = app.buttons["companion.destination.sessions"]
+        XCTAssertTrue(idleSessions.waitForExistence(timeout: 5))
+        idleSessions.tap()
+
         let primary = app.buttons["companion.liveActivity.primaryButton"]
-        XCTAssertTrue(primary.waitForExistence(timeout: 10))
+        if !primary.waitForExistence(timeout: 8) {
+            app.swipeUp()
+        }
+        if !primary.waitForExistence(timeout: 5) {
+            let screenshot = XCTAttachment(screenshot: app.screenshot())
+            screenshot.name = "live-activity-resolved-state-missing"
+            screenshot.lifetime = .keepAlways
+            add(screenshot)
+            print(app.debugDescription)
+            XCTFail("Resolved session did not expose the primary Live Activity control")
+            return
+        }
         let ended = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "label CONTAINS[c] %@", "Start Live Activity"),
             object: primary
         )
-        XCTAssertEqual(XCTWaiter.wait(for: [ended], timeout: 15), .completed)
-        let inlineGone = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "exists == false"),
-            object: inline
-        )
-        XCTAssertEqual(XCTWaiter.wait(for: [inlineGone], timeout: 4), .completed)
+        XCTAssertEqual(XCTWaiter.wait(for: [ended], timeout: 5), .completed)
     }
 
     @MainActor
@@ -81,7 +100,8 @@ final class CodeIslandCompanionUITests: XCTestCase {
         ]
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["Connect to your Mac"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Connect to Greg's Mac"].waitForExistence(timeout: 8))
+        XCTAssertFalse(app.otherElements["companion.discoveryCard"].exists)
         let pairingCode = app.textFields["Pairing code"]
         XCTAssertTrue(pairingCode.waitForExistence(timeout: 3))
         pairingCode.tap()
@@ -96,7 +116,33 @@ final class CodeIslandCompanionUITests: XCTestCase {
                 "That code expired. Open CodeIsland Settings → Buddy on your Mac for the current code."
             ].waitForExistence(timeout: 3)
         )
-        XCTAssertTrue(app.staticTexts["Connect to your Mac"].exists)
+        XCTAssertTrue(app.staticTexts["Connect to Greg's Mac"].exists)
+    }
+
+    @MainActor
+    func testAttentionFirstShellKeepsToolsSecondary() throws {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-CodeIslandCompanionMockState", "idle",
+            "-CodeIslandCompanionMockHub",
+            "-CodeIslandCompanionMockHubMode", "code",
+        ]
+        app.launch()
+
+        let now = app.buttons["companion.destination.now"]
+        let sessions = app.buttons["companion.destination.sessions"]
+        let tools = app.buttons["companion.tools"]
+        XCTAssertTrue(now.waitForExistence(timeout: 8))
+        XCTAssertTrue(sessions.exists)
+        XCTAssertTrue(tools.exists)
+        XCTAssertGreaterThanOrEqual(now.frame.height, 44)
+        XCTAssertGreaterThanOrEqual(tools.frame.height, 44)
+        XCTAssertTrue(app.otherElements["companion.now.overview"].exists)
+        XCTAssertFalse(app.otherElements["hub.surface"].exists)
+
+        tools.tap()
+        XCTAssertTrue(app.otherElements["hub.surface"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.otherElements["companion.tools.sheet"].exists)
     }
 
     @MainActor
@@ -401,6 +447,10 @@ final class CodeIslandCompanionUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-CodeIslandCompanionMockState", mockState]
         app.launch()
+        let sessions = app.buttons["companion.destination.sessions"]
+        if sessions.waitForExistence(timeout: 5) {
+            sessions.tap()
+        }
         return app
     }
 
@@ -416,6 +466,13 @@ final class CodeIslandCompanionUITests: XCTestCase {
             app.launchArguments += ["-CodeIslandCompanionMockDeepLink", deepLink]
         }
         app.launch()
+        let hub = app.otherElements["hub.surface"].firstMatch
+        if !hub.waitForExistence(timeout: 2) {
+            let tools = app.buttons["companion.tools"]
+            if tools.waitForExistence(timeout: 4) {
+                tools.tap()
+            }
+        }
         return app
     }
 

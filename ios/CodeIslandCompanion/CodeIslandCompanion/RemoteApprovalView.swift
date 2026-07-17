@@ -197,6 +197,7 @@ private struct RemoteQuestionCard: View {
 private struct RemotePairingCard: View {
     @EnvironmentObject private var client: RemoteApprovalClient
     @State private var code = ""
+    @State private var showsConnectionSettings = false
 
     private var isConnecting: Bool {
         client.state == .connecting
@@ -211,7 +212,7 @@ private struct RemotePairingCard: View {
                     .frame(width: 38, height: 38)
                     .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Connect to your Mac")
+                    Text("Connect to Greg's Mac")
                         .font(.system(size: 17, weight: .bold, design: .rounded))
                         .foregroundStyle(.ciForeground)
                     Text("Private to your Tailscale network")
@@ -228,16 +229,6 @@ private struct RemotePairingCard: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.ciForeground.opacity(0.7))
 
-            TextField("Tailscale HTTPS URL", text: $client.serverURLText)
-                .textInputAutocapitalization(.never)
-                .keyboardType(.URL)
-                .autocorrectionDisabled()
-                .font(.system(size: 12, weight: .medium, design: .monospaced))
-                .padding(.horizontal, 11)
-                .frame(minHeight: 46)
-                .background(Color.ciForeground.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
-                .accessibilityIdentifier("companion.remote.serverURL")
-
             TextField("Pairing code", text: $code)
                 .keyboardType(.numberPad)
                 .textContentType(.oneTimeCode)
@@ -250,6 +241,22 @@ private struct RemotePairingCard: View {
                     code = String(value.filter(\.isNumber).prefix(6))
                 }
                 .accessibilityIdentifier("companion.remote.pairingCode")
+
+            DisclosureGroup("Connection settings", isExpanded: $showsConnectionSettings) {
+                TextField("Tailscale HTTPS URL", text: $client.serverURLText)
+                    .textInputAutocapitalization(.never)
+                    .keyboardType(.URL)
+                    .autocorrectionDisabled()
+                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .padding(.horizontal, 11)
+                    .frame(minHeight: 46)
+                    .background(Color.ciForeground.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
+                    .accessibilityIdentifier("companion.remote.serverURL")
+                    .padding(.top, 8)
+            }
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(Color.ciForeground.opacity(0.56))
+            .accessibilityIdentifier("companion.remote.connectionSettings")
 
             Button {
                 Task {

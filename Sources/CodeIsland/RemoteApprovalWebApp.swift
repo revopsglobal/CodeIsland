@@ -3,23 +3,45 @@ import Foundation
 enum RemoteApprovalWebApp {
     static let manifest = #"""
     {
-      "name": "CodeIsland Personal Hub",
+      "name": "CodeIsland",
       "short_name": "CodeIsland",
       "start_url": "/",
       "display": "standalone",
       "background_color": "#070a08",
       "theme_color": "#101611",
-      "icons": []
+      "icons": [
+        {
+          "src": "/app-icon.svg",
+          "sizes": "any",
+          "type": "image/svg+xml",
+          "purpose": "any maskable"
+        }
+      ]
     }
     """#
 
+    static let iconSVG = #"""
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="CodeIsland">
+      <rect width="1024" height="1024" rx="220" fill="#f7f4ec"/>
+      <rect x="255" y="409" width="515" height="206" rx="103" fill="#1a1a1a"/>
+      <rect x="358" y="461" width="103" height="103" rx="8" fill="#f5a623"/>
+      <rect x="564" y="461" width="103" height="103" rx="8" fill="#f5a623"/>
+      <rect x="410" y="461" width="51" height="51" rx="4" fill="#ffffff"/>
+      <rect x="616" y="461" width="51" height="51" rx="4" fill="#ffffff"/>
+    </svg>
+    """#
+
     static let serviceWorker = #"""
-    const CACHE = 'codeisland-personal-hub-v2';
+    const CACHE = 'codeisland-personal-hub-v3';
     self.addEventListener('install', event => {
-      event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(['/'])));
+      event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(['/', '/manifest.webmanifest', '/app-icon.svg'])));
       self.skipWaiting();
     });
-    self.addEventListener('activate', event => event.waitUntil(self.clients.claim()));
+    self.addEventListener('activate', event => event.waitUntil(
+      caches.keys()
+        .then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key))))
+        .then(() => self.clients.claim())
+    ));
     self.addEventListener('fetch', event => {
       const url = new URL(event.request.url);
       if (url.pathname.startsWith('/api/')) return;
@@ -37,8 +59,9 @@ enum RemoteApprovalWebApp {
       <meta name="apple-mobile-web-app-capable" content="yes">
       <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
       <meta name="apple-mobile-web-app-title" content="CodeIsland">
+      <link rel="icon" href="/app-icon.svg" type="image/svg+xml">
       <link rel="manifest" href="/manifest.webmanifest">
-      <title>CodeIsland Personal Hub</title>
+      <title>CodeIsland</title>
       <style>
         :root { color-scheme: dark; --green:#4dd96b; --amber:#ffb347; --red:#ff5f64; --muted:#8d9b90; }
         * { box-sizing:border-box; }
@@ -62,6 +85,7 @@ enum RemoteApprovalWebApp {
         .actions { display:grid; grid-template-columns:1fr 1.3fr; gap:10px; margin-top:14px; }
         button { border:0; border-radius:12px; min-height:48px; padding:0 14px; font-size:15px; font-weight:750; cursor:pointer; }
         button:disabled { opacity:.45; }
+        button:focus-visible,.claude-file-label:focus-visible { outline:3px solid var(--amber); outline-offset:3px; }
         .deny { background:#351517; color:#ffbec0; box-shadow:inset 0 0 0 1px #6c2b30; }
         .approve { background:var(--green); color:#061008; }
         .secondary { background:#1a221c; color:#dce3dd; box-shadow:inset 0 0 0 1px #344037; }
@@ -71,7 +95,7 @@ enum RemoteApprovalWebApp {
         .empty { text-align:center; padding:34px 18px; }
         .empty strong { display:block; font-size:17px; margin-bottom:6px; }
         .modes { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin:0 0 12px; }
-        .mode { min-height:38px; border-radius:10px; background:#141a16; color:#8d9b90; font:750 11px ui-monospace,SFMono-Regular,Menlo,monospace; text-transform:uppercase; }
+        .mode { min-height:44px; border-radius:10px; background:#141a16; color:#8d9b90; font:750 12px -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif; }
         .mode.active { background:var(--amber); color:#171006; }
         .section-title { margin:18px 2px 8px; color:#9daa9f; font:750 11px ui-monospace,SFMono-Regular,Menlo,monospace; text-transform:uppercase; letter-spacing:.12em; }
         .module-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:10px; }
@@ -88,23 +112,23 @@ enum RemoteApprovalWebApp {
         .media-item-head { display:flex; align-items:center; gap:9px; }
         .media-art { width:52px; height:52px; flex:0 0 52px; border-radius:11px; object-fit:cover; box-shadow:0 8px 22px #0009,inset 0 0 0 1px #ffffff18; }
         .media-copy { min-width:0; flex:1; }
-        .media-seek { width:100%; min-height:24px; height:24px; margin-top:5px; padding:0; border:0; background:transparent; box-shadow:none; accent-color:var(--amber); }
+        .media-seek { width:100%; min-height:44px; height:44px; margin-top:5px; padding:0; border:0; background:transparent; box-shadow:none; accent-color:var(--amber); }
         .media-times { display:flex; justify-content:space-between; color:#78847a; font:650 9px ui-monospace,SFMono-Regular,Menlo,monospace; }
         .hub-actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
-        .hub-action { min-height:34px; padding:0 10px; border-radius:9px; background:#1b241e; color:#dce3dd; font-size:11px; box-shadow:inset 0 0 0 1px #344037; }
+        .hub-action { min-height:44px; padding:0 12px; border-radius:9px; background:#1b241e; color:#dce3dd; font-size:12px; box-shadow:inset 0 0 0 1px #344037; }
         .hub-action.primary { background:var(--amber); color:#171006; box-shadow:none; }
         .hub-config { margin:0 0 10px; padding:13px; }
         .hub-config-head { display:flex; align-items:center; gap:10px; }
         .hub-config-actions { display:flex; flex-wrap:wrap; gap:7px; margin-top:10px; }
-        .hub-config-actions button { min-height:36px; padding:0 11px; border-radius:9px; font-size:11px; }
+        .hub-config-actions button { min-height:44px; padding:0 12px; border-radius:9px; font-size:12px; }
         .rack-summary { margin-top:7px; color:#aeb8b0; font-size:11px; line-height:1.45; }
         .calendar-month { margin-top:10px; padding:10px; border-radius:13px; background:#070a08; box-shadow:inset 0 0 0 1px #ffffff12; }
         .calendar-head { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
         .calendar-title { flex:1; text-align:center; font-size:13px; font-weight:760; letter-spacing:-.01em; }
-        .calendar-nav { min-height:30px; padding:0 9px; border-radius:999px; background:#1b241e; color:var(--amber); font-size:11px; box-shadow:inset 0 0 0 1px #344037; }
+        .calendar-nav { min-width:44px; min-height:44px; padding:0 10px; border-radius:999px; background:#1b241e; color:var(--amber); font-size:12px; box-shadow:inset 0 0 0 1px #344037; }
         .calendar-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:4px; }
         .calendar-weekday { color:#667268; text-align:center; font:800 9px ui-monospace,SFMono-Regular,Menlo,monospace; }
-        .calendar-day { position:relative; min-height:34px; padding:3px; border-radius:9px; background:transparent; color:#dce3dd; font-size:11px; box-shadow:none; }
+        .calendar-day { position:relative; min-height:44px; padding:3px; border-radius:9px; background:transparent; color:#dce3dd; font-size:12px; box-shadow:none; }
         .calendar-day.adjacent { color:#59635b; }
         .calendar-day.selected { background:#ffb3472e; box-shadow:inset 0 0 0 1px #ffb34766; }
         .calendar-day.today { box-shadow:inset 0 0 0 1px var(--amber); }
@@ -118,7 +142,7 @@ enum RemoteApprovalWebApp {
         .media-preflight-copy { max-width:440px; text-shadow:0 2px 18px #000; }
         .media-preflight-copy strong { display:block; font-size:20px; letter-spacing:-.02em; }
         .media-preflight-copy span { display:block; margin-top:5px; color:#d2dad4; font-size:12px; line-height:1.4; }
-        .media-preflight-close { min-width:72px; min-height:42px; border-radius:999px; background:#f4f7f4; color:#071008; box-shadow:0 8px 28px #0008; }
+        .media-preflight-close { min-width:72px; min-height:44px; border-radius:999px; background:#f4f7f4; color:#071008; box-shadow:0 8px 28px #0008; }
         .media-preflight-bottom { position:absolute; left:18px; right:18px; bottom:max(22px,env(safe-area-inset-bottom)); padding:14px; border:1px solid #ffffff24; border-radius:17px; background:#071008dd; backdrop-filter:blur(18px); box-shadow:0 18px 60px #0008; }
         .media-preflight-private { color:var(--green); font:800 10px ui-monospace,SFMono-Regular,Menlo,monospace; letter-spacing:.11em; text-transform:uppercase; }
         .media-preflight-status { margin-top:5px; color:#aeb8b0; font-size:12px; }
@@ -129,11 +153,13 @@ enum RemoteApprovalWebApp {
         .claude-composer-card textarea { width:100%; min-height:150px; resize:vertical; margin:12px 0 8px; border:1px solid #344037; border-radius:13px; padding:12px; color:#f4f7f4; background:#050806; font:15px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif; outline:none; }
         .claude-composer-card textarea:focus { border-color:var(--amber); box-shadow:0 0 0 3px #ffb34722; }
         .claude-composer-controls { display:flex; flex-wrap:wrap; gap:7px; margin:8px 0; }
-        .claude-composer-controls button,.claude-file-label { min-height:38px; display:inline-flex; align-items:center; padding:0 11px; border-radius:10px; background:#1b241e; color:#dce3dd; font-size:11px; font-weight:750; box-shadow:inset 0 0 0 1px #344037; cursor:pointer; }
+        .claude-composer-controls button,.claude-file-label { min-height:44px; display:inline-flex; align-items:center; padding:0 12px; border-radius:10px; background:#1b241e; color:#dce3dd; font-size:12px; font-weight:750; box-shadow:inset 0 0 0 1px #344037; cursor:pointer; }
         .claude-contexts { color:#aeb8b0; font:650 10px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; }
         .claude-disclosure { margin-top:10px; color:#718075; font-size:11px; line-height:1.4; }
         .hidden { display:none !important; }
         #error { color:#ff9da0; font-size:13px; margin-top:10px; white-space:pre-wrap; }
+        .notice { position:sticky; top:max(8px,env(safe-area-inset-top)); z-index:20; margin:0 0 12px; padding:12px 14px; border:1px solid #4a5a4d; border-radius:13px; background:#151d17f2; color:#e8eee9; box-shadow:0 14px 44px #0008; font-size:13px; line-height:1.4; }
+        .notice.error { border-color:#77363a; color:#ffc4c6; }
         footer { text-align:center; color:#657067; font-size:11px; padding:18px 0; }
       </style>
     </head>
@@ -141,13 +167,14 @@ enum RemoteApprovalWebApp {
       <main>
         <header>
           <div class="mark" aria-hidden="true"></div>
-          <div><h1>CodeIsland</h1><div class="subtitle">Private personal hub</div></div>
+          <div><h1>CodeIsland</h1><div class="subtitle">Your Mac, when it needs you</div></div>
           <div class="status"><span id="dot" class="dot"></span><span id="status">Connecting</span></div>
         </header>
+        <div id="notice" class="notice hidden" role="status" aria-live="polite"></div>
 
         <section id="pair" class="card hidden">
           <div class="eyebrow">Pair this iPhone</div>
-          <div class="tool">Connect to your Mac</div>
+          <div class="tool">Connect to Greg's Mac</div>
           <p class="muted">Open CodeIsland Settings → Buddy on the Mac and enter the six-digit code. The code expires after ten minutes.</p>
           <label for="code">Pairing code</label>
           <input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000">
@@ -159,23 +186,24 @@ enum RemoteApprovalWebApp {
           <div id="error"></div>
         </section>
 
-        <nav id="modes" class="modes hidden" aria-label="Hub mode">
+        <div id="questionTitle" class="section-title hidden">Now · agent questions</div>
+        <section id="questions"></section>
+        <div id="approvalTitle" class="section-title hidden">Now · agent approvals</div>
+        <section id="approvals"></section>
+        <section id="empty" class="card empty hidden">
+          <strong>You're clear for now</strong>
+          <span class="muted">CodeIsland checks your Mac every four seconds.</span>
+        </section>
+
+        <nav id="modes" class="modes hidden" aria-label="Context">
           <button class="mode" data-mode="auto">Auto</button>
           <button class="mode" data-mode="home">Home</button>
           <button class="mode" data-mode="work">Work</button>
           <button class="mode" data-mode="code">Code</button>
         </nav>
-        <div id="hubTitle" class="section-title hidden">Personal hub</div>
+        <div id="hubTitle" class="section-title hidden">Today &amp; tools</div>
         <section id="hubConfig" class="module hub-config hidden"></section>
         <section id="hub" class="module-grid"></section>
-        <div id="questionTitle" class="section-title hidden">Agent questions</div>
-        <section id="questions"></section>
-        <div id="approvalTitle" class="section-title hidden">Agent approvals</div>
-        <section id="approvals"></section>
-        <section id="empty" class="card empty hidden">
-          <strong>No agent input waiting</strong>
-          <span class="muted">This page checks the Mac every four seconds.</span>
-        </section>
         <footer>Tailnet-only · exact-request validation · single-use actions</footer>
       </main>
       <section id="claudeComposer" class="claude-composer hidden" role="dialog" aria-modal="true" aria-labelledby="claudeComposerTitle">
@@ -236,6 +264,7 @@ enum RemoteApprovalWebApp {
         const hubTitle = document.getElementById('hubTitle');
         const approvalTitle = document.getElementById('approvalTitle');
         const questionTitle = document.getElementById('questionTitle');
+        const notice = document.getElementById('notice');
         const mediaPreflight = document.getElementById('mediaPreflight');
         const mediaPreflightVideo = document.getElementById('mediaPreflightVideo');
         const mediaPreflightStatus = document.getElementById('mediaPreflightStatus');
@@ -259,6 +288,11 @@ enum RemoteApprovalWebApp {
 
         function authHeaders() { return { 'Authorization': `Bearer ${deviceToken}` }; }
         function setStatus(text, live=false) { status.textContent=text; dot.classList.toggle('live',live); }
+        let noticeTimer={ value:0 };
+        function notify(message,error=false) {
+          clearTimeout(noticeTimer.value); notice.textContent=String(message||''); notice.classList.toggle('error',error); notice.classList.remove('hidden');
+          noticeTimer.value=setTimeout(()=>notice.classList.add('hidden'),5000);
+        }
         function escapeHTML(value='') { const e=document.createElement('div'); e.textContent=value; return e.innerHTML; }
         function relativeTime(value) {
           const seconds=Math.max(0,Math.round((Date.now()-new Date(value).getTime())/1000));
@@ -287,7 +321,7 @@ enum RemoteApprovalWebApp {
             const body=await response.json();
             if(!response.ok) throw new Error(body.error||'Decision failed');
             await refresh();
-          } catch(error) { alert(error.message); await refresh(); }
+          } catch(error) { notify(error.message,true); await refresh(); }
           finally { busy.delete(id); }
         }
 
@@ -342,14 +376,14 @@ enum RemoteApprovalWebApp {
             const custom=prompt.querySelector('.question-custom').value.trim(); if(custom) selected.push(custom);
             return selected.join(', ');
           });
-          if(answers.some(answer=>!answer)) { alert('Answer every prompt first.'); return; }
+          if(answers.some(answer=>!answer)) { notify('Answer every prompt first.',true); return; }
           if(!confirm('Send this answer to the exact waiting agent request?')) return;
           busy.add(id); button.disabled=true;
           try {
             const response=await fetch(`/api/questions/${encodeURIComponent(id)}/answer`,{method:'POST',headers:{...authHeaders(),'Content-Type':'application/json'},body:JSON.stringify({answers,actionToken:button.dataset.token})});
             const body=await response.json(); if(!response.ok) throw new Error(body.error||'Answer failed');
             await refresh();
-          } catch(error) { alert(error.message); await refresh(); }
+          } catch(error) { notify(error.message,true); await refresh(); }
           finally { busy.delete(id); }
         }
 
@@ -500,8 +534,8 @@ enum RemoteApprovalWebApp {
           if(answer===null) return;
           const reverseNames=Object.fromEntries(Object.entries(moduleNames).map(([id,title])=>[title.toLowerCase(),id]));
           const modules=answer.split(',').map(value=>value.trim()).filter(Boolean).map(value=>catalog.includes(value)?value:reverseNames[value.toLowerCase()]).filter(Boolean);
-          if(!modules.length) { alert('Keep at least one valid module in the rack.'); return; }
-          if(new Set(modules).size!==modules.length) { alert('A module can appear only once.'); return; }
+          if(!modules.length) { notify('Keep at least one valid module in the rack.',true); return; }
+          if(new Set(modules).size!==modules.length) { notify('A module can appear only once.',true); return; }
           await runHubAction('quickToggles','setModeRack',null,null,'',JSON.stringify({mode:snapshot.resolvedMode,modules}));
         }
 
@@ -599,7 +633,7 @@ enum RemoteApprovalWebApp {
               const blob=await response.blob(); const url=URL.createObjectURL(blob); const link=document.createElement('a');
               const disposition=response.headers.get('Content-Disposition')||''; const match=disposition.match(/filename\*=UTF-8''([^;]+)/i);
               link.href=url; link.download=match?decodeURIComponent(match[1]):'CodeIsland-file'; document.body.appendChild(link); link.click(); link.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000);
-            } catch(error) { alert(error.message); }
+            } catch(error) { notify(error.message,true); }
             return;
           }
           if(moduleID==='camera'&&(actionID==='previewLocal'||actionID==='previewOnDevice')) {
@@ -607,15 +641,15 @@ enum RemoteApprovalWebApp {
             return;
           }
           if(actionID==='presentOnDevice') {
-            const popup=window.open('','_blank'); if(!popup) { alert('Allow pop-ups to open the teleprompter'); return; }
+            const popup=window.open('','_blank'); if(!popup) { notify('Allow pop-ups to open the teleprompter',true); return; }
             popup.document.title='CodeIsland Teleprompter';
             const style=popup.document.createElement('style'); style.textContent='body{margin:0;background:#050505;color:#f5f5f5;font:600 42px/1.55 system-ui;padding:15vh 9vw 30vh}button{position:fixed;top:18px;right:18px;padding:10px 16px;background:#ffb000;color:#000;border:0;border-radius:10px;font-weight:800}'; popup.document.head.appendChild(style);
             const close=popup.document.createElement('button'); close.textContent='Done'; close.onclick=()=>popup.close(); popup.document.body.appendChild(close);
             const script=popup.document.createElement('div'); script.textContent=payload; popup.document.body.appendChild(script); return;
           }
           if(actionID==='copyToDevice') {
-            try { await navigator.clipboard.writeText(payload); alert('Copied to this device'); }
-            catch(error) { alert('Clipboard permission was denied'); }
+            try { await navigator.clipboard.writeText(payload); notify('Copied to this device'); }
+            catch(error) { notify('Clipboard permission was denied',true); }
             return;
           }
           if(deepLink) { window.location.href=deepLink; return; }
@@ -629,12 +663,12 @@ enum RemoteApprovalWebApp {
               if(lists.length) {
                 const choices=lists.map((item,index)=>`${index+1}. ${item.title}`).join('\n');
                 const answer=prompt(`Choose list number:\n${choices}`,'1'); if(answer===null) return;
-                const index=Number(answer)-1; if(!Number.isInteger(index)||index<0||index>=lists.length) { alert('Invalid list'); return; }
+                const index=Number(answer)-1; if(!Number.isInteger(index)||index<0||index>=lists.length) { notify('Choose a valid list',true); return; }
                 calendarID=lists[index].detail||null;
               }
               const dueText=(prompt('Due time (optional: YYYY-MM-DD HH:MM)','')||'').trim();
               let due=null;
-              if(dueText) { const parsed=new Date(dueText.replace(' ','T')); if(Number.isNaN(parsed.getTime())) { alert('Invalid due time'); return; } due=parsed.toISOString(); }
+              if(dueText) { const parsed=new Date(dueText.replace(' ','T')); if(Number.isNaN(parsed.getTime())) { notify('Enter a valid due time',true); return; } due=parsed.toISOString(); }
               value=JSON.stringify({title:value,due,calendarID});
             }
           }
@@ -647,20 +681,20 @@ enum RemoteApprovalWebApp {
             const pad=n=>String(n).padStart(2,'0');
             const local=`${suggested.getFullYear()}-${pad(suggested.getMonth()+1)}-${pad(suggested.getDate())} ${pad(suggested.getHours())}:${pad(suggested.getMinutes())}`;
             const startText=prompt('Start (YYYY-MM-DD HH:MM)',local); if(!startText) return;
-            const start=new Date(startText.replace(' ','T')); if(Number.isNaN(start.getTime())) { alert('Invalid start time'); return; }
-            const minutes=Number(prompt('Duration in minutes','60')); if(!Number.isFinite(minutes)||minutes<=0) { alert('Invalid duration'); return; }
+            const start=new Date(startText.replace(' ','T')); if(Number.isNaN(start.getTime())) { notify('Enter a valid start time',true); return; }
+            const minutes=Number(prompt('Duration in minutes','60')); if(!Number.isFinite(minutes)||minutes<=0) { notify('Enter a valid duration',true); return; }
             const link=(prompt('Meeting link (optional)','')||'').trim();
             const notes=(prompt('Notes (optional)','')||'').trim();
             value=JSON.stringify({title:title.trim(),start:start.toISOString(),end:new Date(start.getTime()+minutes*60000).toISOString(),joinURL:link||null,notes:notes||null});
           }
           if(moduleID==='calendar'&&actionID==='edit') {
-            let draft; try { draft=JSON.parse(actionValue||''); } catch(error) { alert('This event changed. Refresh and try again.'); return; }
+            let draft; try { draft=JSON.parse(actionValue||''); } catch(error) { notify('This event changed. Refresh and try again.',true); return; }
             const title=prompt('Event title',draft.title||''); if(!title||!title.trim()) return;
             const toLocal=value=>{ const date=new Date(value); const pad=n=>String(n).padStart(2,'0'); return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`; };
             const startText=prompt('Start (YYYY-MM-DD HH:MM)',toLocal(draft.start)); if(!startText) return;
             const endText=prompt('End (YYYY-MM-DD HH:MM)',toLocal(draft.end)); if(!endText) return;
             const start=new Date(startText.replace(' ','T')); const end=new Date(endText.replace(' ','T'));
-            if(Number.isNaN(start.getTime())||Number.isNaN(end.getTime())||end<=start) { alert('Invalid time range'); return; }
+            if(Number.isNaN(start.getTime())||Number.isNaN(end.getTime())||end<=start) { notify('Enter a valid time range',true); return; }
             const link=(prompt('Meeting link (optional)',draft.joinURL||'')||'').trim();
             const notes=(prompt('Notes (optional)',draft.notes||'')||'').trim();
             value=JSON.stringify({title:title.trim(),start:start.toISOString(),end:end.toISOString(),joinURL:link||null,notes:notes||null});
@@ -676,9 +710,9 @@ enum RemoteApprovalWebApp {
             if(actionID==='replace') value=JSON.stringify({text:value,category:seed?.category||null,baseRevision:seed?.baseRevision||null});
           }
           if(moduleID==='notes'&&actionID==='setCategory') {
-            let seed; try { seed=JSON.parse(actionValue||''); } catch(error) { alert('This note changed. Refresh and try again.'); return; }
+            let seed; try { seed=JSON.parse(actionValue||''); } catch(error) { notify('This note changed. Refresh and try again.',true); return; }
             const category=(prompt('Category (leave blank to clear)',seed.category||'')||'').trim();
-            if(category.length>40) { alert('Category is too long'); return; }
+            if(category.length>40) { notify('Category is too long',true); return; }
             value=JSON.stringify({text:seed.text,category:category||null,baseRevision:seed.baseRevision});
           }
           if(moduleID==='claude'&&(actionID==='ask'||actionID==='plan')) {
@@ -686,7 +720,7 @@ enum RemoteApprovalWebApp {
           }
           if(moduleID==='audio'&&actionID==='setVolume') {
             const requested=prompt('Mac output volume (0–100)',actionValue||'50'); if(requested===null) return;
-            const volume=Number(requested); if(!Number.isInteger(volume)||volume<0||volume>100) { alert('Choose a whole number from 0 to 100'); return; }
+            const volume=Number(requested); if(!Number.isInteger(volume)||volume<0||volume>100) { notify('Choose a whole number from 0 to 100',true); return; }
             value=String(volume);
           }
           try {
@@ -695,8 +729,8 @@ enum RemoteApprovalWebApp {
             if(!confirm(prepared.preview)) return;
             const executeResponse=await fetch('/api/hub/actions/execute',{method:'POST',headers:{...authHeaders(),'Content-Type':'application/json'},body:JSON.stringify({intent:prepared.intent,actionToken:prepared.actionToken})});
             const result=await executeResponse.json(); if(!executeResponse.ok) throw new Error(result.error||'Action failed');
-            alert(result.message); await refreshHub();
-          } catch(error) { alert(error.message); }
+            notify(result.message); await refreshHub();
+          } catch(error) { notify(error.message,true); }
         }
 
         async function refreshHub() {
@@ -723,6 +757,15 @@ enum RemoteApprovalWebApp {
           } catch(error) { setStatus('Mac offline'); }
         }
 
+        function userIsEditing() {
+          const active=document.activeElement;
+          return Boolean(
+            claudeInput.resolve
+            || mediaSeekState.active
+            || (active&&active.matches('input:not([type="range"]),textarea,select,[contenteditable="true"]'))
+          );
+        }
+
         document.getElementById('pairButton').addEventListener('click',pairDevice);
         document.getElementById('code').addEventListener('keydown',event=>{if(event.key==='Enter')pairDevice();});
         modes.querySelectorAll('[data-mode]').forEach(button=>button.addEventListener('click',()=>setMode(button.dataset.mode)));
@@ -732,7 +775,7 @@ enum RemoteApprovalWebApp {
         claudeContinuous.addEventListener('click',()=>{if(claudeInput.recognition)stopClaudeSpeech('Voice stopped. Review the transcript before continuing.');else startClaudeSpeech(true);});
         claudeFiles.addEventListener('change',async()=>{
           try { claudeInput.contexts=await loadClaudeFiles(Array.from(claudeFiles.files||[])); updateClaudeContextSummary(); }
-          catch(error) { claudeInput.contexts=[]; claudeFiles.value=''; updateClaudeContextSummary(); alert(error.message); }
+          catch(error) { claudeInput.contexts=[]; claudeFiles.value=''; updateClaudeContextSummary(); notify(error.message,true); }
         });
         document.getElementById('claudeCancel').addEventListener('click',()=>closeClaudeComposer(null));
         document.getElementById('claudeReview').addEventListener('click',()=>{
@@ -740,7 +783,7 @@ enum RemoteApprovalWebApp {
           closeClaudeComposer({prompt,contexts:claudeInput.contexts});
         });
         if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
-        refresh(); setInterval(()=>{if(document.visibilityState==='visible')refresh();},4000);
+        refresh(); setInterval(()=>{if(document.visibilityState==='visible'&&!userIsEditing())refresh();},4000);
         document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){closeMediaPreflight();closeClaudeComposer(null);}else refresh();});
         window.addEventListener('pagehide',()=>{releaseLocalMedia();closeClaudeComposer(null);});
       </script>

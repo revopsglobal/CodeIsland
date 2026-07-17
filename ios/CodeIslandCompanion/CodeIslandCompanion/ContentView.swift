@@ -13,6 +13,7 @@ struct ContentView: View {
     @EnvironmentObject private var connection: CompanionConnection
     @EnvironmentObject private var liveActivity: LiveActivityController
     @EnvironmentObject private var remoteApprovals: RemoteApprovalClient
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(appAppearanceStorageKey) private var appearanceRaw = AppAppearance.system.rawValue
 
     private var appearance: AppAppearance {
@@ -81,10 +82,10 @@ struct ContentView: View {
                 guard liveActivity.isRunning, let state = connection.latestState else { return }
                 liveActivity.startOrUpdate(with: state)
             }
-            .animation(CodeIslandMotion.open, value: connection.connectedPeer)
-            .animation(CodeIslandMotion.pop, value: connection.latestState?.status)
-            .animation(CodeIslandMotion.micro, value: connection.browsing)
-            .animation(CodeIslandMotion.open, value: remoteApprovals.hubActionMessage)
+            .animation(reduceMotion ? nil : CodeIslandMotion.open, value: connection.connectedPeer)
+            .animation(reduceMotion ? nil : CodeIslandMotion.pop, value: connection.latestState?.status)
+            .animation(reduceMotion ? nil : CodeIslandMotion.micro, value: connection.browsing)
+            .animation(reduceMotion ? nil : CodeIslandMotion.open, value: remoteApprovals.hubActionMessage)
         }
         .background(Color.ciBackground.ignoresSafeArea())
         .preferredColorScheme(appearance.colorScheme)
@@ -93,89 +94,391 @@ struct ContentView: View {
     }
 }
 
+private enum CompanionPrimaryDestination: String, CaseIterable, Identifiable {
+    case now
+    case sessions
+
+    var id: String { rawValue }
+    var title: String { rawValue.capitalized }
+}
+
+private enum CompanionSheet: String, Identifiable {
+    case tools
+
+    var id: String { rawValue }
+}
+
 private struct PortraitIslandView: View {
     let topPadding: CGFloat
     @EnvironmentObject private var connection: CompanionConnection
     @EnvironmentObject private var liveActivity: LiveActivityController
     @EnvironmentObject private var remoteApprovals: RemoteApprovalClient
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var destination = CompanionPrimaryDestination.now
+    @State private var presentedSheet: CompanionSheet?
 
     private static let pendingAnchor = "companion.pendingCard"
 
     var body: some View {
         GeometryReader { proxy in
             ScrollViewReader { scroller in
-            ScrollView(.vertical) {
-                LazyVStack(spacing: 10) {
-                    CompactIslandBar()
-                        .environmentObject(connection)
-
-                    RemoteApprovalSurface()
-                        .environmentObject(remoteApprovals)
-                        .id("companion.remoteApprovals.anchor")
-
-                    if remoteApprovals.hasPairingCredential {
-                        PersonalHubSurface()
-                            .environmentObject(remoteApprovals)
-                    }
-
-                    if let state = connection.latestState {
-                        LiveIslandCard(state: state)
+                ScrollView(.vertical) {
+                    LazyVStack(spacing: 10) {
+                        CompactIslandBar()
                             .environmentObject(connection)
-                            .environmentObject(liveActivity)
-                            .id(Self.pendingAnchor)
-                            .transition(.blurFade.combined(with: .scale(scale: 0.96, anchor: .top)))
 
-                        if let personalStatus = state.personalStatus, !personalStatus.isEmpty {
-                            PersonalStatusStrip(status: personalStatus)
+                        CompanionPrimaryNavigation(
+                            destination: $destination,
+                            attentionCount: remoteApprovals.approvals.count + remoteApprovals.questions.count,
+                            openTools: { presentedSheet = .tools }
+                        )
+
+                        switch destination {
+                        case .now:
+                            RemoteApprovalSurface()
+                                .environmentObject(remoteApprovals)
+                                .id("companion.remoteApprovals.anchor")
+
+                            if remoteApprovals.hasPairingCredential {
+                                if remoteApprovals.approvals.isEmpty,
+                                   remoteApprovals.questions.isEmpty,
+                                   let state = connection.latestState,
+                                   state.pendingAction != nil {
+                                    sessionCard(state)
+                                }
+
+                                PersonalNowOverview(
+                                    snapshot: remoteApprovals.hubSnapshot,
+                                    openTools: { quickJot in
+                                        if let quickJot {
+                                            remoteApprovals.quickJotDestination = quickJot
+                                        }
+                                        presentedSheet = .tools
+                                    }
+                                )
+                            } else if let state = connection.latestState,
+                                      state.pendingAction != nil {
+                                sessionCard(state)
+                            }
+
+                        case .sessions:
+                            if let state = connection.latestState {
+                                sessionCard(state)
+
+                                if let personalStatus = state.personalStatus, !personalStatus.isEmpty {
+                                    PersonalStatusStrip(status: personalStatus)
+                                        .transition(.blurFade.combined(with: .move(edge: .top)))
+                                }
+
+                                MessageStrip(messages: state.messages)
+                            } else {
+                                DiscoveryIsland()
+                                    .environmentObject(connection)
+                                    .transition(.blurFade.combined(with: .scale(scale: 0.98, anchor: .top)))
+
+                                DiscoveryFill()
+                            }
+                        }
+
+                        if let error = connection.lastError,
+                           destination == .sessions || !remoteApprovals.hasPairingCredential {
+                            DiagnosticStrip(message: error)
                                 .transition(.blurFade.combined(with: .move(edge: .top)))
                         }
 
-                        MessageStrip(messages: state.messages)
-                    } else {
-                        DiscoveryIsland()
-                            .environmentObject(connection)
-                            .transition(.blurFade.combined(with: .scale(scale: 0.96, anchor: .top)))
-
-                        DiscoveryFill()
+                        if let error = liveActivity.lastError {
+                            LiveActivityDiagnosticStrip(message: error)
+                                .environmentObject(liveActivity)
+                                .transition(.blurFade.combined(with: .move(edge: .top)))
+                        }
                     }
-
-                    if let error = connection.lastError {
-                        DiagnosticStrip(message: error)
-                            .transition(.blurFade.combined(with: .move(edge: .top)))
-                    }
-
-                    if let error = liveActivity.lastError {
-                        LiveActivityDiagnosticStrip(message: error)
-                            .environmentObject(liveActivity)
-                            .transition(.blurFade.combined(with: .move(edge: .top)))
+                    .padding(.horizontal, 12)
+                    .frame(maxWidth: 640)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, topPadding)
+                    .padding(.bottom, max(28, proxy.safeAreaInsets.bottom + 20))
+                    .frame(minHeight: proxy.size.height, alignment: .top)
+                }
+                .scrollIndicators(.automatic)
+                .scrollBounceBehavior(.basedOnSize)
+                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
+                .accessibilityIdentifier("companion.scroll")
+                .onChange(of: connection.latestState?.pendingAction) { _, newValue in
+                    guard newValue != nil else { return }
+                    withAnimation(reduceMotion ? nil : .easeOut(duration: 0.24)) {
+                        destination = .now
+                        scroller.scrollTo(Self.pendingAnchor, anchor: .top)
                     }
                 }
-                .padding(.horizontal, 12)
-                .frame(maxWidth: 640)
-                .frame(maxWidth: .infinity)
-                .padding(.top, topPadding)
-                .padding(.bottom, max(28, proxy.safeAreaInsets.bottom + 20))
-                .frame(minHeight: proxy.size.height, alignment: .top)
-            }
-            .scrollIndicators(.automatic)
-            .scrollBounceBehavior(.basedOnSize)
-            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
-            .accessibilityIdentifier("companion.scroll")
-            .onChange(of: connection.latestState?.pendingAction) { _, newValue in
-                guard newValue != nil else { return }
-                withAnimation(.easeOut(duration: 0.3)) {
-                    scroller.scrollTo(Self.pendingAnchor, anchor: .top)
+                .onChange(of: remoteApprovals.approvals.count + remoteApprovals.questions.count) { oldValue, newValue in
+                    guard newValue > oldValue else { return }
+                    withAnimation(reduceMotion ? nil : .easeOut(duration: 0.24)) {
+                        destination = .now
+                        scroller.scrollTo("companion.remoteApprovals.anchor", anchor: .top)
+                    }
                 }
-            }
-            .onChange(of: remoteApprovals.approvals.count + remoteApprovals.questions.count) { oldValue, newValue in
-                guard newValue > oldValue else { return }
-                withAnimation(.easeOut(duration: 0.3)) {
-                    scroller.scrollTo("companion.remoteApprovals.anchor", anchor: .top)
+                .onChange(of: remoteApprovals.highlightedHubModuleID) { _, moduleID in
+                    guard moduleID != nil else { return }
+                    presentedSheet = .tools
                 }
-            }
+                .onAppear {
+                    if remoteApprovals.highlightedHubModuleID != nil {
+                        presentedSheet = .tools
+                    }
+                }
+                .sheet(item: $presentedSheet) { sheet in
+                    switch sheet {
+                    case .tools:
+                        NavigationStack {
+                            ScrollView {
+                                PersonalHubSurface()
+                                    .environmentObject(remoteApprovals)
+                                    .padding(12)
+                            }
+                            .background(Color.ciBackground.ignoresSafeArea())
+                            .navigationTitle("Tools")
+                            .navigationBarTitleDisplayMode(.inline)
+                            .toolbar {
+                                ToolbarItem(placement: .confirmationAction) {
+                                    Button("Done") { presentedSheet = nil }
+                                }
+                            }
+                        }
+                        .presentationDetents([.large])
+                        .presentationDragIndicator(.visible)
+                        .accessibilityElement(children: .contain)
+                        .accessibilityIdentifier("companion.tools.sheet")
+                    }
+                }
             }
         }
     }
+
+    @ViewBuilder
+    private func sessionCard(_ state: CompanionStatePayload) -> some View {
+        LiveIslandCard(state: state)
+            .environmentObject(connection)
+            .environmentObject(liveActivity)
+            .id(Self.pendingAnchor)
+            .transition(.blurFade.combined(with: .scale(scale: 0.98, anchor: .top)))
+    }
+}
+
+private struct CompanionPrimaryNavigation: View {
+    @Binding var destination: CompanionPrimaryDestination
+    let attentionCount: Int
+    let openTools: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(CompanionPrimaryDestination.allCases) { item in
+                Button {
+                    withAnimation(reduceMotion ? nil : .easeOut(duration: 0.16)) {
+                        destination = item
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(item.title)
+                        if item == .now, attentionCount > 0 {
+                            Text("\(attentionCount)")
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                                .foregroundStyle(Color.black)
+                                .frame(minWidth: 20, minHeight: 20)
+                                .background(Color.orange, in: Circle())
+                                .accessibilityHidden(true)
+                        }
+                    }
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundStyle(destination == item ? Color.ciForeground : Color.ciForeground.opacity(0.5))
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .background(
+                        destination == item ? Color.ciForeground.opacity(0.09) : Color.clear,
+                        in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(item == .now && attentionCount > 0
+                    ? "Now, \(attentionCount) items need attention"
+                    : item.title)
+                .accessibilityIdentifier("companion.destination.\(item.rawValue)")
+            }
+
+            Button(action: openTools) {
+                Image(systemName: "square.grid.2x2")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color.ciForeground.opacity(0.72))
+                    .frame(width: 44, height: 44)
+                    .background(Color.ciForeground.opacity(0.06), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Tools")
+            .accessibilityIdentifier("companion.tools")
+        }
+        .padding(4)
+        .background(Color.ciSurface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color.ciForeground.opacity(0.07)))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("companion.primaryNavigation")
+    }
+}
+
+private struct PersonalNowOverview: View {
+    let snapshot: PersonalHubSnapshot?
+    let openTools: (BuddyQuickJotDestination?) -> Void
+    @Environment(\.openURL) private var openURL
+
+    private var rows: [NowOverviewRow] {
+        guard let snapshot else { return [] }
+        var result: [NowOverviewRow] = []
+
+        if let calendar = snapshot.modules.first(where: { $0.id == .calendar }),
+           let item = calendar.items.first {
+            result.append(.init(module: calendar, item: item))
+        }
+        if let reminders = snapshot.modules.first(where: { $0.id == .reminders }),
+           let item = reminders.items.first(where: { !$0.id.hasPrefix("list:") }) {
+            result.append(.init(module: reminders, item: item))
+        }
+        if let agents = snapshot.modules.first(where: { $0.id == .agents }),
+           let item = agents.items.first {
+            result.append(.init(module: agents, item: item))
+        }
+        return Array(result.prefix(3))
+    }
+
+    private var weatherSummary: String? {
+        snapshot?.modules.first(where: { $0.id == .weather })?.summary
+    }
+
+    private var hasAgentAttention: Bool {
+        rows.contains { row in
+            guard row.module.id == .agents else { return false }
+            let signal = [row.item.title, row.item.subtitle ?? ""]
+                .joined(separator: " ")
+                .lowercased()
+            return signal.contains("approval") || signal.contains("question") || signal.contains("needs")
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(hasAgentAttention ? "Needs you" : "Today")
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color.ciForeground)
+                    Text(hasAgentAttention
+                        ? "An agent is waiting for a decision"
+                        : (weatherSummary ?? "Nothing else needs your attention"))
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Color.ciForeground.opacity(0.5))
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 12)
+                if let snapshot {
+                    Text(snapshot.generatedAt, style: .time)
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Color.ciForeground.opacity(0.38))
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 10)
+
+            if rows.isEmpty {
+                HStack(spacing: 10) {
+                    Image(systemName: snapshot == nil ? "arrow.triangle.2.circlepath" : "checkmark.circle.fill")
+                        .foregroundStyle(snapshot == nil ? Color.orange : Color.green)
+                    Text(snapshot == nil ? "Loading your Mac" : "You're clear for now")
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Color.ciForeground.opacity(0.76))
+                    Spacer()
+                }
+                .frame(minHeight: 56)
+                .padding(.horizontal, 16)
+            } else {
+                ForEach(rows) { row in
+                    Divider().overlay(Color.ciForeground.opacity(0.06))
+                    nowRow(row)
+                }
+            }
+
+            Divider().overlay(Color.ciForeground.opacity(0.06))
+
+            HStack(spacing: 8) {
+                quickButton("New task", symbol: "checklist", destination: .task)
+                quickButton("New note", symbol: "note.text", destination: .note)
+            }
+            .padding(12)
+        }
+        .background(Color.ciSurface, in: IslandShellShape())
+        .overlay(IslandShellShape().stroke(Color.ciForeground.opacity(0.07)))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("companion.now.overview")
+    }
+
+    private func nowRow(_ row: NowOverviewRow) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: row.symbol)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Color.orange)
+                .frame(width: 30)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(row.item.title)
+                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Color.ciForeground.opacity(0.88))
+                    .lineLimit(2)
+                if let subtitle = row.item.subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Color.ciForeground.opacity(0.48))
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            if let action = row.item.actions.first(where: { $0.deepLink != nil }),
+               let deepLink = action.deepLink {
+                Button(action.label) { openURL(deepLink) }
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(Color.black)
+                    .frame(minWidth: 68, minHeight: 44)
+                    .background(Color.orange, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("companion.now.\(row.module.id.rawValue).\(action.id)")
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .frame(minHeight: 64)
+    }
+
+    private func quickButton(
+        _ title: String,
+        symbol: String,
+        destination: BuddyQuickJotDestination
+    ) -> some View {
+        Button { openTools(destination) } label: {
+            Label(title, systemImage: symbol)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Color.ciForeground.opacity(0.74))
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .background(Color.ciForeground.opacity(0.06), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("companion.now.quick.\(destination.rawValue)")
+    }
+}
+
+private struct NowOverviewRow: Identifiable {
+    let module: PersonalHubModuleSnapshot
+    let item: PersonalHubItem
+
+    var id: String { "\(module.id.rawValue):\(item.id)" }
+    var symbol: String { item.symbol ?? PersonalHubCatalog.definition(for: module.id).symbol }
 }
 
 private struct PrimaryMessageView: View {
@@ -450,7 +753,7 @@ private struct CompactIslandBar: View {
                 Image(systemName: connection.browsing ? "stop.circle.fill" : "dot.radiowaves.left.and.right")
                     .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(.ciForeground.opacity(0.86))
-                    .frame(width: 38, height: 38)
+                    .frame(width: 44, height: 44)
                     .background(Color.ciForeground.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
             .buttonStyle(.plain)
@@ -691,7 +994,8 @@ private struct DiscoveryIsland: View {
         if connection.discoveredPeers.isEmpty {
             return connection.browsing ? "Broadcasting handshake" : "Tap the top-right to keep searching"
         }
-        return "Found \(connection.discoveredPeers.count) devices"
+        let count = connection.discoveredPeers.count
+        return "Found \(count) \(count == 1 ? "device" : "devices")"
     }
 }
 
@@ -804,7 +1108,7 @@ private struct LiveActivityInlineButton: View {
             )
             .font(.caption.weight(.semibold))
             .foregroundStyle(liveActivity.isRunning ? .ciForeground.opacity(0.62) : Color(red: 0.25, green: 0.76, blue: 1.0).opacity(0.86))
-            .frame(maxWidth: .infinity, minHeight: 34)
+            .frame(maxWidth: .infinity, minHeight: 44)
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("companion.liveActivity.inlineButton")
@@ -1452,7 +1756,7 @@ private struct AppearanceMenu: View {
             Image(systemName: (AppAppearance(rawValue: appearanceRaw) ?? .system).icon)
                 .font(.system(size: 15, weight: .bold))
                 .foregroundStyle(.ciForeground.opacity(0.86))
-                .frame(width: 38, height: 38)
+                .frame(width: 44, height: 44)
                 .background(Color.ciForeground.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
@@ -1471,6 +1775,7 @@ private struct MorphText: View {
     @State private var displayed: String
     @State private var blur: CGFloat = 0
     @State private var generation = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(text: String, font: Font = .system(size: 12), color: Color = .ciForeground, lineLimit: Int? = 1, markdown: Bool = false) {
         self.text = text
@@ -1492,9 +1797,15 @@ private struct MorphText: View {
             .lineLimit(lineLimit)
             .blur(radius: blur * 4)
             .opacity(1 - blur * 0.15)
-            .animation(CodeIslandMotion.micro, value: blur)
+            .animation(reduceMotion ? nil : CodeIslandMotion.micro, value: blur)
             .onChange(of: text) { _, newText in
                 guard newText != displayed else { return }
+                if reduceMotion {
+                    generation += 1
+                    displayed = newText
+                    blur = 0
+                    return
+                }
                 // Streaming increments (prefix growing/shrinking) update directly, with no blur morph,
                 // to avoid constant flicker during per-character updates. Only a full content swap gets the morph transition.
                 if newText.hasPrefix(displayed) || displayed.hasPrefix(newText) {
@@ -1561,21 +1872,29 @@ private struct HeaderStatusDot: View {
 
 private struct PulseDot: View {
     let status: CompanionStatus
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    @ViewBuilder
     var body: some View {
-        TimelineView(.animation) { timeline in
-            let scale = pulseScale(timeline.date.timeIntervalSinceReferenceDate)
+        if reduceMotion {
             Circle()
                 .fill(statusColor(status))
                 .frame(width: 8, height: 8)
-                .overlay {
+        } else {
+            TimelineView(.animation) { timeline in
+                let scale = pulseScale(timeline.date.timeIntervalSinceReferenceDate)
+                Circle()
+                    .fill(statusColor(status))
+                    .frame(width: 8, height: 8)
+                    .overlay {
                     Circle()
                         .stroke(statusColor(status).opacity(0.5), lineWidth: 1)
                         .scaleEffect(scale)
                         .opacity(max(0, 1.2 - scale))
-                }
+                    }
+            }
+            .frame(width: 14, height: 14)
         }
-        .frame(width: 14, height: 14)
     }
 
     private func pulseScale(_ phase: TimeInterval) -> CGFloat {
@@ -1707,7 +2026,7 @@ private struct LiveActivityDiagnosticStrip: View {
                     .font(.caption.weight(.bold))
                     // This notice card is fixed to a deep-blue background (consistent across both themes); its text stays light to preserve contrast.
                     .foregroundStyle(.white.opacity(0.82))
-                    .frame(maxWidth: .infinity, minHeight: 34)
+                    .frame(maxWidth: .infinity, minHeight: 44)
                     .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
             .buttonStyle(.plain)

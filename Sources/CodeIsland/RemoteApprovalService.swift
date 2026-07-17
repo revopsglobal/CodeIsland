@@ -262,6 +262,15 @@ final class RemoteApprovalService: ObservableObject {
                 headers: ["Content-Type": "application/manifest+json; charset=utf-8"],
                 body: Data(RemoteApprovalWebApp.manifest.utf8)
             )
+        case ("GET", "/app-icon.svg"):
+            return RemoteHTTPResponse(
+                status: 200,
+                headers: [
+                    "Content-Type": "image/svg+xml; charset=utf-8",
+                    "Cache-Control": "public, max-age=86400"
+                ],
+                body: Data(RemoteApprovalWebApp.iconSVG.utf8)
+            )
         case ("GET", "/sw.js"):
             return RemoteHTTPResponse(
                 status: 200,
