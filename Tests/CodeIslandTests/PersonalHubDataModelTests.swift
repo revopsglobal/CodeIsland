@@ -76,6 +76,44 @@ final class PersonalHubDataModelTests: XCTestCase {
         XCTAssertFalse(pullRequest.isDraft)
     }
 
+    func testParsesNowPlayingMetadataAndLyrics() throws {
+        let separator = String(UnicodeScalar(31))
+        let queue = [PersonalHubDataModel.NowPlaying.QueueItem(
+            id: "7",
+            title: "Next song",
+            artist: "Next artist",
+            album: "Next album"
+        )]
+        let media = try XCTUnwrap(PersonalHubDataModel.parseNowPlayingOutput(
+            ["playing", "Current song", "Current artist", "Current album", "42.5", "180", "Line one\nLine two"]
+                .joined(separator: separator),
+            appName: "Music",
+            queue: queue
+        ))
+
+        XCTAssertEqual(media.title, "Current song")
+        XCTAssertTrue(media.isPlaying)
+        XCTAssertEqual(media.position, 42.5)
+        XCTAssertEqual(media.duration, 180)
+        XCTAssertEqual(media.lyrics, "Line one\nLine two")
+        XCTAssertEqual(media.queue, queue)
+    }
+
+    func testParsesMusicQueueAndIgnoresMalformedRows() {
+        let field = String(UnicodeScalar(30))
+        let row = String(UnicodeScalar(29))
+        let output = [
+            ["12", "Song A", "Artist A", "Album A"].joined(separator: field),
+            "not-a-track",
+            ["13", "Song B", "Artist B", "Album B"].joined(separator: field),
+        ].joined(separator: row)
+
+        let queue = PersonalHubDataModel.parseMusicQueueOutput(output)
+
+        XCTAssertEqual(queue.map(\.id), ["12", "13"])
+        XCTAssertEqual(queue.map(\.title), ["Song A", "Song B"])
+    }
+
     func testLegacyTextShelfEntryDecodesWithoutFilePath() throws {
         let data = try XCTUnwrap(#"{"id":"clip-1","value":"git push origin main","capturedAt":0}"#.data(using: .utf8))
 
@@ -94,5 +132,47 @@ final class PersonalHubDataModelTests: XCTestCase {
         )
 
         XCTAssertEqual(entry.title, "Quarterly-plan.pdf")
+    }
+
+    func testLegacyNoteDecodesWithSafeRevisionDefaults() throws {
+        let data = try XCTUnwrap(
+            #"{"id":"note-1","text":"Old note","updatedAt":0}"#.data(using: .utf8)
+        )
+
+        let note = try JSONDecoder().decode(PersonalHubDataModel.Note.self, from: data)
+
+        XCTAssertEqual(note.currentRevision, 1)
+        XCTAssertNil(note.category)
+        XCTAssertFalse(note.canUndo)
+    }
+
+    func testParsesMarkdownChecklistLinesWithStableLineIndexes() {
+        let lines = PersonalHubDataModel.Note.parseChecklist(
+            "Launch\n- [ ] Send invite\nContext\n- [x] Publish page\n- [X] Notify team"
+        )
+
+        XCTAssertEqual(lines.map(\.lineIndex), [1, 3, 4])
+        XCTAssertEqual(lines.map(\.title), ["Send invite", "Publish page", "Notify team"])
+        XCTAssertEqual(lines.map(\.isCompleted), [false, true, true])
+    }
+
+    func testParsesOnlySafeClaudeActionProposals() throws {
+        let output = """
+        ```json
+        {"proposals":[
+          {"type":"reminder","title":"Call the bank","text":null,"due":"2026-07-18T18:00:00-07:00","start":null,"end":null,"joinURL":null,"notes":null},
+          {"type":"note","title":"Deck idea","text":"Use the customer quote first","due":null,"start":null,"end":null,"joinURL":null,"notes":null},
+          {"type":"calendar","title":"Invalid event","text":null,"due":null,"start":null,"end":null,"joinURL":null,"notes":null},
+          {"type":"shell","title":"rm -rf","text":null,"due":null,"start":null,"end":null,"joinURL":null,"notes":null}
+        ]}
+        ```
+        """
+
+        let proposals = PersonalHubDataModel.parseClaudeProposals(output)
+
+        XCTAssertEqual(proposals.count, 2)
+        XCTAssertEqual(proposals.map(\.kind), [.reminder, .note])
+        XCTAssertEqual(proposals.first?.title, "Call the bank")
+        XCTAssertNotNil(proposals.first?.due)
     }
 }

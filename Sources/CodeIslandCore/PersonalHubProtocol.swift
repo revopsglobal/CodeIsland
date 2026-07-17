@@ -91,6 +91,10 @@ public struct PersonalHubAction: Codable, Equatable, Identifiable, Sendable {
     public let role: PersonalHubActionRole
     public let targetID: String?
     public let deepLink: URL?
+    /// Optional structured seed data for a device-side editor. The Mac never
+    /// trusts this value on its own; the client sends its reviewed value back
+    /// through a typed intent and the server revalidates current state.
+    public let value: String?
     public let actionToken: String?
     public let actionExpiresAt: Date?
 
@@ -101,6 +105,7 @@ public struct PersonalHubAction: Codable, Equatable, Identifiable, Sendable {
         role: PersonalHubActionRole = .normal,
         targetID: String? = nil,
         deepLink: URL? = nil,
+        value: String? = nil,
         actionToken: String? = nil,
         actionExpiresAt: Date? = nil
     ) {
@@ -110,6 +115,7 @@ public struct PersonalHubAction: Codable, Equatable, Identifiable, Sendable {
         self.role = role
         self.targetID = targetID
         self.deepLink = deepLink
+        self.value = value
         self.actionToken = actionToken
         self.actionExpiresAt = actionExpiresAt
     }
@@ -186,10 +192,12 @@ public struct PersonalHubCalendarDraft: Codable, Equatable, Sendable {
 public struct PersonalHubReminderDraft: Codable, Equatable, Sendable {
     public let title: String
     public let due: Date?
+    public let calendarID: String?
 
-    public init(title: String, due: Date? = nil) {
+    public init(title: String, due: Date? = nil, calendarID: String? = nil) {
         self.title = title
         self.due = due
+        self.calendarID = calendarID
     }
 
     public func encodedActionValue() -> String? {
@@ -207,6 +215,55 @@ public struct PersonalHubReminderDraft: Codable, Equatable, Sendable {
             if let decoded = try? decoder.decode(Self.self, from: data) { return decoded }
         }
         return .init(title: value)
+    }
+}
+
+/// Conflict-safe note editor payload. A client edits the seed it received in a
+/// snapshot and sends the base revision back; the Mac rejects a stale replace
+/// instead of silently overwriting a newer edit from another device.
+public struct PersonalHubNoteDraft: Codable, Equatable, Sendable {
+    public let text: String
+    public let category: String?
+    public let baseRevision: Int?
+
+    public init(text: String, category: String? = nil, baseRevision: Int? = nil) {
+        self.text = text
+        self.category = category
+        self.baseRevision = baseRevision
+    }
+
+    public func encodedActionValue() -> String? {
+        guard let data = try? JSONEncoder().encode(self) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    public static func decodeActionValue(_ value: String?) -> Self? {
+        guard let value else { return nil }
+        if let data = value.data(using: .utf8),
+           let decoded = try? JSONDecoder().decode(Self.self, from: data) {
+            return decoded
+        }
+        return .init(text: value)
+    }
+}
+
+public struct PersonalHubChecklistMutation: Codable, Equatable, Sendable {
+    public let lineIndex: Int
+    public let baseRevision: Int
+
+    public init(lineIndex: Int, baseRevision: Int) {
+        self.lineIndex = lineIndex
+        self.baseRevision = baseRevision
+    }
+
+    public func encodedActionValue() -> String? {
+        guard let data = try? JSONEncoder().encode(self) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    public static func decodeActionValue(_ value: String?) -> Self? {
+        guard let value, let data = value.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(Self.self, from: data)
     }
 }
 

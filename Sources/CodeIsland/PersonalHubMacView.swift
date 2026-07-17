@@ -138,12 +138,65 @@ struct PersonalHubMacView: View {
             return
         }
         if moduleID == .notes, ["append", "replace"].contains(action.id), let itemID {
+            let seed = PersonalHubNoteDraft.decodeActionValue(action.value)
             guard let value = promptForNote(
                 title: action.id == "append" ? "Append to note" : "Edit note",
-                initialValue: action.id == "replace" ? (itemDetail ?? "") : ""
+                initialValue: action.id == "replace" ? (seed?.text ?? itemDetail ?? "") : ""
             ) else { return }
+            let actionValue = action.id == "replace"
+                ? PersonalHubNoteDraft(
+                    text: value,
+                    category: seed?.category,
+                    baseRevision: seed?.baseRevision
+                ).encodedActionValue()
+                : value
             acceptPrepared(service.prepare(
-                intent: .init(moduleID: .notes, actionID: action.id, targetID: itemID, value: value),
+                intent: .init(moduleID: .notes, actionID: action.id, targetID: itemID, value: actionValue),
+                deviceID: "local-mac"
+            ))
+            return
+        }
+        if moduleID == .notes,
+           action.id == "setCategory",
+           let itemID,
+           let seed = PersonalHubNoteDraft.decodeActionValue(action.value),
+           let category = promptForCategory(initial: seed.category ?? "") {
+            let updated = PersonalHubNoteDraft(
+                text: seed.text,
+                category: category,
+                baseRevision: seed.baseRevision
+            )
+            acceptPrepared(service.prepare(
+                intent: .init(
+                    moduleID: .notes,
+                    actionID: "setCategory",
+                    targetID: itemID,
+                    value: updated.encodedActionValue()
+                ),
+                deviceID: "local-mac"
+            ))
+            return
+        }
+        if moduleID == .calendar,
+           action.id == "edit",
+           let itemID,
+           let draft = PersonalHubCalendarDraft.decodeActionValue(action.value),
+           let updated = promptForCalendar(draft) {
+            acceptPrepared(service.prepare(
+                intent: .init(
+                    moduleID: .calendar,
+                    actionID: "edit",
+                    targetID: itemID,
+                    value: updated.encodedActionValue()
+                ),
+                deviceID: "local-mac"
+            ))
+            return
+        }
+        if moduleID == .audio, action.id == "setVolume",
+           let volume = promptForVolume(initial: Int(action.value ?? "") ?? 50) {
+            acceptPrepared(service.prepare(
+                intent: .init(moduleID: .audio, actionID: "setVolume", value: String(volume)),
                 deviceID: "local-mac"
             ))
             return
@@ -155,7 +208,8 @@ struct PersonalHubMacView: View {
         let intent = PersonalHubActionIntent(
             moduleID: moduleID,
             actionID: action.id,
-            targetID: action.targetID ?? itemID
+            targetID: action.targetID ?? itemID,
+            value: action.value
         )
         acceptPrepared(service.prepare(intent: intent, deviceID: "local-mac"))
     }
@@ -212,6 +266,87 @@ struct PersonalHubMacView: View {
         let value = textView.string.trimmingCharacters(in: .whitespacesAndNewlines)
         return value.isEmpty ? nil : value
     }
+
+    private func promptForCategory(initial: String) -> String? {
+        let alert = NSAlert()
+        alert.messageText = "Set note category"
+        alert.informativeText = "Leave blank to clear it."
+        alert.addButton(withTitle: "Review")
+        alert.addButton(withTitle: "Cancel")
+        let field = NSTextField(string: initial)
+        field.placeholderString = "Work, Home, Ideas…"
+        field.frame = NSRect(x: 0, y: 0, width: 360, height: 28)
+        alert.accessoryView = field
+        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
+        return String(field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).prefix(40))
+    }
+
+    private func promptForCalendar(_ draft: PersonalHubCalendarDraft) -> PersonalHubCalendarDraft? {
+        let alert = NSAlert()
+        alert.messageText = "Edit event"
+        alert.addButton(withTitle: "Review")
+        alert.addButton(withTitle: "Cancel")
+
+        let stack = NSStackView(frame: NSRect(x: 0, y: 0, width: 440, height: 220))
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 8
+
+        let titleField = NSTextField(string: draft.title)
+        titleField.placeholderString = "Event title"
+        let startPicker = NSDatePicker()
+        startPicker.datePickerElements = [.yearMonthDay, .hourMinute]
+        startPicker.dateValue = draft.start
+        let endPicker = NSDatePicker()
+        endPicker.datePickerElements = [.yearMonthDay, .hourMinute]
+        endPicker.dateValue = draft.end
+        let linkField = NSTextField(string: draft.joinURL?.absoluteString ?? "")
+        linkField.placeholderString = "Meeting link (optional)"
+        let notesField = NSTextField(string: draft.notes ?? "")
+        notesField.placeholderString = "Notes (optional)"
+
+        for view in [titleField, startPicker, endPicker, linkField, notesField] {
+            view.widthAnchor.constraint(equalToConstant: 440).isActive = true
+            stack.addArrangedSubview(view)
+        }
+        alert.accessoryView = stack
+
+        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
+        let title = titleField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let link = linkField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let url = link.isEmpty ? nil : URL(string: link)
+        guard !title.isEmpty, endPicker.dateValue > startPicker.dateValue, link.isEmpty || url != nil else {
+            actionMessage = "Enter a title, valid time range, and valid meeting URL"
+            return nil
+        }
+        return .init(
+            title: title,
+            start: startPicker.dateValue,
+            end: endPicker.dateValue,
+            joinURL: url,
+            notes: notesField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+    }
+
+    private func promptForVolume(initial: Int) -> Int? {
+        let alert = NSAlert()
+        alert.messageText = "Set Mac output volume"
+        alert.addButton(withTitle: "Review")
+        alert.addButton(withTitle: "Cancel")
+        let slider = NSSlider(
+            value: Double(min(max(initial, 0), 100)),
+            minValue: 0,
+            maxValue: 100,
+            target: nil,
+            action: nil
+        )
+        slider.numberOfTickMarks = 11
+        slider.allowsTickMarkValuesOnly = false
+        slider.frame = NSRect(x: 0, y: 0, width: 360, height: 34)
+        alert.accessoryView = slider
+        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
+        return Int(slider.doubleValue.rounded())
+    }
 }
 
 private struct MacHubModuleCard: View {
@@ -223,6 +358,8 @@ private struct MacHubModuleCard: View {
     @State private var taskTitle = ""
     @State private var eventStart = Date().addingTimeInterval(3_600)
     @State private var eventEnd = Date().addingTimeInterval(7_200)
+    @State private var composerActionID = "add"
+    @State private var selectedReminderCalendarID = ""
 
     private var definition: PersonalHubModuleDefinition {
         PersonalHubCatalog.definition(for: module.id)
@@ -279,9 +416,17 @@ private struct MacHubModuleCard: View {
                     }
                 } else if module.id == .claude {
                     HStack(spacing: 5) {
-                        composerTextField(prompt: "Ask Claude")
+                        composerTextField(prompt: composerActionID == "plan" ? "Tell Claude what to do" : "Ask Claude")
                         reviewButton(
-                            actionID: "ask",
+                            actionID: composerActionID,
+                            value: taskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                        )
+                    }
+                } else if module.id == .reminders, composerActionID == "addList" {
+                    HStack(spacing: 5) {
+                        composerTextField(prompt: "New list name")
+                        reviewButton(
+                            actionID: "addList",
                             value: taskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
                         )
                     }
@@ -289,8 +434,20 @@ private struct MacHubModuleCard: View {
                     HStack(spacing: 5) {
                         composerTextField(prompt: module.id == .notes ? "New note" : "New task")
                         let title = taskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if module.id == .reminders, !reminderLists.isEmpty {
+                            Picker("", selection: $selectedReminderCalendarID) {
+                                ForEach(reminderLists) { list in
+                                    Text(list.title).tag(list.id)
+                                }
+                            }
+                            .labelsHidden()
+                            .frame(width: 110)
+                        }
                         reviewButton(value: module.id == .reminders
-                            ? PersonalHubReminderDraft(title: title).encodedActionValue()
+                            ? PersonalHubReminderDraft(
+                                title: title,
+                                calendarID: selectedReminderCalendarID.isEmpty ? nil : selectedReminderCalendarID
+                            ).encodedActionValue()
                             : title)
                     }
                 }
@@ -324,6 +481,11 @@ private struct MacHubModuleCard: View {
         .padding(8)
         .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 9))
         .overlay(RoundedRectangle(cornerRadius: 9).stroke(Color.white.opacity(0.07), lineWidth: 1))
+        .onAppear {
+            if selectedReminderCalendarID.isEmpty {
+                selectedReminderCalendarID = reminderLists.first?.id ?? ""
+            }
+        }
     }
 
     @ViewBuilder
@@ -333,22 +495,27 @@ private struct MacHubModuleCard: View {
         itemDetail: String?
     ) -> some View {
         if !actions.isEmpty {
-            HStack(spacing: 5) {
-                ForEach(actions) { action in
-                    Button {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 5) {
+                    ForEach(actions) { action in
+                        Button {
                         if ([.calendar, .reminders, .notes].contains(module.id) && action.id == "add")
+                            || (module.id == .reminders && action.id == "addList")
                             || (module.id == .teleprompter && action.id == "set")
-                            || (module.id == .claude && action.id == "ask") {
+                            || (module.id == .claude && ["ask", "plan"].contains(action.id)) {
+                            composerActionID = action.id
+                            taskTitle = ""
                             showsTaskComposer.toggle()
                         } else {
                             prepare(module.id, action, itemID, itemDetail)
                         }
-                    } label: {
-                        Label(action.label, systemImage: action.symbol ?? "arrow.right")
-                            .font(.system(size: 8, weight: .bold))
+                        } label: {
+                            Label(action.label, systemImage: action.symbol ?? "arrow.right")
+                                .font(.system(size: 8, weight: .bold))
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.mini)
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.mini)
                 }
             }
         }
@@ -392,4 +559,16 @@ private struct MacHubModuleCard: View {
         .controlSize(.small)
         .disabled(value == nil || taskTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
+
+    private var reminderLists: [MacReminderListChoice] {
+        module.items.compactMap { item in
+            guard item.id.hasPrefix("list:"), let id = item.detail else { return nil }
+            return .init(id: id, title: item.title)
+        }
+    }
+}
+
+private struct MacReminderListChoice: Identifiable {
+    let id: String
+    let title: String
 }

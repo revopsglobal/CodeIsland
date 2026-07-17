@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import AVFoundation
+import Speech
 
 private enum HubTheme {
     static let accent = Color(red: 1.0, green: 0.69, blue: 0.0)
@@ -130,12 +131,16 @@ private struct PersonalHubModuleCard: View {
     @Environment(\.openURL) private var openURL
     @State private var composerText = ""
     @State private var showsComposer = false
+    @State private var composerActionID = "add"
     @State private var eventStart = Date().addingTimeInterval(3_600)
     @State private var eventEnd = Date().addingTimeInterval(7_200)
     @State private var meetingLink = ""
     @State private var reminderHasDue = false
     @State private var reminderDue = Date().addingTimeInterval(3_600)
+    @State private var selectedReminderCalendarID = ""
+    @State private var outputVolume = 50.0
     @State private var showsCameraPreview = false
+    @StateObject private var speech = HubSpeechRecognizer()
 
     private var definition: PersonalHubModuleDefinition {
         PersonalHubCatalog.definition(for: module.id)
@@ -191,8 +196,15 @@ private struct PersonalHubModuleCard: View {
                     ForEach(module.actions) { action in
                         Button {
                             if ([.calendar, .reminders, .notes].contains(module.id) && action.id == "add")
+                                || (module.id == .reminders && action.id == "addList")
+                                || (module.id == .audio && action.id == "setVolume")
                                 || (module.id == .teleprompter && action.id == "set")
-                                || (module.id == .claude && action.id == "ask") {
+                                || (module.id == .claude && ["ask", "plan"].contains(action.id)) {
+                                composerActionID = action.id
+                                composerText = ""
+                                if module.id == .audio {
+                                    outputVolume = Double(action.value ?? "") ?? 50
+                                }
                                 withAnimation(.easeOut(duration: 0.16)) { showsComposer.toggle() }
                             } else {
                                 prepare(action)
@@ -216,6 +228,11 @@ private struct PersonalHubModuleCard: View {
         .accessibilityIdentifier("hub.module.\(module.id.rawValue)")
         .fullScreenCover(isPresented: $showsCameraPreview) {
             CameraPreviewScreen()
+        }
+        .onAppear {
+            if selectedReminderCalendarID.isEmpty {
+                selectedReminderCalendarID = reminderLists.first?.id ?? ""
+            }
         }
     }
 
@@ -254,7 +271,8 @@ private struct PersonalHubModuleCard: View {
             await client.prepareHubAction(.init(
                 moduleID: module.id,
                 actionID: action.id,
-                targetID: action.targetID
+                targetID: action.targetID,
+                value: action.value
             ))
         }
     }
@@ -276,19 +294,36 @@ private struct PersonalHubModuleCard: View {
                 reviewButton(value: calendarActionValue)
             }
         } else if module.id == .reminders {
-            VStack(alignment: .leading, spacing: 8) {
-                hubTextField("New task", text: $composerText)
-                Toggle("Set due date", isOn: $reminderHasDue)
-                    .font(.system(size: 11, weight: .semibold))
-                if reminderHasDue {
-                    DatePicker("Due", selection: $reminderDue, in: Date()..., displayedComponents: [.date, .hourAndMinute])
-                        .datePickerStyle(.compact)
-                        .font(.system(size: 11, weight: .semibold))
+            if composerActionID == "addList" {
+                HStack(spacing: 7) {
+                    hubTextField("New list name", text: $composerText)
+                    reviewButton(actionID: "addList", value: composerText.trimmingCharacters(in: .whitespacesAndNewlines))
                 }
-                reviewButton(value: PersonalHubReminderDraft(
-                    title: composerText.trimmingCharacters(in: .whitespacesAndNewlines),
-                    due: reminderHasDue ? reminderDue : nil
-                ).encodedActionValue())
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    hubTextField("New task", text: $composerText)
+                    if !reminderLists.isEmpty {
+                        Picker("List", selection: $selectedReminderCalendarID) {
+                            ForEach(reminderLists) { list in
+                                Text(list.title).tag(list.id)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .font(.system(size: 11, weight: .semibold))
+                    }
+                    Toggle("Set due date", isOn: $reminderHasDue)
+                        .font(.system(size: 11, weight: .semibold))
+                    if reminderHasDue {
+                        DatePicker("Due", selection: $reminderDue, in: Date()..., displayedComponents: [.date, .hourAndMinute])
+                            .datePickerStyle(.compact)
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    reviewButton(value: PersonalHubReminderDraft(
+                        title: composerText.trimmingCharacters(in: .whitespacesAndNewlines),
+                        due: reminderHasDue ? reminderDue : nil,
+                        calendarID: selectedReminderCalendarID.isEmpty ? nil : selectedReminderCalendarID
+                    ).encodedActionValue())
+                }
             }
         } else if module.id == .teleprompter {
             VStack(alignment: .leading, spacing: 8) {
@@ -304,11 +339,32 @@ private struct PersonalHubModuleCard: View {
                     value: composerText.trimmingCharacters(in: .whitespacesAndNewlines)
                 )
             }
+        } else if module.id == .audio, composerActionID == "setVolume" {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Output volume \(Int(outputVolume.rounded()))%")
+                    .font(.system(size: 11, weight: .semibold))
+                Slider(value: $outputVolume, in: 0...100, step: 1)
+                    .tint(HubTheme.accent)
+                reviewButton(
+                    actionID: "setVolume",
+                    value: String(Int(outputVolume.rounded())),
+                    requiresText: false
+                )
+            }
         } else if module.id == .claude {
             HStack(spacing: 7) {
-                hubTextField("Ask Claude", text: $composerText)
+                hubTextField(composerActionID == "plan" ? "Tell Claude what to do" : "Ask Claude", text: $composerText)
+                Button {
+                    speech.toggle { transcript in composerText = transcript }
+                } label: {
+                    Image(systemName: speech.isRecording ? "stop.fill" : "mic.fill")
+                        .font(.system(size: 13, weight: .bold))
+                        .frame(width: 36, height: 36)
+                }
+                .buttonStyle(HubSecondaryButtonStyle())
+                .accessibilityLabel(speech.isRecording ? "Stop voice input" : "Start voice input")
                 reviewButton(
-                    actionID: "ask",
+                    actionID: composerActionID,
                     value: composerText.trimmingCharacters(in: .whitespacesAndNewlines)
                 )
             }
@@ -331,9 +387,14 @@ private struct PersonalHubModuleCard: View {
             .accessibilityIdentifier("hub.\(module.id.rawValue).composer")
     }
 
-    private func reviewButton(actionID: String = "add", value: String?) -> some View {
+    private func reviewButton(
+        actionID: String = "add",
+        value: String?,
+        requiresText: Bool = true
+    ) -> some View {
         Button("Review") {
-            guard let value, !composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+            guard let value,
+                  !requiresText || !composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
             Task {
                 await client.prepareHubAction(.init(
                     moduleID: module.id,
@@ -343,7 +404,7 @@ private struct PersonalHubModuleCard: View {
             }
         }
         .buttonStyle(HubPrimaryButtonStyle())
-        .disabled(composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || value == nil)
+        .disabled((requiresText && composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) || value == nil)
     }
 
     private var calendarActionValue: String? {
@@ -357,6 +418,94 @@ private struct PersonalHubModuleCard: View {
             joinURL: url
         ).encodedActionValue()
     }
+
+    private var reminderLists: [ReminderListChoice] {
+        module.items.compactMap { item in
+            guard item.id.hasPrefix("list:"), let id = item.detail else { return nil }
+            return ReminderListChoice(id: id, title: item.title)
+        }
+    }
+}
+
+@MainActor
+private final class HubSpeechRecognizer: ObservableObject {
+    @Published private(set) var isRecording = false
+
+    private let recognizer = SFSpeechRecognizer(locale: Locale.current)
+    private let audioEngine = AVAudioEngine()
+    private var request: SFSpeechAudioBufferRecognitionRequest?
+    private var task: SFSpeechRecognitionTask?
+    private var tapInstalled = false
+
+    func toggle(onTranscript: @escaping (String) -> Void) {
+        if isRecording {
+            stop()
+        } else {
+            Task { await start(onTranscript: onTranscript) }
+        }
+    }
+
+    private func start(onTranscript: @escaping (String) -> Void) async {
+        let speechAuthorization = await withCheckedContinuation { continuation in
+            SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0) }
+        }
+        let microphoneAllowed = await withCheckedContinuation { continuation in
+            AVAudioSession.sharedInstance().requestRecordPermission { continuation.resume(returning: $0) }
+        }
+        guard speechAuthorization == .authorized, microphoneAllowed, recognizer?.isAvailable == true else { return }
+
+        stop()
+        let request = SFSpeechAudioBufferRecognitionRequest()
+        request.shouldReportPartialResults = true
+        request.requiresOnDeviceRecognition = recognizer?.supportsOnDeviceRecognition == true
+        self.request = request
+
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.record, mode: .measurement, options: [.duckOthers])
+            try session.setActive(true, options: .notifyOthersOnDeactivation)
+            let node = audioEngine.inputNode
+            let format = node.outputFormat(forBus: 0)
+            node.installTap(onBus: 0, bufferSize: 1_024, format: format) { buffer, _ in
+                request.append(buffer)
+            }
+            tapInstalled = true
+            audioEngine.prepare()
+            try audioEngine.start()
+            isRecording = true
+            task = recognizer?.recognitionTask(with: request) { [weak self] result, error in
+                Task { @MainActor in
+                    if let result {
+                        onTranscript(result.bestTranscription.formattedString)
+                    }
+                    if result?.isFinal == true || error != nil {
+                        self?.stop()
+                    }
+                }
+            }
+        } catch {
+            stop()
+        }
+    }
+
+    func stop() {
+        if audioEngine.isRunning { audioEngine.stop() }
+        if tapInstalled {
+            audioEngine.inputNode.removeTap(onBus: 0)
+            tapInstalled = false
+        }
+        request?.endAudio()
+        task?.cancel()
+        request = nil
+        task = nil
+        isRecording = false
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+}
+
+private struct ReminderListChoice: Identifiable {
+    let id: String
+    let title: String
 }
 
 private struct PersonalHubItemRow: View {
@@ -366,6 +515,7 @@ private struct PersonalHubItemRow: View {
     @Environment(\.openURL) private var openURL
     @State private var showsTeleprompter = false
     @State private var noteMutation: NoteMutation?
+    @State private var calendarMutation: CalendarMutation?
     @State private var sharedFile: SharedFile?
 
     var body: some View {
@@ -396,21 +546,30 @@ private struct PersonalHubItemRow: View {
             }
 
             if !item.actions.isEmpty {
-                HStack(spacing: 6) {
-                    ForEach(item.actions) { action in
-                        Button {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(item.actions) { action in
+                            Button {
                             if action.id == "downloadToDevice" {
                                 Task {
                                     if let url = await client.downloadShelfFile(id: item.id, filename: item.title) {
                                         sharedFile = SharedFile(url: url)
                                     }
                                 }
-                            } else if moduleID == .notes, ["append", "replace"].contains(action.id) {
+                            } else if moduleID == .notes, ["append", "replace", "setCategory"].contains(action.id) {
+                                let seed = PersonalHubNoteDraft.decodeActionValue(action.value)
                                 noteMutation = .init(
                                     actionID: action.id,
                                     targetID: action.targetID ?? item.id,
-                                    initialText: action.id == "replace" ? (item.detail ?? "") : ""
+                                    initialText: action.id == "replace"
+                                        ? (seed?.text ?? item.detail ?? "")
+                                        : (action.id == "setCategory" ? (seed?.category ?? "") : ""),
+                                    seed: seed
                                 )
+                            } else if moduleID == .calendar,
+                                      action.id == "edit",
+                                      let draft = PersonalHubCalendarDraft.decodeActionValue(action.value) {
+                                calendarMutation = .init(targetID: action.targetID ?? item.id, draft: draft)
                             } else if action.id == "presentOnDevice", item.detail != nil {
                                 showsTeleprompter = true
                             } else if action.id == "copyToDevice", let value = item.detail {
@@ -423,15 +582,17 @@ private struct PersonalHubItemRow: View {
                                     await client.prepareHubAction(.init(
                                         moduleID: moduleID,
                                         actionID: action.id,
-                                        targetID: action.targetID ?? item.id
+                                        targetID: action.targetID ?? item.id,
+                                        value: action.value
                                     ))
                                 }
                             }
-                        } label: {
-                            Label(action.label, systemImage: action.symbol ?? "arrow.right")
-                                .font(.system(size: 10, weight: .bold))
+                            } label: {
+                                Label(action.label, systemImage: action.symbol ?? "arrow.right")
+                                    .font(.system(size: 10, weight: .bold))
+                            }
+                            .buttonStyle(HubCompactButtonStyle(primary: action.role == .primary))
                         }
-                        .buttonStyle(HubCompactButtonStyle(primary: action.role == .primary))
                     }
                 }
             }
@@ -446,9 +607,88 @@ private struct PersonalHubItemRow: View {
                 .environmentObject(client)
                 .presentationDetents([.medium, .large])
         }
+        .sheet(item: $calendarMutation) { mutation in
+            CalendarMutationSheet(mutation: mutation)
+                .environmentObject(client)
+                .presentationDetents([.large])
+        }
         .sheet(item: $sharedFile) { file in
             ActivityView(items: [file.url])
         }
+    }
+}
+
+private struct CalendarMutation: Identifiable {
+    let targetID: String
+    let draft: PersonalHubCalendarDraft
+    var id: String { targetID }
+}
+
+private struct CalendarMutationSheet: View {
+    let mutation: CalendarMutation
+    @EnvironmentObject private var client: RemoteApprovalClient
+    @Environment(\.dismiss) private var dismiss
+    @State private var title: String
+    @State private var start: Date
+    @State private var end: Date
+    @State private var link: String
+    @State private var notes: String
+
+    init(mutation: CalendarMutation) {
+        self.mutation = mutation
+        _title = State(initialValue: mutation.draft.title)
+        _start = State(initialValue: mutation.draft.start)
+        _end = State(initialValue: mutation.draft.end)
+        _link = State(initialValue: mutation.draft.joinURL?.absoluteString ?? "")
+        _notes = State(initialValue: mutation.draft.notes ?? "")
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("Event title", text: $title)
+                DatePicker("Starts", selection: $start, displayedComponents: [.date, .hourAndMinute])
+                DatePicker("Ends", selection: $end, in: start..., displayedComponents: [.date, .hourAndMinute])
+                TextField("Meeting link", text: $link)
+                    .textInputAutocapitalization(.never)
+                    .keyboardType(.URL)
+                TextField("Notes", text: $notes, axis: .vertical)
+                    .lineLimit(3...8)
+            }
+            .navigationTitle("Edit event")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Review") {
+                        guard let value = actionValue else { return }
+                        Task {
+                            await client.prepareHubAction(.init(
+                                moduleID: .calendar,
+                                actionID: "edit",
+                                targetID: mutation.targetID,
+                                value: value
+                            ))
+                            dismiss()
+                        }
+                    }
+                    .disabled(actionValue == nil)
+                }
+            }
+        }
+    }
+
+    private var actionValue: String? {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedLink = link.trimmingCharacters(in: .whitespacesAndNewlines)
+        let url = trimmedLink.isEmpty ? nil : URL(string: trimmedLink)
+        guard !trimmedTitle.isEmpty, end > start, trimmedLink.isEmpty || url != nil else { return nil }
+        return PersonalHubCalendarDraft(
+            title: trimmedTitle,
+            start: start,
+            end: end,
+            joinURL: url,
+            notes: notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        ).encodedActionValue()
     }
 }
 
@@ -471,6 +711,7 @@ private struct NoteMutation: Identifiable {
     let actionID: String
     let targetID: String
     let initialText: String
+    let seed: PersonalHubNoteDraft?
     var id: String { "\(actionID):\(targetID)" }
 }
 
@@ -487,16 +728,27 @@ private struct NoteMutationSheet: View {
 
     var body: some View {
         NavigationStack {
-            TextEditor(text: $text)
-                .font(.body)
-                .padding(12)
-                .navigationTitle(mutation.actionID == "append" ? "Append to note" : "Edit note")
+            Group {
+                if mutation.actionID == "setCategory" {
+                    Form {
+                        TextField("Work, Home, Ideas…", text: $text)
+                            .textInputAutocapitalization(.words)
+                        Text("Leave blank to clear the category.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    TextEditor(text: $text)
+                        .font(.body)
+                        .padding(12)
+                }
+            }
+                .navigationTitle(navigationTitle)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Review") {
-                            let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                            guard !value.isEmpty else { return }
+                            guard let value = actionValue else { return }
                             Task {
                                 await client.prepareHubAction(.init(
                                     moduleID: .notes,
@@ -507,9 +759,39 @@ private struct NoteMutationSheet: View {
                                 dismiss()
                             }
                         }
-                        .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .disabled(actionValue == nil)
                     }
                 }
+        }
+    }
+
+    private var navigationTitle: String {
+        switch mutation.actionID {
+        case "append": return "Append to note"
+        case "setCategory": return "Note category"
+        default: return "Edit note"
+        }
+    }
+
+    private var actionValue: String? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        switch mutation.actionID {
+        case "append":
+            return trimmed.isEmpty ? nil : trimmed
+        case "setCategory":
+            guard let seed = mutation.seed else { return nil }
+            return PersonalHubNoteDraft(
+                text: seed.text,
+                category: trimmed.isEmpty ? nil : String(trimmed.prefix(40)),
+                baseRevision: seed.baseRevision
+            ).encodedActionValue()
+        default:
+            guard !trimmed.isEmpty else { return nil }
+            return PersonalHubNoteDraft(
+                text: trimmed,
+                category: mutation.seed?.category,
+                baseRevision: mutation.seed?.baseRevision
+            ).encodedActionValue()
         }
     }
 }

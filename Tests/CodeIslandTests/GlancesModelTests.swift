@@ -61,6 +61,38 @@ final class GlancesModelTests: XCTestCase {
         XCTAssertEqual(GlancesModel.normalizedReminderTitle("  Finish the deck\n"), "Finish the deck")
     }
 
+    func testReminderOrderingSupportsTopUpAndDown() {
+        let ids = ["first", "second", "third"]
+
+        XCTAssertEqual(
+            GlancesModel.reorderedReminderIDs(ids, moving: "third", direction: "top"),
+            ["third", "first", "second"]
+        )
+        XCTAssertEqual(
+            GlancesModel.reorderedReminderIDs(ids, moving: "third", direction: "up"),
+            ["first", "third", "second"]
+        )
+        XCTAssertEqual(
+            GlancesModel.reorderedReminderIDs(ids, moving: "second", direction: "down"),
+            ["first", "third", "second"]
+        )
+    }
+
+    func testReminderOrderingClampsEdgesAndRejectsUnknownInputs() {
+        let ids = ["first", "second"]
+
+        XCTAssertEqual(
+            GlancesModel.reorderedReminderIDs(ids, moving: "first", direction: "up"),
+            ids
+        )
+        XCTAssertEqual(
+            GlancesModel.reorderedReminderIDs(ids, moving: "second", direction: "down"),
+            ids
+        )
+        XCTAssertNil(GlancesModel.reorderedReminderIDs(ids, moving: "missing", direction: "top"))
+        XCTAssertNil(GlancesModel.reorderedReminderIDs(ids, moving: "first", direction: "sideways"))
+    }
+
     func testTrustedMeetingProvidersAllowRealJoinLinks() throws {
         let links = [
             "https://us02web.zoom.us/j/123456789",

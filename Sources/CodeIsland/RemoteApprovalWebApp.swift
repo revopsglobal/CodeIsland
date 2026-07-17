@@ -138,6 +138,7 @@ enum RemoteApprovalWebApp {
         let deviceToken = localStorage.getItem(tokenKey) || '';
         let selectedMode = localStorage.getItem(modeKey) || 'auto';
         let busy = new Set();
+        let lastHubSnapshot = { value: null };
         const pair = document.getElementById('pair');
         const approvals = document.getElementById('approvals');
         const questions = document.getElementById('questions');
@@ -255,6 +256,7 @@ enum RemoteApprovalWebApp {
         }
 
         function renderHub(snapshot) {
+          lastHubSnapshot.value=snapshot;
           hubTitle.textContent=`${snapshot.resolvedMode.toUpperCase()} · ${snapshot.serverName}`;
           hubTitle.classList.remove('hidden'); modes.classList.remove('hidden');
           modes.querySelectorAll('[data-mode]').forEach(button=>button.classList.toggle('active',button.dataset.mode===selectedMode));
@@ -263,15 +265,15 @@ enum RemoteApprovalWebApp {
             ${(module.items||[]).map(item=>`<div class="hub-item"><div class="hub-item-title">${escapeHTML(item.title)}</div>${item.subtitle?`<div class="hub-item-subtitle">${escapeHTML(item.subtitle)}</div>`:''}${item.progress!==null&&item.progress!==undefined?`<progress value="${Number(item.progress)}" max="1"></progress>`:''}${renderHubActions(module.id,item.actions||[],item.id,item.detail||'')}</div>`).join('')}
             ${renderHubActions(module.id,module.actions||[],null,'')}
           </article>`).join('');
-          hub.querySelectorAll('[data-hub-action]').forEach(button=>button.addEventListener('click',()=>runHubAction(button.dataset.module,button.dataset.action,button.dataset.target||null,button.dataset.deeplink||null,button.dataset.payload||'')));
+          hub.querySelectorAll('[data-hub-action]').forEach(button=>button.addEventListener('click',()=>runHubAction(button.dataset.module,button.dataset.action,button.dataset.target||null,button.dataset.deeplink||null,button.dataset.payload||'',button.dataset.value||'')));
         }
 
         function renderHubActions(moduleID,actions,targetID,payload) {
           if(!actions.length) return '';
-          return `<div class="hub-actions">${actions.map(action=>`<button class="hub-action ${action.role==='primary'?'primary':''}" data-hub-action="1" data-module="${escapeHTML(moduleID)}" data-action="${escapeHTML(action.id)}" data-target="${escapeHTML(action.targetID||targetID||'')}" data-deeplink="${escapeHTML(action.deepLink||'')}" data-payload="${escapeHTML(payload)}">${escapeHTML(action.label)}</button>`).join('')}</div>`;
+          return `<div class="hub-actions">${actions.map(action=>`<button class="hub-action ${action.role==='primary'?'primary':''}" data-hub-action="1" data-module="${escapeHTML(moduleID)}" data-action="${escapeHTML(action.id)}" data-target="${escapeHTML(action.targetID||targetID||'')}" data-deeplink="${escapeHTML(action.deepLink||'')}" data-payload="${escapeHTML(payload)}" data-value="${escapeHTML(action.value||'')}">${escapeHTML(action.label)}</button>`).join('')}</div>`;
         }
 
-        async function runHubAction(moduleID,actionID,targetID,deepLink,payload) {
+        async function runHubAction(moduleID,actionID,targetID,deepLink,payload,actionValue) {
           if(actionID==='downloadToDevice'&&targetID) {
             try {
               const response=await fetch(`/api/hub/shelf/${encodeURIComponent(targetID)}/file`,{headers:authHeaders()});
@@ -306,10 +308,27 @@ enum RemoteApprovalWebApp {
             return;
           }
           if(deepLink) { window.location.href=deepLink; return; }
-          let value=null;
+          let value=actionValue||null;
           if((moduleID==='reminders'||moduleID==='notes')&&actionID==='add') {
             value=prompt(moduleID==='notes'?'New note':'New task'); if(!value||!value.trim()) return; value=value.trim();
-            if(moduleID==='reminders') value=JSON.stringify({title:value,due:null});
+            if(moduleID==='reminders') {
+              const reminderModule=(lastHubSnapshot.value?.modules||[]).find(module=>module.id==='reminders');
+              const lists=(reminderModule?.items||[]).filter(item=>String(item.id).startsWith('list:'));
+              let calendarID=null;
+              if(lists.length) {
+                const choices=lists.map((item,index)=>`${index+1}. ${item.title}`).join('\n');
+                const answer=prompt(`Choose list number:\n${choices}`,'1'); if(answer===null) return;
+                const index=Number(answer)-1; if(!Number.isInteger(index)||index<0||index>=lists.length) { alert('Invalid list'); return; }
+                calendarID=lists[index].detail||null;
+              }
+              const dueText=(prompt('Due time (optional: YYYY-MM-DD HH:MM)','')||'').trim();
+              let due=null;
+              if(dueText) { const parsed=new Date(dueText.replace(' ','T')); if(Number.isNaN(parsed.getTime())) { alert('Invalid due time'); return; } due=parsed.toISOString(); }
+              value=JSON.stringify({title:value,due,calendarID});
+            }
+          }
+          if(moduleID==='reminders'&&actionID==='addList') {
+            value=prompt('New Reminders list name'); if(!value||!value.trim()) return; value=value.trim();
           }
           if(moduleID==='calendar'&&actionID==='add') {
             const title=prompt('Event title'); if(!title||!title.trim()) return;
@@ -320,17 +339,44 @@ enum RemoteApprovalWebApp {
             const start=new Date(startText.replace(' ','T')); if(Number.isNaN(start.getTime())) { alert('Invalid start time'); return; }
             const minutes=Number(prompt('Duration in minutes','60')); if(!Number.isFinite(minutes)||minutes<=0) { alert('Invalid duration'); return; }
             const link=(prompt('Meeting link (optional)','')||'').trim();
-            value=JSON.stringify({title:title.trim(),start:start.toISOString(),end:new Date(start.getTime()+minutes*60000).toISOString(),joinURL:link||null,notes:null});
+            const notes=(prompt('Notes (optional)','')||'').trim();
+            value=JSON.stringify({title:title.trim(),start:start.toISOString(),end:new Date(start.getTime()+minutes*60000).toISOString(),joinURL:link||null,notes:notes||null});
+          }
+          if(moduleID==='calendar'&&actionID==='edit') {
+            let draft; try { draft=JSON.parse(actionValue||''); } catch(error) { alert('This event changed. Refresh and try again.'); return; }
+            const title=prompt('Event title',draft.title||''); if(!title||!title.trim()) return;
+            const toLocal=value=>{ const date=new Date(value); const pad=n=>String(n).padStart(2,'0'); return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`; };
+            const startText=prompt('Start (YYYY-MM-DD HH:MM)',toLocal(draft.start)); if(!startText) return;
+            const endText=prompt('End (YYYY-MM-DD HH:MM)',toLocal(draft.end)); if(!endText) return;
+            const start=new Date(startText.replace(' ','T')); const end=new Date(endText.replace(' ','T'));
+            if(Number.isNaN(start.getTime())||Number.isNaN(end.getTime())||end<=start) { alert('Invalid time range'); return; }
+            const link=(prompt('Meeting link (optional)',draft.joinURL||'')||'').trim();
+            const notes=(prompt('Notes (optional)',draft.notes||'')||'').trim();
+            value=JSON.stringify({title:title.trim(),start:start.toISOString(),end:end.toISOString(),joinURL:link||null,notes:notes||null});
           }
           if(moduleID==='teleprompter'&&actionID==='set') {
             value=prompt('Teleprompter script'); if(!value||!value.trim()) return; value=value.trim();
           }
           if(moduleID==='notes'&&(actionID==='append'||actionID==='replace')) {
-            value=prompt(actionID==='append'?'Append to note':'Edit note',actionID==='replace'?payload:'');
+            let seed;
+            if(actionID==='replace') { try { seed=JSON.parse(actionValue||''); } catch(error) { seed=null; } }
+            value=prompt(actionID==='append'?'Append to note':'Edit note',actionID==='replace'?(seed?.text||payload):'');
             if(!value||!value.trim()) return; value=value.trim();
+            if(actionID==='replace') value=JSON.stringify({text:value,category:seed?.category||null,baseRevision:seed?.baseRevision||null});
           }
-          if(moduleID==='claude'&&actionID==='ask') {
-            value=prompt('Ask Claude'); if(!value||!value.trim()) return; value=value.trim();
+          if(moduleID==='notes'&&actionID==='setCategory') {
+            let seed; try { seed=JSON.parse(actionValue||''); } catch(error) { alert('This note changed. Refresh and try again.'); return; }
+            const category=(prompt('Category (leave blank to clear)',seed.category||'')||'').trim();
+            if(category.length>40) { alert('Category is too long'); return; }
+            value=JSON.stringify({text:seed.text,category:category||null,baseRevision:seed.baseRevision});
+          }
+          if(moduleID==='claude'&&(actionID==='ask'||actionID==='plan')) {
+            value=prompt(actionID==='plan'?'Tell Claude what to propose':'Ask Claude'); if(!value||!value.trim()) return; value=value.trim();
+          }
+          if(moduleID==='audio'&&actionID==='setVolume') {
+            const requested=prompt('Mac output volume (0–100)',actionValue||'50'); if(requested===null) return;
+            const volume=Number(requested); if(!Number.isInteger(volume)||volume<0||volume>100) { alert('Choose a whole number from 0 to 100'); return; }
+            value=String(volume);
           }
           try {
             const preparedResponse=await fetch('/api/hub/actions/prepare',{method:'POST',headers:{...authHeaders(),'Content-Type':'application/json'},body:JSON.stringify({intent:{moduleID,actionID,targetID,value}})});

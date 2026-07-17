@@ -125,9 +125,14 @@ final class PersonalHubService {
 
         case (.notes, "replace"):
             guard let targetID = intent.targetID,
-                  let value = intent.value,
-                  data.replaceNote(id: targetID, rawText: value) else {
-                return .failure(.invalid("Note is no longer available"))
+                  let draft = PersonalHubNoteDraft.decodeActionValue(intent.value),
+                  data.replaceNote(
+                    id: targetID,
+                    rawText: draft.text,
+                    expectedRevision: draft.baseRevision,
+                    category: draft.category
+                  ) else {
+                return .failure(.invalid("The note changed before this edit could be applied. Refresh and review it again."))
             }
             return .success(.init(executed: true, message: "Note updated"))
 
@@ -138,6 +143,33 @@ final class PersonalHubService {
                 return .failure(.invalid("Note is no longer available"))
             }
             return .success(.init(executed: true, message: "Text appended to note"))
+
+        case (.notes, "setCategory"):
+            guard let targetID = intent.targetID,
+                  let draft = PersonalHubNoteDraft.decodeActionValue(intent.value),
+                  let revision = draft.baseRevision,
+                  data.setNoteCategory(id: targetID, rawCategory: draft.category, expectedRevision: revision) else {
+                return .failure(.invalid("The note changed before its category could be updated. Refresh and try again."))
+            }
+            return .success(.init(executed: true, message: "Note category updated"))
+
+        case (.notes, "undo"):
+            guard let targetID = intent.targetID, data.undoNote(id: targetID) else {
+                return .failure(.invalid("No note change is available to undo"))
+            }
+            return .success(.init(executed: true, message: "Last note change undone"))
+
+        case (.notes, "toggleChecklist"):
+            guard let targetID = intent.targetID,
+                  let mutation = PersonalHubChecklistMutation.decodeActionValue(intent.value),
+                  data.toggleChecklistLine(
+                    id: targetID,
+                    lineIndex: mutation.lineIndex,
+                    expectedRevision: mutation.baseRevision
+                  ) else {
+                return .failure(.invalid("The checklist changed. Refresh and review it again."))
+            }
+            return .success(.init(executed: true, message: "Checklist updated"))
 
         case (.teleprompter, "set"):
             guard let value = intent.value, data.setTeleprompterText(value) else {
@@ -150,6 +182,41 @@ final class PersonalHubService {
                 return .failure(.failed(data.claudeError ?? "Claude is already answering another question"))
             }
             return .success(.init(executed: true, message: "Question sent to Claude on the Mac"))
+
+        case (.claude, "plan"):
+            guard let value = intent.value, data.planClaudeActions(value) else {
+                return .failure(.failed(data.claudeError ?? "Claude is already working"))
+            }
+            return .success(.init(executed: true, message: "Claude is preparing reviewable actions"))
+
+        case (.claude, "applyProposal"):
+            guard let targetID = intent.targetID,
+                  let proposal = data.claudeProposals.first(where: { $0.id == targetID }) else {
+                return .failure(.invalid("This Claude proposal is no longer available"))
+            }
+            let applied: Bool
+            switch proposal.kind {
+            case .reminder:
+                applied = glances.addReminder(title: proposal.title, due: proposal.due)
+            case .note:
+                applied = data.addNote(proposal.text ?? proposal.title)
+            case .calendar:
+                guard let start = proposal.start, let end = proposal.end else {
+                    return .failure(.invalid("This calendar proposal is incomplete"))
+                }
+                applied = glances.addEvent(.init(
+                    title: proposal.title,
+                    start: start,
+                    end: end,
+                    joinURL: proposal.joinURL,
+                    notes: proposal.notes
+                ))
+            }
+            guard applied else {
+                return .failure(.failed("The proposed \(proposal.summary.lowercased()) could not be created"))
+            }
+            data.removeClaudeProposal(id: targetID)
+            return .success(.init(executed: true, message: "\(proposal.summary) created"))
 
         case (.shelf, "remove"):
             guard let targetID = intent.targetID, data.removeShelfEntry(id: targetID) else {
@@ -164,8 +231,9 @@ final class PersonalHubService {
             NSWorkspace.shared.activateFileViewerSelecting([url])
             return .success(.init(executed: true, message: "Shelf file revealed on the Mac"))
 
-        case (.nowPlaying, "playPause"), (.nowPlaying, "next"), (.nowPlaying, "previous"):
-            guard data.runMediaCommand(intent.actionID) else {
+        case (.nowPlaying, "playPause"), (.nowPlaying, "next"), (.nowPlaying, "previous"),
+             (.nowPlaying, "seekBack"), (.nowPlaying, "seekForward"), (.nowPlaying, "playQueueItem"):
+            guard data.runMediaCommand(intent.actionID, targetID: intent.targetID) else {
                 return .failure(.failed("Could not control the current media app"))
             }
             return .success(.init(executed: true, message: "Media control sent"))
@@ -194,6 +262,21 @@ final class PersonalHubService {
                 executed: true,
                 message: "Default \(intent.actionID == "setInput" ? "input" : "output") set to \(targetID)"
             ))
+
+        case (.audio, "volumeDown"), (.audio, "volumeUp"):
+            guard data.changeOutputVolume(by: intent.actionID == "volumeDown" ? -10 : 10) else {
+                return .failure(.failed("Could not change Mac output volume"))
+            }
+            return .success(.init(executed: true, message: "Mac output volume changed"))
+
+        case (.audio, "setVolume"):
+            guard let value = intent.value,
+                  let volume = Int(value),
+                  (0...100).contains(volume),
+                  data.setOutputVolume(volume) else {
+                return .failure(.failed("Could not set Mac output volume"))
+            }
+            return .success(.init(executed: true, message: "Mac output volume set to \(volume)%"))
 
         case (.quickToggles, "lockMac"):
             let script = #"tell application "System Events" to keystroke "q" using {control down, command down}"#
@@ -241,10 +324,22 @@ final class PersonalHubService {
 
         case (.reminders, "add"):
             guard let draft = PersonalHubReminderDraft.decodeActionValue(intent.value),
-                  glances.addReminder(title: draft.title, due: draft.due) else {
+                  glances.addReminder(title: draft.title, due: draft.due, calendarID: draft.calendarID) else {
                 return .failure(.failed(glances.reminderMutationError ?? "Could not add the task"))
             }
             return .success(.init(executed: true, message: "Task added"))
+
+        case (.reminders, "addList"):
+            guard let value = intent.value, glances.createReminderList(title: value) else {
+                return .failure(.failed(glances.reminderMutationError ?? "Could not create the list"))
+            }
+            return .success(.init(executed: true, message: "Reminders list created"))
+
+        case (.reminders, "deleteList"):
+            guard let targetID = intent.targetID, glances.deleteReminderList(id: targetID) else {
+                return .failure(.failed(glances.reminderMutationError ?? "Could not delete the list"))
+            }
+            return .success(.init(executed: true, message: "Reminders list deleted"))
 
         case (.reminders, "complete"):
             guard let targetID = intent.targetID,
@@ -255,12 +350,36 @@ final class PersonalHubService {
 
         case (.reminders, "delete"):
             guard let targetID = intent.targetID,
-                  let reminder = glances.reminders.first(where: { $0.id == targetID })
+                  let reminder = (glances.reminders + glances.completedReminders)
+                    .first(where: { $0.id == targetID })
             else { return .failure(.invalid("Task is no longer available")) }
             guard glances.deleteReminder(reminder) else {
                 return .failure(.failed(glances.reminderMutationError ?? "Could not delete the task"))
             }
             return .success(.init(executed: true, message: "Task deleted"))
+
+        case (.reminders, "restore"):
+            guard let targetID = intent.targetID,
+                  let reminder = glances.completedReminders.first(where: { $0.id == targetID }),
+                  glances.restoreReminder(reminder) else {
+                return .failure(.failed(glances.reminderMutationError ?? "Could not restore the task"))
+            }
+            return .success(.init(executed: true, message: "Task restored"))
+
+        case (.reminders, "moveTop"), (.reminders, "moveUp"), (.reminders, "moveDown"):
+            guard let targetID = intent.targetID else {
+                return .failure(.invalid("Task is no longer available"))
+            }
+            let direction: String
+            switch intent.actionID {
+            case "moveTop": direction = "top"
+            case "moveUp": direction = "up"
+            default: direction = "down"
+            }
+            guard glances.moveReminder(id: targetID, direction: direction) else {
+                return .failure(.invalid("Task is no longer available"))
+            }
+            return .success(.init(executed: true, message: "Task order updated"))
 
         case (.calendar, "add"):
             guard let draft = PersonalHubCalendarDraft.decodeActionValue(intent.value),
@@ -274,6 +393,14 @@ final class PersonalHubService {
                 return .failure(.failed(glances.calendarMutationError ?? "Could not delete the event"))
             }
             return .success(.init(executed: true, message: "Event deleted"))
+
+        case (.calendar, "edit"):
+            guard let targetID = intent.targetID,
+                  let draft = PersonalHubCalendarDraft.decodeActionValue(intent.value),
+                  glances.updateEvent(id: targetID, draft: draft) else {
+                return .failure(.failed(glances.calendarMutationError ?? "Could not update the event"))
+            }
+            return .success(.init(executed: true, message: "Event updated"))
 
         case (.calendar, "openOnMac"):
             guard let targetID = intent.targetID,
@@ -334,13 +461,48 @@ final class PersonalHubService {
             guard let targetID = intent.targetID,
                   let note = data.notes.first(where: { $0.id == targetID })
             else { return .failure(.invalid("Note is no longer available")) }
-            let value = intent.value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let draft = intent.actionID == "replace"
+                ? PersonalHubNoteDraft.decodeActionValue(intent.value)
+                : intent.value.map { PersonalHubNoteDraft(text: $0) }
+            let value = draft?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             guard !value.isEmpty else { return .failure(.invalid("Enter note text")) }
             let limit = intent.actionID == "append" ? max(20_000 - note.text.count - 1, 0) : 20_000
             guard value.count <= limit else { return .failure(.invalid("Note is too long")) }
+            if let baseRevision = draft?.baseRevision, baseRevision != note.currentRevision {
+                return .failure(.invalid("This note has a newer revision. Refresh before replacing it."))
+            }
             return .success(intent.actionID == "append"
                 ? "Append text to “\(note.title)”"
                 : "Replace the contents of “\(note.title)”")
+
+        case (.notes, "setCategory"):
+            guard let targetID = intent.targetID,
+                  let note = data.notes.first(where: { $0.id == targetID }),
+                  let draft = PersonalHubNoteDraft.decodeActionValue(intent.value),
+                  draft.baseRevision == note.currentRevision else {
+                return .failure(.invalid("This note has a newer revision. Refresh before changing its category."))
+            }
+            let category = draft.category?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard category.count <= 40 else { return .failure(.invalid("Category is too long")) }
+            return .success(category.isEmpty
+                ? "Clear the category from “\(note.title)”"
+                : "Set “\(note.title)” category to “\(category)”")
+
+        case (.notes, "undo"):
+            guard let targetID = intent.targetID,
+                  let note = data.notes.first(where: { $0.id == targetID }),
+                  note.canUndo else { return .failure(.invalid("No note change is available to undo")) }
+            return .success("Undo the last change to “\(note.title)”")
+
+        case (.notes, "toggleChecklist"):
+            guard let targetID = intent.targetID,
+                  let note = data.notes.first(where: { $0.id == targetID }),
+                  let mutation = PersonalHubChecklistMutation.decodeActionValue(intent.value),
+                  mutation.baseRevision == note.currentRevision,
+                  let line = note.checklist.first(where: { $0.lineIndex == mutation.lineIndex }) else {
+                return .failure(.invalid("This checklist changed. Refresh before updating it."))
+            }
+            return .success("Mark “\(line.title)” as \(line.isCompleted ? "not done" : "done")")
 
         case (.teleprompter, "set"):
             let value = intent.value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -354,6 +516,30 @@ final class PersonalHubService {
             guard !value.isEmpty else { return .failure(.invalid("Enter a question")) }
             guard value.count <= 20_000 else { return .failure(.invalid("Question is too long")) }
             return .success("Ask Claude: “\(value.prefix(160))\(value.count > 160 ? "…" : "")”")
+
+        case (.claude, "plan"):
+            let value = intent.value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !data.claudeBusy else { return .failure(.invalid("Claude is already working")) }
+            guard !value.isEmpty else { return .failure(.invalid("Describe what Claude should propose")) }
+            guard value.count <= 20_000 else { return .failure(.invalid("Request is too long")) }
+            return .success("Ask Claude to propose CodeIsland actions for: “\(value.prefix(160))\(value.count > 160 ? "…" : "")”")
+
+        case (.claude, "applyProposal"):
+            guard let targetID = intent.targetID,
+                  let proposal = data.claudeProposals.first(where: { $0.id == targetID }) else {
+                return .failure(.invalid("This Claude proposal is no longer available"))
+            }
+            switch proposal.kind {
+            case .reminder:
+                return .success("Create \(proposal.due == nil ? "task" : "reminder") “\(proposal.title)”")
+            case .note:
+                return .success("Create note “\(proposal.title)”")
+            case .calendar:
+                guard let start = proposal.start, let end = proposal.end else {
+                    return .failure(.invalid("This calendar proposal is incomplete"))
+                }
+                return .success("Add “\(proposal.title)” from \(Self.eventDate(start)) to \(Self.eventDate(end))")
+            }
 
         case (.shelf, "remove"):
             guard let targetID = intent.targetID,
@@ -380,6 +566,21 @@ final class PersonalHubService {
             guard data.nowPlaying != nil else { return .failure(.invalid("Nothing is playing")) }
             return .success("Return to the previous track")
 
+        case (.nowPlaying, "seekBack"):
+            guard data.nowPlaying?.position != nil else { return .failure(.invalid("Playback position is unavailable")) }
+            return .success("Rewind the current track 15 seconds")
+
+        case (.nowPlaying, "seekForward"):
+            guard data.nowPlaying?.position != nil else { return .failure(.invalid("Playback position is unavailable")) }
+            return .success("Advance the current track 15 seconds")
+
+        case (.nowPlaying, "playQueueItem"):
+            guard let targetID = intent.targetID,
+                  let item = data.nowPlaying?.queue.first(where: { $0.id == targetID }) else {
+                return .failure(.invalid("That queued track is no longer available"))
+            }
+            return .success("Play “\(item.title)” next from the current Music queue")
+
         case (.system, "refresh"):
             return .success("Refresh system readings")
 
@@ -395,6 +596,17 @@ final class PersonalHubService {
                 return .failure(.invalid("That device does not support the selected audio role"))
             }
             return .success("Set “\(device.name)” as the Mac's default \(input ? "input" : "output")")
+
+        case (.audio, "volumeDown"), (.audio, "volumeUp"):
+            let current = data.quickSettings?.outputVolume
+            let target = current.map { min(max($0 + (intent.actionID == "volumeDown" ? -10 : 10), 0), 100) }
+            return .success(target.map { "Set Mac output volume to \($0)%" } ?? "Change Mac output volume by 10%")
+
+        case (.audio, "setVolume"):
+            guard let value = intent.value, let volume = Int(value), (0...100).contains(volume) else {
+                return .failure(.invalid("Choose an output volume from 0 to 100"))
+            }
+            return .success("Set Mac output volume to \(volume)%")
 
         case (.quickToggles, "lockMac"):
             return .success("Lock this Mac now")
@@ -433,8 +645,37 @@ final class PersonalHubService {
             }
             guard !value.isEmpty else { return .failure(.invalid("Enter a task")) }
             guard value.count <= 500 else { return .failure(.invalid("Task is too long")) }
+            if let calendarID = draft.calendarID,
+               !glances.reminderCalendars.contains(where: { $0.id == calendarID && $0.isWritable }) {
+                return .failure(.invalid("That Reminders list is no longer writable"))
+            }
             let due = draft.due.map { " due \(Self.actionDate($0))" } ?? ""
-            return .success("Add “\(value)” to the selected Reminders list\(due)")
+            let list = draft.calendarID.flatMap { selected in
+                glances.reminderCalendars.first(where: { $0.id == selected })?.title
+            } ?? "the selected Reminders list"
+            return .success("Add “\(value)” to \(list)\(due)")
+
+        case (.reminders, "addList"):
+            let value = intent.value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard glances.remindersAuthorized else {
+                return .failure(.invalid("Reminders access is required on the Mac"))
+            }
+            guard !value.isEmpty, value.count <= 100 else {
+                return .failure(.invalid("Enter a list name"))
+            }
+            guard !glances.reminderCalendars.contains(where: {
+                $0.title.localizedCaseInsensitiveCompare(value) == .orderedSame
+            }) else { return .failure(.invalid("A list with that name already exists")) }
+            return .success("Create Reminders list “\(value)”")
+
+        case (.reminders, "deleteList"):
+            guard let targetID = intent.targetID,
+                  let calendar = glances.reminderCalendars.first(where: { $0.id == targetID })
+            else { return .failure(.invalid("List is no longer available")) }
+            guard !calendar.isDefault, calendar.isWritable else {
+                return .failure(.invalid("The default or a read-only list cannot be deleted"))
+            }
+            return .success("Delete Reminders list “\(calendar.title)” and its tasks")
 
         case (.reminders, "complete"):
             guard let targetID = intent.targetID,
@@ -444,9 +685,28 @@ final class PersonalHubService {
 
         case (.reminders, "delete"):
             guard let targetID = intent.targetID,
-                  let reminder = glances.reminders.first(where: { $0.id == targetID })
+                  let reminder = (glances.reminders + glances.completedReminders)
+                    .first(where: { $0.id == targetID })
             else { return .failure(.invalid("Task is no longer available")) }
             return .success("Delete task “\(reminder.title)”")
+
+        case (.reminders, "restore"):
+            guard let targetID = intent.targetID,
+                  let reminder = glances.completedReminders.first(where: { $0.id == targetID })
+            else { return .failure(.invalid("Completed task is no longer available")) }
+            return .success("Restore “\(reminder.title)” to open tasks")
+
+        case (.reminders, "moveTop"), (.reminders, "moveUp"), (.reminders, "moveDown"):
+            guard let targetID = intent.targetID,
+                  let reminder = glances.reminders.first(where: { $0.id == targetID })
+            else { return .failure(.invalid("Task is no longer available")) }
+            let destination: String
+            switch intent.actionID {
+            case "moveTop": destination = "the top"
+            case "moveUp": destination = "up"
+            default: destination = "down"
+            }
+            return .success("Move “\(reminder.title)” \(destination)")
 
         case (.calendar, "add"):
             guard glances.calendarAuthorized else {
@@ -471,7 +731,24 @@ final class PersonalHubService {
             guard let targetID = intent.targetID,
                   let event = glances.upcomingEvents.first(where: { $0.id == targetID })
             else { return .failure(.invalid("Event is no longer available")) }
+            guard event.isEditable else { return .failure(.invalid("This calendar is read-only")) }
             return .success("Delete event “\(event.title)”")
+
+        case (.calendar, "edit"):
+            guard let targetID = intent.targetID,
+                  let event = glances.upcomingEvents.first(where: { $0.id == targetID }),
+                  event.isEditable else { return .failure(.invalid("Event is no longer editable")) }
+            guard let draft = PersonalHubCalendarDraft.decodeActionValue(intent.value) else {
+                return .failure(.invalid("Enter an event title and time"))
+            }
+            let title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !title.isEmpty, title.count <= 500, draft.end > draft.start else {
+                return .failure(.invalid("Enter a title and an end time after the start"))
+            }
+            if let url = draft.joinURL, !GlancesModel.isTrustedJoinURL(url) {
+                return .failure(.invalid("Use a supported HTTPS meeting link"))
+            }
+            return .success("Update “\(event.title)” to “\(title)” on \(Self.actionDate(draft.start))")
 
         case (.calendar, "openOnMac"):
             guard let targetID = intent.targetID,
@@ -525,32 +802,59 @@ final class PersonalHubService {
                 let itemActions: [PersonalHubAction] = media.lyrics == nil ? [] : [
                     .init(id: "copyToDevice", label: "Copy lyrics", symbol: "text.quote")
                 ]
+                let currentItem = PersonalHubItem(
+                    id: "current",
+                    title: media.title,
+                    subtitle: media.artist,
+                    detail: media.lyrics ?? media.album,
+                    symbol: media.isPlaying ? "speaker.wave.2.fill" : "pause.fill",
+                    progress: progress,
+                    actions: itemActions
+                )
+                let queueItems = media.queue.map { queued in
+                    PersonalHubItem(
+                        id: "queue:\(queued.id)",
+                        title: queued.title,
+                        subtitle: [queued.artist, queued.album].filter { !$0.isEmpty }.joined(separator: " · "),
+                        symbol: "text.line.first.and.arrowtriangle.forward",
+                        actions: [
+                            .init(
+                                id: "playQueueItem",
+                                label: "Play",
+                                symbol: "play.fill",
+                                targetID: queued.id
+                            )
+                        ]
+                    )
+                }
+                var mediaActions: [PersonalHubAction] = [
+                    .init(id: "previous", label: "Previous", symbol: "backward.fill")
+                ]
+                if media.position != nil {
+                    mediaActions.append(.init(id: "seekBack", label: "−15s", symbol: "gobackward.15"))
+                }
+                mediaActions.append(.init(
+                    id: "playPause",
+                    label: media.isPlaying ? "Pause" : "Play",
+                    symbol: media.isPlaying ? "pause.fill" : "play.fill",
+                    role: .primary
+                ))
+                if media.position != nil {
+                    mediaActions.append(.init(id: "seekForward", label: "+15s", symbol: "goforward.15"))
+                }
+                mediaActions.append(.init(id: "next", label: "Next", symbol: "forward.fill"))
                 return .init(
                     id: id,
                     availability: .ready,
                     summary: media.title,
-                    detail: [media.artist, media.album, media.appName].filter { !$0.isEmpty }.joined(separator: " · "),
-                    items: [
-                        .init(
-                            id: "current",
-                            title: media.title,
-                            subtitle: media.artist,
-                            detail: media.lyrics ?? media.album,
-                            symbol: media.isPlaying ? "speaker.wave.2.fill" : "pause.fill",
-                            progress: progress,
-                            actions: itemActions
-                        )
-                    ],
-                    actions: [
-                        .init(id: "previous", label: "Previous", symbol: "backward.fill"),
-                        .init(
-                            id: "playPause",
-                            label: media.isPlaying ? "Pause" : "Play",
-                            symbol: media.isPlaying ? "pause.fill" : "play.fill",
-                            role: .primary
-                        ),
-                        .init(id: "next", label: "Next", symbol: "forward.fill")
-                    ]
+                    detail: [
+                        media.artist,
+                        media.album,
+                        media.appName,
+                        media.appName == "Spotify" ? "Spotify does not expose its queue to macOS automation" : nil
+                    ].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "),
+                    items: [currentItem] + queueItems,
+                    actions: mediaActions
                 )
             }
             return .init(
@@ -591,25 +895,84 @@ final class PersonalHubService {
             )
 
         case .notes:
+            let noteItems = data.notes.prefix(20).flatMap { note -> [PersonalHubItem] in
+                let editorSeed = PersonalHubNoteDraft(
+                    text: note.text,
+                    category: note.category,
+                    baseRevision: note.currentRevision
+                ).encodedActionValue()
+                var actions: [PersonalHubAction] = [
+                    .init(id: "copyToDevice", label: "Copy here", symbol: "doc.on.doc"),
+                    .init(id: "append", label: "Append", symbol: "text.append", targetID: note.id),
+                    .init(
+                        id: "replace",
+                        label: "Edit",
+                        symbol: "square.and.pencil",
+                        targetID: note.id,
+                        value: editorSeed
+                    ),
+                    .init(
+                        id: "setCategory",
+                        label: "Category",
+                        symbol: "tag",
+                        targetID: note.id,
+                        value: editorSeed
+                    )
+                ]
+                if note.canUndo {
+                    actions.append(.init(
+                        id: "undo",
+                        label: "Undo",
+                        symbol: "arrow.uturn.backward",
+                        targetID: note.id
+                    ))
+                }
+                actions.append(.init(
+                    id: "delete",
+                    label: "Delete",
+                    symbol: "trash",
+                    role: .destructive,
+                    targetID: note.id
+                ))
+                let noteItem = PersonalHubItem(
+                    id: note.id,
+                    title: note.title,
+                    subtitle: [note.category, Self.relativeDate(note.updatedAt), "rev \(note.currentRevision)"]
+                        .compactMap { $0 }
+                        .joined(separator: " · "),
+                    detail: note.text,
+                    symbol: "note.text",
+                    actions: actions
+                )
+                let checklistItems = note.checklist.map { line in
+                    PersonalHubItem(
+                        id: "check:\(note.id):\(line.lineIndex)",
+                        title: line.title,
+                        subtitle: "Checklist · \(note.title)",
+                        symbol: line.isCompleted ? "checkmark.square.fill" : "square",
+                        actions: [
+                            .init(
+                                id: "toggleChecklist",
+                                label: line.isCompleted ? "Reopen" : "Complete",
+                                symbol: line.isCompleted ? "square" : "checkmark.square.fill",
+                                role: line.isCompleted ? .normal : .primary,
+                                targetID: note.id,
+                                value: PersonalHubChecklistMutation(
+                                    lineIndex: line.lineIndex,
+                                    baseRevision: note.currentRevision
+                                ).encodedActionValue()
+                            )
+                        ]
+                    )
+                }
+                return [noteItem] + checklistItems
+            }
             return .init(
                 id: id,
                 availability: .ready,
                 summary: data.notes.isEmpty ? "No notes yet" : "\(data.notes.count) notes",
-                items: data.notes.prefix(20).map { note in
-                    .init(
-                        id: note.id,
-                        title: note.title,
-                        subtitle: Self.relativeDate(note.updatedAt),
-                        detail: note.text,
-                        symbol: "note.text",
-                        actions: [
-                            .init(id: "copyToDevice", label: "Copy here", symbol: "doc.on.doc"),
-                            .init(id: "append", label: "Append", symbol: "text.append", targetID: note.id),
-                            .init(id: "replace", label: "Edit", symbol: "square.and.pencil", targetID: note.id),
-                            .init(id: "delete", label: "Delete", symbol: "trash", role: .destructive, targetID: note.id)
-                        ]
-                    )
-                },
+                detail: "Categories · checklists · 20-step undo · revision-safe edits",
+                items: noteItems,
                 actions: [.init(id: "add", label: "Add note", symbol: "plus", role: .primary)]
             )
 
@@ -659,13 +1022,29 @@ final class PersonalHubService {
                             targetID: event.id
                         ))
                     }
-                    actions.append(.init(
-                        id: "delete",
-                        label: "Delete",
-                        symbol: "trash",
-                        role: .destructive,
-                        targetID: event.id
-                    ))
+                    if event.isEditable {
+                        let draft = PersonalHubCalendarDraft(
+                            title: event.title,
+                            start: event.start,
+                            end: event.end,
+                            joinURL: event.joinURL,
+                            notes: event.notes
+                        )
+                        actions.append(.init(
+                            id: "edit",
+                            label: "Edit",
+                            symbol: "square.and.pencil",
+                            targetID: event.id,
+                            value: draft.encodedActionValue()
+                        ))
+                        actions.append(.init(
+                            id: "delete",
+                            label: "Delete",
+                            symbol: "trash",
+                            role: .destructive,
+                            targetID: event.id
+                        ))
+                    }
                     return .init(
                         id: event.id,
                         title: event.title,
@@ -685,40 +1064,79 @@ final class PersonalHubService {
                     summary: "Reminders access is required on the Mac"
                 )
             }
+            let listItems: [PersonalHubItem] = glances.reminderCalendars.map { calendar in
+                var actions: [PersonalHubAction] = []
+                if calendar.isWritable, !calendar.isDefault {
+                    actions.append(.init(
+                        id: "deleteList",
+                        label: "Delete list",
+                        symbol: "trash",
+                        role: .destructive,
+                        targetID: calendar.id
+                    ))
+                }
+                return .init(
+                    id: "list:\(calendar.id)",
+                    title: calendar.title,
+                    subtitle: [calendar.sourceTitle, glances.selectedReminderCalendarIDs.contains(calendar.id) ? "Shown" : nil]
+                        .compactMap { $0 }
+                        .joined(separator: " · "),
+                    detail: calendar.id,
+                    symbol: "list.bullet",
+                    actions: actions
+                )
+            }
+            let openItems: [PersonalHubItem] = glances.reminders.enumerated().map { index, reminder in
+                var actions: [PersonalHubAction] = [
+                    .init(id: "complete", label: "Complete", symbol: "checkmark.circle.fill", role: .primary, targetID: reminder.id),
+                    .init(id: "copyToDevice", label: "Copy", symbol: "doc.on.doc", targetID: reminder.id),
+                ]
+                if index > 0 {
+                    actions.append(.init(id: "moveUp", label: "Up", symbol: "arrow.up", targetID: reminder.id))
+                    actions.append(.init(id: "moveTop", label: "Top", symbol: "arrow.up.to.line", targetID: reminder.id))
+                }
+                if index + 1 < glances.reminders.count {
+                    actions.append(.init(id: "moveDown", label: "Down", symbol: "arrow.down", targetID: reminder.id))
+                }
+                actions.append(.init(id: "delete", label: "Delete", symbol: "trash", role: .destructive, targetID: reminder.id))
+                return .init(
+                    id: reminder.id,
+                    title: reminder.title,
+                    subtitle: [reminder.due.map(Self.taskDue), reminder.calendarTitle]
+                        .compactMap { $0 }
+                        .joined(separator: " · "),
+                    detail: reminder.title,
+                    symbol: "circle",
+                    actions: actions
+                )
+            }
+            let completedItems: [PersonalHubItem] = glances.completedReminders.prefix(8).map { reminder in
+                .init(
+                    id: reminder.id,
+                    title: reminder.title,
+                    subtitle: ["Completed", reminder.completionDate.map(Self.taskCompleted), reminder.calendarTitle]
+                        .compactMap { $0 }
+                        .joined(separator: " · "),
+                    detail: reminder.title,
+                    symbol: "checkmark.circle.fill",
+                    actions: [
+                        .init(id: "restore", label: "Restore", symbol: "arrow.uturn.backward", role: .primary, targetID: reminder.id),
+                        .init(id: "copyToDevice", label: "Copy", symbol: "doc.on.doc", targetID: reminder.id),
+                        .init(id: "delete", label: "Delete", symbol: "trash", role: .destructive, targetID: reminder.id),
+                    ]
+                )
+            }
             return .init(
                 id: id,
                 availability: .ready,
                 summary: glances.reminders.isEmpty
                     ? "No open tasks in the selected lists"
                     : "\(glances.reminders.count) open",
-                items: glances.reminders.map { reminder in
-                    .init(
-                        id: reminder.id,
-                        title: reminder.title,
-                        subtitle: [reminder.due.map(Self.taskDue), reminder.calendarTitle]
-                            .compactMap { $0 }
-                            .joined(separator: " · "),
-                        symbol: "circle",
-                        actions: [
-                            .init(
-                                id: "complete",
-                                label: "Complete",
-                                symbol: "checkmark.circle.fill",
-                                role: .primary,
-                                targetID: reminder.id
-                            ),
-                            .init(
-                                id: "delete",
-                                label: "Delete",
-                                symbol: "trash",
-                                role: .destructive,
-                                targetID: reminder.id
-                            )
-                        ]
-                    )
-                },
+                detail: "\(glances.reminderCalendars.count) lists · \(glances.completedReminders.count) recently completed",
+                items: listItems + openItems + completedItems,
                 actions: [
-                    .init(id: "add", label: "Add task", symbol: "plus", role: .primary)
+                    .init(id: "add", label: "Add task", symbol: "plus", role: .primary),
+                    .init(id: "addList", label: "New list", symbol: "list.bullet.badge.plus")
                 ]
             )
 
@@ -847,12 +1265,13 @@ final class PersonalHubService {
         case .audio:
             let devices = data.audioDevices.filter { $0.isInput || $0.isOutput }
             let active = devices.filter { $0.isDefaultInput || $0.isDefaultOutput }
+            let volume = data.quickSettings?.outputVolume
             return .init(
                 id: id,
                 availability: devices.isEmpty ? .loading : .ready,
                 summary: active.isEmpty
-                    ? "\(devices.count) audio devices"
-                    : active.map(\.name).joined(separator: " · "),
+                    ? ["\(devices.count) audio devices", volume.map { "Volume \($0)%" }].compactMap { $0 }.joined(separator: " · ")
+                    : [active.map(\.name).joined(separator: " · "), volume.map { "Volume \($0)%" }].compactMap { $0 }.joined(separator: " · "),
                 items: devices.prefix(12).map { device in
                     let roles = [
                         device.isDefaultInput ? "Default input" : nil,
@@ -886,7 +1305,12 @@ final class PersonalHubService {
                         actions: actions
                     )
                 },
-                actions: [.init(id: "openSettings", label: "Open Sound Settings", symbol: "slider.horizontal.3")]
+                actions: [
+                    .init(id: "volumeDown", label: "Volume −10", symbol: "speaker.minus"),
+                    .init(id: "setVolume", label: "Set volume", symbol: "slider.horizontal.3", value: volume.map(String.init)),
+                    .init(id: "volumeUp", label: "Volume +10", symbol: "speaker.plus"),
+                    .init(id: "openSettings", label: "Open Sound Settings", symbol: "gearshape")
+                ]
             )
 
         case .quickToggles:
@@ -1014,13 +1438,43 @@ final class PersonalHubService {
                     actions: [.init(id: "copyToDevice", label: "Copy", symbol: "doc.on.doc")]
                 ))
             }
+            items.append(contentsOf: data.claudeProposals.map { proposal in
+                let timing: String?
+                switch proposal.kind {
+                case .reminder:
+                    timing = proposal.due.map { "Due \(Self.eventDate($0))" }
+                case .calendar:
+                    timing = proposal.start.map(Self.eventDate)
+                case .note:
+                    timing = nil
+                }
+                return .init(
+                    id: "proposal:\(proposal.id)",
+                    title: proposal.title,
+                    subtitle: ["Claude proposal · \(proposal.summary)", timing].compactMap { $0 }.joined(separator: " · "),
+                    detail: proposal.text ?? proposal.notes,
+                    symbol: "checklist",
+                    actions: [
+                        .init(
+                            id: "applyProposal",
+                            label: "Review",
+                            symbol: "checkmark.seal.fill",
+                            role: .primary,
+                            targetID: proposal.id
+                        )
+                    ]
+                )
+            })
             return .init(
                 id: id,
                 availability: data.claudeBusy ? .loading : .ready,
-                summary: data.claudeBusy ? "Claude is answering" : (data.claudeError ?? "Ask your authenticated Claude Code"),
-                detail: "Read-only: tools are disabled; actions stay in CodeIsland's reviewed controls",
+                summary: data.claudeBusy ? "Claude is working" : (data.claudeError ?? "Ask or prepare reviewed actions with your Claude Code login"),
+                detail: "Ask is read-only. Do only creates proposals; every write still requires CodeIsland Review and confirmation.",
                 items: items,
-                actions: [.init(id: "ask", label: "Ask Claude", symbol: "sparkles", role: .primary)]
+                actions: [
+                    .init(id: "ask", label: "Ask", symbol: "sparkles"),
+                    .init(id: "plan", label: "Do", symbol: "checklist", role: .primary)
+                ]
             )
 
         default:
@@ -1041,10 +1495,23 @@ final class PersonalHubService {
         return formatter.string(from: event.start)
     }
 
+    private static func eventDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+
     private static func taskDue(_ date: Date) -> String {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .short
         return "Due \(formatter.localizedString(for: date, relativeTo: Date()))"
+    }
+
+    private static func taskCompleted(_ date: Date) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        return formatter.localizedString(for: date, relativeTo: Date())
     }
 
     private static func actionDate(_ date: Date) -> String {

@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		00C27C14DC7CD3479D678422 /* Speech.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D4056DAB08B8F703E6F5C71B /* Speech.framework */; };
 		0190F180CA1516FF19DE1D09 /* CodeIslandActivityState+Payload.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9F350CB2292BF84421D9BD4 /* CodeIslandActivityState+Payload.swift */; };
 		066BAB67FFF6698F1AA3A05A /* MascotMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77D70D07D1A0B8E65A8B9C66 /* MascotMotion.swift */; };
 		136C1DFA4E4F80076A794410 /* QwenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4978BAC1D31033F1CFFA542C /* QwenView.swift */; };
@@ -152,6 +153,7 @@
 		CCDD1EEEF11FA911FA8E42BF /* WatchStateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchStateStore.swift; sourceTree = "<group>"; };
 		D22D14326F1AEA2E097F595F /* RemoteApprovalProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteApprovalProtocol.swift; sourceTree = "<group>"; };
 		D2A2C29C635BC87419FDED7F /* CompanionMascotView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionMascotView.swift; sourceTree = "<group>"; };
+		D4056DAB08B8F703E6F5C71B /* Speech.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Speech.framework; path = System/Library/Frameworks/Speech.framework; sourceTree = SDKROOT; };
 		D4F96960164D8A1BDE5A13B9 /* CodeIslandCompanion.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CodeIslandCompanion.entitlements; sourceTree = "<group>"; };
 		D78FA9B17D5BB160C8E714F6 /* CodeIslandCompanionUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeIslandCompanionUITests.swift; sourceTree = "<group>"; };
 		D85F2D481FDAD5D904A0F3E5 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -170,6 +172,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D91E181A929AA9ED8ABEE03E /* AppIntents.framework in Frameworks */,
+				00C27C14DC7CD3479D678422 /* Speech.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -211,6 +214,7 @@
 			isa = PBXGroup;
 			children = (
 				1D6BFE9B5287EE06D2FB3938 /* AppIntents.framework */,
+				D4056DAB08B8F703E6F5C71B /* Speech.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
