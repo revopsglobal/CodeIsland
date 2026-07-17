@@ -111,8 +111,11 @@ jobs:
             -k "$KEYCHAIN_PASSWORD" \
             "$KEYCHAIN_PATH"
 
+          # Use the certificate SHA-1 rather than its display name. Apple can
+          # leave a renewed/revoked certificate with the same common name in a
+          # personal export, which makes the name ambiguous to codesign.
           SIGN_IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" \
-            | awk -F'"' '/Apple Development:/ { print $2; exit }')"
+            | awk '/Apple Development:/ { print $2; exit }')"
           test -n "$SIGN_IDENTITY" || { echo "::error::No Apple Development identity found"; exit 1; }
           echo "SIGN_IDENTITY=$SIGN_IDENTITY" >> "$GITHUB_ENV"
           echo "SKIP_SIGN=0" >> "$GITHUB_ENV"
