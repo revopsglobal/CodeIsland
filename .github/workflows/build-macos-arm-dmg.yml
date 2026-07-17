@@ -148,6 +148,8 @@ jobs:
           test -s .build/dmg-staging/CodeIsland.app/Contents/Resources/AppIcon.icns
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' .build/dmg-staging/CodeIsland.app/Contents/Info.plist)" = "AppIcon"
           codesign --verify --deep --strict --verbose=2 .build/dmg-staging/CodeIsland.app
+          codesign -d --entitlements :- .build/dmg-staging/CodeIsland.app 2>&1 \
+            | grep -q '<key>com.apple.security.personal-information.calendars</key>'
           ls -lh .build/CodeIsland.dmg
 
       - name: Verify notarized app launch policy
