@@ -212,14 +212,38 @@ final class AppStatePermissionFlowTests: XCTestCase {
                 appState.handlePermissionRequest(firstEvent, continuation: continuation)
             }
         }
+        for _ in 0..<100 {
+            if appState.permissionQueue.count == 1 { break }
+            try await Task.sleep(for: .milliseconds(1))
+        }
+        XCTAssertEqual(appState.permissionQueue.count, 1)
+        guard appState.permissionQueue.count == 1 else {
+            appState.handlePeerDisconnect(sessionId: "s-remote-first")
+            _ = await firstResponseTask.value
+            return
+        }
+
         let secondResponseTask = Task<Data, Never> {
             await withCheckedContinuation { continuation in
                 appState.handlePermissionRequest(secondEvent, continuation: continuation)
             }
         }
 
-        await Task.yield()
+        // A single yield does not guarantee the second continuation has reached
+        // the main actor. Wait before indexing so a slow runner cannot turn a
+        // timing miss into SIGTRAP.
+        for _ in 0..<100 {
+            if appState.permissionQueue.count == 2 { break }
+            try await Task.sleep(for: .milliseconds(1))
+        }
         XCTAssertEqual(appState.permissionQueue.count, 2)
+        guard appState.permissionQueue.count == 2 else {
+            appState.handlePeerDisconnect(sessionId: "s-remote-first")
+            appState.handlePeerDisconnect(sessionId: "s-remote-second")
+            _ = await firstResponseTask.value
+            _ = await secondResponseTask.value
+            return
+        }
         let firstID = appState.permissionQueue[0].id
         let secondID = appState.permissionQueue[1].id
 
