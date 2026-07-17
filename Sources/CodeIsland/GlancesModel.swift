@@ -470,7 +470,7 @@ final class GlancesModel: NSObject, ObservableObject {
                         if lhsIndex != nil { return true }
                         if rhsIndex != nil { return false }
                     }
-                    (lhs.dueDateComponents?.date ?? .distantFuture)
+                    return (lhs.dueDateComponents?.date ?? .distantFuture)
                         < (rhs.dueDateComponents?.date ?? .distantFuture)
                 }
                 .prefix(40)
