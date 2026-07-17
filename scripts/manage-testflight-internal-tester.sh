@@ -43,7 +43,6 @@ asc_request() {
         "$ASC_PRIVATE_KEY_PATH")"
 
     local args=(
-        --fail-with-body
         --silent
         --show-error
         --request "$method"
@@ -57,7 +56,20 @@ asc_request() {
     for parameter in "$@"; do
         args+=(--get --data-urlencode "$parameter")
     done
-    curl "${args[@]}" "https://api.appstoreconnect.apple.com$path"
+    local response
+    local body_response
+    local http_status
+    response="$(curl "${args[@]}" --write-out $'\n%{http_code}' "https://api.appstoreconnect.apple.com$path")"
+    http_status="${response##*$'\n'}"
+    body_response="${response%$'\n'*}"
+    if [[ ! "$http_status" =~ ^2[0-9][0-9]$ ]]; then
+        echo "::error::App Store Connect $method $path returned HTTP $http_status" >&2
+        printf '%s' "$body_response" | jq -r \
+            '.errors[]? | "::error::\(.code // "APPLE_ERROR"): \(.title // "Request failed") — \(.detail // "No detail")"' \
+            >&2 || true
+        return 22
+    fi
+    printf '%s' "$body_response"
 }
 
 write_receipt() {
