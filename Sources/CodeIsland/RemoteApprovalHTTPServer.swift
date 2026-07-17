@@ -105,6 +105,11 @@ final class RemoteApprovalHTTPServer {
     private let listener: NWListener
     private let route: @MainActor (RemoteHTTPRequest) -> RemoteHTTPResponse
     private var didReportReady = false
+    private var connections: [UUID: RemoteHTTPConnection] = [:]
+
+    var boundPort: UInt16? {
+        listener.port?.rawValue
+    }
 
     init(port: UInt16, route: @escaping @MainActor (RemoteHTTPRequest) -> RemoteHTTPResponse) throws {
         guard let endpointPort = NWEndpoint.Port(rawValue: port) else { throw ServerError.invalidPort }
@@ -139,15 +144,25 @@ final class RemoteApprovalHTTPServer {
     }
 
     func stop() {
+        let activeConnections = Array(connections.values)
+        connections.removeAll()
+        for connection in activeConnections {
+            connection.cancel()
+        }
         listener.cancel()
     }
 
     private func accept(_ connection: NWConnection) {
+        let id = UUID()
         let handler = RemoteHTTPConnection(
             connection: connection,
             maximumBytes: Self.maximumRequestBytes,
-            route: route
+            route: route,
+            onFinish: { [weak self] in
+                self?.connections.removeValue(forKey: id)
+            }
         )
+        connections[id] = handler
         handler.start()
     }
 }
@@ -157,16 +172,20 @@ private final class RemoteHTTPConnection {
     private let connection: NWConnection
     private let maximumBytes: Int
     private let route: @MainActor (RemoteHTTPRequest) -> RemoteHTTPResponse
+    private let onFinish: @MainActor () -> Void
     private var buffer = Data()
+    private var finished = false
 
     init(
         connection: NWConnection,
         maximumBytes: Int,
-        route: @escaping @MainActor (RemoteHTTPRequest) -> RemoteHTTPResponse
+        route: @escaping @MainActor (RemoteHTTPRequest) -> RemoteHTTPResponse,
+        onFinish: @escaping @MainActor () -> Void
     ) {
         self.connection = connection
         self.maximumBytes = maximumBytes
         self.route = route
+        self.onFinish = onFinish
     }
 
     func start() {
@@ -197,9 +216,22 @@ private final class RemoteHTTPConnection {
     }
 
     private func send(_ response: RemoteHTTPResponse) {
-        connection.send(content: response.serialized(), completion: .contentProcessed { [weak connection] _ in
-            connection?.cancel()
+        connection.send(content: response.serialized(), completion: .contentProcessed { [weak self] _ in
+            Task { @MainActor in
+                self?.finish()
+            }
         })
+    }
+
+    func cancel() {
+        finish()
+    }
+
+    private func finish() {
+        guard !finished else { return }
+        finished = true
+        connection.cancel()
+        onFinish()
     }
 
     private static func parse(_ data: Data) -> RemoteHTTPRequest? {

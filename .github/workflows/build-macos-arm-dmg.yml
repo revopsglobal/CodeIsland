@@ -73,6 +73,7 @@ jobs:
       - name: Test remote approval security and exact-request routing
         run: |
           swift test --filter RemoteActionTokenVaultTests
+          swift test --filter RemoteApprovalHTTPServerTests
           swift test --filter RemotePairAttemptLimiterTests
           swift test --filter AppStatePermissionFlowTests/testRemoteDecisionResolvesOnlyTheSelectedPermission
 
