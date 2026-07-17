@@ -53,6 +53,14 @@ class SettingsWindowController {
         // menu-bar app's first regular window, producing a toolbar with a blank
         // content area and no usable permission controls.
         window.contentViewController = hostingController
+        hostingController.view.frame = NSRect(
+            origin: .zero,
+            size: window.contentLayoutRect.size
+        )
+        hostingController.view.autoresizingMask = [.width, .height]
+        window.setContentSize(NSSize(width: winW, height: winH))
+        window.contentView?.needsLayout = true
+        window.contentView?.layoutSubtreeIfNeeded()
         window.contentMinSize = NSSize(width: min(560, screenW * 0.4), height: min(420, screenH * 0.4))
         window.toolbar = nil
         window.center()
