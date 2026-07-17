@@ -377,16 +377,25 @@ struct GlancesView: View {
     }
 }
 
-/// Segmented toggle shown atop the session-list surface: Sessions vs Glances.
+enum HomePanelSelection: String, CaseIterable, Identifiable {
+    case sessions
+    case glances
+    case hub
+
+    var id: String { rawValue }
+}
+
+/// Segmented toggle shown atop the session-list surface.
 struct GlancesToggleRow: View {
-    @Binding var showGlances: Bool
+    @Binding var selection: HomePanelSelection
 
     private static let accent = Color(red: 0.3, green: 0.85, blue: 0.4)
 
     var body: some View {
         HStack(spacing: 1) {
-            tab(label: "SESSIONS", active: !showGlances) { showGlances = false }
-            tab(label: "GLANCES", active: showGlances) { showGlances = true }
+            tab(label: "SESSIONS", selection: .sessions)
+            tab(label: "GLANCES", selection: .glances)
+            tab(label: "HUB", selection: .hub)
             Spacer()
         }
         .padding(.horizontal, 12)
@@ -394,17 +403,17 @@ struct GlancesToggleRow: View {
         .padding(.bottom, 2)
     }
 
-    private func tab(label: String, active: Bool, action: @escaping () -> Void) -> some View {
+    private func tab(label: String, selection target: HomePanelSelection) -> some View {
         Button {
-            withAnimation(.easeInOut(duration: 0.15)) { action() }
+            withAnimation(.easeInOut(duration: 0.15)) { selection = target }
         } label: {
             Text(label)
                 .font(.system(size: 9, weight: .bold, design: .monospaced))
                 .tracking(1.2)
-                .foregroundStyle(active ? Self.accent : .white.opacity(0.3))
+                .foregroundStyle(selection == target ? Self.accent : .white.opacity(0.3))
                 .padding(.horizontal, 7)
                 .padding(.vertical, 4)
-                .background(Rectangle().fill(active ? Color.white.opacity(0.1) : .clear))
+                .background(Rectangle().fill(selection == target ? Color.white.opacity(0.1) : .clear))
         }
         .buttonStyle(.plain)
     }
