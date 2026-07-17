@@ -1481,7 +1481,7 @@ private struct MorphText: View {
     }
 }
 
-private struct IslandShellShape: Shape {
+struct IslandShellShape: Shape {
     func path(in rect: CGRect) -> Path {
         RoundedRectangle(cornerRadius: 18, style: .continuous).path(in: rect)
     }
