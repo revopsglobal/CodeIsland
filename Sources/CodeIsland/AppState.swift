@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import CoreServices
 import os.log
 import SQLite3
@@ -1040,7 +1041,9 @@ final class AppState {
         if totalSessionCount != summary.totalSessionCount { totalSessionCount = summary.totalSessionCount }
         // Amber menu-bar indicator (Crest parity): visible whenever an approval or
         // question is waiting, regardless of the hide-when-idle setting.
-        StatusItemController.shared.setPending(!permissionQueue.isEmpty || !questionQueue.isEmpty)
+        if NSApp != nil {
+            StatusItemController.shared.setPending(!permissionQueue.isEmpty || !questionQueue.isEmpty)
+        }
         ESP32StatePublisher.shared.notifyDirty()
         AppleCompanionPublisher.shared.notifyDirty()
         RemoteApprovalService.shared.stateDidChange()
