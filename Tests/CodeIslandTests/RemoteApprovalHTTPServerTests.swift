@@ -1,6 +1,7 @@
 import Foundation
 import XCTest
 @testable import CodeIsland
+import CodeIslandCore
 
 @MainActor
 final class RemoteApprovalHTTPServerTests: XCTestCase {
@@ -34,5 +35,315 @@ final class RemoteApprovalHTTPServerTests: XCTestCase {
         XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
         let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Bool])
         XCTAssertEqual(object["running"], true)
+    }
+
+    func testAuthenticatedHostLifecycleOverRealListener() async throws {
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CodeIslandRemoteE2E-(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let stateURL = temporaryDirectory.appendingPathComponent("devices.json")
+        let auditURL = temporaryDirectory.appendingPathComponent("audit.jsonl")
+        let deviceStore = RemoteApprovalDeviceStore(stateURL: stateURL)
+        let service = RemoteApprovalService(
+            deviceStore: deviceStore,
+            coordinator: RemoteApprovalCoordinator(auditURL: auditURL),
+            localPortOverride: 0,
+            enabledOverride: true,
+            tailscaleConfigurator: { _, _ in "https://codeisland-e2e.invalid" }
+        )
+        let appState = AppState()
+        service.start(appState: appState)
+        defer { service.stop() }
+
+        let port = try await waitForPort(service)
+
+        let root = try await send(port: port, method: "GET", path: "/")
+        XCTAssertEqual(root.response.statusCode, 200)
+        XCTAssertEqual(root.response.value(forHTTPHeaderField: "X-Frame-Options"), "DENY")
+        XCTAssertEqual(root.response.value(forHTTPHeaderField: "X-Content-Type-Options"), "nosniff")
+        XCTAssertTrue(
+            root.response.value(forHTTPHeaderField: "Content-Security-Policy")?.contains("frame-ancestors 'none'") == true
+        )
+
+        let unauthenticated = try await send(port: port, method: "GET", path: "/api/hub")
+        XCTAssertEqual(unauthenticated.response.statusCode, 401)
+        XCTAssertEqual(unauthenticated.response.value(forHTTPHeaderField: "WWW-Authenticate"), "Bearer")
+
+        let rejectedPair = try await send(
+            port: port,
+            method: "POST",
+            path: "/api/pair",
+            body: try encode(RemotePairRequest(code: "000000", deviceName: "Unpaired iPhone"))
+        )
+        XCTAssertEqual(rejectedPair.response.statusCode, 403)
+
+        let paired = try await send(
+            port: port,
+            method: "POST",
+            path: "/api/pair",
+            body: try encode(RemotePairRequest(code: service.pairingCode, deviceName: "E2E iPhone"))
+        )
+        XCTAssertEqual(paired.response.statusCode, 201)
+        let pair = try decode(RemotePairResponse.self, from: paired.data)
+        XCTAssertEqual(deviceStore.devices.map(\.name), ["E2E iPhone"])
+
+        for mode in [PersonalHubMode.home, .work, .code] {
+            let result = try await send(
+                port: port,
+                method: "POST",
+                path: "/api/hub/snapshot",
+                bearer: pair.deviceToken,
+                body: try encode(PersonalHubSnapshotRequest(requestedMode: mode))
+            )
+            XCTAssertEqual(result.response.statusCode, 200)
+            let snapshot = try decode(PersonalHubSnapshot.self, from: result.data)
+            XCTAssertEqual(snapshot.requestedMode, mode)
+            XCTAssertEqual(snapshot.resolvedMode, mode)
+            XCTAssertEqual(snapshot.modules.map(\.id), PersonalHubCatalog.modules(for: mode))
+        }
+
+        let event = try makePermissionRequestEvent(sessionID: "remote-e2e", toolName: "Bash")
+        let permissionResponse = Task<Data, Never> {
+            await withCheckedContinuation { continuation in
+                appState.handlePermissionRequest(event, continuation: continuation)
+            }
+        }
+        await Task.yield()
+        XCTAssertEqual(appState.permissionQueue.count, 1)
+
+        let approvalsResult = try await send(
+            port: port,
+            method: "GET",
+            path: "/api/approvals",
+            bearer: pair.deviceToken
+        )
+        XCTAssertEqual(approvalsResult.response.statusCode, 200)
+        let approvals = try decode(RemoteApprovalSnapshot.self, from: approvalsResult.data)
+        let approval = try XCTUnwrap(approvals.approvals.first)
+        XCTAssertEqual(approval.tool, "Bash")
+
+        let decision = RemoteDecisionRequest(decision: .approve, actionToken: approval.actionToken)
+        let decisionPath = "/api/approvals/\(approval.id)/decision"
+        let resolved = try await send(
+            port: port,
+            method: "POST",
+            path: decisionPath,
+            bearer: pair.deviceToken,
+            body: try encode(decision)
+        )
+        XCTAssertEqual(resolved.response.statusCode, 200)
+        let permissionResponseData = await permissionResponse.value
+        XCTAssertEqual(try extractPermissionBehavior(from: permissionResponseData), "allow")
+        XCTAssertTrue(appState.permissionQueue.isEmpty)
+
+        let approvalReplay = try await send(
+            port: port,
+            method: "POST",
+            path: decisionPath,
+            bearer: pair.deviceToken,
+            body: try encode(decision)
+        )
+        XCTAssertEqual(approvalReplay.response.statusCode, 403)
+
+        let questionEvent = try makeQuestionEvent(sessionID: "question-e2e")
+        let questionResponse = Task<Data, Never> {
+            await withCheckedContinuation { continuation in
+                appState.handleAskUserQuestion(questionEvent, continuation: continuation)
+            }
+        }
+        await Task.yield()
+        XCTAssertEqual(appState.questionQueue.count, 1)
+
+        let questionsResult = try await send(
+            port: port,
+            method: "GET",
+            path: "/api/approvals",
+            bearer: pair.deviceToken
+        )
+        let questionsSnapshot = try decode(RemoteApprovalSnapshot.self, from: questionsResult.data)
+        let question = try XCTUnwrap(questionsSnapshot.questions.first)
+        XCTAssertFalse(question.requiresLocalResponse)
+        XCTAssertEqual(question.prompts.first?.question, "Continue the E2E run?")
+        XCTAssertEqual(question.prompts.first?.options, ["Continue", "Stop"])
+
+        let questionPath = "/api/questions/\(question.id)/answer"
+        let answered = try await send(
+            port: port,
+            method: "POST",
+            path: questionPath,
+            bearer: pair.deviceToken,
+            body: try encode(RemoteQuestionAnswerRequest(
+                answers: ["Continue"],
+                actionToken: try XCTUnwrap(question.actionToken)
+            ))
+        )
+        XCTAssertEqual(answered.response.statusCode, 200)
+        let questionResponseData = await questionResponse.value
+        XCTAssertEqual(try extractQuestionAnswer(from: questionResponseData), "Continue")
+        XCTAssertTrue(appState.questionQueue.isEmpty)
+
+        let questionReplay = try await send(
+            port: port,
+            method: "POST",
+            path: questionPath,
+            bearer: pair.deviceToken,
+            body: try encode(RemoteQuestionAnswerRequest(
+                answers: ["Continue"],
+                actionToken: try XCTUnwrap(question.actionToken)
+            ))
+        )
+        XCTAssertEqual(questionReplay.response.statusCode, 403)
+
+        let intent = PersonalHubActionIntent(moduleID: .system, actionID: "refresh")
+        let preparedResult = try await send(
+            port: port,
+            method: "POST",
+            path: "/api/hub/actions/prepare",
+            bearer: pair.deviceToken,
+            body: try encode(PersonalHubPrepareActionRequest(intent: intent))
+        )
+        XCTAssertEqual(preparedResult.response.statusCode, 200)
+        let prepared = try decode(PersonalHubPreparedAction.self, from: preparedResult.data)
+
+        let alteredIntent = PersonalHubActionIntent(moduleID: .system, actionID: "refresh", value: "tampered")
+        let alteredExecution = try await send(
+            port: port,
+            method: "POST",
+            path: "/api/hub/actions/execute",
+            bearer: pair.deviceToken,
+            body: try encode(PersonalHubExecuteActionRequest(
+                intent: alteredIntent,
+                actionToken: prepared.actionToken
+            ))
+        )
+        XCTAssertEqual(alteredExecution.response.statusCode, 403)
+
+        let executeRequest = PersonalHubExecuteActionRequest(
+            intent: intent,
+            actionToken: prepared.actionToken
+        )
+        let executed = try await send(
+            port: port,
+            method: "POST",
+            path: "/api/hub/actions/execute",
+            bearer: pair.deviceToken,
+            body: try encode(executeRequest)
+        )
+        XCTAssertEqual(executed.response.statusCode, 200)
+        XCTAssertTrue(try decode(PersonalHubActionResponse.self, from: executed.data).executed)
+
+        let actionReplay = try await send(
+            port: port,
+            method: "POST",
+            path: "/api/hub/actions/execute",
+            bearer: pair.deviceToken,
+            body: try encode(executeRequest)
+        )
+        XCTAssertEqual(actionReplay.response.statusCode, 403)
+
+        let pushToken = String(repeating: "a", count: 64)
+        let registered = try await send(
+            port: port,
+            method: "POST",
+            path: "/api/push-token",
+            bearer: pair.deviceToken,
+            body: try encode(RemotePushRegistrationRequest(token: pushToken, environment: "production"))
+        )
+        XCTAssertEqual(registered.response.statusCode, 200)
+        XCTAssertEqual(deviceStore.devices.first?.pushToken, pushToken)
+        XCTAssertEqual(deviceStore.devices.first?.pushEnvironment, "production")
+
+        let audit = try String(contentsOf: auditURL, encoding: .utf8)
+        XCTAssertTrue(audit.contains("\"event\":\"pair\""))
+        XCTAssertTrue(audit.contains("\"event\":\"decision\""))
+        XCTAssertTrue(audit.contains("\"outcome\":\"resolved\""))
+    }
+
+    private func waitForPort(_ service: RemoteApprovalService) async throws -> UInt16 {
+        for _ in 0..<100 {
+            if service.running, let port = service.boundLocalPort { return port }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        throw XCTSkip("Remote approval listener did not become ready: \(service.lastError ?? "unknown error")")
+    }
+
+    private func send(
+        port: UInt16,
+        method: String,
+        path: String,
+        bearer: String? = nil,
+        body: Data? = nil
+    ) async throws -> (data: Data, response: HTTPURLResponse) {
+        let url = try XCTUnwrap(URL(string: "http://127.0.0.1:\(port)\(path)"))
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.httpBody = body
+        request.timeoutInterval = 5
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        if body != nil { request.setValue("application/json", forHTTPHeaderField: "Content-Type") }
+        if let bearer { request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization") }
+        let (data, response) = try await URLSession.shared.data(for: request)
+        return (data, try XCTUnwrap(response as? HTTPURLResponse))
+    }
+
+    private func encode<T: Encodable>(_ value: T) throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return try encoder.encode(value)
+    }
+
+    private func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try decoder.decode(type, from: data)
+    }
+
+    private func makePermissionRequestEvent(sessionID: String, toolName: String) throws -> HookEvent {
+        let payload: [String: Any] = [
+            "hook_event_name": "PermissionRequest",
+            "session_id": sessionID,
+            "tool_name": toolName,
+            "tool_input": ["command": "echo CodeIsland E2E"]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: payload)
+        return try XCTUnwrap(HookEvent(from: data))
+    }
+
+    private func makeQuestionEvent(sessionID: String) throws -> HookEvent {
+        let payload: [String: Any] = [
+            "hook_event_name": "PermissionRequest",
+            "session_id": sessionID,
+            "tool_name": "AskUserQuestion",
+            "tool_input": [
+                "questions": [[
+                    "header": "E2E",
+                    "question": "Continue the E2E run?",
+                    "options": [
+                        ["label": "Continue", "description": "Keep working"],
+                        ["label": "Stop", "description": "End the run"]
+                    ]
+                ]]
+            ]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: payload)
+        return try XCTUnwrap(HookEvent(from: data))
+    }
+
+    private func extractPermissionBehavior(from responseData: Data) throws -> String {
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: responseData) as? [String: Any])
+        let hookSpecificOutput = try XCTUnwrap(json["hookSpecificOutput"] as? [String: Any])
+        let decision = try XCTUnwrap(hookSpecificOutput["decision"] as? [String: Any])
+        return try XCTUnwrap(decision["behavior"] as? String)
+    }
+
+    private func extractQuestionAnswer(from responseData: Data) throws -> String {
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: responseData) as? [String: Any])
+        let hookSpecificOutput = try XCTUnwrap(json["hookSpecificOutput"] as? [String: Any])
+        let decision = try XCTUnwrap(hookSpecificOutput["decision"] as? [String: Any])
+        let updatedInput = try XCTUnwrap(decision["updatedInput"] as? [String: Any])
+        let answers = try XCTUnwrap(updatedInput["answers"] as? [String: Any])
+        return try XCTUnwrap(answers["Continue the E2E run?"] as? String)
     }
 }
