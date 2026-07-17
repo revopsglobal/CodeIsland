@@ -115,6 +115,51 @@ public struct AppleCompanionSessionPreview: Codable, Equatable, Sendable {
     }
 }
 
+/// Small, privacy-safe personal signals sent to Greg's iPhone companion.
+///
+/// The Mac deliberately sends only display names and progress/battery values—
+/// never a local filesystem path. Every field is optional at the top-level so
+/// shipped companion builds can continue decoding the established agent state.
+public struct AppleCompanionDownloadStatus: Codable, Equatable, Sendable {
+    public let name: String
+    public let bytesReceived: Int64
+    public let totalBytes: Int64?
+
+    public init(name: String, bytesReceived: Int64, totalBytes: Int64?) {
+        self.name = name
+        self.bytesReceived = bytesReceived
+        self.totalBytes = totalBytes
+    }
+}
+
+public struct AppleCompanionDeviceBatteryStatus: Codable, Equatable, Sendable {
+    public let name: String
+    public let percent: Int
+    public let detail: String?
+
+    public init(name: String, percent: Int, detail: String? = nil) {
+        self.name = name
+        self.percent = min(max(percent, 0), 100)
+        self.detail = detail
+    }
+}
+
+public struct AppleCompanionPersonalStatus: Codable, Equatable, Sendable {
+    public let download: AppleCompanionDownloadStatus?
+    public let recentDownloadCompleted: String?
+    public let devices: [AppleCompanionDeviceBatteryStatus]
+
+    public init(
+        download: AppleCompanionDownloadStatus? = nil,
+        recentDownloadCompleted: String? = nil,
+        devices: [AppleCompanionDeviceBatteryStatus] = []
+    ) {
+        self.download = download
+        self.recentDownloadCompleted = recentDownloadCompleted
+        self.devices = devices
+    }
+}
+
 public struct AppleCompanionStatePayload: Codable, Equatable, Sendable {
     public let version: Int
     public let sequence: UInt64
@@ -127,6 +172,7 @@ public struct AppleCompanionStatePayload: Codable, Equatable, Sendable {
     public let pendingAction: AppleCompanionPendingAction?
     public let question: AppleCompanionQuestionPayload?
     public let sessions: [AppleCompanionSessionPreview]
+    public let personalStatus: AppleCompanionPersonalStatus?
     public let updatedAt: Date
 
     public init(
@@ -141,6 +187,7 @@ public struct AppleCompanionStatePayload: Codable, Equatable, Sendable {
         pendingAction: AppleCompanionPendingAction?,
         question: AppleCompanionQuestionPayload? = nil,
         sessions: [AppleCompanionSessionPreview] = [],
+        personalStatus: AppleCompanionPersonalStatus? = nil,
         updatedAt: Date = Date()
     ) {
         self.version = version
@@ -154,6 +201,7 @@ public struct AppleCompanionStatePayload: Codable, Equatable, Sendable {
         self.pendingAction = pendingAction
         self.question = question
         self.sessions = sessions
+        self.personalStatus = personalStatus
         self.updatedAt = updatedAt
     }
 
@@ -169,6 +217,7 @@ public struct AppleCompanionStatePayload: Codable, Equatable, Sendable {
         case pendingAction
         case question
         case sessions
+        case personalStatus
         case updatedAt
     }
 
@@ -185,6 +234,7 @@ public struct AppleCompanionStatePayload: Codable, Equatable, Sendable {
         pendingAction = try container.decodeIfPresent(AppleCompanionPendingAction.self, forKey: .pendingAction)
         question = try container.decodeIfPresent(AppleCompanionQuestionPayload.self, forKey: .question)
         sessions = try container.decodeIfPresent([AppleCompanionSessionPreview].self, forKey: .sessions) ?? []
+        personalStatus = try? container.decodeIfPresent(AppleCompanionPersonalStatus.self, forKey: .personalStatus)
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
     }
 }

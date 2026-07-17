@@ -301,6 +301,7 @@ struct CompanionBluetoothSummary: Codable {
     let questionHeader: String?
     let questionText: String?
     let sessions: [SessionSummary]?
+    let personalStatus: CompanionPersonalStatus?
     let updatedAt: Date
 
     var statePayload: CompanionStatePayload {
@@ -344,6 +345,7 @@ struct CompanionBluetoothSummary: Codable {
             pendingAction: pendingAction,
             question: question,
             sessions: sessionPreviews,
+            personalStatus: personalStatus,
             updatedAt: updatedAt
         )
     }

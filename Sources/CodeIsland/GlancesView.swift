@@ -5,22 +5,38 @@ import AppKit
 /// Styled to match the notch panel: monospaced type, green accent, dark chrome.
 struct GlancesView: View {
     @StateObject private var model = GlancesModel()
+    @ObservedObject private var personalUtilities = PersonalUtilitiesModel.shared
 
     private static let accent = Color(red: 0.3, green: 0.85, blue: 0.4)
     private static let mono = Font.system(size: 12, weight: .medium, design: .monospaced)
     private static let monoSmall = Font.system(size: 10, weight: .regular, design: .monospaced)
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            weatherRow
-            Divider().overlay(Color.white.opacity(0.08))
-            meetingSection
-            Divider().overlay(Color.white.opacity(0.08))
-            remindersSection
+        ScrollView(.vertical) {
+            VStack(alignment: .leading, spacing: 12) {
+                weatherRow
+                if !personalUtilities.downloads.isEmpty || personalUtilities.recentDownloadCompleted != nil {
+                    Divider().overlay(Color.white.opacity(0.08))
+                    downloadsSection
+                }
+                Divider().overlay(Color.white.opacity(0.08))
+                meetingSection
+                if !personalUtilities.deviceBatteries.isEmpty {
+                    Divider().overlay(Color.white.opacity(0.08))
+                    devicesSection
+                }
+                Divider().overlay(Color.white.opacity(0.08))
+                remindersSection
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .onAppear { model.refresh() }
+        .scrollIndicators(.automatic)
+        .frame(maxHeight: 560)
+        .onAppear {
+            model.refresh()
+            personalUtilities.start()
+        }
     }
 
     // MARK: - Weather
@@ -102,6 +118,89 @@ struct GlancesView: View {
         }
     }
 
+    // MARK: - Downloads
+
+    private var downloadsSection: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack {
+                sectionLabel("DOWNLOADS")
+                Spacer()
+                Button { personalUtilities.openDownloads() } label: {
+                    Image(systemName: "folder")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(Self.accent.opacity(0.8))
+                }
+                .buttonStyle(.plain)
+                .help("Open Downloads")
+            }
+
+            ForEach(personalUtilities.downloads.prefix(3)) { download in
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 8) {
+                        Image(systemName: download.isStalled ? "pause.circle" : "arrow.down.circle.fill")
+                            .foregroundStyle(download.isStalled ? .white.opacity(0.35) : Self.accent)
+                        Text(download.name)
+                            .font(Self.monoSmall)
+                            .foregroundStyle(.white.opacity(0.85))
+                            .lineLimit(1)
+                        Spacer()
+                        Text(downloadStatus(download))
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundStyle(.white.opacity(0.45))
+                    }
+                    if let progress = download.progress {
+                        ProgressView(value: progress)
+                            .progressViewStyle(.linear)
+                            .tint(Self.accent)
+                            .scaleEffect(x: 1, y: 0.65, anchor: .center)
+                    }
+                }
+            }
+
+            if personalUtilities.downloads.isEmpty,
+               let completed = personalUtilities.recentDownloadCompleted {
+                Label("\(completed) finished", systemImage: "checkmark.circle.fill")
+                    .font(Self.monoSmall)
+                    .foregroundStyle(Self.accent)
+            }
+        }
+    }
+
+    // MARK: - Connected-device batteries
+
+    private var devicesSection: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack {
+                sectionLabel("DEVICES")
+                Spacer()
+                Button { personalUtilities.refreshBluetooth(force: true) } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(Self.accent.opacity(0.8))
+                }
+                .buttonStyle(.plain)
+                .disabled(personalUtilities.isRefreshingBluetooth)
+                .help("Refresh device batteries")
+            }
+
+            ForEach(personalUtilities.deviceBatteries.prefix(4)) { device in
+                HStack(spacing: 8) {
+                    Image(systemName: batterySymbol(device.primaryPercent))
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(device.primaryPercent <= 20 ? .orange : Self.accent)
+                    Text(device.name)
+                        .font(Self.monoSmall)
+                        .foregroundStyle(.white.opacity(0.85))
+                        .lineLimit(1)
+                    Spacer()
+                    Text(device.summary)
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundStyle(.white.opacity(0.5))
+                }
+            }
+        }
+    }
+
     // MARK: - Reminders
 
     private var remindersSection: some View {
@@ -169,6 +268,22 @@ struct GlancesView: View {
         .buttonStyle(.plain)
         .help(label)
         .accessibilityLabel(label)
+    }
+
+    private func downloadStatus(_ download: PersonalUtilitiesModel.DownloadInfo) -> String {
+        if download.isStalled { return "paused" }
+        if let percent = download.percent { return "\(percent)%" }
+        return ByteCountFormatter.string(fromByteCount: download.bytesReceived, countStyle: .file)
+    }
+
+    private func batterySymbol(_ percent: Int) -> String {
+        switch percent {
+        case ...10: return "battery.0percent"
+        case ...35: return "battery.25percent"
+        case ...60: return "battery.50percent"
+        case ...85: return "battery.75percent"
+        default: return "battery.100percent"
+        }
     }
 
     private static func timeText(for event: GlancesModel.EventInfo) -> String {

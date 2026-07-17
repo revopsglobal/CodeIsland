@@ -31,4 +31,39 @@ final class AppleCompanionPayloadCompatTests: XCTestCase {
             XCTAssertTrue(shipped.contains(role.rawValue))
         }
     }
+
+    func testPersonalStatusIsOptionalAndRoundTripsWithoutPaths() throws {
+        let personal = AppleCompanionPersonalStatus(
+            download: AppleCompanionDownloadStatus(
+                name: "Crest-4.9.0.dmg",
+                bytesReceived: 50,
+                totalBytes: 100
+            ),
+            devices: [
+                AppleCompanionDeviceBatteryStatus(name: "AirPods", percent: 18, detail: "L 18% · R 22%")
+            ]
+        )
+        let payload = AppleCompanionStatePayload(
+            sequence: 49,
+            sessionId: "s1",
+            source: "codex",
+            status: .running,
+            toolName: nil,
+            workspaceName: "CodeIsland",
+            messages: [],
+            pendingAction: nil,
+            personalStatus: personal
+        )
+
+        let data = try JSONEncoder().encode(payload)
+        let decoded = try JSONDecoder().decode(AppleCompanionStatePayload.self, from: data)
+        XCTAssertEqual(decoded.personalStatus, personal)
+        XCTAssertFalse(String(decoding: data, as: UTF8.self).contains("/Users/"))
+    }
+
+    func testOldPayloadWithoutPersonalStatusStillDecodes() throws {
+        let data = Data(#"{"version":1,"sequence":1,"source":"claude","status":"idle","messages":[],"sessions":[],"updatedAt":0}"#.utf8)
+        let decoded = try JSONDecoder().decode(AppleCompanionStatePayload.self, from: data)
+        XCTAssertNil(decoded.personalStatus)
+    }
 }

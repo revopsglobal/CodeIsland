@@ -119,6 +119,7 @@ struct SettingsView: View {
 
 private struct GlancesSettingsPage: View {
     @StateObject private var model = GlancesModel()
+    @ObservedObject private var personalUtilities = PersonalUtilitiesModel.shared
     @AppStorage(SettingsKey.glancesWeatherLocation)
     private var weatherLocation = SettingsDefaults.glancesWeatherLocation
 
@@ -216,9 +217,48 @@ private struct GlancesSettingsPage: View {
                         .foregroundStyle(.secondary)
                 }
             }
+
+            Section("Downloads & Devices") {
+                LabeledContent("Downloads") {
+                    Text(personalUtilities.downloads.isEmpty
+                        ? "Watching ~/Downloads"
+                        : "\(personalUtilities.downloads.count) active")
+                        .foregroundStyle(personalUtilities.downloads.isEmpty ? Color.secondary : Color.green)
+                }
+                Button("Open Downloads") { personalUtilities.openDownloads() }
+
+                if personalUtilities.deviceBatteries.isEmpty {
+                    Text(personalUtilities.bluetoothError ?? "Checking connected accessories…")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(personalUtilities.deviceBatteries) { device in
+                        LabeledContent(device.name) {
+                            Text(device.summary)
+                                .foregroundStyle(device.primaryPercent <= 20 ? .orange : .secondary)
+                        }
+                    }
+                }
+
+                HStack {
+                    Button("Refresh Batteries") {
+                        personalUtilities.refreshBluetooth(force: true)
+                    }
+                    .disabled(personalUtilities.isRefreshingBluetooth)
+                    Button("Open Bluetooth Settings") {
+                        personalUtilities.openBluetoothSettings()
+                    }
+                }
+
+                Text("CodeIsland watches this Mac's Downloads folder and reads battery values reported by macOS. Nothing is uploaded.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
-        .onAppear { model.refreshPermissions() }
+        .onAppear {
+            model.refreshPermissions()
+            personalUtilities.start()
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             model.refreshPermissions()
         }

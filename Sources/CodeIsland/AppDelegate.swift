@@ -63,6 +63,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         panelController = PanelWindowController(appState: appState)
         panelController?.showPanel()
 
+        // Local personal-status signals (Downloads + accessory batteries).
+        // Monitoring is event-driven and only polls download progress while a
+        // partial file exists, so it stays useful without becoming background
+        // churn when the notch is idle.
+        PersonalUtilitiesModel.shared.start()
+
         appState.startSessionDiscovery()
         appState.startCodexAppServerWatcher()
         RemoteManager.shared.startup()
@@ -174,6 +180,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         hookServer?.stop()
         appState.stopCodexAppServerWatcher()
         appState.stopSessionDiscovery()
+        PersonalUtilitiesModel.shared.stop()
     }
 
     // MARK: - Global Shortcuts

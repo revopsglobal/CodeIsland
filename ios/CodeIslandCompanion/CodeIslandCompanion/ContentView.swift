@@ -73,6 +73,11 @@ private struct PortraitIslandView: View {
                             .id(Self.pendingAnchor)
                             .transition(.blurFade.combined(with: .scale(scale: 0.96, anchor: .top)))
 
+                        if let personalStatus = state.personalStatus, !personalStatus.isEmpty {
+                            PersonalStatusStrip(status: personalStatus)
+                                .transition(.blurFade.combined(with: .move(edge: .top)))
+                        }
+
                         MessageStrip(messages: state.messages)
                     } else {
                         DiscoveryIsland()
@@ -836,6 +841,108 @@ private struct HeroTranscript: View {
     }
 }
 
+/// Greg's compact personal signals. Agent sessions remain the primary Buddy
+/// surface; this card appears only when the Mac has something useful to show.
+private struct PersonalStatusStrip: View {
+    let status: CompanionPersonalStatus
+    var compact = false
+
+    private var visibleDevices: ArraySlice<CompanionDeviceBatteryStatus> {
+        status.devices.prefix(compact ? 2 : 4)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: compact ? 8 : 10) {
+            HStack(spacing: 7) {
+                Image(systemName: "sparkles")
+                Text("PERSONAL")
+                    .font(.system(size: compact ? 10 : 11, weight: .black, design: .rounded))
+                    .tracking(1.2)
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(.ciForeground.opacity(0.5))
+
+            if let download = status.download {
+                HStack(spacing: 10) {
+                    Image(systemName: "arrow.down.circle.fill")
+                        .font(.system(size: compact ? 18 : 21, weight: .semibold))
+                        .foregroundStyle(Color.blue)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 8) {
+                            Text(download.name)
+                                .font(.system(size: compact ? 13 : 15, weight: .bold, design: .rounded))
+                                .foregroundStyle(.ciForeground.opacity(0.88))
+                                .lineLimit(1)
+                            Spacer(minLength: 0)
+                            Text(downloadDetail(download))
+                                .font(.system(size: compact ? 10 : 11, weight: .bold, design: .rounded))
+                                .foregroundStyle(.ciForeground.opacity(0.52))
+                        }
+                        if let progress = download.progress {
+                            ProgressView(value: progress)
+                                .tint(.blue)
+                        }
+                    }
+                }
+            } else if let completed = status.recentDownloadCompleted {
+                Label("Downloaded \(completed)", systemImage: "checkmark.circle.fill")
+                    .font(.system(size: compact ? 13 : 15, weight: .bold, design: .rounded))
+                    .foregroundStyle(.green)
+                    .lineLimit(1)
+            }
+
+            if !visibleDevices.isEmpty {
+                HStack(spacing: 7) {
+                    ForEach(Array(visibleDevices)) { device in
+                        HStack(spacing: 5) {
+                            Image(systemName: batterySymbol(device.percent))
+                            Text(device.name)
+                                .lineLimit(1)
+                            Text("\(min(max(device.percent, 0), 100))%")
+                                .fontWeight(.black)
+                        }
+                        .font(.system(size: compact ? 10 : 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(device.percent <= 20 ? Color.orange : Color.ciForeground.opacity(0.72))
+                        .padding(.horizontal, compact ? 7 : 9)
+                        .padding(.vertical, compact ? 5 : 6)
+                        .background(Color.ciForeground.opacity(0.07), in: Capsule())
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+        .padding(compact ? 11 : 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.ciForeground.opacity(0.045))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.ciForeground.opacity(0.07))
+        )
+        .accessibilityIdentifier("companion.personalStatus")
+    }
+
+    private func downloadDetail(_ download: CompanionDownloadStatus) -> String {
+        if let progress = download.progress {
+            return "\(Int((progress * 100).rounded()))%"
+        }
+        return ByteCountFormatter.string(fromByteCount: download.bytesReceived, countStyle: .file)
+    }
+
+    private func batterySymbol(_ percent: Int) -> String {
+        switch percent {
+        case ...10: return "battery.0percent"
+        case ...35: return "battery.25percent"
+        case ...60: return "battery.50percent"
+        case ...85: return "battery.75percent"
+        default: return "battery.100percent"
+        }
+    }
+}
+
 private struct StandByIsland: View {
     let state: CompanionStatePayload
     let availableSize: CGSize
@@ -894,6 +1001,10 @@ private struct StandByIsland: View {
                     if let toolText = CompanionDisplayText.tool(state.toolName) {
                         TinyChip(icon: "hammer", text: toolText)
                     }
+                }
+
+                if let personalStatus = state.personalStatus, !personalStatus.isEmpty {
+                    PersonalStatusStrip(status: personalStatus, compact: true)
                 }
             }
             .frame(maxWidth: sessions.count > 1 ? availableSize.width * 0.34 : .infinity, alignment: .leading)

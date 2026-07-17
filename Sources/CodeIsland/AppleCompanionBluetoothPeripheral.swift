@@ -248,6 +248,7 @@ private struct AppleCompanionBluetoothSummary: Codable {
     let questionHeader: String?
     let questionText: String?
     let sessions: [SessionSummary]
+    let personalStatus: AppleCompanionPersonalStatus?
     let updatedAt: Date
 
     init(payload: AppleCompanionStatePayload) {
@@ -273,6 +274,7 @@ private struct AppleCompanionBluetoothSummary: Codable {
                 updatedAt: $0.updatedAt
             )
         }
+        personalStatus = payload.personalStatus
         updatedAt = payload.updatedAt
     }
 

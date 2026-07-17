@@ -184,6 +184,56 @@ struct CompanionSessionPreview: Codable, Identifiable, Hashable {
     }
 }
 
+struct CompanionDownloadStatus: Codable, Hashable {
+    let name: String
+    let bytesReceived: Int64
+    let totalBytes: Int64?
+
+    var progress: Double? {
+        guard let totalBytes, totalBytes > 0 else { return nil }
+        return min(max(Double(bytesReceived) / Double(totalBytes), 0), 1)
+    }
+}
+
+struct CompanionDeviceBatteryStatus: Codable, Identifiable, Hashable {
+    let name: String
+    let percent: Int
+    let detail: String?
+
+    var id: String { name.lowercased() }
+}
+
+struct CompanionPersonalStatus: Codable, Hashable {
+    let download: CompanionDownloadStatus?
+    let recentDownloadCompleted: String?
+    let devices: [CompanionDeviceBatteryStatus]
+
+    var isEmpty: Bool {
+        download == nil && recentDownloadCompleted == nil && devices.isEmpty
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case download, recentDownloadCompleted, devices
+    }
+
+    init(
+        download: CompanionDownloadStatus? = nil,
+        recentDownloadCompleted: String? = nil,
+        devices: [CompanionDeviceBatteryStatus] = []
+    ) {
+        self.download = download
+        self.recentDownloadCompleted = recentDownloadCompleted
+        self.devices = devices
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        download = try? c.decodeIfPresent(CompanionDownloadStatus.self, forKey: .download)
+        recentDownloadCompleted = try? c.decodeIfPresent(String.self, forKey: .recentDownloadCompleted)
+        devices = (try? c.decodeIfPresent([CompanionDeviceBatteryStatus].self, forKey: .devices)) ?? []
+    }
+}
+
 struct CompanionStatePayload: Codable {
     let version: Int
     let sequence: UInt64
@@ -196,6 +246,7 @@ struct CompanionStatePayload: Codable {
     let pendingAction: CompanionPendingAction?
     let question: CompanionQuestionPayload?
     let sessions: [CompanionSessionPreview]
+    let personalStatus: CompanionPersonalStatus?
     let updatedAt: Date
 
     init(
@@ -210,6 +261,7 @@ struct CompanionStatePayload: Codable {
         pendingAction: CompanionPendingAction?,
         question: CompanionQuestionPayload?,
         sessions: [CompanionSessionPreview] = [],
+        personalStatus: CompanionPersonalStatus? = nil,
         updatedAt: Date
     ) {
         self.version = version
@@ -223,6 +275,7 @@ struct CompanionStatePayload: Codable {
         self.pendingAction = pendingAction
         self.question = question
         self.sessions = sessions
+        self.personalStatus = personalStatus
         self.updatedAt = updatedAt
     }
 
@@ -238,6 +291,7 @@ struct CompanionStatePayload: Codable {
         case pendingAction
         case question
         case sessions
+        case personalStatus
         case updatedAt
     }
 
@@ -256,6 +310,7 @@ struct CompanionStatePayload: Codable {
         pendingAction = (try? container.decodeIfPresent(CompanionPendingAction.self, forKey: .pendingAction)) ?? nil
         question = (try? container.decodeIfPresent(CompanionQuestionPayload.self, forKey: .question)) ?? nil
         sessions = (try? container.decodeIfPresent([CompanionSessionPreview].self, forKey: .sessions)) ?? []
+        personalStatus = (try? container.decodeIfPresent(CompanionPersonalStatus.self, forKey: .personalStatus)) ?? nil
         updatedAt = (try? container.decodeIfPresent(Date.self, forKey: .updatedAt)) ?? Date()
     }
 }

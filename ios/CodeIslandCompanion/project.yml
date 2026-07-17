@@ -29,6 +29,8 @@ targets:
       - path: ../../Sources/CodeIsland/GeminiView.swift
       - path: ../../Sources/CodeIsland/HermesView.swift
       - path: ../../Sources/CodeIsland/KimiView.swift
+      - path: ../../Sources/CodeIsland/MascotMotion.swift
+      - path: ../../Sources/CodeIsland/MascotTimeline.swift
       - path: ../../Sources/CodeIsland/OpenCodeView.swift
       - path: ../../Sources/CodeIsland/PixelCharacterView.swift
       - path: ../../Sources/CodeIsland/QoderView.swift
@@ -45,8 +47,6 @@ targets:
         ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: NO
     dependencies:
       - target: CodeIslandCompanionWidget
-        embed: true
-      - target: CodeIslandWatchApp
         embed: true
       - sdk: AppIntents.framework
       - sdk: WatchConnectivity.framework
@@ -67,6 +67,8 @@ targets:
       - path: ../../Sources/CodeIsland/GeminiView.swift
       - path: ../../Sources/CodeIsland/HermesView.swift
       - path: ../../Sources/CodeIsland/KimiView.swift
+      - path: ../../Sources/CodeIsland/MascotMotion.swift
+      - path: ../../Sources/CodeIsland/MascotTimeline.swift
       - path: ../../Sources/CodeIsland/OpenCodeView.swift
       - path: ../../Sources/CodeIsland/PixelCharacterView.swift
       - path: ../../Sources/CodeIsland/QoderView.swift
@@ -101,6 +103,8 @@ targets:
       - path: ../../Sources/CodeIsland/GeminiView.swift
       - path: ../../Sources/CodeIsland/HermesView.swift
       - path: ../../Sources/CodeIsland/KimiView.swift
+      - path: ../../Sources/CodeIsland/MascotMotion.swift
+      - path: ../../Sources/CodeIsland/MascotTimeline.swift
       - path: ../../Sources/CodeIsland/OpenCodeView.swift
       - path: ../../Sources/CodeIsland/PixelCharacterView.swift
       - path: ../../Sources/CodeIsland/QoderView.swift
@@ -139,6 +143,8 @@ targets:
       - path: ../../Sources/CodeIsland/GeminiView.swift
       - path: ../../Sources/CodeIsland/HermesView.swift
       - path: ../../Sources/CodeIsland/KimiView.swift
+      - path: ../../Sources/CodeIsland/MascotMotion.swift
+      - path: ../../Sources/CodeIsland/MascotTimeline.swift
       - path: ../../Sources/CodeIsland/OpenCodeView.swift
       - path: ../../Sources/CodeIsland/PixelCharacterView.swift
       - path: ../../Sources/CodeIsland/QoderView.swift
@@ -174,8 +180,6 @@ schemes:
       targets:
         CodeIslandCompanion: all
         CodeIslandCompanionWidget: all
-        CodeIslandWatchApp: all
-        CodeIslandWatchWidget: all
         CodeIslandCompanionUITests: [test]
     run:
       config: Debug
