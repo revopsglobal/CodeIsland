@@ -64,6 +64,13 @@ asc_request() {
     http_status="${response##*$'\n'}"
     body_response="${response%$'\n'*}"
     if [[ ! "$http_status" =~ ^2[0-9][0-9]$ ]]; then
+        if [[ "$method" == "POST" && "$path" == "/v1/betaTesterInvitations" ]] &&
+            printf '%s' "$body_response" | jq -e \
+                '[.errors[]?.code] | any(. == "STATE_ERROR.TESTER_INVITE.ALREADY_ACCEPTED")' \
+                >/dev/null 2>&1; then
+            printf '%s' '{"data":null,"meta":{"alreadyAccepted":true}}'
+            return 0
+        fi
         echo "::error::App Store Connect $method $path returned HTTP $http_status" >&2
         printf '%s' "$body_response" | jq -r \
             '.errors[]? | "::error::\(.code // "APPLE_ERROR"): \(.title // "Request failed") — \(.detail // "No detail")"' \
@@ -258,11 +265,15 @@ if [[ "$RESEND_TESTFLIGHT_INVITATION" == "1" ]]; then
         '{data:{type:"betaTesterInvitations",relationships:{app:{data:{type:"apps",id:$appId}},betaTester:{data:{type:"betaTesters",id:$testerId}}}}}')"
     testflight_invitation_response="$(asc_request POST /v1/betaTesterInvitations "$testflight_invitation_payload")"
     testflight_invitation_id="$(printf '%s' "$testflight_invitation_response" | jq -r '.data.id // empty')"
-    if [[ -z "$testflight_invitation_id" ]]; then
+    invitation_already_accepted="$(printf '%s' "$testflight_invitation_response" | jq -r '.meta.alreadyAccepted // false')"
+    if [[ "$invitation_already_accepted" == "true" ]]; then
+        echo "$TESTER_EMAIL already accepted the TestFlight invitation; no resend is needed."
+    elif [[ -z "$testflight_invitation_id" ]]; then
         echo "::error::Apple did not return a TestFlight invitation ID"
         exit 1
+    else
+        echo "Apple sent a fresh TestFlight invitation to $TESTER_EMAIL."
     fi
-    echo "Apple sent a fresh TestFlight invitation to $TESTER_EMAIL."
 fi
 
 write_receipt ready "$app_id" "$group_id" "$tester_id" "$testflight_invitation_id"

@@ -36,7 +36,7 @@ case "$path" in
     fi
     ;;
   /v1/users)
-    if [[ "${MOCK_SCENARIO:-}" == "existing-user" ]]; then
+    if [[ "${MOCK_SCENARIO:-}" == "existing-user" || "${MOCK_SCENARIO:-}" == "already-accepted" ]]; then
       printf '%s\n' '{"data":[{"type":"users","id":"user-1","attributes":{"username":"gregharned@gmail.com","firstName":"Greg","lastName":"Harned","allAppsVisible":true}}]}'
     else
       printf '%s\n' '{"data":[]}'
@@ -79,7 +79,11 @@ case "$path" in
     printf '%s\n' '{}'
     ;;
   /v1/betaTesterInvitations)
-    printf '%s\n' '{"data":{"type":"betaTesterInvitations","id":"testflight-invite-1"}}'
+    if [[ "${MOCK_SCENARIO:-}" == "already-accepted" ]]; then
+      printf '%s\n' '{"data":null,"meta":{"alreadyAccepted":true}}'
+    else
+      printf '%s\n' '{"data":{"type":"betaTesterInvitations","id":"testflight-invite-1"}}'
+    fi
     ;;
   *)
     printf 'unexpected request: %s %s\n' "$method" "$path" >&2
@@ -139,6 +143,17 @@ MOCK
   grep -q '"type":"apps","id":"app-1"' "$ASC_REQUEST_LOG"
   grep -q '"type":"betaTesters","id":"tester-1"' "$ASC_REQUEST_LOG"
   jq -e '.state == "ready" and .invitationId == "testflight-invite-1"' "$ASC_RECEIPT_PATH"
+}
+
+@test "treats an already accepted TestFlight invitation as ready" {
+  export MOCK_SCENARIO="already-accepted"
+  export RESEND_TESTFLIGHT_INVITATION="1"
+
+  run "$REPO_ROOT/scripts/manage-testflight-internal-tester.sh"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"already accepted the TestFlight invitation"* ]]
+  jq -e '.state == "ready" and .invitationId == ""' "$ASC_RECEIPT_PATH"
 }
 
 @test "creates a scoped team invitation for a missing user" {

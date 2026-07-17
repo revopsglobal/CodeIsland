@@ -1,0 +1,129 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+: "${ASC_ISSUER_ID:?ASC_ISSUER_ID is required}"
+: "${ASC_KEY_ID:?ASC_KEY_ID is required}"
+: "${ASC_PRIVATE_KEY_PATH:?ASC_PRIVATE_KEY_PATH is required}"
+
+TESTER_EMAIL="${TESTER_EMAIL:-gregharned@gmail.com}"
+ADD_BUNDLE_ID="${ADD_BUNDLE_ID:-com.harned.estate}"
+REMOVE_APP_NAME="${REMOVE_APP_NAME:-Orca IDE}"
+ASC_RECEIPT_PATH="${ASC_RECEIPT_PATH:-testflight-membership-receipt.json}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+asc_request() {
+    local method="$1"
+    local path="$2"
+    local body="${3:-}"
+    shift 3 || true
+
+    if [[ -n "${ASC_REQUEST_COMMAND:-}" ]]; then
+        "$ASC_REQUEST_COMMAND" "$method" "$path" "$body" "$@"
+        return
+    fi
+
+    local token
+    token="$(ruby "$SCRIPT_DIR/app-store-connect-jwt.rb" \
+        "$ASC_ISSUER_ID" "$ASC_KEY_ID" "$ASC_PRIVATE_KEY_PATH")"
+    local args=(
+        --silent --show-error --fail-with-body
+        --request "$method"
+        --header "Authorization: Bearer $token"
+        --header "Accept: application/json"
+    )
+    if [[ -n "$body" ]]; then
+        args+=(--header "Content-Type: application/json" --data "$body")
+    fi
+    local parameter
+    for parameter in "$@"; do
+        args+=(--get --data-urlencode "$parameter")
+    done
+    curl "${args[@]}" "https://api.appstoreconnect.apple.com$path"
+}
+
+apps="$(asc_request GET /v1/apps "" "fields[apps]=name,bundleId" "limit=200")"
+add_app_id="$(printf '%s' "$apps" | jq -r --arg bundle "$ADD_BUNDLE_ID" \
+    '.data[] | select(.attributes.bundleId == $bundle) | .id' | head -n 1)"
+add_app_name="$(printf '%s' "$apps" | jq -r --arg bundle "$ADD_BUNDLE_ID" \
+    '.data[] | select(.attributes.bundleId == $bundle) | .attributes.name' | head -n 1)"
+remove_app_id="$(printf '%s' "$apps" | jq -r --arg name "$REMOVE_APP_NAME" \
+    '.data[] | select(.attributes.name == $name) | .id' | head -n 1)"
+
+[[ -n "$add_app_id" ]] || { echo "::error::No app found for $ADD_BUNDLE_ID"; exit 1; }
+[[ -n "$remove_app_id" ]] || { echo "::error::No app named $REMOVE_APP_NAME found"; exit 1; }
+
+testers="$(asc_request GET /v1/betaTesters "" \
+    "filter[email]=$TESTER_EMAIL" "fields[betaTesters]=email,state" "limit=200")"
+tester_email_lower="$(printf '%s' "$TESTER_EMAIL" | tr '[:upper:]' '[:lower:]')"
+tester_id="$(printf '%s' "$testers" | jq -r --arg email "$tester_email_lower" \
+    '.data[] | select((.attributes.email // "" | ascii_downcase) == $email) | .id' | head -n 1)"
+[[ -n "$tester_id" ]] || { echo "::error::No TestFlight tester found for $TESTER_EMAIL"; exit 1; }
+
+add_groups="$(asc_request GET "/v1/apps/$add_app_id/betaGroups" "" \
+    "fields[betaGroups]=name,isInternalGroup,hasAccessToAllBuilds" "limit=200")"
+add_group_id="$(printf '%s' "$add_groups" | jq -r \
+    '[.data[] | select(.attributes.isInternalGroup == true)]
+     | sort_by(if .attributes.hasAccessToAllBuilds == true then 0 else 1 end)
+     | .[0].id // empty')"
+add_group_name="$(printf '%s' "$add_groups" | jq -r --arg id "$add_group_id" \
+    '.data[] | select(.id == $id) | .attributes.name' | head -n 1)"
+[[ -n "$add_group_id" ]] || { echo "::error::$add_app_name has no internal TestFlight group"; exit 1; }
+
+add_group_testers="$(asc_request GET "/v1/betaGroups/$add_group_id/betaTesters" "" \
+    "fields[betaTesters]=email,state" "limit=200")"
+add_member_count="$(printf '%s' "$add_group_testers" | jq --arg id "$tester_id" \
+    '[.data[] | select(.id == $id)] | length')"
+if [[ "$add_member_count" -eq 0 ]]; then
+    tester_linkage="$(jq -n -c --arg id "$tester_id" '{data:[{type:"betaTesters",id:$id}]}')"
+    asc_request POST "/v1/betaGroups/$add_group_id/relationships/betaTesters" "$tester_linkage" >/dev/null
+fi
+
+remove_groups="$(asc_request GET "/v1/apps/$remove_app_id/betaGroups" "" \
+    "fields[betaGroups]=name,isInternalGroup,hasAccessToAllBuilds" "limit=200")"
+removed_group_ids=()
+while IFS= read -r group_id; do
+    [[ -n "$group_id" ]] || continue
+    group_testers="$(asc_request GET "/v1/betaGroups/$group_id/betaTesters" "" \
+        "fields[betaTesters]=email,state" "limit=200")"
+    member_count="$(printf '%s' "$group_testers" | jq --arg id "$tester_id" \
+        '[.data[] | select(.id == $id)] | length')"
+    if [[ "$member_count" -gt 0 ]]; then
+        tester_linkage="$(jq -n -c --arg id "$tester_id" '{data:[{type:"betaTesters",id:$id}]}')"
+        asc_request DELETE "/v1/betaGroups/$group_id/relationships/betaTesters" "$tester_linkage" >/dev/null
+        removed_group_ids+=("$group_id")
+    fi
+done < <(printf '%s' "$remove_groups" | jq -r '.data[].id')
+
+verified_add="$(asc_request GET "/v1/betaGroups/$add_group_id/betaTesters" "" \
+    "fields[betaTesters]=email,state" "limit=200")"
+[[ "$(printf '%s' "$verified_add" | jq --arg id "$tester_id" '[.data[] | select(.id == $id)] | length')" -eq 1 ]] || {
+    echo "::error::$TESTER_EMAIL was not added to $add_app_name"; exit 1;
+}
+
+while IFS= read -r group_id; do
+    [[ -n "$group_id" ]] || continue
+    verified_remove="$(asc_request GET "/v1/betaGroups/$group_id/betaTesters" "" \
+        "fields[betaTesters]=email,state" "limit=200")"
+    [[ "$(printf '%s' "$verified_remove" | jq --arg id "$tester_id" '[.data[] | select(.id == $id)] | length')" -eq 0 ]] || {
+        echo "::error::$TESTER_EMAIL is still assigned to $REMOVE_APP_NAME"; exit 1;
+    }
+done < <(printf '%s' "$remove_groups" | jq -r '.data[].id')
+
+removed_groups_json="$(printf '%s\n' "${removed_group_ids[@]:-}" | jq -R -s 'split("\n") | map(select(length > 0))')"
+mkdir -p "$(dirname "$ASC_RECEIPT_PATH")"
+jq -n \
+    --arg state ready \
+    --arg testerEmail "$TESTER_EMAIL" \
+    --arg testerId "$tester_id" \
+    --arg addedApp "$add_app_name" \
+    --arg addedBundleId "$ADD_BUNDLE_ID" \
+    --arg addedGroup "$add_group_name" \
+    --arg removedApp "$REMOVE_APP_NAME" \
+    --arg checkedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    --argjson removedGroupIds "$removed_groups_json" \
+    '{state:$state,testerEmail:$testerEmail,testerId:$testerId,addedApp:$addedApp,addedBundleId:$addedBundleId,addedGroup:$addedGroup,removedApp:$removedApp,removedGroupIds:$removedGroupIds,checkedAt:$checkedAt}' \
+    > "$ASC_RECEIPT_PATH"
+
+echo "Added $TESTER_EMAIL to $add_app_name / $add_group_name and removed it from $REMOVE_APP_NAME."
+jq -c . "$ASC_RECEIPT_PATH"
