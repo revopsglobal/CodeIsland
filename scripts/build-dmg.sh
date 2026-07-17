@@ -50,6 +50,13 @@ esac
 
 ARM_DIR="$BUILD_DIR/arm64-apple-macosx/release"
 X86_DIR="$BUILD_DIR/x86_64-apple-macosx/release"
+# Xcode 27's SwiftPM uses the Xcode build-system product layout even for the
+# command-line package build. Keep the existing CI/Xcode 26 path first, then
+# accept the local Xcode 27 layout for Greg's ARM-only build.
+if [ "$BUILD_ARCH" = "arm64" ] && [ ! -x "$ARM_DIR/CodeIsland" ] \
+    && [ -x "$BUILD_DIR/out/Products/Release/CodeIsland" ]; then
+    ARM_DIR="$BUILD_DIR/out/Products/Release"
+fi
 
 echo "==> Assembling .app bundle"
 
@@ -109,7 +116,7 @@ fi
 # Copy SPM resource bundles into Contents/Resources/ — putting them at the .app
 # root breaks Developer ID signing with "unsealed contents present in the bundle
 # root". Bundle.module already checks resourceURL, so this layout loads fine.
-for bundle in "$BUILD_DIR"/*/release/*.bundle; do
+for bundle in "$ARM_DIR"/*.bundle "$BUILD_DIR"/*/release/*.bundle; do
     if [ -e "$bundle" ]; then
         cp -R "$bundle" "$CONTENTS_DIR/Resources/"
         break
@@ -244,29 +251,17 @@ echo "==> Creating DMG"
 # Remove previous DMG if exists
 rm -f "$OUTPUT_DMG"
 
-if command -v create-dmg >/dev/null 2>&1; then
-    create-dmg \
-        --volname "CodeIsland ${VERSION}" \
-        --window-pos 200 120 \
-        --window-size 600 400 \
-        --icon-size 100 \
-        --icon "CodeIsland.app" 175 190 \
-        --hide-extension "CodeIsland.app" \
-        --app-drop-link 425 190 \
-        --no-internet-enable \
-        --sandbox-safe \
-        "$OUTPUT_DMG" \
-        "$STAGING_DIR/"
-else
-    echo "==> create-dmg not found — using hdiutil fallback"
-    ln -sfn /Applications "$STAGING_DIR/Applications"
-    hdiutil create \
-        -volname "CodeIsland ${VERSION}" \
-        -srcfolder "$STAGING_DIR" \
-        -format UDZO \
-        -ov \
-        "$OUTPUT_DMG"
-fi
+# create-dmg applies FinderInfo while arranging its decorative window. On a
+# signed app with nested Sparkle executables, that transport metadata makes the
+# mounted bundle fail codesign --strict even though the pre-DMG staging bundle
+# was valid. This private distribution values install integrity over decoration.
+ln -sfn /Applications "$STAGING_DIR/Applications"
+COPYFILE_DISABLE=1 hdiutil create \
+    -volname "CodeIsland ${VERSION}" \
+    -srcfolder "$STAGING_DIR" \
+    -format UDZO \
+    -ov \
+    "$OUTPUT_DMG"
 
 # Codesign the DMG container itself. Without this `spctl --assess` reports
 # "no usable signature" on the dmg even when the inner .app is properly
@@ -278,6 +273,20 @@ if [ "$APP_SIGNED" = true ]; then
     echo "==> Code-signing the DMG container"
     codesign --force --sign "$SIGN_IDENTITY" --timestamp "$OUTPUT_DMG"
 fi
+
+# Verify the artifact users actually download, not only the staging directory.
+# A transport xattr regression is visible only after mounting the finished DMG.
+VERIFY_MOUNT=$(mktemp -d "$BUILD_DIR/dmg-verify.XXXXXX")
+cleanup_verify_mount() {
+    hdiutil detach "$VERIFY_MOUNT" >/dev/null 2>&1 || true
+    rmdir "$VERIFY_MOUNT" 2>/dev/null || true
+}
+trap cleanup_verify_mount EXIT
+hdiutil attach -nobrowse -mountpoint "$VERIFY_MOUNT" "$OUTPUT_DMG" >/dev/null
+codesign --verify --deep --strict --verbose=2 "$VERIFY_MOUNT/CodeIsland.app"
+cleanup_verify_mount
+trap - EXIT
+echo "==> Mounted DMG app passed strict signature verification"
 
 # ---------------------------------------------------------------------------
 # Notarize + staple. Uses the "CodeIsland" keychain profile by default
