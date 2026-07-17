@@ -9,6 +9,8 @@ set -euo pipefail
 TESTER_EMAIL="${TESTER_EMAIL:-gregharned@gmail.com}"
 ADD_BUNDLE_ID="${ADD_BUNDLE_ID:-com.harned.estate}"
 REMOVE_APP_NAME="${REMOVE_APP_NAME:-Orca IDE}"
+FORCE_READD="${FORCE_READD:-0}"
+RESEND_TESTFLIGHT_INVITATION="${RESEND_TESTFLIGHT_INVITATION:-0}"
 ASC_RECEIPT_PATH="${ASC_RECEIPT_PATH:-testflight-membership-receipt.json}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -27,7 +29,7 @@ asc_request() {
     token="$(ruby "$SCRIPT_DIR/app-store-connect-jwt.rb" \
         "$ASC_ISSUER_ID" "$ASC_KEY_ID" "$ASC_PRIVATE_KEY_PATH")"
     local args=(
-        --silent --show-error --fail-with-body
+        --silent --show-error
         --request "$method"
         --header "Authorization: Bearer $token"
         --header "Accept: application/json"
@@ -39,7 +41,27 @@ asc_request() {
     for parameter in "$@"; do
         args+=(--get --data-urlencode "$parameter")
     done
-    curl "${args[@]}" "https://api.appstoreconnect.apple.com$path"
+    local response
+    local body_response
+    local http_status
+    response="$(curl "${args[@]}" --write-out $'\n%{http_code}' "https://api.appstoreconnect.apple.com$path")"
+    http_status="${response##*$'\n'}"
+    body_response="${response%$'\n'*}"
+    if [[ ! "$http_status" =~ ^2[0-9][0-9]$ ]]; then
+        if [[ "$method" == "POST" && "$path" == "/v1/betaTesterInvitations" ]] &&
+            printf '%s' "$body_response" | jq -e \
+                '[.errors[]?.code] | any(. == "STATE_ERROR.TESTER_INVITE.ALREADY_ACCEPTED")' \
+                >/dev/null 2>&1; then
+            printf '%s' '{"data":null,"meta":{"alreadyAccepted":true}}'
+            return 0
+        fi
+        echo "::error::App Store Connect $method $path returned HTTP $http_status" >&2
+        printf '%s' "$body_response" | jq -r \
+            '.errors[]? | "::error::\(.code // "APPLE_ERROR"): \(.title // "Request failed") — \(.detail // "No detail")"' \
+            >&2 || true
+        return 22
+    fi
+    printf '%s' "$body_response"
 }
 
 apps="$(asc_request GET /v1/apps "" "fields[apps]=name,bundleId" "limit=200")"
@@ -79,6 +101,11 @@ add_group_testers="$(asc_request GET "/v1/betaGroups/$add_group_id/betaTesters" 
     "fields[betaTesters]=email,state" "limit=200")"
 add_member_count="$(printf '%s' "$add_group_testers" | jq --arg id "$tester_id" \
     '[.data[] | select(.id == $id)] | length')"
+if [[ "$add_member_count" -gt 0 && "$FORCE_READD" == "1" ]]; then
+    tester_linkage="$(jq -n -c --arg id "$tester_id" '{data:[{type:"betaTesters",id:$id}]}')"
+    asc_request DELETE "/v1/betaGroups/$add_group_id/relationships/betaTesters" "$tester_linkage" >/dev/null
+    add_member_count=0
+fi
 if [[ "$add_member_count" -eq 0 ]]; then
     tester_linkage="$(jq -n -c --arg id "$tester_id" '{data:[{type:"betaTesters",id:$id}]}')"
     asc_request POST "/v1/betaGroups/$add_group_id/relationships/betaTesters" "$tester_linkage" >/dev/null
@@ -118,6 +145,25 @@ while IFS= read -r group_id; do
     }
 done < <(printf '%s' "$remove_groups" | jq -r '.data[].id')
 
+testflight_invitation_id=""
+testflight_invitation_state="not-requested"
+if [[ "$RESEND_TESTFLIGHT_INVITATION" == "1" ]]; then
+    testflight_invitation_payload="$(jq -n -c \
+        --arg appId "$add_app_id" \
+        --arg testerId "$tester_id" \
+        '{data:{type:"betaTesterInvitations",relationships:{app:{data:{type:"apps",id:$appId}},betaTester:{data:{type:"betaTesters",id:$testerId}}}}}')"
+    testflight_invitation_response="$(asc_request POST /v1/betaTesterInvitations "$testflight_invitation_payload")"
+    testflight_invitation_id="$(printf '%s' "$testflight_invitation_response" | jq -r '.data.id // empty')"
+    if [[ "$(printf '%s' "$testflight_invitation_response" | jq -r '.meta.alreadyAccepted // false')" == "true" ]]; then
+        testflight_invitation_state="already-accepted"
+    elif [[ -n "$testflight_invitation_id" ]]; then
+        testflight_invitation_state="sent"
+    else
+        echo "::error::Apple did not return a TestFlight invitation ID"
+        exit 1
+    fi
+fi
+
 removed_groups_json="$(printf '%s\n' "${removed_group_ids[@]:-}" | jq -R -s 'split("\n") | map(select(length > 0))')"
 mkdir -p "$(dirname "$ASC_RECEIPT_PATH")"
 jq -n \
@@ -129,9 +175,11 @@ jq -n \
     --arg addedGroup "$add_group_name" \
     --arg removedApp "$REMOVE_APP_NAME" \
     --arg removedAppState "$remove_app_state" \
+    --arg invitationId "$testflight_invitation_id" \
+    --arg invitationState "$testflight_invitation_state" \
     --arg checkedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     --argjson removedGroupIds "$removed_groups_json" \
-    '{state:$state,testerEmail:$testerEmail,testerId:$testerId,addedApp:$addedApp,addedBundleId:$addedBundleId,addedGroup:$addedGroup,removedApp:$removedApp,removedAppState:$removedAppState,removedGroupIds:$removedGroupIds,checkedAt:$checkedAt}' \
+    '{state:$state,testerEmail:$testerEmail,testerId:$testerId,addedApp:$addedApp,addedBundleId:$addedBundleId,addedGroup:$addedGroup,removedApp:$removedApp,removedAppState:$removedAppState,removedGroupIds:$removedGroupIds,invitationId:$invitationId,invitationState:$invitationState,checkedAt:$checkedAt}' \
     > "$ASC_RECEIPT_PATH"
 
 if [[ "$remove_app_state" == "removed" ]]; then
