@@ -22,16 +22,7 @@ struct RemoteApprovalSurface: View {
                     .environmentObject(client)
             default:
                 if client.approvals.isEmpty && client.questions.isEmpty {
-                    RemoteApprovalStatusStrip(
-                        icon: "checkmark.shield.fill",
-                        title: "Remote agents",
-                        detail: "Connected · Nothing waiting",
-                        tint: .green
-                    )
-                    .contextMenu {
-                        Button("Refresh") { Task { await client.refresh() } }
-                        Button("Forget Mac", role: .destructive) { client.unpair() }
-                    }
+                    EmptyView()
                 } else {
                     VStack(spacing: 10) {
                         ForEach(client.questions) { question in

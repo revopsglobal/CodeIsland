@@ -1235,19 +1235,38 @@ final class PersonalHubService {
             )
 
         case .agents:
-            let sessions = appState.sessions.sorted { $0.value.lastActivity > $1.value.lastActivity }
+            let attentionIDs = SessionAttentionRouter.orderedSessionIDs(
+                appState.sessions.map { sessionID, session in
+                    SessionAttentionCandidate(
+                        id: sessionID,
+                        status: session.status,
+                        lastActivity: session.lastActivity
+                    )
+                }
+            )
+            let recentIDs = appState.sessions
+                .sorted { $0.value.lastActivity > $1.value.lastActivity }
+                .map(\.key)
+            let visibleIDs = attentionIDs.isEmpty ? Array(recentIDs.prefix(1)) : attentionIDs
             let waiting = appState.permissionQueue.count + appState.questionQueue.count
+            let running = appState.sessions.values.filter {
+                $0.status == .running || $0.status == .processing
+            }.count
             return .init(
                 id: id,
                 availability: .ready,
-                summary: waiting > 0 ? "\(waiting) waiting · \(sessions.count) sessions" : "\(sessions.count) sessions",
-                items: sessions.prefix(12).map { sessionID, session in
-                    .init(
+                summary: waiting > 0
+                    ? "\(waiting) needs you · \(running) running"
+                    : (running > 0 ? "\(running) running · no decisions waiting" : "No decisions waiting"),
+                detail: "\(appState.sessions.count) total sessions",
+                items: visibleIDs.prefix(6).compactMap { sessionID in
+                    guard let session = appState.sessions[sessionID] else { return nil }
+                    return .init(
                         id: sessionID,
                         title: session.displayName,
-                        subtitle: session.sourceLabel,
+                        subtitle: "\(Self.agentAttentionLabel(session.status)) · \(session.sourceLabel)",
                         detail: String(describing: session.status),
-                        symbol: "terminal"
+                        symbol: Self.agentAttentionSymbol(session.status)
                     )
                 }
             )
@@ -1598,6 +1617,25 @@ final class PersonalHubService {
                 availability: .unavailable,
                 summary: "\(definition.title) is not implemented yet"
             )
+        }
+    }
+
+    private static func agentAttentionLabel(_ status: AgentStatus) -> String {
+        switch status {
+        case .waitingApproval: return "Needs approval"
+        case .waitingQuestion: return "Needs an answer"
+        case .running: return "Running"
+        case .processing: return "Processing"
+        case .idle: return "Recent"
+        }
+    }
+
+    private static func agentAttentionSymbol(_ status: AgentStatus) -> String {
+        switch status {
+        case .waitingApproval: return "checkmark.shield.fill"
+        case .waitingQuestion: return "questionmark.bubble.fill"
+        case .running, .processing: return "terminal.fill"
+        case .idle: return "clock"
         }
     }
 

@@ -30,7 +30,7 @@ struct ContentView: View {
                             .environmentObject(connection)
                             .environmentObject(liveActivity)
 
-                        if !remoteApprovals.approvals.isEmpty {
+                        if !remoteApprovals.approvals.isEmpty || !remoteApprovals.questions.isEmpty {
                             ScrollView {
                                 RemoteApprovalSurface()
                                     .environmentObject(remoteApprovals)
@@ -109,12 +109,14 @@ private struct PortraitIslandView: View {
                     CompactIslandBar()
                         .environmentObject(connection)
 
-                    PersonalHubSurface()
-                        .environmentObject(remoteApprovals)
-
                     RemoteApprovalSurface()
                         .environmentObject(remoteApprovals)
                         .id("companion.remoteApprovals.anchor")
+
+                    if remoteApprovals.hasPairingCredential {
+                        PersonalHubSurface()
+                            .environmentObject(remoteApprovals)
+                    }
 
                     if let state = connection.latestState {
                         LiveIslandCard(state: state)
@@ -163,6 +165,12 @@ private struct PortraitIslandView: View {
                 guard newValue != nil else { return }
                 withAnimation(.easeOut(duration: 0.3)) {
                     scroller.scrollTo(Self.pendingAnchor, anchor: .top)
+                }
+            }
+            .onChange(of: remoteApprovals.approvals.count + remoteApprovals.questions.count) { oldValue, newValue in
+                guard newValue > oldValue else { return }
+                withAnimation(.easeOut(duration: 0.3)) {
+                    scroller.scrollTo("companion.remoteApprovals.anchor", anchor: .top)
                 }
             }
             }

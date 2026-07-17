@@ -70,3 +70,37 @@ final class SessionAttentionRouterTests: XCTestCase {
         )
     }
 }
+
+@MainActor
+final class PersonalHubAttentionSnapshotTests: XCTestCase {
+    func testAgentModuleShowsAttentionBeforeRoutineAndKeepsTotalsSecondary() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CodeIslandAttentionSnapshot-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let configuration = PersonalHubConfigurationStore(
+            stateURL: directory.appendingPathComponent("configuration.json")
+        )
+        let appState = AppState()
+
+        var routine = SessionSnapshot(startTime: Date(timeIntervalSince1970: 100))
+        routine.status = .running
+        routine.lastActivity = Date(timeIntervalSince1970: 300)
+        routine.source = "codex"
+        var approval = SessionSnapshot(startTime: Date(timeIntervalSince1970: 90))
+        approval.status = .waitingApproval
+        approval.lastActivity = Date(timeIntervalSince1970: 200)
+        approval.source = "claude"
+        appState.sessions = ["routine": routine, "approval": approval]
+
+        let snapshot = PersonalHubService(configurationStore: configuration).snapshot(
+            appState: appState,
+            requestedMode: .code,
+            serverName: "Attention Test Mac"
+        )
+        let agents = try XCTUnwrap(snapshot.modules.first(where: { $0.id == .agents }))
+
+        XCTAssertEqual(agents.items.map(\.id), ["approval", "routine"])
+        XCTAssertEqual(agents.items.first?.subtitle, "Needs approval · Claude")
+        XCTAssertEqual(agents.detail, "2 total sessions")
+    }
+}
