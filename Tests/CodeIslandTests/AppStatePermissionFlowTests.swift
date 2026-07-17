@@ -224,12 +224,14 @@ final class AppStatePermissionFlowTests: XCTestCase {
         let secondID = appState.permissionQueue[1].id
 
         XCTAssertTrue(appState.resolveRemotePermission(requestID: secondID, decision: .approve))
-        XCTAssertEqual(try extractPermissionBehavior(from: await secondResponseTask.value), "allow")
+        let secondResponse = await secondResponseTask.value
+        XCTAssertEqual(try extractPermissionBehavior(from: secondResponse), "allow")
         XCTAssertEqual(appState.permissionQueue.map(\.id), [firstID])
         XCTAssertFalse(appState.resolveRemotePermission(requestID: secondID, decision: .deny))
 
         XCTAssertTrue(appState.resolveRemotePermission(requestID: firstID, decision: .deny))
-        XCTAssertEqual(try extractPermissionBehavior(from: await firstResponseTask.value), "deny")
+        let firstResponse = await firstResponseTask.value
+        XCTAssertEqual(try extractPermissionBehavior(from: firstResponse), "deny")
         XCTAssertTrue(appState.permissionQueue.isEmpty)
     }
 
