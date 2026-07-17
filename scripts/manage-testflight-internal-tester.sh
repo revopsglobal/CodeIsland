@@ -12,6 +12,7 @@ TESTER_LAST_NAME="${TESTER_LAST_NAME:-Harned}"
 BUNDLE_ID="${BUNDLE_ID:-com.revopsglobal.codeisland.buddy}"
 BETA_GROUP_NAME="${BETA_GROUP_NAME:-CodeIsland Internal}"
 FORCE_NEW_INVITATION="${FORCE_NEW_INVITATION:-0}"
+RESEND_TESTFLIGHT_INVITATION="${RESEND_TESTFLIGHT_INVITATION:-0}"
 ASC_RECEIPT_PATH="${ASC_RECEIPT_PATH:-testflight-tester-receipt.json}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -249,4 +250,19 @@ if [[ "$verified_member" -ne 1 ]]; then
     exit 1
 fi
 
-write_receipt ready "$app_id" "$group_id" "$tester_id"
+testflight_invitation_id=""
+if [[ "$RESEND_TESTFLIGHT_INVITATION" == "1" ]]; then
+    testflight_invitation_payload="$(jq -n -c \
+        --arg appId "$app_id" \
+        --arg testerId "$tester_id" \
+        '{data:{type:"betaTesterInvitations",relationships:{app:{data:{type:"apps",id:$appId}},betaTester:{data:{type:"betaTesters",id:$testerId}}}}}')"
+    testflight_invitation_response="$(asc_request POST /v1/betaTesterInvitations "$testflight_invitation_payload")"
+    testflight_invitation_id="$(printf '%s' "$testflight_invitation_response" | jq -r '.data.id // empty')"
+    if [[ -z "$testflight_invitation_id" ]]; then
+        echo "::error::Apple did not return a TestFlight invitation ID"
+        exit 1
+    fi
+    echo "Apple sent a fresh TestFlight invitation to $TESTER_EMAIL."
+fi
+
+write_receipt ready "$app_id" "$group_id" "$tester_id" "$testflight_invitation_id"

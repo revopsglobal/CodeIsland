@@ -78,6 +78,9 @@ case "$path" in
     printf '%s' 'tester-1' > "$ASC_REQUEST_STATE"
     printf '%s\n' '{}'
     ;;
+  /v1/betaTesterInvitations)
+    printf '%s\n' '{"data":{"type":"betaTesterInvitations","id":"testflight-invite-1"}}'
+    ;;
   *)
     printf 'unexpected request: %s %s\n' "$method" "$path" >&2
     exit 64
@@ -123,6 +126,19 @@ MOCK
   grep -q $'DELETE\t/v1/betaTesters/tester-1' "$ASC_REQUEST_LOG"
   grep -q $'POST\t/v1/betaTesters' "$ASC_REQUEST_LOG"
   jq -e '.testerId == "tester-new"' "$ASC_RECEIPT_PATH"
+}
+
+@test "explicitly resends the TestFlight invitation after membership is ready" {
+  export MOCK_SCENARIO="existing-user"
+  export RESEND_TESTFLIGHT_INVITATION="1"
+
+  run "$REPO_ROOT/scripts/manage-testflight-internal-tester.sh"
+
+  [ "$status" -eq 0 ]
+  grep -q $'POST\t/v1/betaTesterInvitations' "$ASC_REQUEST_LOG"
+  grep -q '"type":"apps","id":"app-1"' "$ASC_REQUEST_LOG"
+  grep -q '"type":"betaTesters","id":"tester-1"' "$ASC_REQUEST_LOG"
+  jq -e '.state == "ready" and .invitationId == "testflight-invite-1"' "$ASC_RECEIPT_PATH"
 }
 
 @test "creates a scoped team invitation for a missing user" {
