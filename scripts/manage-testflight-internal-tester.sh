@@ -167,12 +167,17 @@ if [[ -z "$user_id" ]]; then
 fi
 
 all_apps_visible="$(printf '%s' "$users_response" | jq -r '.data[0].attributes.allAppsVisible // false')"
+user_roles="$(printf '%s' "$users_response" | jq -r '[.data[0].attributes.roles[]?] | join(",")')"
+echo "Existing App Store Connect user found; roles=${user_roles:-none}; allAppsVisible=$all_apps_visible."
 if [[ "$all_apps_visible" != "true" ]]; then
     visible_apps="$(asc_request GET "/v1/users/$user_id/visibleApps" "" "fields[apps]=bundleId" "limit=200")"
     has_app="$(printf '%s' "$visible_apps" | jq --arg id "$app_id" '[.data[] | select(.id == $id)] | length')"
     if [[ "$has_app" -eq 0 ]]; then
         visible_payload="$(jq -n -c --arg id "$app_id" '{data:[{type:"apps",id:$id}]}')"
         asc_request POST "/v1/users/$user_id/relationships/visibleApps" "$visible_payload" >/dev/null
+        echo "Granted the existing user access to CodeIsland Buddy."
+    else
+        echo "The existing user already has CodeIsland Buddy app access."
     fi
 fi
 
@@ -185,6 +190,13 @@ tester_id="$(printf '%s' "$testers_response" | jq -r \
     --arg email "$tester_email_lower" \
     '.data[] | select((.attributes.email // "" | ascii_downcase) == $email) | .id' \
     | head -n 1)"
+tester_state="$(printf '%s' "$testers_response" | jq -r \
+    --arg email "$tester_email_lower" \
+    '.data[] | select((.attributes.email // "" | ascii_downcase) == $email) | .attributes.state // "UNKNOWN"' \
+    | head -n 1)"
+if [[ -n "$tester_id" ]]; then
+    echo "Existing TestFlight tester found; state=${tester_state:-UNKNOWN}."
+fi
 
 if [[ -n "$tester_id" && "$FORCE_NEW_INVITATION" == "1" ]]; then
     echo "Resetting the existing TestFlight tester record for a fresh internal invitation."
