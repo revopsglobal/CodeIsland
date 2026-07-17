@@ -112,7 +112,7 @@ final class GlancesModel: NSObject, ObservableObject {
             loadUpcomingEvents()
             return
         }
-        guard status == .notDetermined else { return }
+        guard Self.canRequestFullCalendarAccess(status) else { return }
 
         eventStore.requestFullAccessToEvents { [weak self] granted, error in
             Task { @MainActor in
@@ -169,6 +169,10 @@ final class GlancesModel: NSObject, ObservableObject {
 
     nonisolated private static func hasFullAccess(_ status: EKAuthorizationStatus) -> Bool {
         status == .fullAccess
+    }
+
+    nonisolated static func canRequestFullCalendarAccess(_ status: EKAuthorizationStatus) -> Bool {
+        status == .notDetermined || status == .writeOnly
     }
 
     nonisolated private static func hasLocationAccess(_ status: CLAuthorizationStatus) -> Bool {
