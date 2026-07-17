@@ -972,73 +972,8 @@ private struct BuddyCalendarMonthView: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            HStack(spacing: 8) {
-                navigationButton("chevron.left", label: "Previous month", identifier: "previous") {
-                    moveMonth(-1)
-                }
-                Spacer(minLength: 0)
-                Text(month.displayedMonth.formatted(.dateTime.month(.wide).year()))
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
-                    .foregroundStyle(HubTheme.foreground.opacity(0.9))
-                    .accessibilityIdentifier("hub.calendar.monthTitle")
-                Spacer(minLength: 0)
-                Button("Today") {
-                    Task { await client.refreshCalendar(referenceDate: Date(), selectedDate: Date()) }
-                }
-                .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(HubTheme.accent)
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("hub.calendar.today")
-                navigationButton("chevron.right", label: "Next month", identifier: "next") {
-                    moveMonth(1)
-                }
-            }
-
-            LazyVGrid(columns: columns, spacing: 4) {
-                ForEach(weekdaySymbols, id: \.self) { symbol in
-                    Text(symbol.uppercased())
-                        .font(.system(size: 8, weight: .black, design: .monospaced))
-                        .foregroundStyle(HubTheme.foreground.opacity(0.28))
-                        .frame(maxWidth: .infinity)
-                }
-                ForEach(month.days) { day in
-                    Button {
-                        Task {
-                            await client.refreshCalendar(
-                                referenceDate: month.displayedMonth,
-                                selectedDate: day.date
-                            )
-                        }
-                    } label: {
-                        VStack(spacing: 2) {
-                            Text("\(calendar.component(.day, from: day.date))")
-                                .font(.system(size: 11, weight: isSelected(day) ? .bold : .medium, design: .rounded))
-                            HStack(spacing: 1.5) {
-                                ForEach(0..<min(day.eventCount, 3), id: \.self) { _ in
-                                    Circle().frame(width: 2.5, height: 2.5)
-                                }
-                            }
-                            .frame(height: 3)
-                        }
-                        .foregroundStyle(day.isInDisplayedMonth
-                            ? HubTheme.foreground.opacity(0.86)
-                            : HubTheme.foreground.opacity(0.22))
-                        .frame(maxWidth: .infinity, minHeight: 34)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(isSelected(day) ? HubTheme.accent.opacity(0.24) : Color.clear)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .stroke(day.isToday ? HubTheme.accent.opacity(0.92) : Color.clear, lineWidth: 1)
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("hub.calendar.day.\(day.id)")
-                    .accessibilityLabel(day.date.formatted(date: .complete, time: .omitted))
-                    .accessibilityValue(day.eventCount == 1 ? "1 event" : "\(day.eventCount) events")
-                }
-            }
+            monthHeader
+            monthGrid
         }
         .padding(9)
         .background(Color.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -1048,6 +983,113 @@ private struct BuddyCalendarMonthView: View {
         )
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("hub.calendar.month")
+    }
+
+    private var monthHeader: some View {
+        HStack(spacing: 8) {
+            navigationButton("chevron.left", label: "Previous month", identifier: "previous") {
+                moveMonth(-1)
+            }
+            Spacer(minLength: 0)
+            monthTitle
+            Spacer(minLength: 0)
+            todayButton
+            navigationButton("chevron.right", label: "Next month", identifier: "next") {
+                moveMonth(1)
+            }
+        }
+    }
+
+    private var monthTitle: some View {
+        Text(month.displayedMonth.formatted(.dateTime.month(.wide).year()))
+            .font(.system(size: 14, weight: .bold, design: .rounded))
+            .foregroundStyle(HubTheme.foreground.opacity(0.9))
+            .accessibilityIdentifier("hub.calendar.monthTitle")
+    }
+
+    private var todayButton: some View {
+        Button("Today") {
+            Task { await client.refreshCalendar(referenceDate: Date(), selectedDate: Date()) }
+        }
+        .font(.system(size: 10, weight: .bold))
+        .foregroundStyle(HubTheme.accent)
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("hub.calendar.today")
+    }
+
+    private var monthGrid: some View {
+        LazyVGrid(columns: columns, spacing: 4) {
+            ForEach(weekdaySymbols, id: \.self) { symbol in
+                weekdayLabel(symbol)
+            }
+            ForEach(month.days) { day in
+                dayButton(day)
+            }
+        }
+    }
+
+    private func weekdayLabel(_ symbol: String) -> some View {
+        Text(symbol.uppercased())
+            .font(.system(size: 8, weight: .black, design: .monospaced))
+            .foregroundStyle(HubTheme.foreground.opacity(0.28))
+            .frame(maxWidth: .infinity)
+    }
+
+    private func dayButton(_ day: PersonalHubCalendarDay) -> some View {
+        Button {
+            select(day)
+        } label: {
+            dayLabel(day)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("hub.calendar.day.\(day.id)")
+        .accessibilityLabel(day.date.formatted(date: .complete, time: .omitted))
+        .accessibilityValue(eventCountLabel(day.eventCount))
+    }
+
+    private func dayLabel(_ day: PersonalHubCalendarDay) -> some View {
+        let selected = isSelected(day)
+        let foreground = day.isInDisplayedMonth
+            ? HubTheme.foreground.opacity(0.86)
+            : HubTheme.foreground.opacity(0.22)
+        let fill = selected ? HubTheme.accent.opacity(0.24) : Color.clear
+        let stroke = day.isToday ? HubTheme.accent.opacity(0.92) : Color.clear
+
+        return VStack(spacing: 2) {
+            Text("\(calendar.component(.day, from: day.date))")
+                .font(.system(size: 11, weight: selected ? .bold : .medium, design: .rounded))
+            eventDots(day.eventCount)
+        }
+        .foregroundStyle(foreground)
+        .frame(maxWidth: .infinity, minHeight: 34)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous).fill(fill)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(stroke, lineWidth: 1)
+        )
+    }
+
+    private func eventDots(_ count: Int) -> some View {
+        HStack(spacing: 1.5) {
+            ForEach(0..<min(count, 3), id: \.self) { _ in
+                Circle().frame(width: 2.5, height: 2.5)
+            }
+        }
+        .frame(height: 3)
+    }
+
+    private func select(_ day: PersonalHubCalendarDay) {
+        Task {
+            await client.refreshCalendar(
+                referenceDate: month.displayedMonth,
+                selectedDate: day.date
+            )
+        }
+    }
+
+    private func eventCountLabel(_ count: Int) -> String {
+        count == 1 ? "1 event" : "\(count) events"
     }
 
     private func navigationButton(
