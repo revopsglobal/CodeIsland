@@ -186,6 +186,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         appState.stopCodexAppServerWatcher()
         appState.stopSessionDiscovery()
         PersonalUtilitiesModel.shared.stop()
+        WindowLayoutDropController.shared.stop()
     }
 
     // MARK: - Global Shortcuts

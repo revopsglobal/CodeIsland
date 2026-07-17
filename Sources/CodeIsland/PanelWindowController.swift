@@ -182,6 +182,7 @@ class PanelWindowController: NSObject, NSWindowDelegate {
         self.lastChosenScreenSignature = ScreenDetector.signature(for: screen)
 
         setupHorizontalDragMonitor()
+        WindowLayoutDropController.shared.start()
         updatePosition()
         panel.orderFrontRegardless()
         MascotAnimationGate.shared.setPanelVisible(true)
