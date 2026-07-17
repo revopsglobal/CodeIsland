@@ -186,6 +186,12 @@ tester_id="$(printf '%s' "$testers_response" | jq -r \
     '.data[] | select((.attributes.email // "" | ascii_downcase) == $email) | .id' \
     | head -n 1)"
 
+if [[ -n "$tester_id" && "$FORCE_NEW_INVITATION" == "1" ]]; then
+    echo "Resetting the existing TestFlight tester record for a fresh internal invitation."
+    asc_request DELETE "/v1/betaTesters/$tester_id" "" >/dev/null
+    tester_id=""
+fi
+
 if [[ -z "$tester_id" ]]; then
     tester_payload="$(jq -n -c \
         --arg email "$TESTER_EMAIL" \
@@ -193,7 +199,18 @@ if [[ -z "$tester_id" ]]; then
         --arg lastName "$TESTER_LAST_NAME" \
         --arg groupId "$group_id" \
         '{data:{type:"betaTesters",attributes:{email:$email,firstName:$firstName,lastName:$lastName},relationships:{betaGroups:{data:[{type:"betaGroups",id:$groupId}]}}}}')"
-    tester_response="$(asc_request POST /v1/betaTesters "$tester_payload")"
+    tester_response=""
+    for attempt in 1 2 3 4 5; do
+        if tester_response="$(asc_request POST /v1/betaTesters "$tester_payload")"; then
+            break
+        fi
+        if [[ "$attempt" -eq 5 ]]; then
+            echo "::error::Apple did not accept the fresh TestFlight tester after $attempt attempts"
+            exit 1
+        fi
+        echo "Apple is still clearing the prior TestFlight tester; retrying in 5 seconds."
+        sleep 5
+    done
     tester_id="$(printf '%s' "$tester_response" | jq -r '.data.id // empty')"
 fi
 

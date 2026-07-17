@@ -56,20 +56,26 @@ case "$path" in
     ;;
   /v1/betaTesters)
     if [[ "$method" == "POST" ]]; then
-      printf '%s\n' '{"data":{"type":"betaTesters","id":"tester-1","attributes":{"email":"gregharned@gmail.com"}}}'
+      printf '%s' 'tester-new' > "$ASC_REQUEST_STATE"
+      printf '%s\n' '{"data":{"type":"betaTesters","id":"tester-new","attributes":{"email":"gregharned@gmail.com"}}}'
     else
       printf '%s\n' '{"data":[{"type":"betaTesters","id":"tester-1","attributes":{"email":"gregharned@gmail.com"}}]}'
     fi
     ;;
+  /v1/betaTesters/tester-1)
+    rm -f "$ASC_REQUEST_STATE"
+    printf '%s\n' '{}'
+    ;;
   /v1/betaGroups/group-1/betaTesters)
     if [[ -f "$ASC_REQUEST_STATE" ]]; then
-      printf '%s\n' '{"data":[{"type":"betaTesters","id":"tester-1","attributes":{"email":"gregharned@gmail.com","state":"ACCEPTED"}}]}'
+      tester_id="$(cat "$ASC_REQUEST_STATE")"
+      printf '{"data":[{"type":"betaTesters","id":"%s","attributes":{"email":"gregharned@gmail.com","state":"ACCEPTED"}}]}\n' "$tester_id"
     else
       printf '%s\n' '{"data":[]}'
     fi
     ;;
   /v1/betaGroups/group-1/relationships/betaTesters)
-    : > "$ASC_REQUEST_STATE"
+    printf '%s' 'tester-1' > "$ASC_REQUEST_STATE"
     printf '%s\n' '{}'
     ;;
   *)
@@ -104,6 +110,19 @@ MOCK
   grep -q $'POST\t/v1/userInvitations' "$ASC_REQUEST_LOG"
   grep -q '"roles":\["DEVELOPER"\]' "$ASC_REQUEST_LOG"
   grep -q '"type":"apps","id":"app-1"' "$ASC_REQUEST_LOG"
+}
+
+@test "recreates a stale beta tester for a fresh internal invitation" {
+  export MOCK_SCENARIO="existing-user"
+  export FORCE_NEW_INVITATION="1"
+
+  run "$REPO_ROOT/scripts/manage-testflight-internal-tester.sh"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"state":"ready"'* ]]
+  grep -q $'DELETE\t/v1/betaTesters/tester-1' "$ASC_REQUEST_LOG"
+  grep -q $'POST\t/v1/betaTesters' "$ASC_REQUEST_LOG"
+  jq -e '.testerId == "tester-new"' "$ASC_RECEIPT_PATH"
 }
 
 @test "creates a scoped team invitation for a missing user" {
