@@ -60,6 +60,7 @@ targets:
       - target: CodeIslandCompanionWidget
         embed: true
       - sdk: AppIntents.framework
+      - sdk: Speech.framework
   CodeIslandCompanionWidget:
     type: app-extension
     platform: iOS

@@ -76,6 +76,7 @@ final class PersonalHubProtocolTests: XCTestCase {
                                     role: .primary,
                                     targetID: "event-1",
                                     deepLink: URL(string: "https://meet.google.com/abc-defg-hij"),
+                                    value: "review-seed",
                                     actionToken: "exact-token",
                                     actionExpiresAt: expiresAt
                                 )
@@ -157,7 +158,8 @@ final class PersonalHubProtocolTests: XCTestCase {
     func testReminderDraftSupportsStructuredAndLegacyValues() throws {
         let draft = PersonalHubReminderDraft(
             title: "Finish the deck",
-            due: Date(timeIntervalSince1970: 1_800_000_000)
+            due: Date(timeIntervalSince1970: 1_800_000_000),
+            calendarID: "work-list"
         )
         XCTAssertEqual(
             PersonalHubReminderDraft.decodeActionValue(try XCTUnwrap(draft.encodedActionValue())),
@@ -166,6 +168,48 @@ final class PersonalHubProtocolTests: XCTestCase {
         XCTAssertEqual(
             PersonalHubReminderDraft.decodeActionValue("Call the bank"),
             PersonalHubReminderDraft(title: "Call the bank")
+        )
+    }
+
+    func testNewOptionalProtocolFieldsDecodeFromLegacyPayloads() throws {
+        let decoder = JSONDecoder()
+        let action = try decoder.decode(
+            PersonalHubAction.self,
+            from: Data(
+                #"{"id":"join","label":"Join","role":"primary","targetID":"event-1"}"#.utf8
+            )
+        )
+        let draft = try decoder.decode(
+            PersonalHubReminderDraft.self,
+            from: Data(#"{"title":"Call the bank","due":null}"#.utf8)
+        )
+
+        XCTAssertNil(action.value)
+        XCTAssertNil(draft.calendarID)
+    }
+
+    func testConflictSafeNoteDraftRoundTripsAndSupportsLegacyText() throws {
+        let draft = PersonalHubNoteDraft(
+            text: "Launch checklist\n- [ ] Send invite",
+            category: "Work",
+            baseRevision: 7
+        )
+
+        XCTAssertEqual(
+            PersonalHubNoteDraft.decodeActionValue(try XCTUnwrap(draft.encodedActionValue())),
+            draft
+        )
+        XCTAssertEqual(
+            PersonalHubNoteDraft.decodeActionValue("Legacy note text"),
+            PersonalHubNoteDraft(text: "Legacy note text")
+        )
+    }
+
+    func testChecklistMutationRoundTrips() throws {
+        let mutation = PersonalHubChecklistMutation(lineIndex: 3, baseRevision: 9)
+        XCTAssertEqual(
+            PersonalHubChecklistMutation.decodeActionValue(try XCTUnwrap(mutation.encodedActionValue())),
+            mutation
         )
     }
 }

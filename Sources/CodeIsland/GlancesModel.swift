@@ -22,8 +22,10 @@ final class GlancesModel: NSObject, ObservableObject {
         let start: Date
         let end: Date
         let joinURL: URL?
+        let notes: String?
         let isAllDay: Bool
         let calendarTitle: String
+        let isEditable: Bool
     }
 
     struct ReminderInfo: Identifiable, Equatable {
@@ -31,12 +33,16 @@ final class GlancesModel: NSObject, ObservableObject {
         let title: String
         let due: Date?
         let calendarTitle: String
+        let isCompleted: Bool
+        let completionDate: Date?
     }
 
     struct ReminderCalendarInfo: Identifiable, Equatable {
         let id: String
         let title: String
         let sourceTitle: String
+        let isDefault: Bool
+        let isWritable: Bool
     }
 
     struct WeatherInfo: Equatable {
@@ -54,6 +60,7 @@ final class GlancesModel: NSObject, ObservableObject {
     @Published private(set) var nextEvent: EventInfo?
     @Published private(set) var upcomingEvents: [EventInfo] = []
     @Published private(set) var reminders: [ReminderInfo] = []
+    @Published private(set) var completedReminders: [ReminderInfo] = []
     @Published private(set) var reminderCalendars: [ReminderCalendarInfo] = []
     @Published private(set) var selectedReminderCalendarIDs: Set<String> = []
     @Published private(set) var weather: WeatherInfo?
@@ -73,6 +80,7 @@ final class GlancesModel: NSObject, ObservableObject {
     private let log = Logger(subsystem: "com.codeisland", category: "Glances")
     private var lastRefresh: Date = .distantPast
     private var refreshing = false
+    private static let reminderOrderKey = "codeisland.glances.reminderOrder.v1"
 
     private override init() {
         super.init()
@@ -201,8 +209,10 @@ final class GlancesModel: NSObject, ObservableObject {
             start: event.startDate,
             end: event.endDate,
             joinURL: extractJoinURL(from: event),
+            notes: event.notes,
             isAllDay: event.isAllDay,
-            calendarTitle: event.calendar.title
+            calendarTitle: event.calendar.title,
+            isEditable: event.calendar.allowsContentModifications
         )
     }
 
@@ -256,6 +266,10 @@ final class GlancesModel: NSObject, ObservableObject {
             calendarMutationError = "Event is no longer available"
             return false
         }
+        guard event.calendar.allowsContentModifications else {
+            calendarMutationError = "This calendar is read-only"
+            return false
+        }
         do {
             try eventStore.remove(event, span: .thisEvent, commit: true)
             loadUpcomingEvents()
@@ -263,6 +277,42 @@ final class GlancesModel: NSObject, ObservableObject {
         } catch {
             log.error("delete event: \(error.localizedDescription, privacy: .public)")
             calendarMutationError = "Could not delete the event"
+            return false
+        }
+    }
+
+    @discardableResult
+    func updateEvent(id: String, draft: PersonalHubCalendarDraft) -> Bool {
+        calendarMutationError = nil
+        guard calendarAuthorized else {
+            calendarMutationError = "Calendar access is required"
+            return false
+        }
+        guard let event = eventStore.event(withIdentifier: id) else {
+            calendarMutationError = "Event is no longer available"
+            return false
+        }
+        guard event.calendar.allowsContentModifications else {
+            calendarMutationError = "This calendar is read-only"
+            return false
+        }
+        let title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty, draft.end > draft.start else {
+            calendarMutationError = "Enter a title and an end time after the start"
+            return false
+        }
+        event.title = title
+        event.startDate = draft.start
+        event.endDate = draft.end
+        event.notes = draft.notes?.trimmingCharacters(in: .whitespacesAndNewlines)
+        event.url = draft.joinURL
+        do {
+            try eventStore.save(event, span: .thisEvent, commit: true)
+            loadUpcomingEvents()
+            return true
+        } catch {
+            log.error("update event: \(error.localizedDescription, privacy: .public)")
+            calendarMutationError = "Could not update the event"
             return false
         }
     }
@@ -319,12 +369,15 @@ final class GlancesModel: NSObject, ObservableObject {
 
     private func loadReminderCalendarsAndReminders() {
         let calendars = eventStore.calendars(for: .reminder)
+        let defaultID = eventStore.defaultCalendarForNewReminders()?.calendarIdentifier
         reminderCalendars = calendars
             .map {
                 ReminderCalendarInfo(
                     id: $0.calendarIdentifier,
                     title: $0.title,
-                    sourceTitle: $0.source.title
+                    sourceTitle: $0.source.title,
+                    isDefault: $0.calendarIdentifier == defaultID,
+                    isWritable: $0.allowsContentModifications
                 )
             }
             .sorted {
@@ -337,13 +390,14 @@ final class GlancesModel: NSObject, ObservableObject {
         let selected = Self.resolveReminderCalendarIDs(
             stored: stored,
             available: available,
-            defaultID: eventStore.defaultCalendarForNewReminders()?.calendarIdentifier
+            defaultID: defaultID
         )
         selectedReminderCalendarIDs = selected
         if selected != stored {
             SettingsManager.shared.glancesReminderCalendarIDs = selected
         }
         loadReminders(from: calendars.filter { selected.contains($0.calendarIdentifier) })
+        loadCompletedReminders(from: calendars.filter { selected.contains($0.calendarIdentifier) })
     }
 
     nonisolated static func resolveReminderCalendarIDs(
@@ -405,19 +459,29 @@ final class GlancesModel: NSObject, ObservableObject {
             ending: nil,
             calendars: calendars
         )
+        let storedOrder = Self.loadReminderOrder()
         eventStore.fetchReminders(matching: predicate) { [weak self] fetched in
             let items = (fetched ?? [])
                 .sorted { lhs, rhs in
-                    (lhs.dueDateComponents?.date ?? .distantFuture)
+                    let lhsIndex = storedOrder.firstIndex(of: lhs.calendarItemIdentifier)
+                    let rhsIndex = storedOrder.firstIndex(of: rhs.calendarItemIdentifier)
+                    if lhsIndex != rhsIndex {
+                        if let lhsIndex, let rhsIndex { return lhsIndex < rhsIndex }
+                        if lhsIndex != nil { return true }
+                        if rhsIndex != nil { return false }
+                    }
+                    return (lhs.dueDateComponents?.date ?? .distantFuture)
                         < (rhs.dueDateComponents?.date ?? .distantFuture)
                 }
-                .prefix(8)
+                .prefix(40)
                 .map { reminder in
                     ReminderInfo(
                         id: reminder.calendarItemIdentifier,
                         title: reminder.title ?? "Untitled",
                         due: reminder.dueDateComponents?.date,
-                        calendarTitle: reminder.calendar.title
+                        calendarTitle: reminder.calendar.title,
+                        isCompleted: false,
+                        completionDate: nil
                     )
                 }
             Task { @MainActor in
@@ -426,10 +490,39 @@ final class GlancesModel: NSObject, ObservableObject {
         }
     }
 
+    private func loadCompletedReminders(from calendars: [EKCalendar]) {
+        guard !calendars.isEmpty else {
+            completedReminders = []
+            return
+        }
+        let since = Calendar.current.date(byAdding: .day, value: -30, to: Date())
+        let predicate = eventStore.predicateForCompletedReminders(
+            withCompletionDateStarting: since,
+            ending: nil,
+            calendars: calendars
+        )
+        eventStore.fetchReminders(matching: predicate) { [weak self] fetched in
+            let items = (fetched ?? [])
+                .sorted { ($0.completionDate ?? .distantPast) > ($1.completionDate ?? .distantPast) }
+                .prefix(20)
+                .map { reminder in
+                    ReminderInfo(
+                        id: reminder.calendarItemIdentifier,
+                        title: reminder.title ?? "Untitled",
+                        due: reminder.dueDateComponents?.date,
+                        calendarTitle: reminder.calendar.title,
+                        isCompleted: true,
+                        completionDate: reminder.completionDate
+                    )
+                }
+            Task { @MainActor in self?.completedReminders = Array(items) }
+        }
+    }
+
     /// Add a quick task to one of the lists selected for Glances. Natural-language
     /// parsing can call this same write path later after presenting a preview.
     @discardableResult
-    func addReminder(title rawTitle: String, due: Date? = nil) -> Bool {
+    func addReminder(title rawTitle: String, due: Date? = nil, calendarID requestedCalendarID: String? = nil) -> Bool {
         reminderMutationError = nil
         guard remindersAuthorized else {
             reminderMutationError = "Reminders access is required"
@@ -444,11 +537,15 @@ final class GlancesModel: NSObject, ObservableObject {
 
         let calendars = eventStore.calendars(for: .reminder)
         let orderedIDs = reminderCalendars.map(\.id)
-        guard let calendarID = Self.preferredReminderCalendarID(
+        let calendarID = requestedCalendarID.flatMap { requested in
+            calendars.contains(where: { $0.calendarIdentifier == requested }) ? requested : nil
+        } ?? Self.preferredReminderCalendarID(
             selectedIDs: selectedReminderCalendarIDs,
             orderedAvailableIDs: orderedIDs,
             defaultID: eventStore.defaultCalendarForNewReminders()?.calendarIdentifier
-        ), let calendar = calendars.first(where: { $0.calendarIdentifier == calendarID }) else {
+        )
+        guard let calendarID,
+              let calendar = calendars.first(where: { $0.calendarIdentifier == calendarID }) else {
             reminderMutationError = "Choose a Reminders list in settings"
             return false
         }
@@ -464,6 +561,10 @@ final class GlancesModel: NSObject, ObservableObject {
         }
         do {
             try eventStore.save(item, commit: true)
+            var order = Self.loadReminderOrder()
+            order.removeAll { $0 == item.calendarItemIdentifier }
+            order.insert(item.calendarItemIdentifier, at: 0)
+            Self.saveReminderOrder(order)
             loadReminders(from: calendars.filter {
                 selectedReminderCalendarIDs.contains($0.calendarIdentifier)
             })
@@ -486,9 +587,124 @@ final class GlancesModel: NSObject, ObservableObject {
         do {
             try eventStore.save(item, commit: true)
             reminders.removeAll { $0.id == reminder.id }
+            let calendars = eventStore.calendars(for: .reminder)
+                .filter { selectedReminderCalendarIDs.contains($0.calendarIdentifier) }
+            loadCompletedReminders(from: calendars)
         } catch {
             log.error("complete reminder: \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    @discardableResult
+    func restoreReminder(_ reminder: ReminderInfo) -> Bool {
+        reminderMutationError = nil
+        guard let item = eventStore.calendarItem(withIdentifier: reminder.id) as? EKReminder else {
+            reminderMutationError = "Task is no longer available"
+            return false
+        }
+        item.isCompleted = false
+        item.completionDate = nil
+        do {
+            try eventStore.save(item, commit: true)
+            let calendars = eventStore.calendars(for: .reminder)
+                .filter { selectedReminderCalendarIDs.contains($0.calendarIdentifier) }
+            loadReminders(from: calendars)
+            loadCompletedReminders(from: calendars)
+            return true
+        } catch {
+            log.error("restore reminder: \(error.localizedDescription, privacy: .public)")
+            reminderMutationError = "Could not restore the task"
+            return false
+        }
+    }
+
+    @discardableResult
+    func moveReminder(id: String, direction: String) -> Bool {
+        let byID = Dictionary(uniqueKeysWithValues: reminders.map { ($0.id, $0) })
+        guard let orderedIDs = Self.reorderedReminderIDs(
+            reminders.map(\.id),
+            moving: id,
+            direction: direction
+        ) else { return false }
+        reminders = orderedIDs.compactMap { byID[$0] }
+        Self.saveReminderOrder(orderedIDs)
+        return true
+    }
+
+    @discardableResult
+    func createReminderList(title rawTitle: String) -> Bool {
+        reminderMutationError = nil
+        let title = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard remindersAuthorized, !title.isEmpty, title.count <= 100 else {
+            reminderMutationError = "Enter a list name"
+            return false
+        }
+        guard let source = eventStore.defaultCalendarForNewReminders()?.source
+            ?? eventStore.sources.first(where: { $0.sourceType == .local || $0.sourceType == .calDAV }) else {
+            reminderMutationError = "No writable Reminders account is available"
+            return false
+        }
+        let calendar = EKCalendar(for: .reminder, eventStore: eventStore)
+        calendar.title = title
+        calendar.source = source
+        do {
+            try eventStore.saveCalendar(calendar, commit: true)
+            selectedReminderCalendarIDs.insert(calendar.calendarIdentifier)
+            SettingsManager.shared.glancesReminderCalendarIDs = selectedReminderCalendarIDs
+            loadReminderCalendarsAndReminders()
+            return true
+        } catch {
+            log.error("create reminder list: \(error.localizedDescription, privacy: .public)")
+            reminderMutationError = "Could not create the list"
+            return false
+        }
+    }
+
+    @discardableResult
+    func deleteReminderList(id: String) -> Bool {
+        reminderMutationError = nil
+        guard remindersAuthorized,
+              let calendar = eventStore.calendar(withIdentifier: id) else {
+            reminderMutationError = "List is no longer available"
+            return false
+        }
+        guard calendar.calendarIdentifier != eventStore.defaultCalendarForNewReminders()?.calendarIdentifier else {
+            reminderMutationError = "The default Reminders list cannot be deleted"
+            return false
+        }
+        do {
+            try eventStore.removeCalendar(calendar, commit: true)
+            selectedReminderCalendarIDs.remove(id)
+            loadReminderCalendarsAndReminders()
+            return true
+        } catch {
+            log.error("delete reminder list: \(error.localizedDescription, privacy: .public)")
+            reminderMutationError = "Could not delete the list"
+            return false
+        }
+    }
+
+    nonisolated static func reorderedReminderIDs(_ ids: [String], moving id: String, direction: String) -> [String]? {
+        guard let index = ids.firstIndex(of: id) else { return nil }
+        let destination: Int
+        switch direction {
+        case "top": destination = 0
+        case "up": destination = max(index - 1, 0)
+        case "down": destination = min(index + 1, ids.count - 1)
+        default: return nil
+        }
+        var next = ids
+        let value = next.remove(at: index)
+        next.insert(value, at: destination)
+        return next
+    }
+
+    nonisolated private static func loadReminderOrder() -> [String] {
+        UserDefaults.standard.stringArray(forKey: reminderOrderKey) ?? []
+    }
+
+    nonisolated private static func saveReminderOrder(_ ids: [String]) {
+        UserDefaults.standard.set(Array(ids.prefix(500)), forKey: reminderOrderKey)
     }
 
     @discardableResult
@@ -501,6 +717,7 @@ final class GlancesModel: NSObject, ObservableObject {
         do {
             try eventStore.remove(item, commit: true)
             reminders.removeAll { $0.id == reminder.id }
+            completedReminders.removeAll { $0.id == reminder.id }
             return true
         } catch {
             log.error("delete reminder: \(error.localizedDescription, privacy: .public)")
