@@ -784,7 +784,21 @@ final class RemoteApprovalClient: ObservableObject {
         case .weather:
             return .init(id: id, availability: ready, summary: "68° · Mostly clear", detail: "Los Angeles, CA", actions: [.init(id: "refresh", label: "Refresh")])
         case .notifications:
-            return .init(id: id, availability: ready, summary: "Push and Live Activity ready", actions: [.init(id: "test", label: "Test notification")])
+            return .init(
+                id: id,
+                availability: .partial,
+                summary: "1 CodeIsland alert needs attention",
+                detail: "macOS does not expose other apps’ Notification Center history through a public API. CodeIsland never reads private notification databases or asks for Full Disk Access.",
+                items: [
+                    .init(
+                        id: "alert:approval",
+                        title: "Shell approval",
+                        subtitle: "Codex · Action required",
+                        detail: "Review the exact command in the approval card.",
+                        symbol: "exclamationmark.circle.fill"
+                    )
+                ]
+            )
         case .claude:
             return .init(
                 id: id,

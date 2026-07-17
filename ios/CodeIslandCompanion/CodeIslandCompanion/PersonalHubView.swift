@@ -464,9 +464,17 @@ private struct PersonalHubModuleCard: View {
             }
 
             if let detail = module.detail {
-                Text(detail)
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .foregroundStyle(HubTheme.foreground.opacity(0.38))
+                HStack(alignment: .top, spacing: 7) {
+                    Image(systemName: module.id == .notifications ? "eye.slash" : "info.circle")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(module.id == .notifications ? HubTheme.accent : HubTheme.foreground.opacity(0.38))
+                    Text(detail)
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .foregroundStyle(HubTheme.foreground.opacity(0.44))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(8)
+                .background(Color.black.opacity(0.16), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
             }
 
             if showsComposer {

@@ -482,6 +482,20 @@ private struct MacHubModuleCard: View {
                 availability
             }
 
+            if let detail = module.detail {
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: module.id == .notifications ? "eye.slash" : "info.circle")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(module.id == .notifications ? Color.orange : Color.white.opacity(0.34))
+                    Text(detail)
+                        .font(.system(size: 8, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.white.opacity(0.4))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(6)
+                .background(Color.black.opacity(0.2), in: RoundedRectangle(cornerRadius: 6))
+            }
+
             if showsTaskComposer {
                 if module.id == .calendar {
                     VStack(alignment: .leading, spacing: 5) {

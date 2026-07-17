@@ -79,6 +79,8 @@ enum RemoteApprovalWebApp {
         .module-head { display:flex; align-items:flex-start; gap:9px; }
         .module-title { font-size:15px; font-weight:750; }
         .module-summary { margin-top:3px; color:#8d9b90; font-size:12px; line-height:1.35; }
+        .module-detail { margin-top:9px; padding:9px; border-radius:10px; background:#050806; color:#7f8b81; font:600 10px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace; box-shadow:inset 0 0 0 1px #ffffff0d; }
+        .module-detail strong { color:var(--amber); font-weight:800; }
         .availability { margin-left:auto; color:var(--amber); font:750 9px ui-monospace,SFMono-Regular,Menlo,monospace; text-transform:uppercase; }
         .hub-item { margin-top:8px; padding:9px; border-radius:10px; background:#050806; }
         .hub-item-title { font-size:12px; font-weight:700; overflow-wrap:anywhere; }
@@ -290,6 +292,7 @@ enum RemoteApprovalWebApp {
           renderHubConfiguration(snapshot);
           hub.innerHTML=(snapshot.modules||[]).map(module=>`<article class="module">
             <div class="module-head"><div><div class="module-title">${escapeHTML(moduleNames[module.id]||module.id)}</div><div class="module-summary">${escapeHTML(module.summary||'')}</div></div><div class="availability">${escapeHTML(module.availability)}</div></div>
+            ${module.detail?`<div class="module-detail">${module.id==='notifications'?'<strong>SYSTEM LIMIT</strong> · ':''}${escapeHTML(module.detail)}</div>`:''}
             ${renderCalendarMonth(module)}
             ${(module.calendarMonth?(module.items||[]).slice(0,6):(module.items||[])).map(item=>renderHubItem(module.id,item)).join('')}
             ${renderHubActions(module.id,module.actions||[],null,'')}

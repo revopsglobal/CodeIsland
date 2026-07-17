@@ -1477,11 +1477,27 @@ final class PersonalHubService {
             )
 
         case .notifications:
-            let count = appState.permissionQueue.count + appState.questionQueue.count
+            let mirror = SystemNotificationMirror.makeSnapshot(
+                candidates: Self.notificationCandidates(appState: appState),
+                providerState: SystemNotificationMirror.currentProviderState
+            )
+            let count = mirror.actionRequired.count
             return .init(
                 id: id,
                 availability: .partial,
-                summary: count == 0 ? "No CodeIsland alerts" : "\(count) CodeIsland alerts"
+                summary: count == 0
+                    ? "No CodeIsland alerts need attention"
+                    : "\(count) CodeIsland alert\(count == 1 ? "" : "s") need attention",
+                detail: mirror.providerState.message,
+                items: mirror.actionRequired.map { alert in
+                    .init(
+                        id: alert.id,
+                        title: alert.title,
+                        subtitle: "\(alert.source) · Action required",
+                        detail: alert.body,
+                        symbol: alert.isRedacted ? "eye.slash.fill" : "exclamationmark.circle.fill"
+                    )
+                }
             )
 
         case .github:
@@ -1757,6 +1773,34 @@ final class PersonalHubService {
         case .selection: return "Capture"
         case .recording: return "Recording"
         }
+    }
+
+    private static func notificationCandidates(appState: AppState) -> [SystemNotificationMirror.Entry] {
+        let approvals = appState.permissionQueue.map { request in
+            let tool = request.event.toolName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let description = request.event.toolDescription?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return SystemNotificationMirror.Entry(
+                id: request.id,
+                source: AppState.sourceLabel(for: request.event),
+                title: tool.isEmpty ? "Approval required" : tool,
+                body: description.isEmpty ? "A waiting agent needs your approval." : description,
+                createdAt: request.createdAt,
+                origin: .codeIslandAction,
+                sessionID: request.event.sessionId ?? "default"
+            )
+        }
+        let questions = appState.questionQueue.map { request in
+            SystemNotificationMirror.Entry(
+                id: request.id,
+                source: AppState.sourceLabel(for: request.event),
+                title: "Decision required",
+                body: request.question.question,
+                createdAt: request.createdAt,
+                origin: .codeIslandAction,
+                sessionID: request.event.sessionId ?? "default"
+            )
+        }
+        return approvals + questions
     }
 
     private static func playbackTime(_ seconds: TimeInterval) -> String {
