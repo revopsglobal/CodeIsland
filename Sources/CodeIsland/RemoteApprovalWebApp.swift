@@ -122,10 +122,12 @@ enum RemoteApprovalWebApp {
         </nav>
         <div id="hubTitle" class="section-title hidden">Personal hub</div>
         <section id="hub" class="module-grid"></section>
+        <div id="questionTitle" class="section-title hidden">Agent questions</div>
+        <section id="questions"></section>
         <div id="approvalTitle" class="section-title hidden">Agent approvals</div>
         <section id="approvals"></section>
         <section id="empty" class="card empty hidden">
-          <strong>No approvals waiting</strong>
+          <strong>No agent input waiting</strong>
           <span class="muted">This page checks the Mac every four seconds.</span>
         </section>
         <footer>Tailnet-only · exact-request validation · single-use actions</footer>
@@ -138,6 +140,7 @@ enum RemoteApprovalWebApp {
         let busy = new Set();
         const pair = document.getElementById('pair');
         const approvals = document.getElementById('approvals');
+        const questions = document.getElementById('questions');
         const empty = document.getElementById('empty');
         const status = document.getElementById('status');
         const dot = document.getElementById('dot');
@@ -146,6 +149,7 @@ enum RemoteApprovalWebApp {
         const hub = document.getElementById('hub');
         const hubTitle = document.getElementById('hubTitle');
         const approvalTitle = document.getElementById('approvalTitle');
+        const questionTitle = document.getElementById('questionTitle');
 
         const moduleNames = {
           nowPlaying:'Now Playing',shelf:'Shelf',calendar:'Calendar',reminders:'Tasks',notes:'Notes',
@@ -189,6 +193,7 @@ enum RemoteApprovalWebApp {
         }
 
         let lastItems=[];
+        let lastQuestions=[];
         function render(items) {
           lastItems=items; renderLast();
         }
@@ -204,8 +209,49 @@ enum RemoteApprovalWebApp {
             </div>
           </article>`).join('');
           approvals.querySelectorAll('button[data-decision]').forEach(button=>button.addEventListener('click',()=>decide(button.dataset.id,button.dataset.token,button.dataset.decision)));
-          empty.classList.toggle('hidden',lastItems.length!==0);
+          updateWaitingState();
           approvalTitle.classList.toggle('hidden',lastItems.length===0);
+        }
+
+        function renderQuestions(items) {
+          lastQuestions=items;
+          questions.innerHTML=items.map(item=>`<article class="card approval" data-question-id="${escapeHTML(item.id)}">
+            <div class="eyebrow">${escapeHTML(item.source)} · QUESTION · ${relativeTime(item.createdAt)}</div>
+            ${item.requiresLocalResponse
+              ? `<div class="tool">Sensitive question waiting on Mac</div><div class="muted">Its text and choices are intentionally never sent to this device.</div>`
+              : (item.prompts||[]).map((prompt,promptIndex)=>`<div class="question-prompt" data-prompt-index="${promptIndex}">
+                  ${prompt.header?`<div class="eyebrow">${escapeHTML(prompt.header)}</div>`:''}
+                  <div class="tool">${escapeHTML(prompt.question)}</div>
+                  ${(prompt.options||[]).map(option=>`<label class="hub-item"><input class="question-option" type="${prompt.allowsMultipleSelection?'checkbox':'radio'}" name="question-${escapeHTML(item.id)}-${promptIndex}" value="${escapeHTML(option)}"> ${escapeHTML(option)}</label>`).join('')}
+                  <input class="question-custom" placeholder="${prompt.options&&prompt.options.length?'Or type a custom answer':'Type your answer'}">
+                </div>`).join('') + `<div class="actions" style="grid-template-columns:1fr"><button class="approve question-send" data-id="${escapeHTML(item.id)}" data-token="${escapeHTML(item.actionToken||'')}">Send answer</button></div>`}
+          </article>`).join('');
+          questions.querySelectorAll('button.question-send').forEach(button=>button.addEventListener('click',()=>answerQuestion(button)));
+          questionTitle.classList.toggle('hidden',items.length===0);
+          updateWaitingState();
+        }
+
+        function updateWaitingState() {
+          empty.classList.toggle('hidden',lastItems.length!==0||lastQuestions.length!==0);
+        }
+
+        async function answerQuestion(button) {
+          const id=button.dataset.id; if(busy.has(id)) return;
+          const card=button.closest('[data-question-id]');
+          const answers=Array.from(card.querySelectorAll('.question-prompt')).map(prompt=>{
+            const selected=Array.from(prompt.querySelectorAll('.question-option:checked')).map(input=>input.value);
+            const custom=prompt.querySelector('.question-custom').value.trim(); if(custom) selected.push(custom);
+            return selected.join(', ');
+          });
+          if(answers.some(answer=>!answer)) { alert('Answer every prompt first.'); return; }
+          if(!confirm('Send this answer to the exact waiting agent request?')) return;
+          busy.add(id); button.disabled=true;
+          try {
+            const response=await fetch(`/api/questions/${encodeURIComponent(id)}/answer`,{method:'POST',headers:{...authHeaders(),'Content-Type':'application/json'},body:JSON.stringify({answers,actionToken:button.dataset.token})});
+            const body=await response.json(); if(!response.ok) throw new Error(body.error||'Answer failed');
+            await refresh();
+          } catch(error) { alert(error.message); await refresh(); }
+          finally { busy.delete(id); }
         }
 
         function renderHub(snapshot) {
@@ -260,12 +306,12 @@ enum RemoteApprovalWebApp {
         }
 
         async function refresh() {
-          if(!deviceToken) { pair.classList.remove('hidden'); approvals.innerHTML=''; hub.innerHTML=''; modes.classList.add('hidden'); hubTitle.classList.add('hidden'); approvalTitle.classList.add('hidden'); empty.classList.add('hidden'); setStatus('Pairing required'); return; }
+          if(!deviceToken) { pair.classList.remove('hidden'); approvals.innerHTML=''; questions.innerHTML=''; hub.innerHTML=''; modes.classList.add('hidden'); hubTitle.classList.add('hidden'); approvalTitle.classList.add('hidden'); questionTitle.classList.add('hidden'); empty.classList.add('hidden'); setStatus('Pairing required'); return; }
           try {
             const response=await fetch('/api/approvals',{headers:authHeaders(),cache:'no-store'});
             if(response.status===401) { deviceToken=''; localStorage.removeItem(tokenKey); pair.classList.remove('hidden'); setStatus('Pairing required'); return; }
             const body=await response.json(); if(!response.ok) throw new Error(body.error||'Mac unavailable');
-            pair.classList.add('hidden'); render(body.approvals||[]); await refreshHub(); setStatus(`${body.approvals.length} pending`,true);
+            pair.classList.add('hidden'); render(body.approvals||[]); renderQuestions(body.questions||[]); await refreshHub(); setStatus(`${(body.approvals||[]).length+(body.questions||[]).length} waiting`,true);
           } catch(error) { setStatus('Mac offline'); }
         }
 

@@ -500,6 +500,60 @@ final class AppStateQuestionFlowTests: XCTestCase {
         XCTAssertNil(completedPayload.pendingAction)
     }
 
+    func testRemoteAnswerResolvesOnlyTheSelectedQuestion() async throws {
+        let appState = AppState()
+        let firstEvent = try makeAskUserQuestionEvent(
+            sessionId: "s-remote-question-first",
+            questions: [question(header: "First", text: "First choice?", options: ["A", "B"])]
+        )
+        let secondEvent = try makeAskUserQuestionEvent(
+            sessionId: "s-remote-question-second",
+            questions: [question(header: "Second", text: "Second choice?", options: ["C", "D"])]
+        )
+        let firstTask = Task<Data, Never> {
+            await withCheckedContinuation { appState.handleAskUserQuestion(firstEvent, continuation: $0) }
+        }
+        let secondTask = Task<Data, Never> {
+            await withCheckedContinuation { appState.handleAskUserQuestion(secondEvent, continuation: $0) }
+        }
+        await Task.yield()
+
+        let firstID = appState.questionQueue[0].id
+        let secondID = appState.questionQueue[1].id
+        XCTAssertTrue(appState.resolveRemoteQuestion(requestID: secondID, answers: ["D"]))
+        let secondResponse = await secondTask.value
+        XCTAssertEqual(try extractAnswers(from: secondResponse)["Second choice?"] as? String, "D")
+        XCTAssertEqual(appState.questionQueue.map(\.id), [firstID])
+        XCTAssertFalse(appState.resolveRemoteQuestion(requestID: secondID, answers: ["C"]))
+
+        XCTAssertTrue(appState.resolveRemoteQuestion(requestID: firstID, answers: ["A"]))
+        let firstResponse = await firstTask.value
+        XCTAssertEqual(try extractAnswers(from: firstResponse)["First choice?"] as? String, "A")
+        XCTAssertTrue(appState.questionQueue.isEmpty)
+    }
+
+    func testRemoteAnswerNeverResolvesSecretQuestion() throws {
+        let appState = AppState()
+        let event = try makeAskUserQuestionEvent(
+            sessionId: "s-secret-remote",
+            questions: [question(header: "Secret", text: "Placeholder", options: [])]
+        )
+        let requestID = "secret-request"
+        appState.questionQueue.append(QuestionRequest(
+            id: requestID,
+            event: event,
+            question: QuestionPayload(
+                question: "Enter a private value",
+                options: nil,
+                header: "Secret",
+                isSecret: true
+            ),
+            resolution: .codexAppServer { _ in }
+        ))
+        XCTAssertFalse(appState.resolveRemoteQuestion(requestID: requestID, answers: ["do not send"]))
+        XCTAssertEqual(appState.questionQueue.map(\.id), [requestID])
+    }
+
     // MARK: - Helpers
 
     private func makeAskUserQuestionEvent(sessionId: String, questions: [[String: Any]]) throws -> HookEvent {

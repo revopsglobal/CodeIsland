@@ -202,7 +202,7 @@ final class PersonalHubDataModel: ObservableObject {
         let pasteboard = NSPasteboard.general
         guard force || pasteboard.changeCount != lastPasteboardChangeCount else { return }
         lastPasteboardChangeCount = pasteboard.changeCount
-        guard !pasteboard.types.contains(where: {
+        guard !(pasteboard.types ?? []).contains(where: {
             $0.rawValue.localizedCaseInsensitiveContains("concealed")
                 || $0.rawValue.localizedCaseInsensitiveContains("transient")
         }), let value = pasteboard.string(forType: .string)?.trimmingCharacters(in: .whitespacesAndNewlines),

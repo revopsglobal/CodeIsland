@@ -9,16 +9,16 @@ struct RemoteApprovalSurface: View {
             case .unpaired:
                 RemotePairingCard()
                     .environmentObject(client)
-            case .connecting where client.approvals.isEmpty:
+            case .connecting where client.approvals.isEmpty && client.questions.isEmpty:
                 RemoteApprovalStatusStrip(icon: "lock.iphone", title: "Remote approvals", detail: "Connecting to Mac…", tint: .orange)
-            case .offline(let message) where client.approvals.isEmpty:
+            case .offline(let message) where client.approvals.isEmpty && client.questions.isEmpty:
                 RemoteOfflineCard(message: message)
                     .environmentObject(client)
             default:
-                if client.approvals.isEmpty {
+                if client.approvals.isEmpty && client.questions.isEmpty {
                     RemoteApprovalStatusStrip(
                         icon: "checkmark.shield.fill",
-                        title: "Remote approvals",
+                        title: "Remote agents",
                         detail: "Connected · Nothing waiting",
                         tint: .green
                     )
@@ -28,6 +28,10 @@ struct RemoteApprovalSurface: View {
                     }
                 } else {
                     VStack(spacing: 10) {
+                        ForEach(client.questions) { question in
+                            RemoteQuestionCard(question: question)
+                                .environmentObject(client)
+                        }
                         ForEach(client.approvals) { approval in
                             RemoteApprovalCard(approval: approval)
                                 .environmentObject(client)
@@ -37,6 +41,154 @@ struct RemoteApprovalSurface: View {
             }
         }
         .accessibilityIdentifier("companion.remoteApprovals")
+    }
+}
+
+private struct RemoteQuestionCard: View {
+    let question: RemoteQuestionItem
+    @EnvironmentObject private var client: RemoteApprovalClient
+    @State private var singleSelections: [String: String] = [:]
+    @State private var multiSelections: [String: Set<String>] = [:]
+    @State private var customAnswers: [String: String] = [:]
+    @State private var confirming = false
+
+    private var resolvedAnswers: [String] {
+        question.prompts.map { prompt in
+            let custom = customAnswers[prompt.id, default: ""]
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if prompt.allowsMultipleSelection {
+                var values = Array(multiSelections[prompt.id, default: []]).sorted()
+                if !custom.isEmpty { values.append(custom) }
+                return values.joined(separator: ", ")
+            }
+            return custom.isEmpty ? singleSelections[prompt.id, default: ""] : custom
+        }
+    }
+
+    private var canSubmit: Bool {
+        !question.requiresLocalResponse
+            && !question.prompts.isEmpty
+            && resolvedAnswers.allSatisfy { !$0.isEmpty }
+            && !client.busyRequestIDs.contains(question.id)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Text("\(question.source.uppercased()) · QUESTION")
+                    .font(.system(size: 11, weight: .black, design: .monospaced))
+                    .foregroundStyle(.cyan)
+                Spacer()
+                Text(question.createdAt, style: .relative)
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.ciForeground.opacity(0.42))
+            }
+
+            if question.requiresLocalResponse {
+                Label("Sensitive question waiting on Mac", systemImage: "eye.slash.fill")
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .foregroundStyle(.orange)
+                Text("Its text and choices are intentionally never sent to this device.")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.ciForeground.opacity(0.62))
+            } else {
+                ForEach(question.prompts) { prompt in
+                    VStack(alignment: .leading, spacing: 8) {
+                        if let header = prompt.header, !header.isEmpty {
+                            Text(header.uppercased())
+                                .font(.system(size: 10, weight: .black, design: .monospaced))
+                                .foregroundStyle(.ciForeground.opacity(0.46))
+                        }
+                        Text(prompt.question)
+                            .font(.system(size: 15, weight: .bold, design: .rounded))
+                            .foregroundStyle(.ciForeground)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        ForEach(prompt.options.indices, id: \.self) { index in
+                            let option = prompt.options[index]
+                            Button {
+                                if prompt.allowsMultipleSelection {
+                                    var selected = multiSelections[prompt.id, default: []]
+                                    if selected.contains(option) { selected.remove(option) } else { selected.insert(option) }
+                                    multiSelections[prompt.id] = selected
+                                } else {
+                                    singleSelections[prompt.id] = option
+                                }
+                            } label: {
+                                HStack(alignment: .top, spacing: 9) {
+                                    Image(systemName: isSelected(option, for: prompt)
+                                          ? (prompt.allowsMultipleSelection ? "checkmark.square.fill" : "largecircle.fill.circle")
+                                          : (prompt.allowsMultipleSelection ? "square" : "circle"))
+                                        .foregroundStyle(isSelected(option, for: prompt) ? Color.cyan : Color.ciForeground.opacity(0.38))
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(option)
+                                            .font(.system(size: 13, weight: .bold))
+                                        if prompt.descriptions.indices.contains(index) {
+                                            Text(prompt.descriptions[index])
+                                                .font(.system(size: 11, weight: .medium))
+                                                .foregroundStyle(.ciForeground.opacity(0.52))
+                                        }
+                                    }
+                                    Spacer(minLength: 0)
+                                }
+                                .foregroundStyle(.ciForeground)
+                                .padding(10)
+                                .background(Color.ciForeground.opacity(0.055), in: RoundedRectangle(cornerRadius: 9))
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        TextField(prompt.options.isEmpty ? "Type your answer" : "Or type a custom answer", text: customBinding(for: prompt.id))
+                            .textInputAutocapitalization(.sentences)
+                            .font(.system(size: 13, weight: .medium))
+                            .padding(.horizontal, 11)
+                            .frame(minHeight: 44)
+                            .background(Color.ciForeground.opacity(0.06), in: RoundedRectangle(cornerRadius: 9))
+                    }
+                }
+
+                Button {
+                    confirming = true
+                } label: {
+                    Label("Send answer", systemImage: "paperplane.fill")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(.black)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .background(Color.cyan, in: RoundedRectangle(cornerRadius: 9))
+                }
+                .buttonStyle(.plain)
+                .disabled(!canSubmit)
+            }
+        }
+        .padding(14)
+        .background(IslandShellShape().fill(Color.ciSurface))
+        .overlay(IslandShellShape().stroke(Color.cyan.opacity(0.48), lineWidth: 1))
+        .confirmationDialog(
+            "Send this answer to the exact waiting agent request?",
+            isPresented: $confirming
+        ) {
+            Button("Send answer") {
+                let answers = resolvedAnswers
+                Task { await client.answer(question, answers: answers) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The Mac re-checks the question ID and a single-use token before delivering it.")
+        }
+        .accessibilityIdentifier("companion.remote.question.\(question.id)")
+    }
+
+    private func isSelected(_ option: String, for prompt: RemoteQuestionPrompt) -> Bool {
+        prompt.allowsMultipleSelection
+            ? multiSelections[prompt.id, default: []].contains(option)
+            : singleSelections[prompt.id] == option
+    }
+
+    private func customBinding(for id: String) -> Binding<String> {
+        Binding(
+            get: { customAnswers[id, default: ""] },
+            set: { customAnswers[id] = $0 }
+        )
     }
 }
 
@@ -264,4 +416,3 @@ private struct RemoteApprovalCard: View {
         .accessibilityIdentifier("companion.remote.\(decision.rawValue).\(approval.id)")
     }
 }
-

@@ -138,7 +138,7 @@ final class APNSNotificationSender: ObservableObject {
             "aps": [
                 "alert": [
                     "title": "CodeIsland approval waiting",
-                    "body": "\(source) · \(String(tool.prefix(80)))"
+                    "body": "Open Buddy to review it privately."
                 ],
                 "sound": "default",
                 "interruption-level": "time-sensitive"
@@ -164,4 +164,3 @@ private extension Data {
             .replacingOccurrences(of: "=", with: "")
     }
 }
-

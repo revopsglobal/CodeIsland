@@ -66,6 +66,8 @@ enum QuestionResolution {
 }
 
 struct QuestionRequest {
+    let id: String
+    let createdAt: Date
     let event: HookEvent
     let question: QuestionPayload
     let resolution: QuestionResolution
@@ -74,12 +76,16 @@ struct QuestionRequest {
     var askUserQuestionState: AskUserQuestionState?
 
     init(
+        id: String = UUID().uuidString.lowercased(),
+        createdAt: Date = Date(),
         event: HookEvent,
         question: QuestionPayload,
         resolution: QuestionResolution,
         isFromPermission: Bool = false,
         askUserQuestionState: AskUserQuestionState? = nil
     ) {
+        self.id = id
+        self.createdAt = createdAt
         self.event = event
         self.question = askUserQuestionState?.items.first?.payload ?? question
         self.resolution = resolution
@@ -89,6 +95,8 @@ struct QuestionRequest {
 
     /// Back-compat convenience for hook-originated questions.
     init(
+        id: String = UUID().uuidString.lowercased(),
+        createdAt: Date = Date(),
         event: HookEvent,
         question: QuestionPayload,
         continuation: CheckedContinuation<Data, Never>,
@@ -96,6 +104,8 @@ struct QuestionRequest {
         askUserQuestionState: AskUserQuestionState? = nil
     ) {
         self.init(
+            id: id,
+            createdAt: createdAt,
             event: event,
             question: question,
             resolution: .hook(continuation),

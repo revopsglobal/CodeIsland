@@ -79,6 +79,8 @@ jobs:
           swift test --filter RemoteApprovalHTTPServerTests
           swift test --filter RemotePairAttemptLimiterTests
           swift test --filter AppStatePermissionFlowTests/testRemoteDecisionResolvesOnlyTheSelectedPermission
+          swift test --filter AppStateQuestionFlowTests/testRemoteAnswerResolvesOnlyTheSelectedQuestion
+          swift test --filter AppStateQuestionFlowTests/testRemoteAnswerNeverResolvesSecretQuestion
 
       - name: Test iPhone companion models
         run: ios/CodeIslandCompanion/scripts/run-model-tests.sh

@@ -21,6 +21,7 @@ final class RemoteApprovalClient: ObservableObject {
     }
 
     @Published private(set) var approvals: [RemoteApprovalItem] = []
+    @Published private(set) var questions: [RemoteQuestionItem] = []
     @Published private(set) var state: ConnectionState = .unpaired
     @Published private(set) var serverName: String?
     @Published private(set) var lastUpdatedAt: Date?
@@ -147,6 +148,7 @@ final class RemoteApprovalClient: ObservableObject {
         Self.deleteKeychainToken()
         deviceToken = nil
         approvals = []
+        questions = []
         serverName = nil
         hubSnapshot = nil
         hubError = nil
@@ -176,10 +178,33 @@ final class RemoteApprovalClient: ObservableObject {
         }
     }
 
+    func answer(_ question: RemoteQuestionItem, answers: [String]) async {
+        guard !busyRequestIDs.contains(question.id),
+              let actionToken = question.actionToken,
+              let url = endpoint("/api/questions/\(question.id)/answer")
+        else { return }
+        busyRequestIDs.insert(question.id)
+        defer { busyRequestIDs.remove(question.id) }
+        do {
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try Self.encoder.encode(
+                RemoteQuestionAnswerRequest(answers: answers, actionToken: actionToken)
+            )
+            let _: RemoteQuestionAnswerResponse = try await perform(request, authenticated: true)
+            await refresh()
+        } catch {
+            state = .offline(error.localizedDescription)
+            await refresh()
+        }
+    }
+
     func refresh() async {
         guard deviceToken != nil else {
             state = .unpaired
             approvals = []
+            questions = []
             return
         }
         guard let url = endpoint("/api/approvals") else {
@@ -193,6 +218,7 @@ final class RemoteApprovalClient: ObservableObject {
             request.cachePolicy = .reloadIgnoringLocalCacheData
             let snapshot: RemoteApprovalSnapshot = try await perform(request, authenticated: true)
             approvals = snapshot.approvals
+            questions = snapshot.questions
             serverName = snapshot.serverName
             lastUpdatedAt = Date()
             state = .connected
