@@ -351,8 +351,28 @@ final class RemoteApprovalClient: ObservableObject {
         hubActionMessage = nil
     }
 
-    func downloadShelfFile(id: String, filename: String) async -> URL? {
-        guard let url = endpoint("/api/hub/shelf/\(id)/file"), let deviceToken else { return nil }
+    func downloadHubFile(moduleID: PersonalHubModuleID, id: String, filename: String) async -> URL? {
+#if DEBUG
+        if usesMockHub {
+            do {
+                let destination = FileManager.default.temporaryDirectory
+                    .appendingPathComponent(UUID().uuidString, isDirectory: true)
+                try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+                let fileURL = destination.appendingPathComponent(filename.isEmpty ? "CodeIsland-file" : filename)
+                try Data("CodeIsland simulator file transfer".utf8).write(to: fileURL, options: [.atomic])
+                hubActionMessage = "Downloaded \(fileURL.lastPathComponent)"
+                return fileURL
+            } catch {
+                hubActionMessage = error.localizedDescription
+                return nil
+            }
+        }
+#endif
+        var pathAllowed = CharacterSet.urlPathAllowed
+        pathAllowed.remove(charactersIn: "/")
+        guard let encodedID = id.addingPercentEncoding(withAllowedCharacters: pathAllowed) else { return nil }
+        let route = moduleID == .downloads ? "downloads" : "shelf"
+        guard let url = endpoint("/api/hub/\(route)/\(encodedID)/file"), let deviceToken else { return nil }
         do {
             var request = URLRequest(url: url)
             request.httpMethod = "GET"
@@ -361,7 +381,7 @@ final class RemoteApprovalClient: ObservableObject {
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse,
                   (200..<300).contains(http.statusCode) else {
-                throw RemoteClientError.server("Mac could not transfer the Shelf file")
+                throw RemoteClientError.server("Mac could not transfer the file")
             }
             let safeName = filename.replacingOccurrences(of: "/", with: "-")
             let destination = FileManager.default.temporaryDirectory
@@ -705,7 +725,27 @@ final class RemoteApprovalClient: ObservableObject {
         case .quickToggles:
             return .init(id: id, availability: ready, summary: "Appearance and Mac controls", actions: [.init(id: "toggleAppearance", label: "Dark / Light"), .init(id: "mute", label: "Mute"), .init(id: "lock", label: "Lock Mac")])
         case .downloads:
-            return .init(id: id, availability: ready, summary: "1 active download", items: [.init(id: "download:1", title: "CodeIsland.dmg", subtitle: "72%", progress: 0.72, actions: [.init(id: "open", label: "Open", targetID: "download:1")])], actions: [.init(id: "refresh", label: "Refresh")])
+            return .init(
+                id: id,
+                availability: ready,
+                summary: "1 recent download",
+                items: [
+                    .init(
+                        id: "download:1",
+                        title: "CodeIsland.dmg",
+                        subtitle: "Completed · 8.4 MB",
+                        actions: [
+                            .init(
+                                id: "downloadToDevice",
+                                label: "Download",
+                                role: .primary,
+                                targetID: "download:1"
+                            )
+                        ]
+                    )
+                ],
+                actions: [.init(id: "refresh", label: "Refresh")]
+            )
         case .camera:
             return .init(id: id, availability: ready, summary: "Front camera preview", actions: [.init(id: "previewOnDevice", label: "Preview", symbol: "camera.fill")])
         case .teleprompter:

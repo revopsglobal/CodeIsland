@@ -276,10 +276,12 @@ enum RemoteApprovalWebApp {
         async function runHubAction(moduleID,actionID,targetID,deepLink,payload,actionValue) {
           if(actionID==='downloadToDevice'&&targetID) {
             try {
-              const response=await fetch(`/api/hub/shelf/${encodeURIComponent(targetID)}/file`,{headers:authHeaders()});
+              const fileModule=moduleID==='downloads'?'downloads':'shelf';
+              const response=await fetch(`/api/hub/${fileModule}/${encodeURIComponent(targetID)}/file`,{headers:authHeaders()});
               if(!response.ok) { const body=await response.json(); throw new Error(body.error||'File transfer failed'); }
               const blob=await response.blob(); const url=URL.createObjectURL(blob); const link=document.createElement('a');
-              link.href=url; link.download='CodeIsland-file'; document.body.appendChild(link); link.click(); link.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000);
+              const disposition=response.headers.get('Content-Disposition')||''; const match=disposition.match(/filename\*=UTF-8''([^;]+)/i);
+              link.href=url; link.download=match?decodeURIComponent(match[1]):'CodeIsland-file'; document.body.appendChild(link); link.click(); link.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000);
             } catch(error) { alert(error.message); }
             return;
           }

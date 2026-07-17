@@ -34,6 +34,18 @@ final class PersonalUtilitiesModel: ObservableObject {
         }
     }
 
+    struct RecentDownloadInfo: Identifiable, Equatable, Sendable {
+        let id: String
+        let url: URL
+        let name: String
+        let bytes: Int64
+        let modifiedAt: Date
+
+        var isTransferable: Bool {
+            bytes <= PersonalUtilitiesModel.maximumRemoteTransferBytes
+        }
+    }
+
     struct BatteryLevel: Identifiable, Equatable, Sendable {
         let id: String
         let label: String
@@ -66,6 +78,8 @@ final class PersonalUtilitiesModel: ObservableObject {
     }
 
     @Published private(set) var downloads: [DownloadInfo] = []
+    @Published private(set) var recentDownloads: [RecentDownloadInfo] = []
+    @Published private(set) var downloadsScanComplete = false
     @Published private(set) var recentDownloadCompleted: String?
     @Published private(set) var deviceBatteries: [DeviceBattery] = []
     @Published private(set) var bluetoothDevices: [BluetoothDevice] = []
@@ -90,6 +104,13 @@ final class PersonalUtilitiesModel: ObservableObject {
     nonisolated private static let partialExtensions: Set<String> = [
         "crdownload", "download", "opdownload", "part", "partial",
     ]
+    nonisolated private static let downloadsIOQueue = DispatchQueue(
+        label: "com.codeisland.downloads-io",
+        qos: .utility
+    )
+    nonisolated static let maximumRemoteTransferBytes: Int64 = 100_000_000
+    nonisolated private static let recentDownloadAge: TimeInterval = 7 * 24 * 60 * 60
+    nonisolated private static let maximumRecentDownloads = 12
 
     nonisolated private static let defaultDownloadsURL = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Downloads", isDirectory: true)
@@ -146,6 +167,10 @@ final class PersonalUtilitiesModel: ObservableObject {
         refreshBluetooth(force: true)
     }
 
+    func refreshDownloads() {
+        scanDownloads()
+    }
+
     func openDownloads() {
         NSWorkspace.shared.open(downloadsURL)
     }
@@ -153,6 +178,23 @@ final class PersonalUtilitiesModel: ObservableObject {
     func openBluetoothSettings() {
         guard let url = URL(string: "x-apple.systempreferences:com.apple.BluetoothSettings") else { return }
         NSWorkspace.shared.open(url)
+    }
+
+    func downloadItemURL(id: String) -> URL? {
+        if let active = downloads.first(where: { $0.id == id }) {
+            return active.url
+        }
+        return recentDownloadFileURL(id: id)
+    }
+
+    func recentDownloadFileURL(id: String) -> URL? {
+        guard let entry = recentDownloads.first(where: { $0.id == id }),
+              entry.isTransferable,
+              entry.url.standardizedFileURL.deletingLastPathComponent() == downloadsURL.standardizedFileURL,
+              let values = try? entry.url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey]),
+              values.isRegularFile == true,
+              values.isSymbolicLink != true else { return nil }
+        return entry.url
     }
 
     // MARK: - Downloads
@@ -164,10 +206,9 @@ final class PersonalUtilitiesModel: ObservableObject {
         Task { [weak self] in
             // Downloads is protected by Files & Folders TCC. A newly signed app
             // can block in open(2) while macOS resolves that permission, so the
-            // syscall must never run on the app's main actor during launch.
-            let descriptor = await Task.detached(priority: .utility) {
-                opener(path)
-            }.value
+            // syscall must never run on the app's main actor or Swift's
+            // cooperative executor during launch.
+            let descriptor = await Self.openDownloadsDirectory(path: path, using: opener)
             guard let self else {
                 if descriptor >= 0 { close(descriptor) }
                 return
@@ -209,13 +250,11 @@ final class PersonalUtilitiesModel: ObservableObject {
         let directory = downloadsURL
         let generation = downloadsGeneration
         Task { [weak self] in
-            let current = await Task.detached(priority: .utility) {
-                Self.scanDownloadEntries(in: directory)
-            }.value
+            let current = await Self.readDownloadEntries(in: directory)
             guard let self else { return }
             self.downloadScanInFlight = false
             guard self.started, self.downloadsGeneration == generation else { return }
-            self.applyDownloadEntries(current)
+            self.applyDownloadEntries(current.active, recent: current.recent)
             if self.downloadScanPending {
                 self.downloadScanPending = false
                 self.scanDownloads()
@@ -223,10 +262,37 @@ final class PersonalUtilitiesModel: ObservableObject {
         }
     }
 
-    private func applyDownloadEntries(_ current: [DownloadInfo]) {
+    nonisolated private static func openDownloadsDirectory(
+        path: String,
+        using opener: @escaping DirectoryOpener
+    ) async -> Int32 {
+        await withCheckedContinuation { continuation in
+            downloadsIOQueue.async {
+                continuation.resume(returning: opener(path))
+            }
+        }
+    }
+
+    nonisolated private static func readDownloadEntries(
+        in directory: URL
+    ) async -> (active: [DownloadInfo], recent: [RecentDownloadInfo]) {
+        await withCheckedContinuation { continuation in
+            downloadsIOQueue.async {
+                continuation.resume(returning: (
+                    active: scanDownloadEntries(in: directory),
+                    recent: scanRecentDownloadEntries(in: directory)
+                ))
+            }
+        }
+    }
+
+    private func applyDownloadEntries(_ current: [DownloadInfo], recent: [RecentDownloadInfo]) {
         let previous = downloads
+        let previousRecent = recentDownloads
         let previousCompletion = recentDownloadCompleted
         downloads = current
+        recentDownloads = recent
+        downloadsScanComplete = true
 
         if hasScannedDownloads, !previous.isEmpty {
             let currentIDs = Set(current.map(\.id))
@@ -243,7 +309,7 @@ final class PersonalUtilitiesModel: ObservableObject {
         }
         hasScannedDownloads = true
         updateProgressTimer()
-        if current != previous || recentDownloadCompleted != previousCompletion {
+        if current != previous || recent != previousRecent || recentDownloadCompleted != previousCompletion {
             AppleCompanionPublisher.shared.notifyDirty()
         }
     }
@@ -289,6 +355,42 @@ final class PersonalUtilitiesModel: ObservableObject {
         }
         .filter { Date().timeIntervalSince($0.modifiedAt) < 86_400 }
         .sorted { $0.modifiedAt > $1.modifiedAt }
+    }
+
+    nonisolated static func scanRecentDownloadEntries(
+        in directory: URL,
+        now: Date = Date()
+    ) -> [RecentDownloadInfo] {
+        let keys: Set<URLResourceKey> = [
+            .isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey,
+            .fileSizeKey, .contentModificationDateKey,
+        ]
+        guard let urls = try? FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: Array(keys),
+            options: [.skipsHiddenFiles]
+        ) else { return [] }
+
+        return urls.compactMap { url in
+            guard !partialExtensions.contains(url.pathExtension.lowercased()),
+                  let values = try? url.resourceValues(forKeys: keys),
+                  values.isDirectory != true,
+                  values.isRegularFile == true,
+                  values.isSymbolicLink != true,
+                  let modifiedAt = values.contentModificationDate,
+                  now.timeIntervalSince(modifiedAt) >= 0,
+                  now.timeIntervalSince(modifiedAt) <= recentDownloadAge else { return nil }
+            return RecentDownloadInfo(
+                id: url.path,
+                url: url,
+                name: url.lastPathComponent,
+                bytes: Int64(values.fileSize ?? 0),
+                modifiedAt: modifiedAt
+            )
+        }
+        .sorted { $0.modifiedAt > $1.modifiedAt }
+        .prefix(maximumRecentDownloads)
+        .map { $0 }
     }
 
     nonisolated private static func directoryByteSize(_ directory: URL) -> Int64 {

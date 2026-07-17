@@ -40,7 +40,7 @@ Sources used for the baseline:
 | Bluetooth devices/connect/disconnect | Unverified: connected/remembered devices, battery, connect/disconnect | Unverified: mirrored devices and confirmed remote actions | Physical accessory connect/disconnect tests |
 | Battery health | Ready: charge, cycles, health percentage, and condition | Ready: mirrored health and accessory readings | Runtime comparison with macOS System Information |
 | Quick toggles | Unverified: dark/light, mute/unmute, display sleep, and Lock Mac | Unverified: exact-confirmation remote actions | Physical state/action tests, including expected permission failures |
-| Active Downloads | Ready on Mac | Partial: nearby summary only | Remote list/progress/open/download tests over Tailscale |
+| Active and recent Downloads | Ready: live progress, 12 recent completed files, Reveal, refresh, age filtering, and a 100 MB private-transfer cap | Ready implementation: paired devices can download/share eligible completed files and the web fallback preserves filenames; physical Tailscale transfer remains unverified | Physical iPhone and web file round trip over Tailscale, plus over-limit rejection |
 | Camera pre-check | Partial: opens Photo Booth | Unverified: private front-camera preview with permission/failure UI | Physical camera permission/preview test; mic and camera selection remain |
 | Teleprompter/present mode | Unverified: persistent floating reader, play/pause, WPM, and font size | Unverified: full-screen reader, play/pause, WPM, and font size | Mac and physical-iPhone presentation/resume tests |
 | Window snapping/remote window actions | Unverified: allow-listed left/right/maximize via Accessibility | Unverified: confirmed remote left/right/maximize | Grant Accessibility and verify real windows |
@@ -72,6 +72,20 @@ starts the real loopback listener with isolated device/audit storage and proves:
 - a real `AskUserQuestion` continuation, answer delivery, and replay rejection;
 - reviewed action prepare/execute, altered-intent rejection, single-use enforcement; and
 - production push-token registration without touching Greg's real paired-device store.
+
+`RemoteApprovalHTTPServerTests.testAuthenticatedRecentDownloadTransfersToPairedDevice`
+uses an isolated Downloads directory and the real listener to prove:
+
+- recent completed files appear in the authenticated Work snapshot;
+- unauthenticated transfer is rejected;
+- a paired device receives the exact bytes and original filename; and
+- over-limit files are not advertised for transfer and are rejected; and
+- an encoded path outside Downloads is rejected.
+
+The iOS Simulator suite includes
+`CodeIslandCompanionUITests.testCompletedDownloadOpensNativeShareSheet`; the
+full companion UI run passed 12 tests with zero failures on 2026-07-17. This is
+native Simulator evidence, not physical-iPhone or cellular/Tailscale proof.
 
 ## Current signed delivery receipts
 
@@ -124,7 +138,8 @@ and real Calendar/Reminders data.
    Spotify playback controls; Shelf file round trip; clipboard copy/remove;
    notes/checklists/undo; weather ZIP and location modes; GitHub PR deep link;
    audio output/input and volume; Bluetooth connect/disconnect and battery;
-   downloads; dark mode/mute/display sleep; camera preview; teleprompter; and
+   downloads (including a completed file below 100 MB and an over-limit file);
+   dark mode/mute/display sleep; camera preview; teleprompter; and
    Accessibility-backed window snapping.
 9. Leave the Mac host running and connected, lock it, move the iPhone off local
    Wi-Fi, and repeat one approval, one task creation, and one Calendar read over

@@ -546,7 +546,11 @@ private struct PersonalHubItemRow: View {
                             Button {
                             if action.id == "downloadToDevice" {
                                 Task {
-                                    if let url = await client.downloadShelfFile(id: item.id, filename: item.title) {
+                                    if let url = await client.downloadHubFile(
+                                        moduleID: moduleID,
+                                        id: item.id,
+                                        filename: item.title
+                                    ) {
                                         sharedFile = SharedFile(url: url)
                                     }
                                 }
@@ -585,6 +589,7 @@ private struct PersonalHubItemRow: View {
                                 Label(action.label, systemImage: action.symbol ?? "arrow.right")
                                     .font(.system(size: 10, weight: .bold))
                             }
+                            .accessibilityIdentifier("hub.action.\(moduleID.rawValue).\(action.id)")
                             .buttonStyle(HubCompactButtonStyle(primary: action.role == .primary))
                         }
                     }
