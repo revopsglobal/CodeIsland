@@ -366,6 +366,7 @@ private struct PersonalHubItemRow: View {
     @Environment(\.openURL) private var openURL
     @State private var showsTeleprompter = false
     @State private var noteMutation: NoteMutation?
+    @State private var sharedFile: SharedFile?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -398,7 +399,13 @@ private struct PersonalHubItemRow: View {
                 HStack(spacing: 6) {
                     ForEach(item.actions) { action in
                         Button {
-                            if moduleID == .notes, ["append", "replace"].contains(action.id) {
+                            if action.id == "downloadToDevice" {
+                                Task {
+                                    if let url = await client.downloadShelfFile(id: item.id, filename: item.title) {
+                                        sharedFile = SharedFile(url: url)
+                                    }
+                                }
+                            } else if moduleID == .notes, ["append", "replace"].contains(action.id) {
                                 noteMutation = .init(
                                     actionID: action.id,
                                     targetID: action.targetID ?? item.id,
@@ -439,7 +446,25 @@ private struct PersonalHubItemRow: View {
                 .environmentObject(client)
                 .presentationDetents([.medium, .large])
         }
+        .sheet(item: $sharedFile) { file in
+            ActivityView(items: [file.url])
+        }
     }
+}
+
+private struct SharedFile: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+private struct ActivityView: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
 private struct NoteMutation: Identifiable {
