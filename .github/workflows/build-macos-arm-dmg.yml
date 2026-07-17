@@ -123,6 +123,7 @@ jobs:
 
       - name: Test personal utilities
         run: |
+          swift test --filter GlancesModelTests
           swift test --filter PersonalUtilitiesModelTests
           swift test --filter PersonalHubProtocolTests
           swift test --filter PersonalHubDataModelTests
