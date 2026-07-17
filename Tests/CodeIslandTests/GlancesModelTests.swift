@@ -33,6 +33,54 @@ final class GlancesModelTests: XCTestCase {
         XCTAssertEqual(selected, ["home"])
     }
 
+    func testQuickTaskPrefersSelectedDefaultList() {
+        let selected = GlancesModel.preferredReminderCalendarID(
+            selectedIDs: ["work", "home"],
+            orderedAvailableIDs: ["work", "home"],
+            defaultID: "home"
+        )
+
+        XCTAssertEqual(selected, "home")
+    }
+
+    func testQuickTaskFallsBackToFirstSelectedListInDisplayOrder() {
+        let selected = GlancesModel.preferredReminderCalendarID(
+            selectedIDs: ["work"],
+            orderedAvailableIDs: ["home", "work"],
+            defaultID: "home"
+        )
+
+        XCTAssertEqual(selected, "work")
+        XCTAssertEqual(GlancesModel.normalizedReminderTitle("  Finish the deck\n"), "Finish the deck")
+    }
+
+    func testTrustedMeetingProvidersAllowRealJoinLinks() throws {
+        let links = [
+            "https://us02web.zoom.us/j/123456789",
+            "https://meet.google.com/abc-defg-hij",
+            "https://teams.microsoft.com/l/meetup-join/19%3ameeting",
+            "https://acme.webex.com/meet/greg",
+            "https://whereby.com/my-room",
+        ]
+
+        for link in links {
+            XCTAssertTrue(GlancesModel.isTrustedJoinURL(try XCTUnwrap(URL(string: link))), link)
+        }
+    }
+
+    func testTrustedMeetingProvidersRejectSpoofedAndInsecureLinks() throws {
+        let links = [
+            "https://attacker.example/?next=meet.google.com/abc-defg-hij",
+            "https://meet.google.com.attacker.example/abc-defg-hij",
+            "http://meet.google.com/abc-defg-hij",
+            "https://example.com/meeting",
+        ]
+
+        for link in links {
+            XCTAssertFalse(GlancesModel.isTrustedJoinURL(try XCTUnwrap(URL(string: link))), link)
+        }
+    }
+
     func testGeocodingURLExtractsZIPFromNaturalLocationInput() throws {
         let url = try XCTUnwrap(GlancesModel.geocodingURL(for: "San Francisco 94107"))
         let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))

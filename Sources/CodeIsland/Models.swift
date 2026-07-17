@@ -2,10 +2,24 @@ import Foundation
 import CodeIslandCore
 
 struct PermissionRequest {
+    let id: String
+    let createdAt: Date
     let event: HookEvent
     let continuation: CheckedContinuation<Data, Never>
 
     var toolUseId: String? { event.toolUseId }
+
+    init(
+        id: String = UUID().uuidString.lowercased(),
+        createdAt: Date = Date(),
+        event: HookEvent,
+        continuation: CheckedContinuation<Data, Never>
+    ) {
+        self.id = id
+        self.createdAt = createdAt
+        self.event = event
+        self.continuation = continuation
+    }
 }
 
 struct AskUserQuestionItem {

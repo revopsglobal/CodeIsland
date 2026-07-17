@@ -87,6 +87,10 @@ final class NotificationManager: NSObject {
 
     /// Clear a session's pending notification once it's answered/gone.
     func clearPending(sessionId: String) {
+        // Swift Package tests do not run inside an application bundle. Asking
+        // UserNotifications for its process proxy there raises an Objective-C
+        // exception before Swift can handle it.
+        guard NSApp != nil else { return }
         UNUserNotificationCenter.current()
             .removeDeliveredNotifications(withIdentifiers: ["approval-\(sessionId)"])
     }

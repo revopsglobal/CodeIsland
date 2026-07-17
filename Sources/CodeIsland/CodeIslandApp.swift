@@ -7,7 +7,7 @@ struct CodeIslandApp: App {
 
     var body: some Scene {
         Settings {
-            EmptyView()
+            SettingsView(appState: appDelegate.appState)
         }
     }
 }

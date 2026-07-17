@@ -116,6 +116,17 @@ enum SettingsKey {
     static let appleCompanionEnabled = "appleCompanionEnabled"
     static let appleCompanionHeartbeatSeconds = "appleCompanionHeartbeatSeconds"
 
+    // Remote approvals (private Tailscale HTTPS -> loopback HTTP server)
+    static let remoteApprovalsEnabled = "remoteApprovalsEnabled"
+    static let remoteApprovalLocalPort = "remoteApprovalLocalPort"
+    static let remoteApprovalTailscalePort = "remoteApprovalTailscalePort"
+    static let remoteApprovalTailnetURL = "remoteApprovalTailnetURL"
+    static let remoteApprovalPreventSleep = "remoteApprovalPreventSleep"
+    static let remoteApprovalAPNSTeamID = "remoteApprovalAPNSTeamID"
+    static let remoteApprovalAPNSKeyID = "remoteApprovalAPNSKeyID"
+    static let remoteApprovalAPNSPrivateKeyPath = "remoteApprovalAPNSPrivateKeyPath"
+    static let remoteApprovalAPNSTopic = "remoteApprovalAPNSTopic"
+
     // Glances utilities
     // Comma-separated EventKit reminder calendar identifiers. An empty value is
     // normalized to the default Reminders list when access is first available.
@@ -199,6 +210,16 @@ struct SettingsDefaults {
     static let appleCompanionEnabled = false
     static let appleCompanionHeartbeatSeconds = 5.0
 
+    static let remoteApprovalsEnabled = true
+    static let remoteApprovalLocalPort = 43891
+    static let remoteApprovalTailscalePort = 9443
+    static let remoteApprovalTailnetURL = ""
+    static let remoteApprovalPreventSleep = true
+    static let remoteApprovalAPNSTeamID = "44JG2Y95CH"
+    static let remoteApprovalAPNSKeyID = ""
+    static let remoteApprovalAPNSPrivateKeyPath = ""
+    static let remoteApprovalAPNSTopic = "com.revopsglobal.codeisland.buddy"
+
     static let glancesReminderCalendarIDs = ""
     static let glancesWeatherLocation = ""
 
@@ -272,6 +293,15 @@ class SettingsManager {
             SettingsKey.selectedBuddyName: SettingsDefaults.selectedBuddyName,
             SettingsKey.appleCompanionEnabled: SettingsDefaults.appleCompanionEnabled,
             SettingsKey.appleCompanionHeartbeatSeconds: SettingsDefaults.appleCompanionHeartbeatSeconds,
+            SettingsKey.remoteApprovalsEnabled: SettingsDefaults.remoteApprovalsEnabled,
+            SettingsKey.remoteApprovalLocalPort: SettingsDefaults.remoteApprovalLocalPort,
+            SettingsKey.remoteApprovalTailscalePort: SettingsDefaults.remoteApprovalTailscalePort,
+            SettingsKey.remoteApprovalTailnetURL: SettingsDefaults.remoteApprovalTailnetURL,
+            SettingsKey.remoteApprovalPreventSleep: SettingsDefaults.remoteApprovalPreventSleep,
+            SettingsKey.remoteApprovalAPNSTeamID: SettingsDefaults.remoteApprovalAPNSTeamID,
+            SettingsKey.remoteApprovalAPNSKeyID: SettingsDefaults.remoteApprovalAPNSKeyID,
+            SettingsKey.remoteApprovalAPNSPrivateKeyPath: SettingsDefaults.remoteApprovalAPNSPrivateKeyPath,
+            SettingsKey.remoteApprovalAPNSTopic: SettingsDefaults.remoteApprovalAPNSTopic,
             SettingsKey.glancesReminderCalendarIDs: SettingsDefaults.glancesReminderCalendarIDs,
             SettingsKey.glancesWeatherLocation: SettingsDefaults.glancesWeatherLocation,
             SettingsKey.defaultSource: SettingsDefaults.defaultSource,

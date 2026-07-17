@@ -58,6 +58,7 @@ final class GlancesModel: NSObject, ObservableObject {
     @Published private(set) var remindersAuthorizationStatus: EKAuthorizationStatus = .notDetermined
     @Published private(set) var locationAuthorizationStatus: CLAuthorizationStatus = .notDetermined
     @Published private(set) var statusLine: String?
+    @Published private(set) var reminderMutationError: String?
 
     private let eventStore = EKEventStore()
     private let locationManager = CLLocationManager()
@@ -191,27 +192,50 @@ final class GlancesModel: NSObject, ObservableObject {
 
     /// Find a video-call link in the event's URL, location, or notes.
     static func extractJoinURL(from event: EKEvent) -> URL? {
-        if let url = event.url, Self.isJoinURL(url.absoluteString) { return url }
+        if let url = event.url, Self.isTrustedJoinURL(url) { return url }
         let haystacks = [event.location, event.notes].compactMap { $0 }
         let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
         for text in haystacks {
             let range = NSRange(text.startIndex..., in: text)
             let matches = detector?.matches(in: text, options: [], range: range) ?? []
             for match in matches {
-                if let url = match.url, Self.isJoinURL(url.absoluteString) { return url }
+                if let url = match.url, Self.isTrustedJoinURL(url) { return url }
             }
         }
         return nil
     }
 
-    private static func isJoinURL(_ string: String) -> Bool {
-        let lower = string.lowercased()
-        return lower.contains("zoom.us/j/")
-            || lower.contains("zoom.us/my/")
-            || lower.contains("meet.google.com/")
-            || lower.contains("teams.microsoft.com/l/meetup")
-            || lower.contains("teams.live.com/meet")
-            || lower.contains("webex.com/meet")
+    /// Only show the one-click action for known meeting providers. Parsing the
+    /// host (instead of substring matching) prevents URLs such as
+    /// `attacker.example/?next=meet.google.com` from being treated as trusted.
+    nonisolated static func isTrustedJoinURL(_ url: URL) -> Bool {
+        guard url.scheme?.lowercased() == "https",
+              let rawHost = url.host?.lowercased()
+        else { return false }
+
+        let host = rawHost.hasPrefix("www.") ? String(rawHost.dropFirst(4)) : rawHost
+        let path = url.path.lowercased()
+        let isHost: (String) -> Bool = { domain in
+            host == domain || host.hasSuffix(".\(domain)")
+        }
+
+        if isHost("zoom.us") || isHost("zoom.com") {
+            return path.hasPrefix("/j/") || path.hasPrefix("/my/") || path.hasPrefix("/wc/")
+        }
+        if host == "meet.google.com" { return path.count > 1 }
+        if host == "teams.microsoft.com" {
+            return path.hasPrefix("/l/meetup-join/") || path.hasPrefix("/meet/")
+        }
+        if host == "teams.live.com" { return path.hasPrefix("/meet/") }
+        if isHost("webex.com") {
+            return path.contains("/meet/")
+                || path.contains("/join/")
+                || path.contains("/wbxmjs/joinservice/")
+        }
+        if host == "meet.jit.si" || isHost("whereby.com") || host == "chime.aws" {
+            return path.count > 1
+        }
+        return host == "facetime.apple.com" && path.count > 1
     }
 
     // MARK: - Reminders
@@ -255,6 +279,25 @@ final class GlancesModel: NSObject, ObservableObject {
         if let defaultID, available.contains(defaultID) { return [defaultID] }
         if let first = available.sorted().first { return [first] }
         return []
+    }
+
+    /// Prefer the system default when it is one of the selected lists; otherwise
+    /// use the first selected list in the same stable order shown in Settings.
+    nonisolated static func preferredReminderCalendarID(
+        selectedIDs: Set<String>,
+        orderedAvailableIDs: [String],
+        defaultID: String?
+    ) -> String? {
+        if let defaultID,
+           selectedIDs.contains(defaultID),
+           orderedAvailableIDs.contains(defaultID) {
+            return defaultID
+        }
+        return orderedAvailableIDs.first(where: selectedIDs.contains)
+    }
+
+    nonisolated static func normalizedReminderTitle(_ title: String) -> String {
+        title.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     func setReminderCalendar(id: String, selected: Bool) {
@@ -303,6 +346,53 @@ final class GlancesModel: NSObject, ObservableObject {
                 self?.reminders = Array(items)
             }
         }
+    }
+
+    /// Add a quick task to one of the lists selected for Glances. Natural-language
+    /// parsing can call this same write path later after presenting a preview.
+    @discardableResult
+    func addReminder(title rawTitle: String) -> Bool {
+        reminderMutationError = nil
+        guard remindersAuthorized else {
+            reminderMutationError = "Reminders access is required"
+            return false
+        }
+
+        let title = Self.normalizedReminderTitle(rawTitle)
+        guard !title.isEmpty else {
+            reminderMutationError = "Enter a task"
+            return false
+        }
+
+        let calendars = eventStore.calendars(for: .reminder)
+        let orderedIDs = reminderCalendars.map(\.id)
+        guard let calendarID = Self.preferredReminderCalendarID(
+            selectedIDs: selectedReminderCalendarIDs,
+            orderedAvailableIDs: orderedIDs,
+            defaultID: eventStore.defaultCalendarForNewReminders()?.calendarIdentifier
+        ), let calendar = calendars.first(where: { $0.calendarIdentifier == calendarID }) else {
+            reminderMutationError = "Choose a Reminders list in settings"
+            return false
+        }
+
+        let item = EKReminder(eventStore: eventStore)
+        item.title = title
+        item.calendar = calendar
+        do {
+            try eventStore.save(item, commit: true)
+            loadReminders(from: calendars.filter {
+                selectedReminderCalendarIDs.contains($0.calendarIdentifier)
+            })
+            return true
+        } catch {
+            log.error("add reminder: \(error.localizedDescription, privacy: .public)")
+            reminderMutationError = "Could not add the task"
+            return false
+        }
+    }
+
+    func clearReminderMutationError() {
+        reminderMutationError = nil
     }
 
     /// Mark a reminder complete and drop it from the list.

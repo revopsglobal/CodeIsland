@@ -34,6 +34,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // hooks get no response and Claude Code denies them.
         hookServer = HookServer(appState: appState)
         hookServer?.start()
+        // Private away-from-Mac approval path. The HTTP listener binds only to
+        // loopback; Tailscale Serve supplies tailnet-only HTTPS on the outside.
+        _ = SettingsManager.shared
+        RemoteApprovalService.shared.start(appState: appState)
         RemoteManager.shared.onDisconnect = { [weak appState] hostId in
             appState?.removeRemoteSessions(hostId: hostId)
         }
@@ -177,6 +181,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         teardownGlobalShortcut()
         appState.saveSessions()
         RemoteManager.shared.shutdown()
+        RemoteApprovalService.shared.stop()
         hookServer?.stop()
         appState.stopCodexAppServerWatcher()
         appState.stopSessionDiscovery()

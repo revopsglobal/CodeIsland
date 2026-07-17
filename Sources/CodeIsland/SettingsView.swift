@@ -77,7 +77,7 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
+        HStack(spacing: 0) {
             List(selection: $selectedPage) {
                 ForEach(sidebarGroups, id: \.title) { group in
                     Section {
@@ -93,8 +93,10 @@ struct SettingsView: View {
                 }
             }
             .listStyle(.sidebar)
-            .navigationSplitViewColumnWidth(200)
-        } detail: {
+            .frame(width: 200)
+
+            Divider()
+
             Group {
                 switch selectedPage {
                 case .general: GeneralPage()
@@ -110,8 +112,10 @@ struct SettingsView: View {
                 case .about: AboutPage()
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .toolbar(removing: .sidebarToggle)
+        .frame(minWidth: 560, minHeight: 420)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 }
 
@@ -1537,7 +1541,15 @@ private struct BuddyPage: View {
     @AppStorage(SettingsKey.buddyScreenOrientation) private var screenOrientation: String = SettingsDefaults.buddyScreenOrientation
     @AppStorage(SettingsKey.appleCompanionEnabled) private var appleCompanionEnabled: Bool = SettingsDefaults.appleCompanionEnabled
     @AppStorage(SettingsKey.appleCompanionHeartbeatSeconds) private var appleCompanionHeartbeat: Double = SettingsDefaults.appleCompanionHeartbeatSeconds
+    @AppStorage(SettingsKey.remoteApprovalsEnabled) private var remoteApprovalsEnabled: Bool = SettingsDefaults.remoteApprovalsEnabled
+    @AppStorage(SettingsKey.remoteApprovalPreventSleep) private var remotePreventSleep: Bool = SettingsDefaults.remoteApprovalPreventSleep
+    @AppStorage(SettingsKey.remoteApprovalAPNSTeamID) private var apnsTeamID: String = SettingsDefaults.remoteApprovalAPNSTeamID
+    @AppStorage(SettingsKey.remoteApprovalAPNSKeyID) private var apnsKeyID: String = SettingsDefaults.remoteApprovalAPNSKeyID
+    @AppStorage(SettingsKey.remoteApprovalAPNSPrivateKeyPath) private var apnsPrivateKeyPath: String = SettingsDefaults.remoteApprovalAPNSPrivateKeyPath
+    @AppStorage(SettingsKey.remoteApprovalAPNSTopic) private var apnsTopic: String = SettingsDefaults.remoteApprovalAPNSTopic
     @ObservedObject private var appleCompanion = AppleCompanionPublisher.shared
+    @ObservedObject private var remoteApprovals = RemoteApprovalService.shared
+    @ObservedObject private var apns = APNSNotificationSender.shared
     @State private var refreshTick = 0
 
     private var bridge: ESP32BridgeManager { ESP32BridgeManager.shared }
@@ -1844,6 +1856,133 @@ private struct BuddyPage: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("Remote approvals") {
+                Toggle("Approve from iPhone over Tailscale", isOn: $remoteApprovalsEnabled)
+                    .onChange(of: remoteApprovalsEnabled) { _, _ in
+                        RemoteApprovalService.shared.restart()
+                    }
+
+                HStack {
+                    Text("Private HTTPS")
+                    Spacer()
+                    Circle()
+                        .fill(remoteApprovals.running ? Color.green : Color.red)
+                        .frame(width: 8, height: 8)
+                    Text(remoteApprovals.running ? "Running" : "Stopped")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                HStack(spacing: 8) {
+                    Text(remoteApprovals.displayURL)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer()
+                    Button("Copy") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(remoteApprovals.displayURL, forType: .string)
+                    }
+                    Button("Open") {
+                        if let url = URL(string: remoteApprovals.displayURL) {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("PAIRING CODE")
+                        .font(.caption2.bold())
+                        .foregroundStyle(.secondary)
+                    Text(remoteApprovals.pairingCode)
+                        .font(.system(size: 28, weight: .bold, design: .monospaced))
+                        .textSelection(.enabled)
+                    Text(pairingExpiryText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Button {
+                    remoteApprovals.rotatePairingCode()
+                } label: {
+                    Label("New pairing code", systemImage: "arrow.clockwise")
+                }
+
+                if remoteApprovals.pairedDevices.isEmpty {
+                    Label("No remote iPhones paired", systemImage: "iphone.slash")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(remoteApprovals.pairedDevices) { device in
+                        HStack {
+                            Label(device.name, systemImage: device.pushToken == nil ? "iphone" : "bell.badge.fill")
+                                .lineLimit(1)
+                            Spacer()
+                            Text(device.lastSeenAt, style: .relative)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Button(role: .destructive) {
+                                remoteApprovals.revokeDevice(id: device.id)
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                    }
+                }
+
+                Toggle("Keep this Mac awake while approval is waiting", isOn: $remotePreventSleep)
+
+                Button {
+                    remoteApprovals.restart()
+                } label: {
+                    Label("Restart remote approval service", systemImage: "arrow.triangle.2.circlepath")
+                }
+
+                if let error = remoteApprovals.lastError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .textSelection(.enabled)
+                }
+            }
+
+            Section("iPhone notifications (APNs)") {
+                TextField("Apple Team ID", text: $apnsTeamID)
+                TextField("APNs Key ID", text: $apnsKeyID)
+                TextField("App bundle ID", text: $apnsTopic)
+
+                HStack {
+                    Text(apnsPrivateKeyPath.isEmpty
+                         ? "No APNs .p8 key selected"
+                         : URL(fileURLWithPath: apnsPrivateKeyPath).lastPathComponent)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Choose .p8…") { chooseAPNSPrivateKey() }
+                    if !apnsPrivateKeyPath.isEmpty {
+                        Button("Clear") { apnsPrivateKeyPath = "" }
+                    }
+                }
+
+                if let delivered = apns.lastDeliveryAt {
+                    Label("Last delivered \(delivered.formatted(date: .omitted, time: .shortened))", systemImage: "checkmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                }
+                if let error = apns.lastError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .textSelection(.enabled)
+                }
+
+                Text("The private key stays on this Mac. Push messages contain only the agent and tool name; Buddy fetches the live request over Tailscale after you open it.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section {
                 Text(l10n["buddy_desc"])
                     .font(.caption)
@@ -1892,6 +2031,24 @@ private struct BuddyPage: View {
     private var appleCompanionStatusColor: Color {
         guard appleCompanion.enabled else { return .secondary }
         return appleCompanion.connectedPeerNames.isEmpty ? .orange : .green
+    }
+
+    private var pairingExpiryText: String {
+        let seconds = max(0, Int(remoteApprovals.pairingExpiresAt.timeIntervalSinceNow))
+        return seconds > 0 ? "Expires in \(seconds / 60):\(String(format: "%02d", seconds % 60))" : "Expired — create a new code"
+    }
+
+    private func chooseAPNSPrivateKey() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose APNs authentication key"
+        if let p8Type = UTType(filenameExtension: "p8") {
+            panel.allowedContentTypes = [p8Type]
+        }
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        if panel.runModal() == .OK, let url = panel.url {
+            apnsPrivateKeyPath = url.path
+        }
     }
 }
 

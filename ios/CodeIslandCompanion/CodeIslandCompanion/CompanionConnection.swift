@@ -7,11 +7,7 @@ import UIKit
 final class CompanionConnection: NSObject, ObservableObject {
     @Published private(set) var discoveredPeers: [MCPeerID] = []
     @Published private(set) var connectedPeer: MCPeerID?
-    @Published private(set) var latestState: CompanionStatePayload? {
-        didSet {
-            watchBridge.publish(latestState)
-        }
-    }
+    @Published private(set) var latestState: CompanionStatePayload?
     @Published private(set) var lastError: String?
     @Published private(set) var browsing = false
     @Published private(set) var bluetoothConnectedPeripheralName: String?
@@ -22,7 +18,6 @@ final class CompanionConnection: NSObject, ObservableObject {
     private static let refreshAfterSeconds: TimeInterval = 8
     private static let reconnectAfterSeconds: TimeInterval = 24
 
-    private let watchBridge = WatchBridge()
     private let bluetoothBridge = CompanionBluetoothCentral()
     private let peerID = MCPeerID(displayName: UIDevice.current.name)
     private let mockStatePayload = CompanionConnection.mockStateFromLaunchArguments()
@@ -50,9 +45,6 @@ final class CompanionConnection: NSObject, ObservableObject {
         super.init()
         session.delegate = self
         browser.delegate = self
-        watchBridge.commandHandler = { [weak self] command in
-            self?.send(command)
-        }
         bluetoothBridge.onSummary = { [weak self] summary in
             self?.receiveBluetoothSummary(summary)
         }

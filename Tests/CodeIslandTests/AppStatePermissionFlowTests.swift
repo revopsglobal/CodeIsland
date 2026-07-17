@@ -202,6 +202,39 @@ final class AppStatePermissionFlowTests: XCTestCase {
         XCTAssertEqual(appState.permissionQueue.count, 0)
     }
 
+    func testRemoteDecisionResolvesOnlyTheSelectedPermission() async throws {
+        let appState = AppState()
+        let firstEvent = try makePermissionRequestEvent(sessionId: "s-remote-first", toolName: "Read")
+        let secondEvent = try makePermissionRequestEvent(sessionId: "s-remote-second", toolName: "Bash")
+
+        let firstResponseTask = Task<Data, Never> {
+            await withCheckedContinuation { continuation in
+                appState.handlePermissionRequest(firstEvent, continuation: continuation)
+            }
+        }
+        let secondResponseTask = Task<Data, Never> {
+            await withCheckedContinuation { continuation in
+                appState.handlePermissionRequest(secondEvent, continuation: continuation)
+            }
+        }
+
+        await Task.yield()
+        XCTAssertEqual(appState.permissionQueue.count, 2)
+        let firstID = appState.permissionQueue[0].id
+        let secondID = appState.permissionQueue[1].id
+
+        XCTAssertTrue(appState.resolveRemotePermission(requestID: secondID, decision: .approve))
+        let secondResponse = await secondResponseTask.value
+        XCTAssertEqual(try extractPermissionBehavior(from: secondResponse), "allow")
+        XCTAssertEqual(appState.permissionQueue.map(\.id), [firstID])
+        XCTAssertFalse(appState.resolveRemotePermission(requestID: secondID, decision: .deny))
+
+        XCTAssertTrue(appState.resolveRemotePermission(requestID: firstID, decision: .deny))
+        let firstResponse = await firstResponseTask.value
+        XCTAssertEqual(try extractPermissionBehavior(from: firstResponse), "deny")
+        XCTAssertTrue(appState.permissionQueue.isEmpty)
+    }
+
     func testPendingApprovalPreviewSplitsLongDescriptionAcrossMultipleWatchFrames() async throws {
         let appState = AppState()
         let sessionId = "s-buddy-preview"

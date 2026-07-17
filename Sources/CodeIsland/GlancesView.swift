@@ -6,8 +6,12 @@ import AppKit
 struct GlancesView: View {
     @StateObject private var model = GlancesModel()
     @ObservedObject private var personalUtilities = PersonalUtilitiesModel.shared
+    @State private var isAddingReminder = false
+    @State private var newReminderTitle = ""
+    @FocusState private var reminderFieldFocused: Bool
 
     private static let accent = Color(red: 0.3, green: 0.85, blue: 0.4)
+    private static let actionAccent = Color(red: 1.0, green: 0.69, blue: 0.0)
     private static let mono = Font.system(size: 12, weight: .medium, design: .monospaced)
     private static let monoSmall = Font.system(size: 10, weight: .regular, design: .monospaced)
 
@@ -99,11 +103,16 @@ struct GlancesView: View {
                             Text("JOIN")
                                 .font(.system(size: 10, weight: .bold, design: .monospaced))
                                 .foregroundStyle(.black)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 4)
-                                .background(Rectangle().fill(Self.accent))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                        .fill(Self.actionAccent)
+                                )
                         }
                         .buttonStyle(.plain)
+                        .help("Join \(event.title)")
+                        .accessibilityLabel("Join \(event.title)")
                     }
                 }
             } else if model.calendarAuthorized {
@@ -208,7 +217,57 @@ struct GlancesView: View {
             HStack {
                 sectionLabel("REMINDERS")
                 Spacer()
+                if model.remindersAuthorized {
+                    Button {
+                        isAddingReminder.toggle()
+                        model.clearReminderMutationError()
+                        if isAddingReminder {
+                            Task { @MainActor in reminderFieldFocused = true }
+                        }
+                    } label: {
+                        Image(systemName: isAddingReminder ? "xmark" : "plus")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(Self.actionAccent)
+                            .padding(3)
+                    }
+                    .buttonStyle(.plain)
+                    .help(isAddingReminder ? "Cancel new task" : "Add task")
+                    .accessibilityLabel(isAddingReminder ? "Cancel new task" : "Add task")
+                }
                 settingsButton(label: "Choose Reminders lists")
+            }
+            if isAddingReminder {
+                HStack(spacing: 8) {
+                    TextField("New task", text: $newReminderTitle)
+                        .textFieldStyle(.plain)
+                        .font(Self.monoSmall)
+                        .foregroundStyle(.white)
+                        .focused($reminderFieldFocused)
+                        .onSubmit(addReminder)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 7)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(Color.white.opacity(0.07))
+                        )
+                    Button("ADD", action: addReminder)
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(Self.actionAccent)
+                        )
+                        .buttonStyle(.plain)
+                        .disabled(!canAddReminder)
+                        .opacity(canAddReminder ? 1 : 0.45)
+                }
+                if let error = model.reminderMutationError {
+                    Text(error)
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundStyle(.red.opacity(0.85))
+                }
             }
             if !model.reminders.isEmpty {
                 ForEach(model.reminders) { reminder in
@@ -242,6 +301,19 @@ struct GlancesView: View {
     }
 
     // MARK: - Helpers
+
+    private var canAddReminder: Bool {
+        !GlancesModel.normalizedReminderTitle(newReminderTitle).isEmpty
+    }
+
+    private func addReminder() {
+        guard canAddReminder else { return }
+        if model.addReminder(title: newReminderTitle) {
+            newReminderTitle = ""
+            isAddingReminder = false
+            reminderFieldFocused = false
+        }
+    }
 
     private func sectionLabel(_ text: String) -> some View {
         Text(text)
