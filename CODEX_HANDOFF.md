@@ -22,6 +22,11 @@ out of scope.
 - iOS `1.0.0 (20260717120420)` is Apple `VALID`, audience
   `APP_STORE_ELIGIBLE`, and available to the all-builds internal group
   `CodeIsland Internal` in TestFlight.
+- `gregharned@gmail.com` is now verified as an `ACCOUNT_HOLDER,ADMIN` App Store
+  Connect user, enrolled in `CodeIsland Internal`, and Apple explicitly sent a
+  fresh TestFlight invitation at 2026-07-17 15:20:54Z. Workflow run
+  `29591716380`, tester receipt artifact `8411326331`, invitation
+  `9679ce07-ac35-4b29-b007-461e0b418801`.
 - Mac local and Tailscale `/health` both returned `running: true` after install.
   The Tailscale root returned the expected security headers and an
   unauthenticated Downloads-file request returned `401`.
@@ -70,6 +75,9 @@ single-user setup rather than scale.
 - Bundle: `com.revopsglobal.codeisland.buddy`
 - Apple processing: `VALID`, `APP_STORE_ELIGIBLE`
 - Internal group: `CodeIsland Internal`, all-build access
+- Internal tester: `gregharned@gmail.com`, enrollment `ready`
+- Fresh invitation receipt: run `29591716380`, artifact `8411326331`,
+  invitation `9679ce07-ac35-4b29-b007-461e0b418801`
 
 The current Mac build and current TestFlight build come from the same merged
 source SHA.
@@ -136,8 +144,9 @@ full-suite load demonstrated cooperative-executor starvation.
 Greg must perform the physical/TCC steps in
 `docs/crest-mobile-parity.md#physical-acceptance-run`. The short version:
 
-1. Install or update TestFlight, then install CodeIsland Buddy
-   `1.0.0 (20260717120420)`. Enable Tailscale on the iPhone.
+1. Open the fresh Apple TestFlight invitation sent to
+   `gregharned@gmail.com`, accept it in TestFlight, then install CodeIsland
+   Buddy `1.0.0 (20260717120420)`. Enable Tailscale on the iPhone.
 2. On the unlocked Mac, use CodeIsland Settings permission buttons and approve
    Calendar, Reminders, Location Services, Camera, Microphone/Speech, and
    Accessibility when prompted.
@@ -214,6 +223,11 @@ gh workflow run testflight-ios.yml \
   --repo revopsglobal/CodeIsland \
   --ref main
 ```
+
+To verify enrollment or explicitly resend Greg's TestFlight email without
+building another IPA, dispatch the same workflow with
+`manage_tester_only=true`, `tester_email=gregharned@gmail.com`, and
+`resend_testflight_invitation=true`.
 
 Never claim a TestFlight build is ready until the workflow reports Apple
 `VALID` and internal-group access. Never claim a Mac build is installed until

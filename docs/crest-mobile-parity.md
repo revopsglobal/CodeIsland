@@ -48,7 +48,7 @@ Sources used for the baseline:
 | Media-key HUD and Crest ambient polish | Missing: no Crest-style brightness/volume HUD, album-art circles, or audio visualizer | Not applicable as direct iPhone controls; mirrored host state remains useful | Implement only the useful Mac ambient pieces Greg wants and capture multi-display/full-screen evidence |
 | Custom dashboard/day-progress surface | Missing: no saved widget dashboard or day-progress header | Missing | Decide whether this remains useful after mode pinning; if retained, implement one shared configuration model |
 | Private web fallback | Partial: responsive client plus live Tailscale root/401 proof and isolated real-listener pairing/auth/mode/action tests | Partial: authenticated Home/Work/Code, approval, question, push registration, exact-action and replay protection are automated | Physical Tailscale browser module/action/file round trip |
-| TestFlight distribution | Ready: signed archive/upload pipeline and internal group | Unverified on the physical phone: build `1.0.0 (20260717120420)` is Apple `VALID` and available to the all-builds internal group; install pending | Install, launch, permissions, push, Live Activity, and receipt evidence on Greg's iPhone |
+| TestFlight distribution | Ready: signed archive/upload pipeline and internal group | Ready for acceptance: build `1.0.0 (20260717120420)` is Apple `VALID`; `gregharned@gmail.com` is enrolled in the all-builds internal group and Apple explicitly resent invitation `9679ce07-ac35-4b29-b007-461e0b418801`; physical install remains unverified | Accept the fresh invitation, then install, launch, grant permissions, pair, and prove push/Live Activity on Greg's iPhone |
 
 ## Behavior-level correction
 
@@ -138,6 +138,12 @@ surfaces, not the remaining physical-device interactions.
   `com.revopsglobal.codeisland.buddy` as `VALID`, audience
   `APP_STORE_ELIGIBLE`; internal group `CodeIsland Internal` has access to all
   builds.
+- App Store Connect tester repair run `29591716380` verified
+  `gregharned@gmail.com` as an `ACCOUNT_HOLDER,ADMIN` user with all-app access,
+  enrolled tester `4510ab81-87ea-4967-bde4-47d3f2e083af` in
+  `CodeIsland Internal`, and explicitly sent invitation
+  `9679ce07-ac35-4b29-b007-461e0b418801`. Receipt artifact `8411326331` records
+  state `ready` at 2026-07-17T15:20:54Z.
 - The installed Mac host answered both local and Tailscale `/health` with
   `running: true`; the Tailscale root returned the expected CSP/frame/referrer
   headers and unauthenticated Downloads-file access returned `401`.
@@ -160,10 +166,10 @@ This is the remaining morning run. It cannot be completed by CI because it
 requires Greg's physical iPhone, biometric/permission taps, real accessories,
 and real Calendar/Reminders data.
 
-1. On iPhone, install Apple's **TestFlight** app from the App Store. In
-   TestFlight, install **CodeIsland Buddy** `1.0.0 (20260717120420)` from
-   `CodeIsland Internal`. Install or enable Tailscale and confirm the phone is
-   on Greg's tailnet.
+1. On iPhone, open the fresh Apple invitation sent to
+   `gregharned@gmail.com`, accept it in Apple's **TestFlight** app, and install
+   **CodeIsland Buddy** `1.0.0 (20260717120420)` from `CodeIsland Internal`.
+   Install or enable Tailscale and confirm the phone is on Greg's tailnet.
 2. Unlock the Mac and open CodeIsland Settings. Use the app's permission
    buttons, then approve CodeIsland in System Settings under Calendars,
    Reminders, Location Services, Camera, and Accessibility as each test needs.
