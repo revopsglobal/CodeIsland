@@ -475,16 +475,22 @@ jobs:
           ASC_ISSUER: ${{ secrets.ASC_ISSUER_ID }}
           ASC_KEY: ${{ secrets.ASC_KEY_ID }}
         run: |
+          set +e
           xcrun altool --build-status \
             --delivery-id "$DELIVERY_ID" \
             --apiKey "$ASC_KEY" \
             --apiIssuer "$ASC_ISSUER" \
-            --output-format json \
-            | tee "$RUNNER_TEMP/testflight-delivery-status.json"
+            --output-format normal \
+            2>&1 | tee "$RUNNER_TEMP/testflight-delivery-status.txt"
+          status="${PIPESTATUS[0]}"
+          set -e
+          printf '\naltool exit code: %s\n' "$status" | tee -a "$RUNNER_TEMP/testflight-delivery-status.txt"
+          exit "$status"
 
       - name: Upload delivery status receipt
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: CodeIsland-TestFlight-delivery-status
-          path: ${{ runner.temp }}/testflight-delivery-status.json
+          path: ${{ runner.temp }}/testflight-delivery-status.txt
           if-no-files-found: error
