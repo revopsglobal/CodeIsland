@@ -251,6 +251,10 @@ jobs:
           done
           exit "$missing"
 
+      - name: Validate App Intent metadata
+        shell: bash
+        run: scripts/validate-app-intent-metadata.sh
+
       - name: Import distribution certificate and profiles
         shell: bash
         env:
@@ -316,6 +320,7 @@ jobs:
           test -n "$(/usr/libexec/PlistBuddy -c 'Print :NSSpeechRecognitionUsageDescription' "$APP/Info.plist")"
           BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")"
           test -n "$BUNDLE_ID"
+          scripts/validate-app-intent-metadata.sh ios/CodeIslandCompanion "$APP"
           echo "BUNDLE_ID=$BUNDLE_ID" >> "$GITHUB_ENV"
           echo "Archived bundle identifier: $BUNDLE_ID"
 
@@ -482,9 +487,17 @@ jobs:
             --apiIssuer "$ASC_ISSUER" \
             --output-format normal \
             2>&1 | tee "$RUNNER_TEMP/testflight-delivery-status.txt"
-          status="${PIPESTATUS[0]}"
+          altool_status="${PIPESTATUS[0]}"
+          status="$altool_status"
           set -e
-          printf '\naltool exit code: %s\n' "$status" | tee -a "$RUNNER_TEMP/testflight-delivery-status.txt"
+          if grep -Eq '^BUILD-STATUS:[[:space:]]+FAILED([[:space:]]|$)' "$RUNNER_TEMP/testflight-delivery-status.txt"; then
+            echo "::error::Apple marked the upload delivery as failed."
+            status=1
+          fi
+          {
+            printf '\naltool exit code: %s\n' "$altool_status"
+            printf 'workflow exit code: %s\n' "$status"
+          } | tee -a "$RUNNER_TEMP/testflight-delivery-status.txt"
           exit "$status"
 
       - name: Upload delivery status receipt

@@ -43,7 +43,7 @@ enum CodeIslandIntentModule: String, AppEnum {
 
 struct OpenCodeIslandModuleIntent: AppIntent {
     static var title: LocalizedStringResource = "Open CodeIsland Module"
-    static var description = IntentDescription("Opens a Mac-backed Buddy module over your private Tailscale connection.")
+    static var description = IntentDescription("Opens a Buddy module over your private Tailscale connection.")
     static var openAppWhenRun = true
 
     @Parameter(title: "Module") var module: CodeIslandIntentModule
@@ -57,7 +57,7 @@ struct OpenCodeIslandModuleIntent: AppIntent {
 
 struct PrepareCodeIslandTaskIntent: AppIntent {
     static var title: LocalizedStringResource = "Prepare CodeIsland Task"
-    static var description = IntentDescription("Opens a task draft. You review it before Buddy sends it to your Mac.")
+    static var description = IntentDescription("Opens a task draft for review before sending it to your paired computer.")
     static var openAppWhenRun = true
 
     @Parameter(title: "Task") var text: String?
@@ -70,7 +70,7 @@ struct PrepareCodeIslandTaskIntent: AppIntent {
 
 struct PrepareCodeIslandNoteIntent: AppIntent {
     static var title: LocalizedStringResource = "Prepare CodeIsland Note"
-    static var description = IntentDescription("Opens a note draft. You review it before Buddy sends it to your Mac.")
+    static var description = IntentDescription("Opens a note draft for review before sending it to your paired computer.")
     static var openAppWhenRun = true
 
     @Parameter(title: "Note") var text: String?
