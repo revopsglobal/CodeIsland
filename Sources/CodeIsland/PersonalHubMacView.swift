@@ -752,124 +752,13 @@ private struct MacHubModuleCard: View {
 
     private var claudeComposer: some View {
         VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 5) {
-                composerTextField(prompt: composerActionID == "plan" ? "Tell Claude what to propose" : "Ask Claude")
-                reviewButton(
-                    actionID: composerActionID,
-                    value: PersonalHubClaudeDraft(
-                        prompt: taskTitle.trimmingCharacters(in: .whitespacesAndNewlines),
-                        fileContexts: claudeContexts
-                    ).encodedActionValue()
-                )
-            }
-
-            HStack(spacing: 5) {
-                ForEach(ClaudeVoiceMode.allCases) { mode in
-                    Button {
-                        claudeVoice.setMode(mode)
-                    } label: {
-                        Text(mode == .pushToTalk ? "HOLD TO TALK" : "CONTINUOUS")
-                            .font(.system(size: 7, weight: .black, design: .monospaced))
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.mini)
-                    .tint(claudeVoice.state.mode == mode ? .orange : .gray)
-                }
-
-                Spacer()
-
-                if claudeVoice.state.mode == .pushToTalk {
-                    Label(
-                        claudeVoice.isListening ? "Listening" : "Hold",
-                        systemImage: claudeVoice.isListening ? "waveform" : "mic.fill"
-                    )
-                    .font(.system(size: 8, weight: .bold))
-                    .foregroundStyle(claudeVoice.isListening ? Color.orange : Color.white.opacity(0.64))
-                    .padding(.horizontal, 8)
-                    .frame(height: 24)
-                    .background(Color.white.opacity(0.07), in: Capsule())
-                    .contentShape(Capsule())
-                    .onLongPressGesture(
-                        minimumDuration: 0,
-                        maximumDistance: 24,
-                        pressing: { pressing in
-                            if pressing { claudeVoice.press() } else { claudeVoice.release() }
-                        },
-                        perform: {}
-                    )
-                    .accessibilityLabel("Hold to talk to Claude")
-                } else {
-                    Button {
-                        claudeVoice.toggleContinuous()
-                    } label: {
-                        Label(claudeVoice.isListening ? "Stop" : "Listen", systemImage: claudeVoice.isListening ? "stop.fill" : "waveform")
-                            .font(.system(size: 8, weight: .bold))
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.mini)
-                    .tint(.orange)
-                }
-            }
-
-            if claudeVoice.state.phase == .requestingPermission {
-                Label("Requesting private microphone access…", systemImage: "lock.shield")
-                    .font(.system(size: 8, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.46))
-            } else if let error = claudeVoice.state.errorMessage {
-                Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .font(.system(size: 8, weight: .semibold))
-                    .foregroundStyle(.orange)
-            }
-
-            if !claudeContexts.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 5) {
-                        ForEach(claudeContexts) { context in
-                            HStack(spacing: 4) {
-                                Image(systemName: "doc.text")
-                                Text(context.name).lineLimit(1)
-                                Button {
-                                    claudeContexts.removeAll { $0.id == context.id }
-                                } label: {
-                                    Image(systemName: "xmark")
-                                }
-                                .buttonStyle(.plain)
-                            }
-                            .font(.system(size: 8, weight: .semibold))
-                            .foregroundStyle(context.wasTruncated ? Color.orange : Color.white.opacity(0.65))
-                            .padding(.horizontal, 7)
-                            .frame(height: 23)
-                            .background(Color.white.opacity(0.07), in: Capsule())
-                        }
-                    }
-                }
-            }
-
-            HStack(spacing: 6) {
-                Button {
-                    chooseClaudeFiles()
-                } label: {
-                    Label("Attach text", systemImage: "paperclip")
-                        .font(.system(size: 8, weight: .bold))
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.mini)
-
-                Text(isClaudeDropTarget ? "DROP TO ATTACH" : "5 files max · text only")
-                    .font(.system(size: 7, weight: .black, design: .monospaced))
-                    .foregroundStyle(isClaudeDropTarget ? Color.orange : Color.white.opacity(0.3))
-            }
-
-            if let claudeContextError {
-                Text(claudeContextError)
-                    .font(.system(size: 8, weight: .semibold))
-                    .foregroundStyle(.orange)
-            }
-
-            Label(ClaudeSharingPrivacy.disclosure, systemImage: "rectangle.inset.filled.and.person.filled")
-                .font(.system(size: 7, weight: .medium))
-                .foregroundStyle(.white.opacity(0.3))
-                .fixedSize(horizontal: false, vertical: true)
+            claudePromptRow
+            claudeVoiceControls
+            claudeVoiceStatus
+            claudeContextChips
+            claudeAttachmentRow
+            claudeContextErrorView
+            claudePrivacyDisclosure
         }
         .padding(7)
         .background(
@@ -880,6 +769,161 @@ private struct MacHubModuleCard: View {
             RoundedRectangle(cornerRadius: 7)
                 .stroke(isClaudeDropTarget ? Color.orange.opacity(0.8) : Color.white.opacity(0.05), lineWidth: 1)
         )
+    }
+
+    private var claudePromptRow: some View {
+        HStack(spacing: 5) {
+            composerTextField(prompt: claudePromptPlaceholder)
+            reviewButton(actionID: composerActionID, value: claudeDraftValue)
+        }
+    }
+
+    private var claudePromptPlaceholder: String {
+        composerActionID == "plan" ? "Tell Claude what to propose" : "Ask Claude"
+    }
+
+    private var claudeDraftValue: String? {
+        PersonalHubClaudeDraft(
+            prompt: taskTitle.trimmingCharacters(in: .whitespacesAndNewlines),
+            fileContexts: claudeContexts
+        ).encodedActionValue()
+    }
+
+    private var claudeVoiceControls: some View {
+        HStack(spacing: 5) {
+            ForEach(ClaudeVoiceMode.allCases) { mode in
+                claudeVoiceModeButton(mode)
+            }
+            Spacer()
+            claudeVoiceAction
+        }
+    }
+
+    private func claudeVoiceModeButton(_ mode: ClaudeVoiceMode) -> some View {
+        Button {
+            claudeVoice.setMode(mode)
+        } label: {
+            Text(mode == .pushToTalk ? "HOLD TO TALK" : "CONTINUOUS")
+                .font(.system(size: 7, weight: .black, design: .monospaced))
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.mini)
+        .tint(claudeVoice.state.mode == mode ? .orange : .gray)
+    }
+
+    @ViewBuilder
+    private var claudeVoiceAction: some View {
+        if claudeVoice.state.mode == .pushToTalk {
+            Label(
+                claudeVoice.isListening ? "Listening" : "Hold",
+                systemImage: claudeVoice.isListening ? "waveform" : "mic.fill"
+            )
+            .font(.system(size: 8, weight: .bold))
+            .foregroundStyle(claudeVoice.isListening ? Color.orange : Color.white.opacity(0.64))
+            .padding(.horizontal, 8)
+            .frame(height: 24)
+            .background(Color.white.opacity(0.07), in: Capsule())
+            .contentShape(Capsule())
+            .onLongPressGesture(
+                minimumDuration: 0,
+                maximumDistance: 24,
+                pressing: { pressing in
+                    if pressing { claudeVoice.press() } else { claudeVoice.release() }
+                },
+                perform: {}
+            )
+            .accessibilityLabel("Hold to talk to Claude")
+        } else {
+            Button {
+                claudeVoice.toggleContinuous()
+            } label: {
+                Label(
+                    claudeVoice.isListening ? "Stop" : "Listen",
+                    systemImage: claudeVoice.isListening ? "stop.fill" : "waveform"
+                )
+                .font(.system(size: 8, weight: .bold))
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.mini)
+            .tint(.orange)
+        }
+    }
+
+    @ViewBuilder
+    private var claudeVoiceStatus: some View {
+        if claudeVoice.state.phase == .requestingPermission {
+            Label("Requesting private microphone access…", systemImage: "lock.shield")
+                .font(.system(size: 8, weight: .medium))
+                .foregroundStyle(.white.opacity(0.46))
+        } else if let error = claudeVoice.state.errorMessage {
+            Label(error, systemImage: "exclamationmark.triangle.fill")
+                .font(.system(size: 8, weight: .semibold))
+                .foregroundStyle(.orange)
+        }
+    }
+
+    @ViewBuilder
+    private var claudeContextChips: some View {
+        if !claudeContexts.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 5) {
+                    ForEach(claudeContexts) { context in
+                        claudeContextChip(context)
+                    }
+                }
+            }
+        }
+    }
+
+    private func claudeContextChip(_ context: ClaudeFileContext) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: "doc.text")
+            Text(context.name).lineLimit(1)
+            Button {
+                claudeContexts.removeAll { $0.id == context.id }
+            } label: {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(.plain)
+        }
+        .font(.system(size: 8, weight: .semibold))
+        .foregroundStyle(context.wasTruncated ? Color.orange : Color.white.opacity(0.65))
+        .padding(.horizontal, 7)
+        .frame(height: 23)
+        .background(Color.white.opacity(0.07), in: Capsule())
+    }
+
+    private var claudeAttachmentRow: some View {
+        HStack(spacing: 6) {
+            Button {
+                chooseClaudeFiles()
+            } label: {
+                Label("Attach text", systemImage: "paperclip")
+                    .font(.system(size: 8, weight: .bold))
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.mini)
+
+            Text(isClaudeDropTarget ? "DROP TO ATTACH" : "5 files max · text only")
+                .font(.system(size: 7, weight: .black, design: .monospaced))
+                .foregroundStyle(isClaudeDropTarget ? Color.orange : Color.white.opacity(0.3))
+        }
+    }
+
+    @ViewBuilder
+    private var claudeContextErrorView: some View {
+        if let claudeContextError {
+            Text(claudeContextError)
+                .font(.system(size: 8, weight: .semibold))
+                .foregroundStyle(.orange)
+        }
+    }
+
+    private var claudePrivacyDisclosure: some View {
+        Label(ClaudeSharingPrivacy.disclosure, systemImage: "rectangle.inset.filled.and.person.filled")
+            .font(.system(size: 7, weight: .medium))
+            .foregroundStyle(.white.opacity(0.3))
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private func chooseClaudeFiles() {
