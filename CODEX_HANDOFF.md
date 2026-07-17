@@ -9,22 +9,17 @@ CodeIsland is Greg's private Mac host plus iPhone companion for Crest-class
 notch utilities and away-from-Mac coding control. Pomodoro and Apple Watch are
 out of scope.
 
-- The Crest/mobile completion implementation is on branch
-  `codex/crest-completion`. Its current product head is `ea5351e`; the
-  verification/handoff change containing this document follows it. Automated
-  Mac/core/iPhone gates are green, but this branch is not yet the source of the
-  installed Mac/TestFlight binaries until the signed-distribution step merges
-  and rebuilds from `main`.
-- The installed Mac and current TestFlight binaries still come from product
-  commit `6ad428e952fb200c51f68182471c38fe7c32e796`. The last merged handoff
-  refresh before this completion branch is
-  `f8473e6029d77a4ec4f3cb7c6c26d7fe7e30a3c0` (PR #17).
-- Signed macOS `1.0.36` is installed at `/Applications/CodeIsland.app`, running
-  as Team `44JG2Y95CH`, CDHash
-  `e7749f3369d10cac87e6495843de22d683a5a425`.
-- The exact DMG is `/Users/gregharned/Downloads/CodeIsland-1.0.36-arm64.dmg`,
+- The Crest/mobile completion implementation and its verification handoff
+  merged through PR #19. The Xcode 26 SwiftUI compatibility refactor merged
+  through PR #20. The current merged product source is
+  `2f7a6b1bb66e14baad870d45fd0767553f816968` on `main`.
+- Signed macOS `1.0.39` from that merged source is installed at
+  `/Applications/CodeIsland.app`, running as Team `44JG2Y95CH`, CDHash
+  `e0f24c10a72e631b05de10fef17d3a6c4ca57458`.
+- The exact DMG is
+  `/Users/gregharned/Downloads/CodeIsland-1.0.39-run-29616108584/CodeIsland.dmg`,
   SHA-256
-  `7025c470ab22782f3ebc505ba9c358d97def778758b9955e374f906e675079fb`.
+  `17d45d870aa8cb8267eeabd537026889b068784e2342fc3e724bae8cdff74041`.
 - iOS `1.0.0 (20260717120420)` is Apple `VALID`, audience
   `APP_STORE_ELIGIBLE`, and available to the all-builds internal group
   `CodeIsland Internal` in TestFlight.
@@ -33,15 +28,15 @@ out of scope.
   fresh TestFlight invitation at 2026-07-17 15:20:54Z. Workflow run
   `29591716380`, tester receipt artifact `8411326331`, invitation
   `9679ce07-ac35-4b29-b007-461e0b418801`.
-- Mac local and Tailscale `/health` both returned `running: true` after install.
+- Mac local and Tailscale `/health` both returned `running: true` after the
+  1.0.39 install.
   The Tailscale root returned the expected security headers and an
   unauthenticated Downloads-file request returned `401`.
 
-Those signed receipts prove the previous baseline's build, signing, transport,
-install, and automated runtime surfaces. They do not deliver the completion
-branch and they do not prove Greg's physical iPhone, macOS TCC grants, APNs
-delivery, Dynamic Island, or real accessory/data mutations. Replace this
-section with the new merged-SHA receipts after the next DMG/TestFlight run.
+Those signed receipts prove build, signing, transport, install, and automated
+runtime surfaces from the completed merged source. They do not prove Greg's
+physical iPhone, macOS TCC grants, APNs delivery, Dynamic Island, or real
+accessory/data mutations.
 
 ## Architecture decision
 
@@ -66,13 +61,13 @@ single-user setup rather than scale.
 ### macOS
 
 - Workflow: `Build macOS ARM DMG`
-- Run: `29578951355`
-- Artifact: `8406349680` (`CodeIsland-macos-arm64-dmg`)
-- Version: `1.0.36`
-- Source SHA: `6ad428e952fb200c51f68182471c38fe7c32e796`
+- Run: `29616108584`
+- Artifact: `8420619293` (`CodeIsland-macos-arm64-dmg`)
+- Version: `1.0.39`
+- Source SHA: `2f7a6b1bb66e14baad870d45fd0767553f816968`
 - Signing: Apple Development, Team `44JG2Y95CH`
 - Previous installed app backup:
-  `/Applications/CodeIsland-backup-1.0.35-20260717-051229.app`
+  `/Applications/CodeIsland-backup-1.0.38-20260717-1449.app`
 
 ### iOS / TestFlight
 
@@ -87,8 +82,9 @@ single-user setup rather than scale.
 - Fresh invitation receipt: run `29591716380`, artifact `8411326331`,
   invitation `9679ce07-ac35-4b29-b007-461e0b418801`
 
-The current Mac build and current TestFlight build come from the same merged
-source SHA.
+The installed Mac build comes from the completion source SHA above. The current
+Apple-VALID TestFlight build remains the prior signed baseline until Apple
+finishes processing the newly uploaded completion build.
 
 ## Implemented product surface
 
