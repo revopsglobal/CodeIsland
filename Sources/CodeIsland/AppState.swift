@@ -1043,6 +1043,7 @@ final class AppState {
         StatusItemController.shared.setPending(!permissionQueue.isEmpty || !questionQueue.isEmpty)
         ESP32StatePublisher.shared.notifyDirty()
         AppleCompanionPublisher.shared.notifyDirty()
+        RemoteApprovalService.shared.stateDidChange()
     }
 
     private func refreshProviderTitle(for trackedSessionId: String, providerSessionId: String? = nil) {
@@ -1311,7 +1312,31 @@ final class AppState {
 
     func approvePermission(always: Bool = false) {
         guard !permissionQueue.isEmpty else { return }
-        let pending = permissionQueue.removeFirst()
+        approvePermission(at: permissionQueue.startIndex, always: always)
+    }
+
+    /// Resolve the exact permission request selected by a remote client.
+    ///
+    /// The request identifier is generated when the hook continuation is queued.
+    /// Looking it up again immediately before resolution prevents a delayed phone
+    /// action from approving whichever unrelated request happens to be first now.
+    @discardableResult
+    func resolveRemotePermission(requestID: String, decision: RemoteApprovalDecision) -> Bool {
+        guard let index = permissionQueue.firstIndex(where: { $0.id == requestID }) else {
+            return false
+        }
+        switch decision {
+        case .approve:
+            approvePermission(at: index, always: false)
+        case .deny:
+            denyPermission(at: index)
+        }
+        return true
+    }
+
+    private func approvePermission(at index: Int, always: Bool) {
+        guard permissionQueue.indices.contains(index) else { return }
+        let pending = permissionQueue.remove(at: index)
         let sessionId = pending.event.sessionId ?? "default"
         dismissedPermissionSessionIds.remove(sessionId)
         NotificationManager.shared.clearPending(sessionId: sessionId)
@@ -1464,7 +1489,12 @@ final class AppState {
 
     func denyPermission() {
         guard !permissionQueue.isEmpty else { return }
-        let pending = permissionQueue.removeFirst()
+        denyPermission(at: permissionQueue.startIndex)
+    }
+
+    private func denyPermission(at index: Int) {
+        guard permissionQueue.indices.contains(index) else { return }
+        let pending = permissionQueue.remove(at: index)
         let sessionId = pending.event.sessionId ?? "default"
         dismissedPermissionSessionIds.remove(sessionId)
         NotificationManager.shared.clearPending(sessionId: sessionId)

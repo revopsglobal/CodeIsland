@@ -12,6 +12,7 @@ private enum CodeIslandMotion {
 struct ContentView: View {
     @EnvironmentObject private var connection: CompanionConnection
     @EnvironmentObject private var liveActivity: LiveActivityController
+    @EnvironmentObject private var remoteApprovals: RemoteApprovalClient
     @AppStorage(appAppearanceStorageKey) private var appearanceRaw = AppAppearance.system.rawValue
 
     private var appearance: AppAppearance {
@@ -24,18 +25,36 @@ struct ContentView: View {
             // The .background below ignores the safe area to fill the entire screen.
             ZStack(alignment: .top) {
                 if proxy.size.width > proxy.size.height, let state = connection.latestState {
-                    StandByIsland(state: state, availableSize: proxy.size)
-                        .environmentObject(connection)
-                        .environmentObject(liveActivity)
+                    ZStack(alignment: .bottom) {
+                        StandByIsland(state: state, availableSize: proxy.size)
+                            .environmentObject(connection)
+                            .environmentObject(liveActivity)
+
+                        if !remoteApprovals.approvals.isEmpty {
+                            ScrollView {
+                                RemoteApprovalSurface()
+                                    .environmentObject(remoteApprovals)
+                                    .frame(maxWidth: 620)
+                                    .padding(16)
+                            }
+                            .frame(maxHeight: proxy.size.height * 0.82)
+                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                            .padding(.horizontal, 24)
+                            .padding(.bottom, 12)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                        }
+                    }
                 } else {
                     PortraitIslandView(topPadding: 40)
                         .environmentObject(connection)
                         .environmentObject(liveActivity)
+                        .environmentObject(remoteApprovals)
                         .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
                 }
             }
             .onAppear {
                 connection.start()
+                remoteApprovals.start()
             }
             .onChange(of: connection.latestState?.sequence) { _, _ in
                 guard liveActivity.isRunning, let state = connection.latestState else { return }
@@ -55,6 +74,7 @@ private struct PortraitIslandView: View {
     let topPadding: CGFloat
     @EnvironmentObject private var connection: CompanionConnection
     @EnvironmentObject private var liveActivity: LiveActivityController
+    @EnvironmentObject private var remoteApprovals: RemoteApprovalClient
 
     private static let pendingAnchor = "companion.pendingCard"
 
@@ -65,6 +85,10 @@ private struct PortraitIslandView: View {
                 LazyVStack(spacing: 10) {
                     CompactIslandBar()
                         .environmentObject(connection)
+
+                    RemoteApprovalSurface()
+                        .environmentObject(remoteApprovals)
+                        .id("companion.remoteApprovals.anchor")
 
                     if let state = connection.latestState {
                         LiveIslandCard(state: state)

@@ -7,5 +7,8 @@ cd "$(dirname "$0")"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 cp companion-models-test.swift "$TMP/main.swift"
-swiftc -o "$TMP/model-tests" ../CodeIslandCompanion/CompanionModels.swift "$TMP/main.swift"
+swiftc -o "$TMP/model-tests" \
+  ../CodeIslandCompanion/CompanionModels.swift \
+  ../../../Sources/CodeIslandCore/RemoteApprovalProtocol.swift \
+  "$TMP/main.swift"
 "$TMP/model-tests"

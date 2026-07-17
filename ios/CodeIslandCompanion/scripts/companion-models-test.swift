@@ -108,4 +108,19 @@ do {
     check("personal state preserves agent status", state.status == .running)
 } catch { check("personal payload decodes at all", false) }
 
+// 9. Remote approval payload keeps its exact request binding and single-use token.
+let remoteApproval = """
+{"version":1,"serverName":"Greg's Mac","generatedAt":"2026-07-17T04:00:00Z",
+ "approvals":[{"id":"request-123","sessionId":"session-456","source":"Codex","tool":"Bash",
+ "detail":"npm test","workspace":"CodeIsland","createdAt":"2026-07-17T03:59:00Z",
+ "actionToken":"single-use-token","actionExpiresAt":"2026-07-17T04:02:00Z"}]}
+""".data(using: .utf8)!
+do {
+    let snapshot = try decoder.decode(RemoteApprovalSnapshot.self, from: remoteApproval)
+    check("remote approval keeps exact request id", snapshot.approvals.first?.id == "request-123")
+    check("remote approval keeps action token", snapshot.approvals.first?.actionToken == "single-use-token")
+    let decision = RemoteDecisionRequest(decision: .approve, actionToken: "single-use-token")
+    check("remote decision encodes approve", decision.decision == .approve)
+} catch { check("remote approval payload decodes at all", false) }
+
 print("ALL PASS")

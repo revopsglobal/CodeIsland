@@ -70,6 +70,12 @@ jobs:
       - name: Test personal utilities
         run: swift test --filter PersonalUtilitiesModelTests
 
+      - name: Test remote approval security and exact-request routing
+        run: |
+          swift test --filter RemoteActionTokenVaultTests
+          swift test --filter RemotePairAttemptLimiterTests
+          swift test --filter AppStatePermissionFlowTests/testRemoteDecisionResolvesOnlyTheSelectedPermission
+
       - name: Test iPhone companion models
         run: ios/CodeIslandCompanion/scripts/run-model-tests.sh
 

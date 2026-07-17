@@ -2,12 +2,16 @@ import SwiftUI
 
 @main
 struct CodeIslandCompanionApp: App {
+    @UIApplicationDelegateAdaptor(CompanionAppDelegate.self) private var appDelegate
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var connection: CompanionConnection
     @StateObject private var liveActivity: LiveActivityController
+    @StateObject private var remoteApprovals: RemoteApprovalClient
 
     init() {
         let connection = CompanionConnection()
         let liveActivity = LiveActivityController()
+        let remoteApprovals = RemoteApprovalClient()
         connection.onStateReceived = { [weak liveActivity] state in
             Task { @MainActor in
                 liveActivity?.updateIfRunning(with: state)
@@ -18,6 +22,7 @@ struct CodeIslandCompanionApp: App {
 #endif
         _connection = StateObject(wrappedValue: connection)
         _liveActivity = StateObject(wrappedValue: liveActivity)
+        _remoteApprovals = StateObject(wrappedValue: remoteApprovals)
     }
 
     var body: some Scene {
@@ -25,6 +30,10 @@ struct CodeIslandCompanionApp: App {
             ContentView()
                 .environmentObject(connection)
                 .environmentObject(liveActivity)
+                .environmentObject(remoteApprovals)
+                .onChange(of: scenePhase) { _, newPhase in
+                    remoteApprovals.setActive(newPhase == .active)
+                }
         }
     }
 
