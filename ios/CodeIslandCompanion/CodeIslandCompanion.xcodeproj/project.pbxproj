@@ -41,7 +41,6 @@
 		5CC36A8128BA65E2481142C1 /* WorkBuddyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F91D3F784C8F89A31E63158 /* WorkBuddyView.swift */; };
 		60EDB1D15F768EF9BEA51D31 /* OpenCodeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23F0ECA53BBAD64BA8C9771F /* OpenCodeView.swift */; };
 		6123D11F09A767D4AFDA5AD3 /* GeminiView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CA2D1F95A933787580CCAA6 /* GeminiView.swift */; };
-		61B79FD49393B5E3C7BEEF3B /* CodeIslandWatchApp.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = F40F9340746E45E572758656 /* CodeIslandWatchApp.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		61E65895CCEBAD88E0183D08 /* StepFunView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB1A12DC31BC8AC80FFB96D8 /* StepFunView.swift */; };
 		632DF62531C30A5489CE9819 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = DE41181FECB15FC695E14CCA /* LaunchScreen.storyboard */; };
 		6449EF8FC0C32176FBF40393 /* OpenCodeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23F0ECA53BBAD64BA8C9771F /* OpenCodeView.swift */; };
@@ -138,13 +137,6 @@
 			remoteGlobalIDString = 98B3A00FDF4C8093790E92A5;
 			remoteInfo = CodeIslandCompanionWidget;
 		};
-		77D846086AB64AFE3A38762C /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = C86DC231658B41C7E38FF15A /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = F17F6C4FF2B113739CD23B46;
-			remoteInfo = CodeIslandWatchApp;
-		};
 		BB58FA90F24E52E7796C4B5E /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = C86DC231658B41C7E38FF15A /* Project object */;
@@ -182,17 +174,6 @@
 				786E71DFAABF2A42048E9091 /* CodeIslandCompanionWidget.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		E77D769B4FB69CEFF7B9FD23 /* Embed Watch Content */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
-			dstSubfolderSpec = 16;
-			files = (
-				61B79FD49393B5E3C7BEEF3B /* CodeIslandWatchApp.app in Embed Watch Content */,
-			);
-			name = "Embed Watch Content";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
@@ -500,13 +481,11 @@
 				AB5C2542C8920112ACD66589 /* Resources */,
 				BEBD44ADD46D108AA6EE4C5A /* Frameworks */,
 				8BEF37F14AECEEF2F1446564 /* Embed Foundation Extensions */,
-				E77D769B4FB69CEFF7B9FD23 /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				A2BC3F7D6ACCF66CA492DBC4 /* PBXTargetDependency */,
-				52309DAC5B9D99045DD350BC /* PBXTargetDependency */,
 			);
 			name = CodeIslandCompanion;
 			packageProductDependencies = (
@@ -745,11 +724,6 @@
 			isa = PBXTargetDependency;
 			target = F3973306BF558558774D5BD7 /* CodeIslandCompanion */;
 			targetProxy = BB58FA90F24E52E7796C4B5E /* PBXContainerItemProxy */;
-		};
-		52309DAC5B9D99045DD350BC /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = F17F6C4FF2B113739CD23B46 /* CodeIslandWatchApp */;
-			targetProxy = 77D846086AB64AFE3A38762C /* PBXContainerItemProxy */;
 		};
 		A2BC3F7D6ACCF66CA492DBC4 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;

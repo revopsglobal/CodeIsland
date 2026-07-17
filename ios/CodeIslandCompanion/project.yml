@@ -48,8 +48,6 @@ targets:
     dependencies:
       - target: CodeIslandCompanionWidget
         embed: true
-      - target: CodeIslandWatchApp
-        embed: true
       - sdk: AppIntents.framework
       - sdk: WatchConnectivity.framework
   CodeIslandCompanionWidget:
@@ -182,8 +180,6 @@ schemes:
       targets:
         CodeIslandCompanion: all
         CodeIslandCompanionWidget: all
-        CodeIslandWatchApp: all
-        CodeIslandWatchWidget: all
         CodeIslandCompanionUITests: [test]
     run:
       config: Debug
