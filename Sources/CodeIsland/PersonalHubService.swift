@@ -34,6 +34,10 @@ final class PersonalHubService {
 
     private init() {}
 
+    func shelfFileURL(id: String) -> URL? {
+        data.shelfFileURL(id: id)
+    }
+
     func snapshot(
         appState: AppState,
         requestedMode: PersonalHubMode,
@@ -152,6 +156,13 @@ final class PersonalHubService {
                 return .failure(.invalid("Shelf item is no longer available"))
             }
             return .success(.init(executed: true, message: "Shelf item removed"))
+
+        case (.shelf, "revealOnMac"):
+            guard let targetID = intent.targetID, let url = data.shelfFileURL(id: targetID) else {
+                return .failure(.invalid("Shelf file is no longer available"))
+            }
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+            return .success(.init(executed: true, message: "Shelf file revealed on the Mac"))
 
         case (.nowPlaying, "playPause"), (.nowPlaying, "next"), (.nowPlaying, "previous"):
             guard data.runMediaCommand(intent.actionID) else {
@@ -349,6 +360,13 @@ final class PersonalHubService {
                   let entry = data.shelf.first(where: { $0.id == targetID })
             else { return .failure(.invalid("Shelf item is no longer available")) }
             return .success("Remove “\(entry.title)” from Shelf")
+
+        case (.shelf, "revealOnMac"):
+            guard let targetID = intent.targetID,
+                  let entry = data.shelf.first(where: { $0.id == targetID }),
+                  data.shelfFileURL(id: targetID) != nil
+            else { return .failure(.invalid("Shelf file is no longer available")) }
+            return .success("Reveal “\(entry.title)” on the Mac")
 
         case (.nowPlaying, "playPause"):
             guard let media = data.nowPlaying else { return .failure(.invalid("Nothing is playing")) }
@@ -548,16 +566,26 @@ final class PersonalHubService {
                 summary: data.shelf.isEmpty ? "Clipboard history is empty" : "\(data.shelf.count) recent clips",
                 detail: "Stored locally on this Mac",
                 items: data.shelf.prefix(12).map { entry in
-                    .init(
-                        id: entry.id,
-                        title: entry.title,
-                        subtitle: Self.relativeDate(entry.capturedAt),
-                        detail: entry.value,
-                        symbol: "doc.on.clipboard",
-                        actions: [
+                    let actions: [PersonalHubAction]
+                    if entry.filePath != nil {
+                        actions = [
+                            .init(id: "downloadToDevice", label: "Download", symbol: "square.and.arrow.down", role: .primary, targetID: entry.id),
+                            .init(id: "revealOnMac", label: "Reveal on Mac", symbol: "folder", targetID: entry.id),
+                            .init(id: "remove", label: "Remove", symbol: "trash", role: .destructive, targetID: entry.id)
+                        ]
+                    } else {
+                        actions = [
                             .init(id: "copyToDevice", label: "Copy here", symbol: "doc.on.doc", role: .primary),
                             .init(id: "remove", label: "Remove", symbol: "trash", role: .destructive, targetID: entry.id)
                         ]
+                    }
+                    return .init(
+                        id: entry.id,
+                        title: entry.title,
+                        subtitle: Self.relativeDate(entry.capturedAt),
+                        detail: entry.filePath == nil ? entry.value : nil,
+                        symbol: entry.filePath == nil ? "doc.on.clipboard" : "doc.fill",
+                        actions: actions
                     )
                 }
             )

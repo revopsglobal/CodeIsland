@@ -272,6 +272,15 @@ enum RemoteApprovalWebApp {
         }
 
         async function runHubAction(moduleID,actionID,targetID,deepLink,payload) {
+          if(actionID==='downloadToDevice'&&targetID) {
+            try {
+              const response=await fetch(`/api/hub/shelf/${encodeURIComponent(targetID)}/file`,{headers:authHeaders()});
+              if(!response.ok) { const body=await response.json(); throw new Error(body.error||'File transfer failed'); }
+              const blob=await response.blob(); const url=URL.createObjectURL(blob); const link=document.createElement('a');
+              link.href=url; link.download='CodeIsland-file'; document.body.appendChild(link); link.click(); link.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000);
+            } catch(error) { alert(error.message); }
+            return;
+          }
           if(moduleID==='camera'&&actionID==='previewOnDevice') {
             try {
               const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user'},audio:false});

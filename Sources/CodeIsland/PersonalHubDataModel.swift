@@ -23,8 +23,17 @@ final class PersonalHubDataModel: ObservableObject {
         let id: String
         let value: String
         let capturedAt: Date
+        let filePath: String?
+
+        init(id: String, value: String, capturedAt: Date, filePath: String? = nil) {
+            self.id = id
+            self.value = value
+            self.capturedAt = capturedAt
+            self.filePath = filePath
+        }
 
         var title: String {
+            if let filePath { return URL(fileURLWithPath: filePath).lastPathComponent }
             let oneLine = value.replacingOccurrences(of: "\n", with: " ")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             return oneLine.count > 72 ? "\(oneLine.prefix(69))…" : oneLine
@@ -239,6 +248,16 @@ final class PersonalHubDataModel: ObservableObject {
         return true
     }
 
+    func shelfFileURL(id: String) -> URL? {
+        guard let entry = shelf.first(where: { $0.id == id }),
+              let filePath = entry.filePath else { return nil }
+        let url = URL(fileURLWithPath: filePath).standardizedFileURL
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+              !isDirectory.boolValue else { return nil }
+        return url
+    }
+
     func runMediaCommand(_ action: String) -> Bool {
         guard let appName = nowPlaying?.appName,
               ["playPause", "next", "previous"].contains(action)
@@ -309,7 +328,23 @@ final class PersonalHubDataModel: ObservableObject {
         guard !(pasteboard.types ?? []).contains(where: {
             $0.rawValue.localizedCaseInsensitiveContains("concealed")
                 || $0.rawValue.localizedCaseInsensitiveContains("transient")
-        }), let value = pasteboard.string(forType: .string)?.trimmingCharacters(in: .whitespacesAndNewlines),
+        }) else { return }
+
+        if let fileURL = (pasteboard.readObjects(forClasses: [NSURL.self]) as? [URL])?.first(where: \.isFileURL),
+           shelf.first?.filePath != fileURL.path {
+            let entry = ShelfEntry(
+                id: UUID().uuidString,
+                value: fileURL.lastPathComponent,
+                capturedAt: Date(),
+                filePath: fileURL.path
+            )
+            shelf.insert(entry, at: 0)
+            if shelf.count > 20 { shelf.removeLast(shelf.count - 20) }
+            persist(shelf, key: Self.shelfKey)
+            return
+        }
+
+        guard let value = pasteboard.string(forType: .string)?.trimmingCharacters(in: .whitespacesAndNewlines),
               !value.isEmpty, value.count <= 10_000, shelf.first?.value != value
         else { return }
         shelf.insert(.init(id: UUID().uuidString, value: value, capturedAt: Date()), at: 0)

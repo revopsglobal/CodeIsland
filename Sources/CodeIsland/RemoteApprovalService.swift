@@ -265,6 +265,39 @@ final class RemoteApprovalService: ObservableObject {
             return .json(status: 200, encodable: snapshot)
         }
 
+        let shelfFilePrefix = "/api/hub/shelf/"
+        let shelfFileSuffix = "/file"
+        if request.method == "GET",
+           request.path.hasPrefix(shelfFilePrefix),
+           request.path.hasSuffix(shelfFileSuffix) {
+            let start = request.path.index(request.path.startIndex, offsetBy: shelfFilePrefix.count)
+            let end = request.path.index(request.path.endIndex, offsetBy: -shelfFileSuffix.count)
+            let itemID = String(request.path[start..<end]).removingPercentEncoding ?? ""
+            guard !itemID.isEmpty,
+                  let fileURL = PersonalHubService.shared.shelfFileURL(id: itemID),
+                  let values = try? fileURL.resourceValues(forKeys: [.fileSizeKey]),
+                  let fileSize = values.fileSize else {
+                return .json(status: 404, object: ["error": "shelf file is no longer available"])
+            }
+            guard fileSize <= 100_000_000 else {
+                return .json(status: 413, object: ["error": "shelf files are limited to 100 MB"])
+            }
+            guard let body = try? Data(contentsOf: fileURL, options: [.mappedIfSafe]) else {
+                return .json(status: 404, object: ["error": "shelf file could not be read"])
+            }
+            let encodedName = fileURL.lastPathComponent.addingPercentEncoding(
+                withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "._-"))
+            ) ?? "CodeIsland-file"
+            return RemoteHTTPResponse(
+                status: 200,
+                headers: [
+                    "Content-Type": "application/octet-stream",
+                    "Content-Disposition": "attachment; filename*=UTF-8''\(encodedName)"
+                ],
+                body: body
+            )
+        }
+
         if request.method == "POST", request.path == "/api/hub/actions/prepare" {
             guard let prepareRequest = request.decode(PersonalHubPrepareActionRequest.self) else {
                 return .json(status: 400, object: ["error": "invalid action intent"])

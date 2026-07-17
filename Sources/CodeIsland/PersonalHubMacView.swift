@@ -127,6 +127,11 @@ struct PersonalHubMacView: View {
             TeleprompterWindowController.shared.show(text: itemDetail)
             return
         }
+        if action.id == "downloadToDevice", let itemID,
+           let fileURL = service.shelfFileURL(id: itemID) {
+            NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+            return
+        }
         if moduleID == .camera, action.id == "previewOnDevice" {
             let photoBooth = URL(fileURLWithPath: "/System/Applications/Photo Booth.app")
             NSWorkspace.shared.open(photoBooth)
