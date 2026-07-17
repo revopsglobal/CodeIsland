@@ -51,6 +51,27 @@ struct ContentView: View {
                         .environmentObject(remoteApprovals)
                         .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
                 }
+
+                if let message = remoteApprovals.hubActionMessage {
+                    Text(message)
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(Color.black.opacity(0.9), in: Capsule())
+                        .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 1))
+                        .padding(.horizontal, 20)
+                        .padding(.top, 8)
+                        .accessibilityIdentifier("hub.action.message")
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .onTapGesture { remoteApprovals.dismissHubActionMessage() }
+                        .task(id: message) {
+                            try? await Task.sleep(for: .seconds(4))
+                            guard remoteApprovals.hubActionMessage == message else { return }
+                            remoteApprovals.dismissHubActionMessage()
+                        }
+                        .zIndex(20)
+                }
             }
             .onAppear {
                 connection.start()
@@ -63,9 +84,11 @@ struct ContentView: View {
             .animation(CodeIslandMotion.open, value: connection.connectedPeer)
             .animation(CodeIslandMotion.pop, value: connection.latestState?.status)
             .animation(CodeIslandMotion.micro, value: connection.browsing)
+            .animation(CodeIslandMotion.open, value: remoteApprovals.hubActionMessage)
         }
         .background(Color.ciBackground.ignoresSafeArea())
         .preferredColorScheme(appearance.colorScheme)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("companion.root")
     }
 }
@@ -1123,6 +1146,7 @@ private struct StandBySessionBoard: View {
             .scrollIndicators(.automatic)
             .accessibilityIdentifier("companion.standby.scroll")
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("companion.standby.board")
     }
 

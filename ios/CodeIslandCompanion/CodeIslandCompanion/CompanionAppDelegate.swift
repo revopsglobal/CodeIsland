@@ -11,7 +11,7 @@ final class CompanionAppDelegate: NSObject, UIApplicationDelegate, UNUserNotific
     ) -> Bool {
         let center = UNUserNotificationCenter.current()
         center.delegate = self
-        center.requestAuthorization(options: [.alert, .badge, .sound, .timeSensitive]) { granted, _ in
+        center.requestAuthorization(options: [.alert, .badge, .sound]) { granted, _ in
             guard granted else { return }
             DispatchQueue.main.async {
                 application.registerForRemoteNotifications()
