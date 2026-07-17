@@ -59,12 +59,6 @@ jobs:
           xcodebuild -version
           uname -m
 
-      - name: Install DMG tooling
-        run: |
-          if ! command -v create-dmg >/dev/null 2>&1; then
-            brew install create-dmg
-          fi
-
       - name: Configure unsigned build
         if: ${{ !inputs.sign_and_notarize && !inputs.sign_for_internal_testing }}
         run: |
