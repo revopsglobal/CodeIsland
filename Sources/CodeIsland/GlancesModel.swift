@@ -189,7 +189,7 @@ final class GlancesModel: NSObject, ObservableObject {
         nextEvent = upcomingEvents.first
     }
 
-    nonisolated private static func eventInfo(_ event: EKEvent) -> EventInfo? {
+    private static func eventInfo(_ event: EKEvent) -> EventInfo? {
         guard let id = event.eventIdentifier else { return nil }
         return EventInfo(
             id: id,
