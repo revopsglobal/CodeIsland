@@ -27,6 +27,7 @@ final class RemoteApprovalClient: ObservableObject {
     @Published private(set) var lastUpdatedAt: Date?
     @Published private(set) var busyRequestIDs: Set<String> = []
     @Published private(set) var highlightedApprovalID: String?
+    @Published private(set) var highlightedHubModuleID: PersonalHubModuleID?
     @Published private(set) var hubSnapshot: PersonalHubSnapshot?
     private var calendarReferenceDate: Date?
     private var calendarSelectedDate: Date?
@@ -35,6 +36,7 @@ final class RemoteApprovalClient: ObservableObject {
     @Published private(set) var hubActionMessage: String?
     @Published var preparedAction: PersonalHubPreparedAction?
     @Published var quickJotDestination: BuddyQuickJotDestination?
+    @Published var quickJotSeedText: String?
     @Published var selectedMode: PersonalHubMode {
         didSet {
             UserDefaults.standard.set(selectedMode.rawValue, forKey: Self.selectedModeKey)
@@ -95,6 +97,9 @@ final class RemoteApprovalClient: ObservableObject {
             serverName = "CodeIsland UI Test Mac"
             lastUpdatedAt = Date()
             hubSnapshot = Self.mockHubSnapshot(requestedMode: selectedMode)
+            if let url = Self.mockDeepLinkFromLaunchArguments() {
+                openDeepLink(url)
+            }
             return
         }
 #endif
@@ -119,6 +124,13 @@ final class RemoteApprovalClient: ObservableObject {
                 await self?.refresh()
             }
         })
+        notificationObservers.append(NotificationCenter.default.addObserver(
+            forName: .codeIslandIntentRouteAvailable,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.consumePendingIntentRoute() }
+        })
     }
 
     deinit {
@@ -129,6 +141,7 @@ final class RemoteApprovalClient: ObservableObject {
     }
 
     func start() {
+        consumePendingIntentRoute()
 #if DEBUG
         if usesMockPairing {
             state = .unpaired
@@ -166,6 +179,7 @@ final class RemoteApprovalClient: ObservableObject {
 #endif
         isActive = active
         if active {
+            consumePendingIntentRoute()
             Task { await refresh() }
         }
     }
@@ -402,12 +416,39 @@ final class RemoteApprovalClient: ObservableObject {
     }
 
     func openDeepLink(_ url: URL) {
-        guard url.scheme?.lowercased() == "codeisland",
-              url.host?.lowercased() == "quick-jot",
-              let destination = url.pathComponents.dropFirst().first,
-              let destination = BuddyQuickJotDestination(rawValue: destination.lowercased())
+        guard let route = PersonalHubDeepLink(url: url) else { return }
+        switch route {
+        case .pendingApproval(let id):
+            highlightedApprovalID = id ?? approvals.first?.id
+            Task { await refresh() }
+        case .module(let module):
+            highlightedHubModuleID = module
+            selectedMode = PersonalHubCatalog.preferredMode(for: module)
+        case .quickJot(let destination, let text):
+            quickJotSeedText = text
+            quickJotDestination = BuddyQuickJotDestination(rawValue: destination.rawValue)
+        }
+    }
+
+    var connectionDetail: String {
+        let host = normalizedServerURL?.host ?? serverURLText
+        let transport = host.lowercased().hasSuffix(".ts.net") ? "Tailscale HTTPS" : "Private HTTPS"
+        return [serverName, host, transport].compactMap { value in
+            guard let value, !value.isEmpty else { return nil }
+            return value
+        }.joined(separator: " · ")
+    }
+
+    func clearQuickJotSeed() {
+        quickJotSeedText = nil
+    }
+
+    private func consumePendingIntentRoute() {
+        guard let raw = UserDefaults.standard.string(forKey: CodeIslandIntentBridge.pendingRouteKey),
+              let url = URL(string: raw)
         else { return }
-        quickJotDestination = destination
+        UserDefaults.standard.removeObject(forKey: CodeIslandIntentBridge.pendingRouteKey)
+        openDeepLink(url)
     }
 
     func downloadHubFile(moduleID: PersonalHubModuleID, id: String, filename: String) async -> URL? {
@@ -590,6 +631,14 @@ final class RemoteApprovalClient: ObservableObject {
     }()
 
 #if DEBUG
+    private static func mockDeepLinkFromLaunchArguments() -> URL? {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let index = arguments.firstIndex(of: "-CodeIslandCompanionMockDeepLink"),
+              arguments.indices.contains(index + 1)
+        else { return nil }
+        return URL(string: arguments[index + 1])
+    }
+
     private static func mockHubModeFromLaunchArguments() -> PersonalHubMode? {
         let arguments = ProcessInfo.processInfo.arguments
         guard let index = arguments.firstIndex(of: "-CodeIslandCompanionMockHubMode"),

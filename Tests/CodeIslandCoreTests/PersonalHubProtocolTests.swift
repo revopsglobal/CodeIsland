@@ -8,6 +8,35 @@ final class PersonalHubProtocolTests: XCTestCase {
         XCTAssertTrue(Set(PersonalHubCatalog.personalBaseline).isSubset(of: Set(PersonalHubModuleID.allCases)))
     }
 
+    func testEveryCatalogModuleHasAnExplicitBuddyRouteAndActionDisposition() {
+        let allModules = PersonalHubCatalog.personalBaseline + PersonalHubCatalog.personalExtensions
+        XCTAssertEqual(Set(PersonalHubBuddyParity.routes.map(\.moduleID)), Set(allModules))
+        XCTAssertEqual(PersonalHubBuddyParity.routes.count, allModules.count)
+        for route in PersonalHubBuddyParity.routes {
+            XCTAssertFalse(route.actionDispositions.isEmpty, "\(route.moduleID) has no Buddy action policy")
+            for disposition in route.actionDispositions.values {
+                if case .macOnly(let reason) = disposition {
+                    XCTAssertFalse(reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+
+    func testPersonalHubDeepLinksRoundTripAllRoutesAndEscapedQuickJotText() throws {
+        let routes: [PersonalHubDeepLink] = [
+            .pendingApproval(id: nil),
+            .pendingApproval(id: "approval-123"),
+            .module(.calendar),
+            .module(.reminders),
+            .quickJot(destination: .task, text: "Call bank & review"),
+            .quickJot(destination: .note, text: nil),
+        ]
+        for route in routes {
+            XCTAssertEqual(PersonalHubDeepLink(url: route.url), route)
+        }
+        XCTAssertNil(PersonalHubDeepLink(url: try XCTUnwrap(URL(string: "https://example.com"))))
+    }
+
     func testEveryBaselineModuleSupportsMacIPhoneAndWeb() {
         for id in PersonalHubCatalog.personalBaseline {
             let platforms = PersonalHubCatalog.definition(for: id).platforms

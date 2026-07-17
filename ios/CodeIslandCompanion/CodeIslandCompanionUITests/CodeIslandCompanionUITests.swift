@@ -207,6 +207,32 @@ final class CodeIslandCompanionUITests: XCTestCase {
     }
 
     @MainActor
+    func testModuleDeepLinkSelectsModeAndHighlightsDestination() throws {
+        let app = launchHubApp(
+            mode: "home",
+            deepLink: "codeisland://hub/reminders"
+        )
+        XCTAssertTrue(app.otherElements["hub.surface"].waitForExistence(timeout: 8))
+        let tasks = findHubElement("hub.module.reminders", in: app)
+        XCTAssertTrue(tasks.exists)
+        XCTAssertEqual(tasks.value as? String, "Opened from link")
+    }
+
+    @MainActor
+    func testQuickJotDeepLinkPrefillsDraftButStillRequiresReview() throws {
+        let app = launchHubApp(
+            mode: "work",
+            deepLink: "codeisland://quick-jot/task?text=Call%20the%20bank"
+        )
+        XCTAssertTrue(app.otherElements["hub.quickJot.sheet"].waitForExistence(timeout: 8))
+        let field = app.textFields["hub.quickJot.text"].firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 4))
+        XCTAssertEqual(field.value as? String, "Call the bank")
+        XCTAssertTrue(app.buttons["Review"].exists)
+        XCTAssertFalse(app.buttons["Do it"].exists)
+    }
+
+    @MainActor
     func testClaudeDoProposalRequiresReviewAndExplicitExecution() throws {
         let app = launchHubApp(mode: "code")
         XCTAssertTrue(app.otherElements["hub.surface"].waitForExistence(timeout: 8))
@@ -346,13 +372,16 @@ final class CodeIslandCompanionUITests: XCTestCase {
     }
 
     @MainActor
-    private func launchHubApp(mode: String) -> XCUIApplication {
+    private func launchHubApp(mode: String, deepLink: String? = nil) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = [
             "-CodeIslandCompanionMockState", "idle",
             "-CodeIslandCompanionMockHub",
             "-CodeIslandCompanionMockHubMode", mode,
         ]
+        if let deepLink {
+            app.launchArguments += ["-CodeIslandCompanionMockDeepLink", deepLink]
+        }
         app.launch()
         return app
     }

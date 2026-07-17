@@ -67,6 +67,7 @@
 		DF8181D3224DFA462CB9E0FA /* TraeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A7D0B4EC41F3FEC24838746 /* TraeView.swift */; };
 		E04C1A6FD543058CDBC1754B /* KimiView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53EE587DE1B0740F9A5B0B19 /* KimiView.swift */; };
 		E15456F718660AE320B7F65F /* CodeIslandLiveActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1079D20C61C1AF51C7F24A /* CodeIslandLiveActivityWidget.swift */; };
+		E68821732380BF7CAF637D97 /* CodeIslandAppIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A50F00CEBB09C1710651A8C1 /* CodeIslandAppIntents.swift */; };
 		EB3D23EDE1100113E8909302 /* ClineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F96CB90CA9C700A293F0F841 /* ClineView.swift */; };
 		ED41E65AAA673D9FBFD48377 /* CompanionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78474E5ED47A37C22FB49F33 /* CompanionModels.swift */; };
 		EE9571C25D71CBAA30B036D1 /* MediaPreflightView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01F72779CD82A22C093C837B /* MediaPreflightView.swift */; };
@@ -146,6 +147,7 @@
 		8DE9B49B0CC8560A642B3750 /* RemoteApprovalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteApprovalView.swift; sourceTree = "<group>"; };
 		9A2B84F4F96272BE5A760B08 /* CodeIslandCompanion.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = CodeIslandCompanion.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		9CD8A43D80EDE6E68D478FE3 /* RemoteApprovalClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteApprovalClient.swift; sourceTree = "<group>"; };
+		A50F00CEBB09C1710651A8C1 /* CodeIslandAppIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeIslandAppIntents.swift; sourceTree = "<group>"; };
 		A637A87231D2C2493FF97990 /* CursorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CursorView.swift; sourceTree = "<group>"; };
 		A6470A3909D478701A3B07E5 /* DexView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DexView.swift; sourceTree = "<group>"; };
 		BCA23CC7B351415E136CC947 /* CodeIslandActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeIslandActivityAttributes.swift; sourceTree = "<group>"; };
@@ -226,6 +228,7 @@
 			children = (
 				D85F2D481FDAD5D904A0F3E5 /* Assets.xcassets */,
 				F9F350CB2292BF84421D9BD4 /* CodeIslandActivityState+Payload.swift */,
+				A50F00CEBB09C1710651A8C1 /* CodeIslandAppIntents.swift */,
 				D4F96960164D8A1BDE5A13B9 /* CodeIslandCompanion.entitlements */,
 				8843E069F081B15AE433EA8D /* CodeIslandCompanionApp.swift */,
 				32BE6F03B699E8406163EBA2 /* CompanionAppDelegate.swift */,
@@ -430,6 +433,7 @@
 				AF508E52E331531A53A2EA2B /* ClineView.swift in Sources */,
 				D47274A29745CA64E55F1C21 /* CodeIslandActivityAttributes.swift in Sources */,
 				0190F180CA1516FF19DE1D09 /* CodeIslandActivityState+Payload.swift in Sources */,
+				E68821732380BF7CAF637D97 /* CodeIslandAppIntents.swift in Sources */,
 				1B9E327493AEBEDF3E0511C6 /* CodeIslandCompanionApp.swift in Sources */,
 				7C94AF24FE483E75AFB02FE4 /* CompanionAppDelegate.swift in Sources */,
 				F2A37C4EDA80546E6307A8D6 /* CompanionBluetoothCentral.swift in Sources */,

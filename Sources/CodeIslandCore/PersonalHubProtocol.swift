@@ -811,6 +811,12 @@ public enum PersonalHubCatalog {
             ?? PersonalHubModuleDefinition(id: id, title: id.rawValue, symbol: "square.grid.2x2")
     }
 
+    public static func preferredMode(for id: PersonalHubModuleID) -> PersonalHubMode {
+        if modules(for: .code).contains(id) { return .code }
+        if modules(for: .work).contains(id) { return .work }
+        return .home
+    }
+
     public static func modules(for mode: PersonalHubMode) -> [PersonalHubModuleID] {
         switch mode {
         case .auto:
@@ -845,5 +851,122 @@ public enum PersonalHubCatalog {
             "visual-studio-code", "cursor", "warp", "terminal", "iterm",
         ]
         return fragments.contains(where: bundleID.contains)
+    }
+}
+
+public enum PersonalHubQuickJotDestination: String, Codable, CaseIterable, Sendable {
+    case task
+    case note
+}
+
+public enum PersonalHubDeepLink: Equatable, Sendable {
+    case pendingApproval(id: String?)
+    case module(PersonalHubModuleID)
+    case quickJot(destination: PersonalHubQuickJotDestination, text: String?)
+
+    public init?(url: URL) {
+        guard url.scheme?.lowercased() == "codeisland",
+              let host = url.host?.lowercased()
+        else { return nil }
+        let path = Array(url.pathComponents.dropFirst())
+        switch host {
+        case "approval", "approvals":
+            let rawID = path.first
+            self = .pendingApproval(id: rawID == "pending" ? nil : rawID)
+        case "hub":
+            guard let raw = path.first, let module = PersonalHubModuleID(rawValue: raw) else { return nil }
+            self = .module(module)
+        case "quick-jot":
+            guard let raw = path.first,
+                  let destination = PersonalHubQuickJotDestination(rawValue: raw.lowercased())
+            else { return nil }
+            let text = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                .queryItems?.first(where: { $0.name == "text" })?.value
+            self = .quickJot(destination: destination, text: text)
+        default:
+            return nil
+        }
+    }
+
+    public var url: URL {
+        var components = URLComponents()
+        components.scheme = "codeisland"
+        switch self {
+        case .pendingApproval(let id):
+            components.host = "approvals"
+            components.path = "/\(id ?? "pending")"
+        case .module(let module):
+            components.host = "hub"
+            components.path = "/\(module.rawValue)"
+        case .quickJot(let destination, let text):
+            components.host = "quick-jot"
+            components.path = "/\(destination.rawValue)"
+            if let text, !text.isEmpty {
+                components.queryItems = [URLQueryItem(name: "text", value: text)]
+            }
+        }
+        return components.url!
+    }
+}
+
+public enum PersonalHubBuddyActionDisposition: Equatable, Sendable {
+    case native
+    case readOnly
+    case macOnly(reason: String)
+}
+
+public struct PersonalHubBuddyRoute: Equatable, Sendable {
+    public let moduleID: PersonalHubModuleID
+    public let actionDispositions: [String: PersonalHubBuddyActionDisposition]
+
+    public init(
+        moduleID: PersonalHubModuleID,
+        actionDispositions: [String: PersonalHubBuddyActionDisposition]
+    ) {
+        self.moduleID = moduleID
+        self.actionDispositions = actionDispositions
+    }
+}
+
+public enum PersonalHubBuddyParity {
+    public static let routes: [PersonalHubBuddyRoute] = [
+        .init(moduleID: .nowPlaying, actionDispositions: native("previous", "playPause", "playQueueItem", "next", "seek", "seekBack", "seekForward", "copyToDevice")),
+        .init(moduleID: .shelf, actionDispositions: native("downloadToDevice", "copyToDevice", "remove").merging(macOnly("revealOnMac", reason: "Reveals the source file in Finder on the Mac"), uniquingKeysWith: { first, _ in first })),
+        .init(moduleID: .calendar, actionDispositions: native("add", "edit", "delete", "join", "openOnMac")),
+        .init(moduleID: .reminders, actionDispositions: native("add", "addList", "deleteList", "complete", "restore", "delete", "moveUp", "moveTop", "moveDown", "copyToDevice")),
+        .init(moduleID: .notes, actionDispositions: native("add", "delete", "append", "replace", "setCategory", "undo", "toggleChecklist", "copyToDevice")),
+        .init(moduleID: .system, actionDispositions: readOnly("refresh")),
+        .init(moduleID: .weather, actionDispositions: readOnly("refresh")),
+        .init(moduleID: .notifications, actionDispositions: ["view": .readOnly]),
+        .init(moduleID: .claude, actionDispositions: native("ask", "plan", "applyProposal", "copyToDevice")),
+        .init(moduleID: .agents, actionDispositions: ["view": .readOnly]),
+        .init(moduleID: .github, actionDispositions: native("open")),
+        .init(moduleID: .audio, actionDispositions: native("volumeDown", "setVolume", "volumeUp", "setInput", "setOutput", "openSettings")),
+        .init(moduleID: .bluetooth, actionDispositions: native("refresh", "connect", "disconnect")),
+        .init(moduleID: .battery, actionDispositions: ["view": .readOnly]),
+        .init(moduleID: .quickToggles, actionDispositions: native("darkMode", "mute", "displaySleep", "lockMac", "setModeRack", "setDashboard")),
+        .init(moduleID: .downloads, actionDispositions: native("refresh", "downloadToDevice").merging(macOnly("reveal", reason: "Reveals the download in Finder on the Mac"), uniquingKeysWith: { first, _ in first })),
+        .init(moduleID: .camera, actionDispositions: native("previewLocal")),
+        .init(moduleID: .teleprompter, actionDispositions: native("set", "presentOnDevice", "copyToDevice")),
+        .init(moduleID: .windowManager, actionDispositions: native("left", "maximize", "right").merging(macOnly("openAccessibility", reason: "Accessibility permission must be granted in Mac System Settings"), uniquingKeysWith: { first, _ in first })),
+    ]
+
+    public static func route(for moduleID: PersonalHubModuleID) -> PersonalHubBuddyRoute? {
+        routes.first(where: { $0.moduleID == moduleID })
+    }
+
+    private static func native(_ ids: String...) -> [String: PersonalHubBuddyActionDisposition] {
+        Dictionary(uniqueKeysWithValues: ids.map { ($0, .native) })
+    }
+
+    private static func readOnly(_ ids: String...) -> [String: PersonalHubBuddyActionDisposition] {
+        Dictionary(uniqueKeysWithValues: ids.map { ($0, .readOnly) })
+    }
+
+    private static func macOnly(
+        _ id: String,
+        reason: String
+    ) -> [String: PersonalHubBuddyActionDisposition] {
+        [id: .macOnly(reason: reason)]
     }
 }

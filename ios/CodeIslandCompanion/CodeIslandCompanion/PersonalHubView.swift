@@ -11,11 +11,10 @@ enum HubTheme {
     static let border = Color.white.opacity(0.09)
 }
 
-enum BuddyQuickJotDestination: String, CaseIterable, Identifiable {
-    case task
-    case note
+typealias BuddyQuickJotDestination = PersonalHubQuickJotDestination
 
-    var id: String { rawValue }
+extension PersonalHubQuickJotDestination: Identifiable {
+    public var id: String { rawValue }
     var title: String { self == .task ? "Task" : "Note" }
     var symbol: String { self == .task ? "checklist" : "note.text" }
 }
@@ -29,6 +28,7 @@ struct PersonalHubSurface: View {
     var body: some View {
         VStack(spacing: 10) {
             modeStrip
+            connectionStrip
             quickJotStrip
 
             if let snapshot = client.hubSnapshot {
@@ -88,7 +88,10 @@ struct PersonalHubSurface: View {
 
                 LazyVStack(spacing: 9) {
                     ForEach(snapshot.modules) { module in
-                        PersonalHubModuleCard(module: module)
+                        PersonalHubModuleCard(
+                            module: module,
+                            isHighlighted: client.highlightedHubModuleID == module.id
+                        )
                     }
                 }
             } else if client.state == .unpaired {
@@ -101,7 +104,8 @@ struct PersonalHubSurface: View {
                 hubEmptyState(
                     symbol: "wifi.exclamationmark",
                     title: "Personal hub unavailable",
-                    detail: error
+                    detail: error,
+                    showsRetry: true
                 )
             } else {
                 hubEmptyState(
@@ -137,8 +141,11 @@ struct PersonalHubSurface: View {
                 }
             }
         }
-        .sheet(item: $client.quickJotDestination, onDismiss: preparePendingQuickJot) { destination in
-            BuddyQuickJotSheet(destination: destination) { text in
+        .sheet(item: $client.quickJotDestination, onDismiss: {
+            preparePendingQuickJot()
+            client.clearQuickJotSeed()
+        }) { destination in
+            BuddyQuickJotSheet(destination: destination, initialText: client.quickJotSeedText ?? "") { text in
                 pendingQuickJot = (destination, text)
                 client.quickJotDestination = nil
             }
@@ -160,6 +167,33 @@ struct PersonalHubSurface: View {
                 .accessibilityIdentifier("hub.quickJot.\(destination.rawValue)")
             }
         }
+    }
+
+    private var connectionStrip: some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(client.state == .connected ? Color.green : Color.orange)
+                .frame(width: 7, height: 7)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(client.state.label.uppercased())
+                    .font(.system(size: 9, weight: .black, design: .monospaced))
+                    .foregroundStyle(client.state == .connected ? Color.green : Color.orange)
+                Text(client.connectionDetail)
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .foregroundStyle(HubTheme.foreground.opacity(0.42))
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            if case .offline = client.state {
+                Button("Retry") { Task { await client.refresh() } }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .tint(HubTheme.accent)
+                    .accessibilityIdentifier("hub.connection.retry")
+            }
+        }
+        .padding(.horizontal, 4)
+        .accessibilityIdentifier("hub.connection.status")
     }
 
     private func toggleDashboard(_ snapshot: PersonalHubSnapshot) {
@@ -230,7 +264,12 @@ struct PersonalHubSurface: View {
         }
     }
 
-    private func hubEmptyState(symbol: String, title: String, detail: String) -> some View {
+    private func hubEmptyState(
+        symbol: String,
+        title: String,
+        detail: String,
+        showsRetry: Bool = false
+    ) -> some View {
         VStack(spacing: 8) {
             Image(systemName: symbol)
                 .font(.system(size: 24, weight: .medium))
@@ -242,6 +281,11 @@ struct PersonalHubSurface: View {
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(HubTheme.foreground.opacity(0.48))
                 .multilineTextAlignment(.center)
+            if showsRetry {
+                Button("Retry") { Task { await client.refresh() } }
+                    .buttonStyle(.borderedProminent)
+                    .tint(HubTheme.accent)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 22)
@@ -250,11 +294,23 @@ struct PersonalHubSurface: View {
 
 private struct BuddyQuickJotSheet: View {
     let destination: BuddyQuickJotDestination
+    let initialText: String
     let onReview: (String) -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @State private var text = ""
+    @State private var text: String
     @FocusState private var focused: Bool
+
+    init(
+        destination: BuddyQuickJotDestination,
+        initialText: String = "",
+        onReview: @escaping (String) -> Void
+    ) {
+        self.destination = destination
+        self.initialText = initialText
+        self.onReview = onReview
+        _text = State(initialValue: initialText)
+    }
 
     var body: some View {
         NavigationStack {
@@ -422,6 +478,7 @@ private struct PersonalHubModeRackEditor: View {
 
 private struct PersonalHubModuleCard: View {
     let module: PersonalHubModuleSnapshot
+    let isHighlighted: Bool
     @EnvironmentObject private var client: RemoteApprovalClient
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
@@ -560,10 +617,11 @@ private struct PersonalHubModuleCard: View {
         .background(HubTheme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(HubTheme.border, lineWidth: 1)
+                .stroke(isHighlighted ? HubTheme.accent : HubTheme.border, lineWidth: isHighlighted ? 2 : 1)
         )
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("hub.module.\(module.id.rawValue)")
+        .accessibilityValue(isHighlighted ? "Opened from link" : "")
         .fullScreenCover(isPresented: $showsCameraPreview) {
             MediaPreflightView()
         }
