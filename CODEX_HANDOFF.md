@@ -9,7 +9,10 @@ CodeIsland is Greg's private Mac host plus iPhone companion for Crest-class
 notch utilities and away-from-Mac coding control. Pomodoro and Apple Watch are
 out of scope.
 
-- `main` is at `6ad428e952fb200c51f68182471c38fe7c32e796` after PR #16.
+- The installed Mac and current TestFlight binaries come from product commit
+  `6ad428e952fb200c51f68182471c38fe7c32e796`. The last merged handoff refresh
+  before this behavior audit is `f8473e6029d77a4ec4f3cb7c6c26d7fe7e30a3c0`
+  (PR #17).
 - Signed macOS `1.0.36` is installed at `/Applications/CodeIsland.app`, running
   as Team `44JG2Y95CH`, CDHash
   `e7749f3369d10cac87e6495843de22d683a5a425`.
@@ -76,7 +79,9 @@ source SHA.
 The exact readiness and proof boundary for every capability lives in
 `docs/crest-mobile-parity.md`. Treat that ledger as authoritative.
 
-Implemented surfaces include:
+Implemented surfaces include the useful subsets below. This list is not a
+claim of full Crest behavior parity; the behavior-level gaps are recorded in
+`docs/crest-mobile-parity.md`.
 
 - Auto, Home, Work, and Code modes on Mac, native iPhone, and private web.
 - Claude/Codex session status, approvals, questions, exact confirmation,
@@ -106,6 +111,14 @@ physical phone. Do not turn implementation presence into a live claim.
 - Release Mac build passed.
 - Full native companion UI suite: 12 tests, 0 failures on the already-booted
   iPhone Simulator.
+- The added camera-path UI test separately passed 1/1 on 2026-07-17. The first
+  targeted execution visibly handled the real Simulator Camera permission
+  alert; the finalized targeted rerun verified the native full-screen preview
+  surface and dismissal. A subsequent 13-test full rerun
+  was interrupted by the Xcode 27 beta Simulator launcher after 7 passes; its
+  six failures were test-runner `signal term`/`signal kill` infrastructure
+  crashes, not assertion failures. Keep the earlier clean 12-test receipt and
+  the new focused 1-test receipt separate.
 - Real-loopback lifecycle E2E proves pairing, bearer auth, all modes, approvals,
   questions, exact action confirmation, altered-intent/replay rejection, audit
   receipt, and push-token registration.
@@ -143,11 +156,25 @@ distribution are ready; physical iPhone/TCC/cellular acceptance is pending.
 
 ## Known gaps that are not permission-only
 
-- Mac camera pre-check currently launches Photo Booth; native iPhone has a
-  private front-camera preview. Explicit camera and microphone device selection
-  is still incomplete.
-- Spotify does not expose a queue through the macOS automation path; artwork is
-  a visual enhancement, not a control blocker.
+- Mode racks are hard-coded. Crest-style per-mode pinning and reordering are
+  not implemented.
+- Now Playing has no album artwork, arbitrary scrubber, visualizer, or floating
+  music circles. Spotify does not expose a queue through macOS automation.
+- Shelf has clipboard/file history but not drag/drop ingest, automatic
+  screenshot capture, selection capture, or screen recording.
+- Calendar has the two-week agenda and CRUD but no month surface.
+- Notifications shows CodeIsland alerts only; it does not mirror macOS app
+  notifications.
+- Mac Claude is typed only and lacks continuous speech, file context, and the
+  screen-share-hidden covert strip. iPhone dictation exists.
+- Mac camera pre-check launches Photo Booth; native iPhone has a private
+  front-camera preview. Microphone metering/device selection is incomplete.
+- Mac teleprompter is manual-scroll only and is not hidden from screen sharing;
+  iPhone has play/pause and WPM pacing.
+- Window actions expose left/right/maximize but not Crest's drag-to-notch layout
+  chooser.
+- Crest's quick-jot hotkeys, media-key HUD, and custom dashboard/day-progress
+  behavior are not implemented.
 - Automatic mode switching has unit coverage but still needs native runtime
   evidence.
 - Real module actions listed as `Unverified` in the parity ledger still need

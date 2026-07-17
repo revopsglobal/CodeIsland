@@ -156,6 +156,35 @@ final class CodeIslandCompanionUITests: XCTestCase {
     }
 
     @MainActor
+    func testCameraActionOpensPrivateNativePreview() throws {
+        let app = launchHubApp(mode: "work")
+        XCTAssertTrue(app.otherElements["hub.surface"].waitForExistence(timeout: 8))
+
+        let cameraModule = findHubElement("hub.module.camera", in: app)
+        XCTAssertTrue(cameraModule.exists)
+
+        addUIInterruptionMonitor(withDescription: "Camera permission") { alert in
+            let allow = alert.buttons["Allow"]
+            if allow.exists {
+                allow.tap()
+                return true
+            }
+            return false
+        }
+
+        let preview = app.buttons["Preview"].firstMatch
+        XCTAssertTrue(preview.waitForExistence(timeout: 4))
+        preview.tap()
+        app.tap()
+
+        XCTAssertTrue(app.otherElements["hub.camera.preview"].waitForExistence(timeout: 8))
+        let done = app.buttons["hub.camera.done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 4))
+        done.tap()
+        XCTAssertFalse(app.otherElements["hub.camera.preview"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
     private func launchApp(mockState: String) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-CodeIslandCompanionMockState", mockState]
