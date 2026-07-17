@@ -963,11 +963,23 @@ private struct PersonalHubItemRow: View {
     @State private var noteMutation: NoteMutation?
     @State private var calendarMutation: CalendarMutation?
     @State private var sharedFile: SharedFile?
+    @State private var mediaSeekPosition = 0.0
+    @State private var isMediaSeeking = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .top, spacing: 8) {
-                if let symbol = item.symbol {
+                if let data = item.decodedArtworkJPEG, let image = UIImage(data: data) {
+                    Image(uiImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 48, height: 48)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(HubTheme.border, lineWidth: 1)
+                        )
+                } else if let symbol = item.symbol {
                     Image(systemName: symbol)
                         .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(HubTheme.foreground.opacity(0.42))
@@ -989,6 +1001,42 @@ private struct PersonalHubItemRow: View {
 
             if let progress = item.progress {
                 ProgressView(value: progress).tint(HubTheme.accent)
+            }
+
+            if let duration = item.mediaDuration, duration.isFinite, duration > 0 {
+                Slider(
+                    value: $mediaSeekPosition,
+                    in: 0...duration,
+                    onEditingChanged: { editing in
+                        isMediaSeeking = editing
+                        guard !editing else { return }
+                        Task {
+                            await client.prepareHubAction(.init(
+                                moduleID: moduleID,
+                                actionID: "seek",
+                                targetID: item.id,
+                                value: String(mediaSeekPosition)
+                            ))
+                        }
+                    }
+                )
+                .tint(HubTheme.accent)
+                .accessibilityLabel("Playback position")
+                .accessibilityIdentifier("hub.seek.\(moduleID.rawValue)")
+                HStack {
+                    Text(playbackTime(mediaSeekPosition))
+                    Spacer()
+                    Text(playbackTime(duration))
+                }
+                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                .foregroundStyle(HubTheme.foreground.opacity(0.36))
+                .onAppear {
+                    mediaSeekPosition = min(max(item.mediaPosition ?? 0, 0), duration)
+                }
+                .onChange(of: item.mediaPosition) { _, position in
+                    guard !isMediaSeeking else { return }
+                    mediaSeekPosition = min(max(position ?? 0, 0), duration)
+                }
             }
 
             if !item.actions.isEmpty {
@@ -1066,6 +1114,11 @@ private struct PersonalHubItemRow: View {
         .sheet(item: $sharedFile) { file in
             ActivityView(items: [file.url])
         }
+    }
+
+    private func playbackTime(_ seconds: TimeInterval) -> String {
+        let whole = max(Int(seconds.rounded()), 0)
+        return String(format: "%d:%02d", whole / 60, whole % 60)
     }
 }
 

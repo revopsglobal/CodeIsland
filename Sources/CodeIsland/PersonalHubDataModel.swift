@@ -2,6 +2,8 @@ import AppKit
 import Combine
 import CodeIslandCore
 import Foundation
+import ImageIO
+import UniformTypeIdentifiers
 
 /// Local-only data providers for personal hub modules that do not belong to the
 /// agent runtime. Notes and shelf history persist in this Mac user's defaults;
@@ -136,6 +138,50 @@ final class PersonalHubDataModel: ObservableObject {
         let duration: Double?
         let lyrics: String?
         let queue: [QueueItem]
+        let artworkJPEG: Data?
+
+        init(
+            appName: String,
+            title: String,
+            artist: String,
+            album: String,
+            isPlaying: Bool,
+            position: Double?,
+            duration: Double?,
+            lyrics: String?,
+            queue: [QueueItem],
+            artworkJPEG: Data? = nil
+        ) {
+            self.appName = appName
+            self.title = title
+            self.artist = artist
+            self.album = album
+            self.isPlaying = isPlaying
+            self.position = position
+            self.duration = duration
+            self.lyrics = lyrics
+            self.queue = appName == "Music" ? queue : []
+            self.artworkJPEG = artworkJPEG
+        }
+
+        nonisolated var trackKey: String {
+            "\(appName)\u{1F}\(title)\u{1F}\(artist)\u{1F}\(album)"
+        }
+
+        nonisolated func updatingPosition(_ nextPosition: Double) -> NowPlaying {
+            .init(
+                appName: appName,
+                title: title,
+                artist: artist,
+                album: album,
+                isPlaying: isPlaying,
+                position: nextPosition,
+                duration: duration,
+                lyrics: lyrics,
+                queue: queue,
+                artworkJPEG: artworkJPEG
+            )
+        }
     }
 
     struct GitHubPullRequest: Equatable, Identifiable, Sendable {
@@ -195,6 +241,9 @@ final class PersonalHubDataModel: ObservableObject {
     @Published private(set) var claudeProposals: [ClaudeProposal] = []
     @Published private(set) var claudeBusy = false
     @Published private(set) var claudeError: String?
+
+    nonisolated static let maximumArtworkBytes = 300_000
+    nonisolated private static let maximumArtworkInputBytes = 8_000_000
 
     let shelfCaptureController: ShelfCaptureController
 
@@ -559,10 +608,15 @@ final class PersonalHubDataModel: ObservableObject {
         captureClipboardIfChanged(force: true)
     }
 
-    func runMediaCommand(_ action: String, targetID: String? = nil) -> Bool {
+    func runMediaCommand(
+        _ action: String,
+        targetID: String? = nil,
+        value: String? = nil
+    ) -> Bool {
         guard let media = nowPlaying else { return false }
         let appName = media.appName
         let command: String
+        var optimisticPosition: Double?
         switch action {
         case "next": command = "next track"
         case "previous": command = "previous track"
@@ -572,6 +626,16 @@ final class PersonalHubDataModel: ObservableObject {
             let current = media.position ?? 0
             let duration = media.duration ?? .greatestFiniteMagnitude
             let destination = min(max(current + delta, 0), duration)
+            optimisticPosition = destination
+            command = "set player position to \(destination)"
+        case "seek":
+            guard let value,
+                  let requested = Double(value),
+                  let duration = media.duration,
+                  let destination = Self.clampedSeekPosition(requested, duration: duration) else {
+                return false
+            }
+            optimisticPosition = destination
             command = "set player position to \(destination)"
         case "playQueueItem":
             guard appName == "Music",
@@ -585,8 +649,12 @@ final class PersonalHubDataModel: ObservableObject {
         }
         let script = "tell application \"\(appName)\" to \(command)"
         let result = ProcessRunner.run(path: "/usr/bin/osascript", args: ["-e", script], timeout: 5)
+        guard result != nil else { return false }
+        let optimistic = optimisticPosition.map(media.updatingPosition) ?? media
+        nowPlaying = optimistic
+        MediaHUDController.shared.showNowPlaying(optimistic)
         refreshNowPlaying()
-        return result != nil
+        return true
     }
 
     func refreshHostData() {
@@ -624,12 +692,16 @@ final class PersonalHubDataModel: ObservableObject {
             mediaPermissionError = nil
             return
         }
+        let previousTrackKey = nowPlaying?.trackKey
         Task { [weak self] in
             let result = await Task.detached(priority: .utility) {
                 Self.readNowPlaying(appName: appName)
             }.value
             guard let self else { return }
             self.nowPlaying = result
+            if let result, result.trackKey != previousTrackKey {
+                MediaHUDController.shared.showNowPlaying(result)
+            }
             self.mediaPermissionError = result == nil
                 ? "Allow CodeIsland to control \(appName) in Privacy & Security → Automation"
                 : nil
@@ -854,6 +926,9 @@ final class PersonalHubDataModel: ObservableObject {
 
     nonisolated static func readNowPlaying(appName: String) -> NowPlaying? {
         guard ["Music", "Spotify"].contains(appName) else { return nil }
+        let artworkURLScript = appName == "Spotify"
+            ? "try\n                set ciArtworkURL to (artwork url of current track as string)\n            end try"
+            : ""
         let script = """
         tell application "\(appName)"
             set ciState to (player state as string)
@@ -863,6 +938,7 @@ final class PersonalHubDataModel: ObservableObject {
             set ciPosition to ""
             set ciDuration to ""
             set ciLyrics to ""
+            set ciArtworkURL to ""
             try
                 set ciPosition to (player position as string)
                 set ciDuration to (duration of current track as string)
@@ -870,20 +946,27 @@ final class PersonalHubDataModel: ObservableObject {
             try
                 set ciLyrics to (lyrics of current track as string)
             end try
-            return ciState & (ASCII character 31) & ciTitle & (ASCII character 31) & ciArtist & (ASCII character 31) & ciAlbum & (ASCII character 31) & ciPosition & (ASCII character 31) & ciDuration & (ASCII character 31) & ciLyrics
+            \(artworkURLScript)
+            return ciState & (ASCII character 31) & ciTitle & (ASCII character 31) & ciArtist & (ASCII character 31) & ciAlbum & (ASCII character 31) & ciPosition & (ASCII character 31) & ciDuration & (ASCII character 31) & ciLyrics & (ASCII character 31) & ciArtworkURL
         end tell
         """
         guard let data = ProcessRunner.run(path: "/usr/bin/osascript", args: ["-e", script], timeout: 5),
               let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
         else { return nil }
         let queue = appName == "Music" ? readMusicQueue() : []
-        return parseNowPlayingOutput(output, appName: appName, queue: queue)
+        let parts = output.components(separatedBy: String(UnicodeScalar(31)))
+        let artworkURL = parts.count > 7 ? parts[7].trimmingCharacters(in: .whitespacesAndNewlines) : ""
+        let artwork = appName == "Music"
+            ? readMusicArtwork()
+            : readSpotifyArtwork(urlString: artworkURL)
+        return parseNowPlayingOutput(output, appName: appName, queue: queue, artworkJPEG: artwork)
     }
 
     nonisolated static func parseNowPlayingOutput(
         _ output: String,
         appName: String,
-        queue: [NowPlaying.QueueItem] = []
+        queue: [NowPlaying.QueueItem] = [],
+        artworkJPEG: Data? = nil
     ) -> NowPlaying? {
         let parts = output.components(separatedBy: String(UnicodeScalar(31)))
         guard parts.count >= 4 else { return nil }
@@ -899,8 +982,105 @@ final class PersonalHubDataModel: ObservableObject {
             position: parts.count > 4 ? Double(parts[4]) : nil,
             duration: parts.count > 5 ? Double(parts[5]) : nil,
             lyrics: lyrics.isEmpty ? nil : lyrics,
-            queue: queue
+            queue: queue,
+            artworkJPEG: artworkJPEG
         )
+    }
+
+    nonisolated static func clampedSeekPosition(_ requested: Double, duration: Double) -> Double? {
+        guard requested.isFinite, duration.isFinite, duration > 0 else { return nil }
+        return min(max(requested, 0), duration)
+    }
+
+    /// Decodes untrusted provider artwork through ImageIO and re-encodes a
+    /// small JPEG. This bounds both memory and the authenticated snapshot size.
+    nonisolated static func normalizeArtworkJPEG(_ sourceData: Data) -> Data? {
+        guard !sourceData.isEmpty, sourceData.count <= maximumArtworkInputBytes,
+              let source = CGImageSourceCreateWithData(sourceData as CFData, nil) else {
+            return nil
+        }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: 320,
+            kCGImageSourceShouldCacheImmediately: true,
+        ]
+        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            return nil
+        }
+        for quality in [0.82, 0.64, 0.46] {
+            let output = NSMutableData()
+            guard let destination = CGImageDestinationCreateWithData(
+                output,
+                UTType.jpeg.identifier as CFString,
+                1,
+                nil
+            ) else { return nil }
+            CGImageDestinationAddImage(
+                destination,
+                image,
+                [kCGImageDestinationLossyCompressionQuality: quality] as CFDictionary
+            )
+            guard CGImageDestinationFinalize(destination) else { continue }
+            let data = output as Data
+            if data.count <= maximumArtworkBytes { return data }
+        }
+        return nil
+    }
+
+    nonisolated private static func readMusicArtwork() -> Data? {
+        let outputURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CodeIsland-artwork-\(UUID().uuidString)", isDirectory: false)
+        defer { try? FileManager.default.removeItem(at: outputURL) }
+        let script = """
+        tell application "Music" to set ciArtwork to data of artwork 1 of current track
+        set ciFile to open for access (POSIX file "\(outputURL.path)") with write permission
+        try
+            set eof ciFile to 0
+            write ciArtwork to ciFile
+            close access ciFile
+        on error ciMessage number ciNumber
+            try
+                close access ciFile
+            end try
+            error ciMessage number ciNumber
+        end try
+        """
+        guard ProcessRunner.run(path: "/usr/bin/osascript", args: ["-e", script], timeout: 6) != nil,
+              let values = try? outputURL.resourceValues(forKeys: [.fileSizeKey]),
+              let size = values.fileSize,
+              size > 0, size <= maximumArtworkInputBytes,
+              let data = try? Data(contentsOf: outputURL, options: [.mappedIfSafe]) else {
+            return nil
+        }
+        return normalizeArtworkJPEG(data)
+    }
+
+    nonisolated private static func readSpotifyArtwork(urlString: String) -> Data? {
+        guard let url = URL(string: urlString),
+              url.scheme?.lowercased() == "https",
+              let host = url.host?.lowercased(),
+              host == "scdn.co" || host.hasSuffix(".scdn.co") || host.hasSuffix(".spotifycdn.com") else {
+            return nil
+        }
+        let outputURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CodeIsland-artwork-\(UUID().uuidString)", isDirectory: false)
+        defer { try? FileManager.default.removeItem(at: outputURL) }
+        guard ProcessRunner.run(
+            path: "/usr/bin/curl",
+            args: [
+                "--silent", "--show-error", "--fail",
+                "--proto", "=https", "--max-time", "5",
+                "--max-filesize", String(maximumArtworkInputBytes),
+                "--output", outputURL.path,
+                url.absoluteString,
+            ],
+            timeout: 7
+        ) != nil,
+        let data = try? Data(contentsOf: outputURL, options: [.mappedIfSafe]) else {
+            return nil
+        }
+        return normalizeArtworkJPEG(data)
     }
 
     nonisolated static func readMusicQueue() -> [NowPlaying.QueueItem] {
@@ -995,10 +1175,15 @@ final class PersonalHubDataModel: ObservableObject {
     }
 
     func toggleMute() -> Bool {
+        let current = quickSettings ?? Self.readQuickSettings()
         let script = #"set volume output muted not (output muted of (get volume settings))"#
         guard ProcessRunner.run(path: "/usr/bin/osascript", args: ["-e", script], timeout: 5) != nil else {
             return false
         }
+        MediaHUDController.shared.showVolume(
+            percent: current.outputVolume ?? 0,
+            muted: !current.outputMuted
+        )
         refreshHostData()
         return true
     }
@@ -1014,6 +1199,7 @@ final class PersonalHubDataModel: ObservableObject {
         guard ProcessRunner.run(path: "/usr/bin/osascript", args: ["-e", script], timeout: 5) != nil else {
             return false
         }
+        MediaHUDController.shared.showVolume(percent: value, muted: false)
         refreshHostData()
         return true
     }

@@ -438,6 +438,13 @@ public struct PersonalHubItem: Codable, Equatable, Identifiable, Sendable {
     public let detail: String?
     public let symbol: String?
     public let progress: Double?
+    /// Small, bounded artwork encoded as a data URL so the authenticated
+    /// snapshot renders identically on Mac, iPhone, and the private web app.
+    public let artworkDataURL: String?
+    /// Absolute playback values allow clients to render and submit an
+    /// arbitrary seek without inferring duration from a rounded progress bar.
+    public let mediaPosition: Double?
+    public let mediaDuration: Double?
     /// Optional semantic date used by calendar-style clients. Existing module
     /// items remain date-free and legacy payloads decode this as nil.
     public let date: Date?
@@ -450,6 +457,9 @@ public struct PersonalHubItem: Codable, Equatable, Identifiable, Sendable {
         detail: String? = nil,
         symbol: String? = nil,
         progress: Double? = nil,
+        artworkDataURL: String? = nil,
+        mediaPosition: Double? = nil,
+        mediaDuration: Double? = nil,
         date: Date? = nil,
         actions: [PersonalHubAction] = []
     ) {
@@ -459,8 +469,27 @@ public struct PersonalHubItem: Codable, Equatable, Identifiable, Sendable {
         self.detail = detail
         self.symbol = symbol
         self.progress = progress
+        self.artworkDataURL = artworkDataURL
+        self.mediaPosition = mediaPosition
+        self.mediaDuration = mediaDuration
         self.date = date
         self.actions = actions
+    }
+}
+
+public extension PersonalHubItem {
+    /// Only accepts the bounded JPEG data URL emitted by the Mac. Clients do
+    /// not load remote artwork URLs, preserving tailnet-only snapshot privacy.
+    var decodedArtworkJPEG: Data? {
+        let prefix = "data:image/jpeg;base64,"
+        guard let artworkDataURL,
+              artworkDataURL.hasPrefix(prefix),
+              let data = Data(base64Encoded: String(artworkDataURL.dropFirst(prefix.count))),
+              data.count <= 300_000,
+              data.starts(with: [0xFF, 0xD8]) else {
+            return nil
+        }
+        return data
     }
 }
 

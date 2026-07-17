@@ -287,8 +287,13 @@ final class PersonalHubService {
             return .success(.init(executed: true, message: "Shelf file revealed on the Mac"))
 
         case (.nowPlaying, "playPause"), (.nowPlaying, "next"), (.nowPlaying, "previous"),
-             (.nowPlaying, "seekBack"), (.nowPlaying, "seekForward"), (.nowPlaying, "playQueueItem"):
-            guard data.runMediaCommand(intent.actionID, targetID: intent.targetID) else {
+             (.nowPlaying, "seekBack"), (.nowPlaying, "seekForward"), (.nowPlaying, "seek"),
+             (.nowPlaying, "playQueueItem"):
+            guard data.runMediaCommand(
+                intent.actionID,
+                targetID: intent.targetID,
+                value: intent.value
+            ) else {
                 return .failure(.failed("Could not control the current media app"))
             }
             return .success(.init(executed: true, message: "Media control sent"))
@@ -658,6 +663,15 @@ final class PersonalHubService {
             guard data.nowPlaying?.position != nil else { return .failure(.invalid("Playback position is unavailable")) }
             return .success("Advance the current track 15 seconds")
 
+        case (.nowPlaying, "seek"):
+            guard let value = intent.value,
+                  let requested = Double(value),
+                  let duration = data.nowPlaying?.duration,
+                  let destination = PersonalHubDataModel.clampedSeekPosition(requested, duration: duration) else {
+                return .failure(.invalid("Choose a valid position in the current track"))
+            }
+            return .success("Seek the current track to \(Self.playbackTime(destination))")
+
         case (.nowPlaying, "playQueueItem"):
             guard let targetID = intent.targetID,
                   let item = data.nowPlaying?.queue.first(where: { $0.id == targetID }) else {
@@ -898,6 +912,11 @@ final class PersonalHubService {
                     detail: media.lyrics ?? media.album,
                     symbol: media.isPlaying ? "speaker.wave.2.fill" : "pause.fill",
                     progress: progress,
+                    artworkDataURL: media.artworkJPEG.map {
+                        "data:image/jpeg;base64,\($0.base64EncodedString())"
+                    },
+                    mediaPosition: media.position,
+                    mediaDuration: media.duration,
                     actions: itemActions
                 )
                 let queueItems = media.queue.map { queued in
@@ -1738,6 +1757,11 @@ final class PersonalHubService {
         case .selection: return "Capture"
         case .recording: return "Recording"
         }
+    }
+
+    private static func playbackTime(_ seconds: TimeInterval) -> String {
+        let whole = max(Int(seconds.rounded()), 0)
+        return String(format: "%d:%02d", whole / 60, whole % 60)
     }
 
     private static func duration(_ seconds: TimeInterval) -> String {

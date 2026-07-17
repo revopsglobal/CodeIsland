@@ -277,6 +277,26 @@ final class CodeIslandCompanionUITests: XCTestCase {
     }
 
     @MainActor
+    func testNowPlayingScrubberShowsExactSeekConfirmation() throws {
+        let app = launchHubApp(mode: "home")
+        XCTAssertTrue(app.otherElements["hub.surface"].waitForExistence(timeout: 8))
+
+        let nowPlaying = findHubElement("hub.module.nowPlaying", in: app)
+        XCTAssertTrue(nowPlaying.exists)
+        let slider = app.sliders["hub.seek.nowPlaying"].firstMatch
+        XCTAssertTrue(slider.waitForExistence(timeout: 5))
+        slider.adjust(toNormalizedSliderPosition: 0.7)
+
+        let confirmation = app.otherElements["hub.action.confirmation"].firstMatch
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(
+            format: "label CONTAINS[c] %@ AND label CONTAINS[c] %@",
+            "Now Playing",
+            "seek"
+        )).firstMatch.exists)
+    }
+
+    @MainActor
     func testCameraActionOpensPrivateNativePreview() throws {
         let app = launchHubApp(mode: "work")
         XCTAssertTrue(app.otherElements["hub.surface"].waitForExistence(timeout: 8))

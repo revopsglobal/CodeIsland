@@ -98,6 +98,7 @@ struct NotchPanelView: View {
     @AppStorage(SettingsKey.hapticOnHover) private var hapticOnHover = SettingsDefaults.hapticOnHover
     @AppStorage(SettingsKey.hapticIntensity) private var hapticIntensity = SettingsDefaults.hapticIntensity
     @ObservedObject private var personalUtilities = PersonalUtilitiesModel.shared
+    @ObservedObject private var mediaHUD = MediaHUDController.shared
 
     /// Delayed hover: prevents accidental expansion when mouse passes through
     @State private var hoverTimer: Timer?
@@ -433,6 +434,112 @@ struct NotchPanelView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .animation(NotchAnimation.open, value: appState.surface)
+        .overlay(alignment: .top) {
+            if let presentation = mediaHUD.presentation {
+                MediaHUDView(presentation: presentation) {
+                    mediaHUD.dismiss(id: presentation.id)
+                }
+                .padding(.top, notchHeight + 7)
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .zIndex(20)
+            }
+        }
+        .animation(.snappy(duration: 0.28), value: mediaHUD.presentation?.id)
+    }
+}
+
+private struct MediaHUDView: View {
+    let presentation: MediaHUDController.Presentation
+    let dismiss: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var animateAmbient: Bool {
+        presentation.kind == .nowPlaying
+            && MediaHUDController.shouldAnimateAmbient(
+                reduceMotion: reduceMotion,
+                thermalState: ProcessInfo.processInfo.thermalState
+            )
+    }
+
+    var body: some View {
+        HStack(spacing: 11) {
+            if let artwork = presentation.artworkJPEG,
+               let image = NSImage(data: artwork) {
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 48, height: 48)
+                    .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 11, style: .continuous)
+                            .stroke(Color.white.opacity(0.13), lineWidth: 1)
+                    )
+            } else {
+                Image(systemName: presentation.symbol)
+                    .font(.system(size: 19, weight: .bold))
+                    .foregroundStyle(Color.orange)
+                    .frame(width: 44, height: 44)
+                    .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 11))
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(presentation.title)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.92))
+                    .lineLimit(1)
+                if let subtitle = presentation.subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.42))
+                        .lineLimit(1)
+                }
+                if let level = presentation.level {
+                    ProgressView(value: min(max(level, 0), 1))
+                        .tint(.orange)
+                        .frame(width: 146)
+                }
+            }
+
+            if presentation.kind == .nowPlaying {
+                MediaAmbientBars(animate: animateAmbient)
+                    .frame(width: 28, height: 28)
+            }
+        }
+        .padding(.horizontal, 13)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.black.opacity(0.94))
+                .shadow(color: .black.opacity(0.5), radius: 18, y: 8)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture(perform: dismiss)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel([presentation.title, presentation.subtitle].compactMap { $0 }.joined(separator: ", "))
+    }
+}
+
+private struct MediaAmbientBars: View {
+    let animate: Bool
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 12.0, paused: !animate)) { timeline in
+            let phase = timeline.date.timeIntervalSinceReferenceDate
+            HStack(alignment: .center, spacing: 3) {
+                ForEach(0..<4, id: \.self) { index in
+                    let wave = animate ? (sin(phase * 3.2 + Double(index) * 1.3) + 1) / 2 : 0.35
+                    Capsule()
+                        .fill(Color.orange.opacity(0.5 + wave * 0.45))
+                        .frame(width: 3, height: 7 + wave * 18)
+                }
+            }
+            .frame(maxHeight: .infinity)
+        }
     }
 }
 

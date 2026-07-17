@@ -95,6 +95,34 @@ final class PersonalHubProtocolTests: XCTestCase {
         XCTAssertEqual(try decoder.decode(PersonalHubSnapshot.self, from: data), snapshot)
     }
 
+    func testMediaItemRoundTripAndLegacyDecode() throws {
+        let item = PersonalHubItem(
+            id: "current",
+            title: "Current song",
+            artworkDataURL: "data:image/jpeg;base64,/9j/2Q==",
+            mediaPosition: 42.5,
+            mediaDuration: 180
+        )
+        let data = try JSONEncoder().encode(item)
+        XCTAssertEqual(try JSONDecoder().decode(PersonalHubItem.self, from: data), item)
+        XCTAssertEqual(item.decodedArtworkJPEG, Data([0xFF, 0xD8, 0xFF, 0xD9]))
+
+        let rejectedArtwork = PersonalHubItem(
+            id: "unsafe",
+            title: "Remote image",
+            artworkDataURL: "data:image/png;base64,iVBORw0KGgo="
+        )
+        XCTAssertNil(rejectedArtwork.decodedArtworkJPEG)
+
+        let legacy = try JSONDecoder().decode(
+            PersonalHubItem.self,
+            from: Data(#"{"id":"legacy","title":"Song","actions":[]}"#.utf8)
+        )
+        XCTAssertNil(legacy.artworkDataURL)
+        XCTAssertNil(legacy.mediaPosition)
+        XCTAssertNil(legacy.mediaDuration)
+    }
+
     func testActionBindingChangesWithEveryMutableField() {
         let baseline = PersonalHubActionIntent(
             moduleID: .reminders,

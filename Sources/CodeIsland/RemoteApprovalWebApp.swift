@@ -83,6 +83,11 @@ enum RemoteApprovalWebApp {
         .hub-item { margin-top:8px; padding:9px; border-radius:10px; background:#050806; }
         .hub-item-title { font-size:12px; font-weight:700; overflow-wrap:anywhere; }
         .hub-item-subtitle { margin-top:2px; color:#78847a; font-size:10px; }
+        .media-item-head { display:flex; align-items:center; gap:9px; }
+        .media-art { width:52px; height:52px; flex:0 0 52px; border-radius:11px; object-fit:cover; box-shadow:0 8px 22px #0009,inset 0 0 0 1px #ffffff18; }
+        .media-copy { min-width:0; flex:1; }
+        .media-seek { width:100%; min-height:24px; height:24px; margin-top:5px; padding:0; border:0; background:transparent; box-shadow:none; accent-color:var(--amber); }
+        .media-times { display:flex; justify-content:space-between; color:#78847a; font:650 9px ui-monospace,SFMono-Regular,Menlo,monospace; }
         .hub-actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
         .hub-action { min-height:34px; padding:0 10px; border-radius:9px; background:#1b241e; color:#dce3dd; font-size:11px; box-shadow:inset 0 0 0 1px #344037; }
         .hub-action.primary { background:var(--amber); color:#171006; box-shadow:none; }
@@ -159,6 +164,7 @@ enum RemoteApprovalWebApp {
         var calendarSelectedDate = null;
         let busy = new Set();
         let lastHubSnapshot = { value: null };
+        const mediaSeekState = { active: false };
         const pair = document.getElementById('pair');
         const approvals = document.getElementById('approvals');
         const questions = document.getElementById('questions');
@@ -291,10 +297,30 @@ enum RemoteApprovalWebApp {
           hub.querySelectorAll('[data-hub-action]').forEach(button=>button.addEventListener('click',()=>runHubAction(button.dataset.module,button.dataset.action,button.dataset.target||null,button.dataset.deeplink||null,button.dataset.payload||'',button.dataset.value||'')));
           hub.querySelectorAll('[data-calendar-nav]').forEach(button=>button.addEventListener('click',()=>navigateCalendar(button.dataset.calendarNav)));
           hub.querySelectorAll('[data-calendar-date]').forEach(button=>button.addEventListener('click',()=>selectCalendarDate(button.dataset.calendarDate)));
+          hub.querySelectorAll('[data-media-seek]').forEach(slider=>{
+            const label=slider.parentElement.querySelector('[data-media-current]');
+            slider.addEventListener('pointerdown',()=>{mediaSeekState.active=true;});
+            slider.addEventListener('focus',()=>{mediaSeekState.active=true;});
+            slider.addEventListener('input',()=>{if(label) label.textContent=playbackTime(Number(slider.value));});
+            slider.addEventListener('change',async()=>{
+              mediaSeekState.active=false;
+              await runHubAction('nowPlaying','seek',slider.dataset.target||'current',null,'',slider.value);
+            });
+            slider.addEventListener('blur',()=>{mediaSeekState.active=false;});
+          });
         }
 
         function renderHubItem(moduleID,item) {
-          return `<div class="hub-item"><div class="hub-item-title">${escapeHTML(item.title)}</div>${item.subtitle?`<div class="hub-item-subtitle">${escapeHTML(item.subtitle)}</div>`:''}${item.progress!==null&&item.progress!==undefined?`<progress value="${Number(item.progress)}" max="1"></progress>`:''}${renderHubActions(moduleID,item.actions||[],item.id,item.detail||'')}</div>`;
+          const artwork=typeof item.artworkDataURL==='string'&&/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(item.artworkDataURL)?item.artworkDataURL:'';
+          const position=Number(item.mediaPosition); const duration=Number(item.mediaDuration);
+          const seek=Number.isFinite(position)&&Number.isFinite(duration)&&duration>0
+            ? `<input class="media-seek" type="range" min="0" max="${duration}" step="0.1" value="${Math.min(Math.max(position,0),duration)}" data-media-seek="1" data-target="${escapeHTML(item.id)}" aria-label="Playback position"><div class="media-times"><span data-media-current>${playbackTime(position)}</span><span>${playbackTime(duration)}</span></div>`:'';
+          return `<div class="hub-item"><div class="media-item-head">${artwork?`<img class="media-art" src="${escapeHTML(artwork)}" alt="">`:''}<div class="media-copy"><div class="hub-item-title">${escapeHTML(item.title)}</div>${item.subtitle?`<div class="hub-item-subtitle">${escapeHTML(item.subtitle)}</div>`:''}</div></div>${item.progress!==null&&item.progress!==undefined?`<progress value="${Number(item.progress)}" max="1"></progress>`:''}${seek}${renderHubActions(moduleID,item.actions||[],item.id,item.detail||'')}</div>`;
+        }
+
+        function playbackTime(seconds) {
+          const whole=Math.max(0,Math.round(Number.isFinite(seconds)?seconds:0));
+          return `${Math.floor(whole/60)}:${String(whole%60).padStart(2,'0')}`;
         }
 
         function renderCalendarMonth(module) {
@@ -480,6 +506,7 @@ enum RemoteApprovalWebApp {
         }
 
         async function refreshHub() {
+          if(mediaSeekState.active) return;
           const response=await fetch('/api/hub/snapshot',{method:'POST',headers:{...authHeaders(),'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify({requestedMode:selectedMode,calendarReferenceDate,calendarSelectedDate})});
           if(response.status===401) throw new Error('unauthorized');
           const body=await response.json(); if(!response.ok) throw new Error(body.error||'Hub unavailable');

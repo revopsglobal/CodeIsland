@@ -455,6 +455,8 @@ private struct MacHubModuleCard: View {
     @State private var eventEnd = Date().addingTimeInterval(7_200)
     @State private var composerActionID = "add"
     @State private var selectedReminderCalendarID = ""
+    @State private var mediaSeekPosition = 0.0
+    @State private var isMediaSeeking = false
 
     private var definition: PersonalHubModuleDefinition {
         PersonalHubCatalog.definition(for: module.id)
@@ -587,21 +589,72 @@ private struct MacHubModuleCard: View {
 
     private func itemCard(_ item: PersonalHubItem) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(item.title)
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.72))
-                    .lineLimit(1)
-                Spacer()
-                if let subtitle = item.subtitle {
-                    Text(subtitle)
-                        .font(.system(size: 8, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.3))
-                        .lineLimit(1)
+            HStack(alignment: .top, spacing: 7) {
+                if let data = item.decodedArtworkJPEG, let image = NSImage(data: data) {
+                    Image(nsImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 38, height: 38)
+                        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                        )
                 }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.title)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.72))
+                        .lineLimit(1)
+                    if let subtitle = item.subtitle {
+                        Text(subtitle)
+                            .font(.system(size: 8, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.3))
+                            .lineLimit(1)
+                    }
+                }
+                Spacer()
             }
             if let progress = item.progress {
                 ProgressView(value: progress).tint(.orange)
+            }
+            if let duration = item.mediaDuration, duration.isFinite, duration > 0 {
+                Slider(
+                    value: $mediaSeekPosition,
+                    in: 0...duration,
+                    onEditingChanged: { editing in
+                        isMediaSeeking = editing
+                        guard !editing else { return }
+                        prepare(
+                            module.id,
+                            .init(
+                                id: "seek",
+                                label: "Seek",
+                                symbol: "slider.horizontal.3",
+                                value: String(mediaSeekPosition)
+                            ),
+                            item.id,
+                            item.detail
+                        )
+                    }
+                )
+                .tint(.orange)
+                .controlSize(.mini)
+                .accessibilityLabel("Playback position")
+                HStack {
+                    Text(playbackTime(mediaSeekPosition))
+                    Spacer()
+                    Text(playbackTime(duration))
+                }
+                .font(.system(size: 7, weight: .medium, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.3))
+                .onAppear {
+                    mediaSeekPosition = min(max(item.mediaPosition ?? 0, 0), duration)
+                }
+                .onChange(of: item.mediaPosition) { _, position in
+                    guard !isMediaSeeking else { return }
+                    mediaSeekPosition = min(max(position ?? 0, 0), duration)
+                }
             }
             actionRow(item.actions, itemID: item.id, itemDetail: item.detail)
         }
@@ -686,6 +739,11 @@ private struct MacHubModuleCard: View {
             guard item.id.hasPrefix("list:"), let id = item.detail else { return nil }
             return .init(id: id, title: item.title)
         }
+    }
+
+    private func playbackTime(_ seconds: TimeInterval) -> String {
+        let whole = max(Int(seconds.rounded()), 0)
+        return String(format: "%d:%02d", whole / 60, whole % 60)
     }
 }
 

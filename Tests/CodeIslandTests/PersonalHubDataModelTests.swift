@@ -99,6 +99,49 @@ final class PersonalHubDataModelTests: XCTestCase {
         XCTAssertEqual(media.queue, queue)
     }
 
+    func testNowPlayingArtworkIsBoundedAndNormalizedToJPEG() throws {
+        let onePixelPNG = try XCTUnwrap(Data(base64Encoded:
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+        ))
+
+        let artwork = try XCTUnwrap(PersonalHubDataModel.normalizeArtworkJPEG(onePixelPNG))
+
+        XCTAssertLessThanOrEqual(artwork.count, PersonalHubDataModel.maximumArtworkBytes)
+        XCTAssertEqual(Array(artwork.prefix(2)), [0xFF, 0xD8])
+    }
+
+    func testArbitrarySeekClampsBoundsAndRejectsNonFiniteValues() {
+        XCTAssertEqual(PersonalHubDataModel.clampedSeekPosition(-20, duration: 180), 0)
+        XCTAssertEqual(PersonalHubDataModel.clampedSeekPosition(42.5, duration: 180), 42.5)
+        XCTAssertEqual(PersonalHubDataModel.clampedSeekPosition(999, duration: 180), 180)
+        XCTAssertNil(PersonalHubDataModel.clampedSeekPosition(.infinity, duration: 180))
+        XCTAssertNil(PersonalHubDataModel.clampedSeekPosition(20, duration: 0))
+    }
+
+    func testOptimisticSeekPreservesMetadataAndSpotifyNeverClaimsQueueSupport() throws {
+        let separator = String(UnicodeScalar(31))
+        let queued = [PersonalHubDataModel.NowPlaying.QueueItem(
+            id: "7",
+            title: "Next song",
+            artist: "Next artist",
+            album: "Next album"
+        )]
+        let spotify = try XCTUnwrap(PersonalHubDataModel.parseNowPlayingOutput(
+            ["playing", "Current song", "Current artist", "Current album", "10", "180", ""]
+                .joined(separator: separator),
+            appName: "Spotify",
+            queue: queued
+        ))
+
+        let updated = spotify.updatingPosition(90)
+
+        XCTAssertTrue(spotify.queue.isEmpty)
+        XCTAssertEqual(updated.position, 90)
+        XCTAssertEqual(updated.title, spotify.title)
+        XCTAssertEqual(updated.artist, spotify.artist)
+        XCTAssertEqual(updated.duration, spotify.duration)
+    }
+
     func testParsesMusicQueueAndIgnoresMalformedRows() {
         let field = String(UnicodeScalar(30))
         let row = String(UnicodeScalar(29))

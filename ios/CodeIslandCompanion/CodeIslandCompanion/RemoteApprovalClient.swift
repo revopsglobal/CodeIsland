@@ -635,10 +635,18 @@ final class RemoteApprovalClient: ObservableObject {
                 detail: "1:42 / 4:06 · Apple Music",
                 items: [
                     .init(
+                        id: "current",
+                        title: "North Star",
+                        subtitle: "Demo Artist",
+                        progress: 102.0 / 246.0,
+                        mediaPosition: 102,
+                        mediaDuration: 246
+                    ),
+                    .init(
                         id: "queue:1",
                         title: "Next: Signal Fire",
                         subtitle: "Demo Artist",
-                        actions: [.init(id: "playFromQueue", label: "Play now", targetID: "queue:1")]
+                        actions: [.init(id: "playQueueItem", label: "Play now", targetID: "1")]
                     )
                 ],
                 actions: [
