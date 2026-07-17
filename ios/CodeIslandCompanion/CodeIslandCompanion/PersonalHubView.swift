@@ -2,6 +2,7 @@ import SwiftUI
 import UIKit
 import AVFoundation
 import Speech
+import UniformTypeIdentifiers
 
 enum HubTheme {
     static let accent = Color(red: 1.0, green: 0.69, blue: 0.0)
@@ -423,6 +424,7 @@ private struct PersonalHubModuleCard: View {
     let module: PersonalHubModuleSnapshot
     @EnvironmentObject private var client: RemoteApprovalClient
     @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
     @State private var composerText = ""
     @State private var showsComposer = false
     @State private var composerActionID = "add"
@@ -434,6 +436,9 @@ private struct PersonalHubModuleCard: View {
     @State private var selectedReminderCalendarID = ""
     @State private var outputVolume = 50.0
     @State private var showsCameraPreview = false
+    @State private var claudeContexts: [PersonalHubClaudeContext] = []
+    @State private var claudeContextError: String?
+    @State private var showsClaudeFileImporter = false
     @StateObject private var speech = HubSpeechRecognizer()
 
     private var definition: PersonalHubModuleDefinition {
@@ -562,11 +567,21 @@ private struct PersonalHubModuleCard: View {
         .fullScreenCover(isPresented: $showsCameraPreview) {
             MediaPreflightView()
         }
+        .fileImporter(
+            isPresented: $showsClaudeFileImporter,
+            allowedContentTypes: [.plainText, .json, .commaSeparatedText, .sourceCode, .data],
+            allowsMultipleSelection: true,
+            onCompletion: importClaudeFiles
+        )
         .onAppear {
             if selectedReminderCalendarID.isEmpty {
                 selectedReminderCalendarID = reminderLists.first?.id ?? ""
             }
         }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active { speech.cancel() }
+        }
+        .onDisappear { speech.cancel() }
     }
 
     @ViewBuilder
@@ -685,21 +700,136 @@ private struct PersonalHubModuleCard: View {
                 )
             }
         } else if module.id == .claude {
-            HStack(spacing: 7) {
-                hubTextField(composerActionID == "plan" ? "Tell Claude what to do" : "Ask Claude", text: $composerText)
-                Button {
-                    speech.toggle { transcript in composerText = transcript }
-                } label: {
-                    Image(systemName: speech.isRecording ? "stop.fill" : "mic.fill")
-                        .font(.system(size: 13, weight: .bold))
-                        .frame(width: 36, height: 36)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 7) {
+                    hubTextField(composerActionID == "plan" ? "Tell Claude what to propose" : "Ask Claude", text: $composerText)
+                    reviewButton(
+                        actionID: composerActionID,
+                        value: PersonalHubClaudeDraft(
+                            prompt: composerText.trimmingCharacters(in: .whitespacesAndNewlines),
+                            contexts: claudeContexts
+                        ).encodedActionValue()
+                    )
                 }
-                .buttonStyle(HubSecondaryButtonStyle())
-                .accessibilityLabel(speech.isRecording ? "Stop voice input" : "Start voice input")
-                reviewButton(
-                    actionID: composerActionID,
-                    value: composerText.trimmingCharacters(in: .whitespacesAndNewlines)
-                )
+
+                HStack(spacing: 6) {
+                    HStack(spacing: 2) {
+                        ForEach(HubSpeechRecognizer.Mode.allCases) { mode in
+                            Button {
+                                speech.setMode(mode)
+                            } label: {
+                                Text(mode == .pushToTalk ? "HOLD" : "CONTINUOUS")
+                                    .font(.system(size: 8, weight: .black, design: .monospaced))
+                                    .foregroundStyle(speech.mode == mode ? Color.black : HubTheme.foreground.opacity(0.5))
+                                    .frame(minWidth: mode == .pushToTalk ? 48 : 76, minHeight: 28)
+                                    .background(
+                                        speech.mode == mode ? HubTheme.accent : Color.clear,
+                                        in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("hub.claude.voice.\(mode.rawValue)")
+                        }
+                    }
+                    .padding(3)
+                    .background(Color.black.opacity(0.24), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                    Spacer(minLength: 0)
+
+                    if speech.mode == .pushToTalk {
+                        Label(speech.isRecording ? "Listening" : "Hold to talk", systemImage: speech.isRecording ? "waveform" : "mic.fill")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(speech.isRecording ? HubTheme.accent : HubTheme.foreground.opacity(0.7))
+                            .padding(.horizontal, 10)
+                            .frame(minHeight: 34)
+                            .background(Color.white.opacity(0.06), in: Capsule())
+                            .contentShape(Capsule())
+                            .onLongPressGesture(
+                                minimumDuration: 0,
+                                maximumDistance: 32,
+                                pressing: { pressing in
+                                    if pressing {
+                                        speech.press { composerText = $0 }
+                                    } else {
+                                        speech.release()
+                                    }
+                                },
+                                perform: {}
+                            )
+                            .accessibilityLabel("Hold to dictate a Claude request")
+                            .accessibilityIdentifier("hub.claude.voice.hold")
+                    } else {
+                        Button {
+                            speech.toggle { composerText = $0 }
+                        } label: {
+                            Label(speech.isRecording ? "Stop" : "Listen", systemImage: speech.isRecording ? "stop.fill" : "waveform")
+                                .font(.system(size: 10, weight: .bold))
+                                .frame(minHeight: 34)
+                        }
+                        .buttonStyle(HubPrimaryButtonStyle())
+                    }
+                }
+
+                if speech.phase == .requestingPermission {
+                    Label("Requesting private microphone access…", systemImage: "lock.shield")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(HubTheme.foreground.opacity(0.48))
+                } else if let error = speech.errorMessage {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(HubTheme.accent)
+                }
+
+                if !claudeContexts.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach(Array(claudeContexts.enumerated()), id: \.offset) { index, context in
+                                HStack(spacing: 5) {
+                                    Image(systemName: "doc.text")
+                                    Text(context.name).lineLimit(1)
+                                    Button {
+                                        claudeContexts.remove(at: index)
+                                    } label: {
+                                        Image(systemName: "xmark")
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(context.wasTruncated ? HubTheme.accent : HubTheme.foreground.opacity(0.7))
+                                .padding(.horizontal, 9)
+                                .frame(minHeight: 30)
+                                .background(Color.white.opacity(0.065), in: Capsule())
+                            }
+                        }
+                    }
+                }
+
+                HStack(spacing: 7) {
+                    Button {
+                        showsClaudeFileImporter = true
+                    } label: {
+                        Label("Attach text", systemImage: "paperclip")
+                            .font(.system(size: 10, weight: .bold))
+                            .frame(minHeight: 32)
+                    }
+                    .buttonStyle(HubSecondaryButtonStyle())
+                    .accessibilityIdentifier("hub.claude.attach")
+                    Text("5 files max · 2 MB each")
+                        .font(.system(size: 9, weight: .black, design: .monospaced))
+                        .foregroundStyle(HubTheme.foreground.opacity(0.34))
+                }
+
+                if let claudeContextError {
+                    Text(claudeContextError)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(HubTheme.accent)
+                }
+
+                Text("Voice and attached text are sent privately to your paired Mac. Ask is read-only; Do only creates proposals you must review again.")
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(HubTheme.foreground.opacity(0.36))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("hub.claude.safety")
             }
         } else {
             HStack(spacing: 7) {
@@ -756,6 +886,21 @@ private struct PersonalHubModuleCard: View {
         module.items.compactMap { item in
             guard item.id.hasPrefix("list:"), let id = item.detail else { return nil }
             return ReminderListChoice(id: id, title: item.title)
+        }
+    }
+
+    private func importClaudeFiles(_ result: Result<[URL], Error>) {
+        do {
+            let urls = try result.get()
+            let namedData = try urls.map { url -> (String, Data) in
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                return (url.lastPathComponent, try Data(contentsOf: url, options: [.mappedIfSafe]))
+            }
+            claudeContexts = try PersonalHubClaudeContextPolicy.validate(namedData: namedData)
+            claudeContextError = nil
+        } catch {
+            claudeContextError = error.localizedDescription
         }
     }
 }
@@ -883,30 +1028,89 @@ private struct BuddyCalendarMonthView: View {
 
 @MainActor
 private final class HubSpeechRecognizer: ObservableObject {
+    enum Mode: String, CaseIterable, Identifiable {
+        case pushToTalk
+        case continuous
+        var id: String { rawValue }
+    }
+
+    enum Phase: Equatable {
+        case idle
+        case requestingPermission
+        case listening
+        case blocked
+    }
+
     @Published private(set) var isRecording = false
+    @Published private(set) var mode: Mode = .pushToTalk
+    @Published private(set) var phase: Phase = .idle
+    @Published private(set) var errorMessage: String?
 
     private let recognizer = SFSpeechRecognizer(locale: Locale.current)
     private let audioEngine = AVAudioEngine()
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
+    private var silenceTask: Task<Void, Never>?
     private var tapInstalled = false
+    private let sessionQueue = DispatchQueue(label: "com.codeisland.buddy.speech-session")
+    private var startGeneration = UUID()
+
+    func setMode(_ mode: Mode) {
+        startGeneration = UUID()
+        if isRecording { stop() }
+        self.mode = mode
+        errorMessage = nil
+    }
+
+    func press(onTranscript: @escaping (String) -> Void) {
+        guard mode == .pushToTalk, !isRecording else { return }
+        beginStart(onTranscript: onTranscript)
+    }
+
+    func release() {
+        guard mode == .pushToTalk else { return }
+        startGeneration = UUID()
+        if isRecording {
+            stop()
+        } else if phase == .requestingPermission {
+            phase = .idle
+        }
+    }
 
     func toggle(onTranscript: @escaping (String) -> Void) {
         if isRecording {
             stop()
         } else {
-            Task { await start(onTranscript: onTranscript) }
+            beginStart(onTranscript: onTranscript)
         }
     }
 
-    private func start(onTranscript: @escaping (String) -> Void) async {
+    private func beginStart(onTranscript: @escaping (String) -> Void) {
+        let generation = UUID()
+        startGeneration = generation
+        Task { await start(generation: generation, onTranscript: onTranscript) }
+    }
+
+    private func start(generation: UUID, onTranscript: @escaping (String) -> Void) async {
+        phase = .requestingPermission
+        errorMessage = nil
         let speechAuthorization = await withCheckedContinuation { continuation in
             SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0) }
         }
         let microphoneAllowed = await withCheckedContinuation { continuation in
             AVAudioApplication.requestRecordPermission { continuation.resume(returning: $0) }
         }
-        guard speechAuthorization == .authorized, microphoneAllowed, recognizer?.isAvailable == true else { return }
+        guard startGeneration == generation else { return }
+        guard speechAuthorization == .authorized, microphoneAllowed else {
+            phase = .blocked
+            errorMessage = "Enable Speech Recognition and Microphone in Settings"
+            return
+        }
+        guard recognizer?.isAvailable == true else {
+            phase = .blocked
+            errorMessage = "Speech Recognition is currently unavailable"
+            return
+        }
 
         stop()
         let request = SFSpeechAudioBufferRecognitionRequest()
@@ -915,9 +1119,7 @@ private final class HubSpeechRecognizer: ObservableObject {
         self.request = request
 
         do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.record, mode: .measurement, options: [.duckOthers])
-            try session.setActive(true, options: .notifyOthersOnDeactivation)
+            try await activateAudioSession()
             let node = audioEngine.inputNode
             let format = node.outputFormat(forBus: 0)
             node.installTap(onBus: 0, bufferSize: 1_024, format: format) { buffer, _ in
@@ -927,10 +1129,13 @@ private final class HubSpeechRecognizer: ObservableObject {
             audioEngine.prepare()
             try audioEngine.start()
             isRecording = true
+            phase = .listening
+            scheduleSilenceTimeout()
             task = recognizer?.recognitionTask(with: request) { [weak self] result, error in
                 Task { @MainActor in
                     if let result {
                         onTranscript(result.bestTranscription.formattedString)
+                        self?.scheduleSilenceTimeout()
                     }
                     if result?.isFinal == true || error != nil {
                         self?.stop()
@@ -939,10 +1144,24 @@ private final class HubSpeechRecognizer: ObservableObject {
             }
         } catch {
             stop()
+            phase = .blocked
+            errorMessage = "Microphone could not start: \(error.localizedDescription)"
+        }
+    }
+
+    private func scheduleSilenceTimeout() {
+        silenceTask?.cancel()
+        guard mode == .continuous else { return }
+        silenceTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            self?.stop()
         }
     }
 
     func stop() {
+        silenceTask?.cancel()
+        silenceTask = nil
         if audioEngine.isRunning { audioEngine.stop() }
         if tapInstalled {
             audioEngine.inputNode.removeTap(onBus: 0)
@@ -953,7 +1172,36 @@ private final class HubSpeechRecognizer: ObservableObject {
         request = nil
         task = nil
         isRecording = false
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        if phase != .blocked { phase = .idle }
+        deactivateAudioSession()
+    }
+
+    func cancel() {
+        startGeneration = UUID()
+        stop()
+        errorMessage = nil
+        phase = .idle
+    }
+
+    private func activateAudioSession() async throws {
+        try await withCheckedThrowingContinuation { continuation in
+            sessionQueue.async {
+                do {
+                    let session = AVAudioSession.sharedInstance()
+                    try session.setCategory(.record, mode: .measurement, options: [.duckOthers])
+                    try session.setActive(true, options: .notifyOthersOnDeactivation)
+                    continuation.resume()
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    private func deactivateAudioSession() {
+        sessionQueue.async {
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        }
     }
 }
 

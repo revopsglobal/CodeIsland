@@ -220,6 +220,14 @@ final class CodeIslandCompanionUITests: XCTestCase {
 
         let composer = app.textFields["hub.claude.composer"].firstMatch
         XCTAssertTrue(composer.waitForExistence(timeout: 4))
+        XCTAssertTrue(app.buttons["hub.claude.voice.pushToTalk"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["hub.claude.voice.continuous"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["hub.claude.attach"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["hub.claude.safety"].waitForExistence(timeout: 3))
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Claude voice and file context composer"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
         composer.tap()
         composer.typeText("Add finish the deck to my tasks")
 

@@ -311,6 +311,39 @@ final class PersonalHubProtocolTests: XCTestCase {
         )
     }
 
+    func testClaudeDraftBindsPromptAndFileContextToReviewedAction() throws {
+        let draft = PersonalHubClaudeDraft(
+            prompt: "Summarize this",
+            contexts: [
+                .init(name: "brief.md", text: "Private context", byteCount: 15, wasTruncated: false)
+            ]
+        )
+
+        XCTAssertEqual(
+            PersonalHubClaudeDraft.decodeActionValue(try XCTUnwrap(draft.encodedActionValue())),
+            draft
+        )
+        XCTAssertEqual(
+            PersonalHubClaudeDraft.decodeActionValue("Legacy question"),
+            PersonalHubClaudeDraft(prompt: "Legacy question")
+        )
+    }
+
+    func testClaudeContextPolicyRejectsBinaryAndBoundsTotalText() throws {
+        XCTAssertThrowsError(try PersonalHubClaudeContextPolicy.validate(namedData: [
+            ("photo.png", Data())
+        ]))
+        let contexts = try PersonalHubClaudeContextPolicy.validate(namedData: [
+            ("a.md", Data(String(repeating: "a", count: 15_000).utf8)),
+            ("b.txt", Data(String(repeating: "b", count: 15_000).utf8))
+        ])
+        XCTAssertLessThanOrEqual(
+            contexts.reduce(0) { $0 + $1.text.count },
+            PersonalHubClaudeContextPolicy.maximumTotalCharacters
+        )
+        XCTAssertTrue(contexts.contains(where: \.wasTruncated))
+    }
+
     func testChecklistMutationRoundTrips() throws {
         let mutation = PersonalHubChecklistMutation(lineIndex: 3, baseRevision: 9)
         XCTAssertEqual(

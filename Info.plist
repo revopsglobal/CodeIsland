@@ -37,6 +37,8 @@
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>CodeIsland uses the microphone only while you run a private local microphone pre-check or dictate a request.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>CodeIsland converts your voice to text only while you dictate a private Claude request.</string>
 	<key>NSRemindersFullAccessUsageDescription</key>
 	<string>CodeIsland shows your reminders in the notch's Glances so you can check them off.</string>
 	<key>NSScreenCaptureUsageDescription</key>

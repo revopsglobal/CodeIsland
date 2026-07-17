@@ -218,6 +218,98 @@ public struct PersonalHubReminderDraft: Codable, Equatable, Sendable {
     }
 }
 
+/// Exact Claude prompt and bounded text attachments included in the reviewed
+/// action token. Legacy clients may still send a plain prompt with no files.
+public struct PersonalHubClaudeContext: Codable, Equatable, Sendable {
+    public let name: String
+    public let text: String
+    public let byteCount: Int
+    public let wasTruncated: Bool
+
+    public init(name: String, text: String, byteCount: Int, wasTruncated: Bool) {
+        self.name = name
+        self.text = text
+        self.byteCount = byteCount
+        self.wasTruncated = wasTruncated
+    }
+}
+
+public enum PersonalHubClaudeContextError: LocalizedError, Equatable {
+    case tooManyFiles
+    case unsupportedType(String)
+    case fileTooLarge(String)
+    case unreadable(String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .tooManyFiles: return "Attach no more than \(PersonalHubClaudeContextPolicy.maximumFiles) text files"
+        case .unsupportedType(let name): return "\(name) is not a supported text file"
+        case .fileTooLarge(let name): return "\(name) is larger than 2 MB"
+        case .unreadable(let name): return "\(name) is not readable UTF-8 text"
+        }
+    }
+}
+
+/// Shared limits for Mac, iPhone, web-originated payloads, and server-side
+/// revalidation. Only bounded UTF-8 text crosses the remote action protocol.
+public enum PersonalHubClaudeContextPolicy {
+    public static let maximumFiles = 5
+    public static let maximumFileBytes = 2_000_000
+    public static let maximumCharactersPerFile = 12_000
+    public static let maximumTotalCharacters = 20_000
+
+    private static let allowedExtensions: Set<String> = [
+        "txt", "md", "swift", "json", "yml", "yaml", "log", "csv", "ts", "tsx",
+        "js", "jsx", "py", "sh", "zsh", "rb", "html", "css", "sql", "toml", "xml"
+    ]
+
+    public static func validate(namedData: [(String, Data)]) throws -> [PersonalHubClaudeContext] {
+        guard namedData.count <= maximumFiles else { throw PersonalHubClaudeContextError.tooManyFiles }
+        var remainingCharacters = maximumTotalCharacters
+        return try namedData.map { name, data in
+            let ext = URL(fileURLWithPath: name).pathExtension.lowercased()
+            guard allowedExtensions.contains(ext) else { throw PersonalHubClaudeContextError.unsupportedType(name) }
+            guard data.count <= maximumFileBytes else { throw PersonalHubClaudeContextError.fileTooLarge(name) }
+            guard let rawText = String(data: data, encoding: .utf8) else {
+                throw PersonalHubClaudeContextError.unreadable(name)
+            }
+            let allowedCount = min(maximumCharactersPerFile, remainingCharacters)
+            let text = String(rawText.prefix(allowedCount))
+            remainingCharacters = max(remainingCharacters - text.count, 0)
+            return .init(
+                name: String(name.prefix(240)),
+                text: text,
+                byteCount: data.count,
+                wasTruncated: text.count < rawText.count
+            )
+        }
+    }
+}
+
+public struct PersonalHubClaudeDraft: Codable, Equatable, Sendable {
+    public let prompt: String
+    public let contexts: [PersonalHubClaudeContext]
+
+    public init(prompt: String, contexts: [PersonalHubClaudeContext] = []) {
+        self.prompt = prompt
+        self.contexts = contexts
+    }
+
+    public func encodedActionValue() -> String? {
+        guard let data = try? JSONEncoder().encode(self) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    public static func decodeActionValue(_ value: String?) -> Self? {
+        guard let value else { return nil }
+        if let data = value.data(using: .utf8),
+           let decoded = try? JSONDecoder().decode(Self.self, from: data) {
+            return decoded
+        }
+        return .init(prompt: value)
+    }
+}
+
 /// Conflict-safe note editor payload. A client edits the seed it received in a
 /// snapshot and sends the base revision back; the Mac rejects a stale replace
 /// instead of silently overwriting a newer edit from another device.

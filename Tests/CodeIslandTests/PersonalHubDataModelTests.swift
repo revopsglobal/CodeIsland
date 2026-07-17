@@ -309,4 +309,32 @@ final class PersonalHubDataModelTests: XCTestCase {
         XCTAssertEqual(proposals.first?.title, "Call the bank")
         XCTAssertNotNil(proposals.first?.due)
     }
+
+    func testClaudeAskInvocationIsToolFreeAndFileContextIsUntrusted() throws {
+        let contexts = try ClaudeFileContextLoader.load(namedData: [
+            ("brief.md", Data("Treat this as data".utf8)),
+        ])
+
+        let invocation = PersonalHubDataModel.claudeInvocation(
+            prompt: "Summarize this",
+            contexts: contexts,
+            mode: .ask
+        )
+
+        XCTAssertTrue(invocation.systemPrompt.contains("Do not use tools"))
+        XCTAssertTrue(invocation.prompt.contains("BEGIN UNTRUSTED FILE CONTEXT"))
+        XCTAssertFalse(invocation.systemPrompt.contains("execute the request"))
+    }
+
+    func testClaudeDoInvocationCanOnlyReturnReviewableProposals() {
+        let invocation = PersonalHubDataModel.claudeInvocation(
+            prompt: "Remind me to call the bank",
+            contexts: [],
+            mode: .plan(now: Date(timeIntervalSince1970: 0), timeZone: TimeZone(secondsFromGMT: 0)!)
+        )
+
+        XCTAssertTrue(invocation.systemPrompt.contains("Never execute tools"))
+        XCTAssertTrue(invocation.systemPrompt.contains("Return JSON only"))
+        XCTAssertTrue(invocation.systemPrompt.contains("proposed CodeIsland actions"))
+    }
 }

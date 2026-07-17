@@ -1,6 +1,7 @@
 import AppKit
 import CodeIslandCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Native Mac surface for the same hub contract used by Buddy and the private
 /// web client. All local mutations still use prepare -> confirm -> execute so
@@ -458,6 +459,10 @@ private struct MacHubModuleCard: View {
     @State private var mediaSeekPosition = 0.0
     @State private var isMediaSeeking = false
     @State private var showsMediaPreflight = false
+    @StateObject private var claudeVoice = ClaudeVoiceController()
+    @State private var claudeContexts: [ClaudeFileContext] = []
+    @State private var claudeContextError: String?
+    @State private var isClaudeDropTarget = false
 
     private var definition: PersonalHubModuleDefinition {
         PersonalHubCatalog.definition(for: module.id)
@@ -527,13 +532,7 @@ private struct MacHubModuleCard: View {
                         )
                     }
                 } else if module.id == .claude {
-                    HStack(spacing: 5) {
-                        composerTextField(prompt: composerActionID == "plan" ? "Tell Claude what to do" : "Ask Claude")
-                        reviewButton(
-                            actionID: composerActionID,
-                            value: taskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-                        )
-                    }
+                    claudeComposer
                 } else if module.id == .reminders, composerActionID == "addList" {
                     HStack(spacing: 5) {
                         composerTextField(prompt: "New list name")
@@ -599,6 +598,15 @@ private struct MacHubModuleCard: View {
             if selectedReminderCalendarID.isEmpty {
                 selectedReminderCalendarID = reminderLists.first?.id ?? ""
             }
+        }
+        .onChange(of: claudeVoice.state.transcript) { _, transcript in
+            guard !transcript.isEmpty else { return }
+            taskTitle = transcript
+        }
+        .onDisappear { claudeVoice.cancel() }
+        .onDrop(of: [UTType.fileURL.identifier], isTargeted: $isClaudeDropTarget) { providers in
+            guard module.id == .claude else { return false }
+            return acceptClaudeDrop(providers)
         }
         .sheet(isPresented: $showsMediaPreflight) {
             MediaPreflightView()
@@ -739,6 +747,181 @@ private struct MacHubModuleCard: View {
             .font(.system(size: 10, weight: .medium))
             .padding(6)
             .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 5))
+    }
+
+    private var claudeComposer: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 5) {
+                composerTextField(prompt: composerActionID == "plan" ? "Tell Claude what to propose" : "Ask Claude")
+                reviewButton(
+                    actionID: composerActionID,
+                    value: PersonalHubClaudeDraft(
+                        prompt: taskTitle.trimmingCharacters(in: .whitespacesAndNewlines),
+                        fileContexts: claudeContexts
+                    ).encodedActionValue()
+                )
+            }
+
+            HStack(spacing: 5) {
+                ForEach(ClaudeVoiceMode.allCases) { mode in
+                    Button {
+                        claudeVoice.setMode(mode)
+                    } label: {
+                        Text(mode == .pushToTalk ? "HOLD TO TALK" : "CONTINUOUS")
+                            .font(.system(size: 7, weight: .black, design: .monospaced))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
+                    .tint(claudeVoice.state.mode == mode ? .orange : .gray)
+                }
+
+                Spacer()
+
+                if claudeVoice.state.mode == .pushToTalk {
+                    Label(
+                        claudeVoice.isListening ? "Listening" : "Hold",
+                        systemImage: claudeVoice.isListening ? "waveform" : "mic.fill"
+                    )
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(claudeVoice.isListening ? Color.orange : Color.white.opacity(0.64))
+                    .padding(.horizontal, 8)
+                    .frame(height: 24)
+                    .background(Color.white.opacity(0.07), in: Capsule())
+                    .contentShape(Capsule())
+                    .onLongPressGesture(
+                        minimumDuration: 0,
+                        maximumDistance: 24,
+                        pressing: { pressing in
+                            if pressing { claudeVoice.press() } else { claudeVoice.release() }
+                        },
+                        perform: {}
+                    )
+                    .accessibilityLabel("Hold to talk to Claude")
+                } else {
+                    Button {
+                        claudeVoice.toggleContinuous()
+                    } label: {
+                        Label(claudeVoice.isListening ? "Stop" : "Listen", systemImage: claudeVoice.isListening ? "stop.fill" : "waveform")
+                            .font(.system(size: 8, weight: .bold))
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.mini)
+                    .tint(.orange)
+                }
+            }
+
+            if claudeVoice.state.phase == .requestingPermission {
+                Label("Requesting private microphone access…", systemImage: "lock.shield")
+                    .font(.system(size: 8, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.46))
+            } else if let error = claudeVoice.state.errorMessage {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(.orange)
+            }
+
+            if !claudeContexts.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 5) {
+                        ForEach(claudeContexts) { context in
+                            HStack(spacing: 4) {
+                                Image(systemName: "doc.text")
+                                Text(context.name).lineLimit(1)
+                                Button {
+                                    claudeContexts.removeAll { $0.id == context.id }
+                                } label: {
+                                    Image(systemName: "xmark")
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            .font(.system(size: 8, weight: .semibold))
+                            .foregroundStyle(context.wasTruncated ? Color.orange : Color.white.opacity(0.65))
+                            .padding(.horizontal, 7)
+                            .frame(height: 23)
+                            .background(Color.white.opacity(0.07), in: Capsule())
+                        }
+                    }
+                }
+            }
+
+            HStack(spacing: 6) {
+                Button {
+                    chooseClaudeFiles()
+                } label: {
+                    Label("Attach text", systemImage: "paperclip")
+                        .font(.system(size: 8, weight: .bold))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
+
+                Text(isClaudeDropTarget ? "DROP TO ATTACH" : "5 files max · text only")
+                    .font(.system(size: 7, weight: .black, design: .monospaced))
+                    .foregroundStyle(isClaudeDropTarget ? Color.orange : Color.white.opacity(0.3))
+            }
+
+            if let claudeContextError {
+                Text(claudeContextError)
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(.orange)
+            }
+
+            Label(ClaudeSharingPrivacy.disclosure, systemImage: "rectangle.inset.filled.and.person.filled")
+                .font(.system(size: 7, weight: .medium))
+                .foregroundStyle(.white.opacity(0.3))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(7)
+        .background(
+            (isClaudeDropTarget ? Color.orange.opacity(0.12) : Color.black.opacity(0.18)),
+            in: RoundedRectangle(cornerRadius: 7)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 7)
+                .stroke(isClaudeDropTarget ? Color.orange.opacity(0.8) : Color.white.opacity(0.05), lineWidth: 1)
+        )
+    }
+
+    private func chooseClaudeFiles() {
+        let panel = NSOpenPanel()
+        panel.message = "Choose up to 5 text files for private Claude context"
+        panel.prompt = "Attach"
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = true
+        guard panel.runModal() == .OK else { return }
+        replaceClaudeFiles(with: Array(panel.urls.prefix(ClaudeFileContextLoader.maximumFiles)))
+    }
+
+    private func replaceClaudeFiles(with urls: [URL]) {
+        do {
+            claudeContexts = try ClaudeFileContextLoader.load(urls: urls)
+            claudeContextError = nil
+        } catch {
+            claudeContextError = error.localizedDescription
+        }
+    }
+
+    private func appendClaudeFile(_ url: URL) {
+        do {
+            var namedData = claudeContexts.map { ($0.name, Data($0.text.utf8)) }
+            namedData.append((url.lastPathComponent, try Data(contentsOf: url, options: [.mappedIfSafe])))
+            claudeContexts = try ClaudeFileContextLoader.load(namedData: namedData)
+            claudeContextError = nil
+        } catch {
+            claudeContextError = error.localizedDescription
+        }
+    }
+
+    private func acceptClaudeDrop(_ providers: [NSItemProvider]) -> Bool {
+        let supported = Array(providers.prefix(ClaudeFileContextLoader.maximumFiles))
+            .filter { $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) }
+        guard !supported.isEmpty else { return false }
+        for provider in supported {
+            provider.loadDataRepresentation(forTypeIdentifier: UTType.fileURL.identifier) { data, _ in
+                guard let data, let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
+                Task { @MainActor in appendClaudeFile(url) }
+            }
+        }
+        return true
     }
 
     private func reviewButton(actionID: String = "add", value: String?) -> some View {

@@ -171,7 +171,10 @@ class PanelWindowController: NSObject, NSWindowDelegate {
         panel.isMovableByWindowBackground = false
         panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
-        panel.sharingType = .readOnly
+        // Ask the legacy window server not to expose the panel as a capturable
+        // window. Full-display ScreenCaptureKit capture can still include it,
+        // which is why the Claude surface carries an explicit disclosure.
+        panel.sharingType = .none
         panel.contentView = contentView
         panel.delegate = self
 

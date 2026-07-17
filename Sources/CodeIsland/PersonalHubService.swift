@@ -233,13 +233,17 @@ final class PersonalHubService {
             return .success(.init(executed: true, message: "Teleprompter script saved"))
 
         case (.claude, "ask"):
-            guard let value = intent.value, data.askClaude(value) else {
+            guard let draft = PersonalHubClaudeDraft.decodeActionValue(intent.value),
+                  let contexts = try? draft.validatedFileContexts(),
+                  data.askClaude(draft.prompt, contexts: contexts) else {
                 return .failure(.failed(data.claudeError ?? "Claude is already answering another question"))
             }
             return .success(.init(executed: true, message: "Question sent to Claude on the Mac"))
 
         case (.claude, "plan"):
-            guard let value = intent.value, data.planClaudeActions(value) else {
+            guard let draft = PersonalHubClaudeDraft.decodeActionValue(intent.value),
+                  let contexts = try? draft.validatedFileContexts(),
+                  data.planClaudeActions(draft.prompt, contexts: contexts) else {
                 return .failure(.failed(data.claudeError ?? "Claude is already working"))
             }
             return .success(.init(executed: true, message: "Claude is preparing reviewable actions"))
@@ -600,18 +604,28 @@ final class PersonalHubService {
             return .success("Replace the teleprompter script with \(value.count) characters")
 
         case (.claude, "ask"):
-            let value = intent.value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard let draft = PersonalHubClaudeDraft.decodeActionValue(intent.value),
+                  let contexts = try? draft.validatedFileContexts() else {
+                return .failure(.invalid("Attach up to 5 supported text files, no larger than 2 MB each"))
+            }
+            let value = draft.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !data.claudeBusy else { return .failure(.invalid("Claude is already answering")) }
             guard !value.isEmpty else { return .failure(.invalid("Enter a question")) }
             guard value.count <= 20_000 else { return .failure(.invalid("Question is too long")) }
-            return .success("Ask Claude: “\(value.prefix(160))\(value.count > 160 ? "…" : "")”")
+            let files = contexts.isEmpty ? "" : " with \(contexts.count) attached text file\(contexts.count == 1 ? "" : "s")"
+            return .success("Ask Claude\(files): “\(value.prefix(160))\(value.count > 160 ? "…" : "")”")
 
         case (.claude, "plan"):
-            let value = intent.value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard let draft = PersonalHubClaudeDraft.decodeActionValue(intent.value),
+                  let contexts = try? draft.validatedFileContexts() else {
+                return .failure(.invalid("Attach up to 5 supported text files, no larger than 2 MB each"))
+            }
+            let value = draft.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !data.claudeBusy else { return .failure(.invalid("Claude is already working")) }
             guard !value.isEmpty else { return .failure(.invalid("Describe what Claude should propose")) }
             guard value.count <= 20_000 else { return .failure(.invalid("Request is too long")) }
-            return .success("Ask Claude to propose CodeIsland actions for: “\(value.prefix(160))\(value.count > 160 ? "…" : "")”")
+            let files = contexts.isEmpty ? "" : " using \(contexts.count) attached text file\(contexts.count == 1 ? "" : "s")"
+            return .success("Ask Claude to propose CodeIsland actions\(files) for: “\(value.prefix(160))\(value.count > 160 ? "…" : "")”")
 
         case (.claude, "applyProposal"):
             guard let targetID = intent.targetID,

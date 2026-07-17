@@ -220,6 +220,7 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' .build/dmg-staging/CodeIsland.app/Contents/Info.plist)" = "AppIcon"
           test -n "$(/usr/libexec/PlistBuddy -c 'Print :NSCameraUsageDescription' .build/dmg-staging/CodeIsland.app/Contents/Info.plist)"
           test -n "$(/usr/libexec/PlistBuddy -c 'Print :NSMicrophoneUsageDescription' .build/dmg-staging/CodeIsland.app/Contents/Info.plist)"
+          test -n "$(/usr/libexec/PlistBuddy -c 'Print :NSSpeechRecognitionUsageDescription' .build/dmg-staging/CodeIsland.app/Contents/Info.plist)"
           codesign --verify --deep --strict --verbose=2 .build/dmg-staging/CodeIsland.app
           codesign -d --entitlements :- .build/dmg-staging/CodeIsland.app 2>&1 \
             | grep -q '<key>com.apple.security.personal-information.calendars</key>'

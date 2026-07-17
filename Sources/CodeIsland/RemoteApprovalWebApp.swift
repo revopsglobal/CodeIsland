@@ -124,6 +124,14 @@ enum RemoteApprovalWebApp {
         .media-preflight-status { margin-top:5px; color:#aeb8b0; font-size:12px; }
         .media-preflight-meter { height:7px; margin-top:11px; overflow:hidden; border-radius:999px; background:#ffffff14; }
         .media-preflight-level { width:0; height:100%; border-radius:inherit; background:linear-gradient(90deg,var(--green),var(--amber)); transition:width 90ms linear; }
+        .claude-composer { position:fixed; inset:0; z-index:110; display:grid; place-items:center; padding:18px; background:#010201e8; }
+        .claude-composer-card { width:min(560px,100%); max-height:calc(100vh - 36px); overflow:auto; padding:18px; border:1px solid #ffffff1f; border-radius:20px; background:linear-gradient(145deg,#141a16,#090d0a); box-shadow:0 28px 90px #000c; }
+        .claude-composer-card textarea { width:100%; min-height:150px; resize:vertical; margin:12px 0 8px; border:1px solid #344037; border-radius:13px; padding:12px; color:#f4f7f4; background:#050806; font:15px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif; outline:none; }
+        .claude-composer-card textarea:focus { border-color:var(--amber); box-shadow:0 0 0 3px #ffb34722; }
+        .claude-composer-controls { display:flex; flex-wrap:wrap; gap:7px; margin:8px 0; }
+        .claude-composer-controls button,.claude-file-label { min-height:38px; display:inline-flex; align-items:center; padding:0 11px; border-radius:10px; background:#1b241e; color:#dce3dd; font-size:11px; font-weight:750; box-shadow:inset 0 0 0 1px #344037; cursor:pointer; }
+        .claude-contexts { color:#aeb8b0; font:650 10px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; }
+        .claude-disclosure { margin-top:10px; color:#718075; font-size:11px; line-height:1.4; }
         .hidden { display:none !important; }
         #error { color:#ff9da0; font-size:13px; margin-top:10px; white-space:pre-wrap; }
         footer { text-align:center; color:#657067; font-size:11px; padding:18px 0; }
@@ -170,6 +178,26 @@ enum RemoteApprovalWebApp {
         </section>
         <footer>Tailnet-only · exact-request validation · single-use actions</footer>
       </main>
+      <section id="claudeComposer" class="claude-composer hidden" role="dialog" aria-modal="true" aria-labelledby="claudeComposerTitle">
+        <div class="claude-composer-card">
+          <div class="eyebrow">Private Mac copilot</div>
+          <div id="claudeComposerTitle" class="tool">Ask Claude</div>
+          <textarea id="claudePrompt" placeholder="Ask a question or describe the actions Claude should propose"></textarea>
+          <div class="claude-composer-controls">
+            <button id="claudeHold" type="button">Hold to talk</button>
+            <button id="claudeContinuous" type="button">Continuous</button>
+            <label class="claude-file-label" for="claudeFiles">Attach text</label>
+            <input id="claudeFiles" class="hidden" type="file" multiple accept=".txt,.md,.swift,.json,.yml,.yaml,.log,.csv,.ts,.tsx,.js,.jsx,.py,.sh,.zsh,.rb,.html,.css,.sql,.toml,.xml,text/*">
+          </div>
+          <div id="claudeContexts" class="claude-contexts">No files attached · 5 max · 2 MB each</div>
+          <div id="claudeSpeechStatus" class="claude-contexts">Voice stays off until you press a voice control.</div>
+          <div class="claude-disclosure">Voice and bounded text are sent only to your paired Mac. Ask has no tools. Do returns proposals that require another exact confirmation.</div>
+          <div class="actions">
+            <button id="claudeCancel" class="deny">Cancel</button>
+            <button id="claudeReview" class="approve">Review</button>
+          </div>
+        </div>
+      </section>
       <section id="mediaPreflight" class="media-preflight hidden" role="dialog" aria-modal="true" aria-labelledby="mediaPreflightTitle">
         <video id="mediaPreflightVideo" autoplay muted playsinline></video>
         <div class="media-preflight-scrim" aria-hidden="true"></div>
@@ -194,6 +222,7 @@ enum RemoteApprovalWebApp {
         let lastHubSnapshot = { value: null };
         const mediaSeekState = { active: false };
         const localMedia = { stream:null, audioContext:null, source:null, analyser:null, frame:0, lastMeterAt:0, priorFocus:null };
+        const claudeInput = { resolve:null, contexts:[], recognition:null, silenceTimer:0, baseText:'', priorFocus:null };
         const pair = document.getElementById('pair');
         const approvals = document.getElementById('approvals');
         const questions = document.getElementById('questions');
@@ -212,6 +241,14 @@ enum RemoteApprovalWebApp {
         const mediaPreflightStatus = document.getElementById('mediaPreflightStatus');
         const mediaPreflightLevel = document.getElementById('mediaPreflightLevel');
         const mediaPreflightDone = document.getElementById('mediaPreflightDone');
+        const claudeComposer = document.getElementById('claudeComposer');
+        const claudeComposerTitle = document.getElementById('claudeComposerTitle');
+        const claudePrompt = document.getElementById('claudePrompt');
+        const claudeFiles = document.getElementById('claudeFiles');
+        const claudeContexts = document.getElementById('claudeContexts');
+        const claudeSpeechStatus = document.getElementById('claudeSpeechStatus');
+        const claudeHold = document.getElementById('claudeHold');
+        const claudeContinuous = document.getElementById('claudeContinuous');
 
         const moduleNames = {
           nowPlaying:'Now Playing',shelf:'Shelf',calendar:'Calendar',reminders:'Tasks',notes:'Notes',
@@ -473,6 +510,86 @@ enum RemoteApprovalWebApp {
           return `<div class="hub-actions">${actions.map(action=>`<button class="hub-action ${action.role==='primary'?'primary':''}" data-hub-action="1" data-module="${escapeHTML(moduleID)}" data-action="${escapeHTML(action.id)}" data-target="${escapeHTML(action.targetID||targetID||'')}" data-deeplink="${escapeHTML(action.deepLink||'')}" data-payload="${escapeHTML(payload)}" data-value="${escapeHTML(action.value||'')}">${escapeHTML(action.label)}</button>`).join('')}</div>`;
         }
 
+        function stopClaudeSpeech(message='Voice stopped.') {
+          if(claudeInput.silenceTimer) clearTimeout(claudeInput.silenceTimer);
+          claudeInput.silenceTimer=0;
+          const recognition=claudeInput.recognition; claudeInput.recognition=null;
+          if(recognition) { try { recognition.stop(); } catch(error) {} }
+          claudeHold.textContent='Hold to talk'; claudeContinuous.textContent='Continuous';
+          claudeSpeechStatus.textContent=message;
+        }
+
+        function scheduleClaudeSilenceStop() {
+          if(claudeInput.silenceTimer) clearTimeout(claudeInput.silenceTimer);
+          claudeInput.silenceTimer=setTimeout(()=>stopClaudeSpeech('Stopped after 3 seconds of silence.'),3000);
+        }
+
+        function startClaudeSpeech(continuous) {
+          stopClaudeSpeech('Starting private voice input…');
+          const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+          if(!Recognition) { claudeSpeechStatus.textContent='Voice input is unavailable in this browser. Type your request instead.'; return; }
+          const recognition=new Recognition(); claudeInput.recognition=recognition; claudeInput.baseText=claudePrompt.value.trim();
+          recognition.continuous=continuous; recognition.interimResults=true; recognition.lang=document.documentElement.lang||'en-US';
+          recognition.onstart=()=>{
+            claudeSpeechStatus.textContent=continuous?'Listening continuously · stops after silence':'Listening while held';
+            if(continuous) { claudeContinuous.textContent='Stop listening'; scheduleClaudeSilenceStop(); }
+            else claudeHold.textContent='Listening…';
+          };
+          recognition.onresult=event=>{
+            let spoken='';
+            for(let index=0;index<event.results.length;index++) spoken+=event.results[index][0].transcript;
+            claudePrompt.value=[claudeInput.baseText,spoken.trim()].filter(Boolean).join(' ');
+            if(continuous) scheduleClaudeSilenceStop();
+          };
+          recognition.onerror=event=>stopClaudeSpeech(`Voice input unavailable: ${event.error||'permission denied'}`);
+          recognition.onend=()=>{
+            if(claudeInput.recognition===recognition) {
+              claudeInput.recognition=null; claudeHold.textContent='Hold to talk'; claudeContinuous.textContent='Continuous';
+              claudeSpeechStatus.textContent='Voice stopped. Review the transcript before continuing.';
+            }
+          };
+          try { recognition.start(); } catch(error) { stopClaudeSpeech('Voice input could not start.'); }
+        }
+
+        async function loadClaudeFiles(files) {
+          const allowed=new Set(['txt','md','swift','json','yml','yaml','log','csv','ts','tsx','js','jsx','py','sh','zsh','rb','html','css','sql','toml','xml']);
+          if(files.length>5) throw new Error('Attach no more than 5 text files.');
+          let remaining=20000; const contexts=[];
+          for(const file of files) {
+            const extension=(file.name.split('.').pop()||'').toLowerCase();
+            if(!allowed.has(extension)) throw new Error(`${file.name} is not a supported text file.`);
+            if(file.size>2000000) throw new Error(`${file.name} is larger than 2 MB.`);
+            let text;
+            try { text=new TextDecoder('utf-8',{fatal:true}).decode(await file.arrayBuffer()); }
+            catch(error) { throw new Error(`${file.name} is not readable UTF-8 text.`); }
+            const limit=Math.min(12000,remaining); const clipped=text.slice(0,limit); remaining=Math.max(0,remaining-clipped.length);
+            contexts.push({name:file.name.slice(0,240),text:clipped,byteCount:file.size,wasTruncated:clipped.length<text.length});
+          }
+          return contexts;
+        }
+
+        function updateClaudeContextSummary() {
+          if(!claudeInput.contexts.length) { claudeContexts.textContent='No files attached · 5 max · 2 MB each'; return; }
+          claudeContexts.textContent=claudeInput.contexts.map(context=>`${context.name}${context.wasTruncated?' (truncated)':''}`).join(' · ');
+        }
+
+        function closeClaudeComposer(result=null) {
+          stopClaudeSpeech(); claudeComposer.classList.add('hidden'); document.querySelector('main').inert=false;
+          if(claudeInput.priorFocus&&typeof claudeInput.priorFocus.focus==='function') claudeInput.priorFocus.focus();
+          claudeInput.priorFocus=null;
+          const resolve=claudeInput.resolve; claudeInput.resolve=null; if(resolve) resolve(result);
+        }
+
+        function collectClaudeDraft(actionID) {
+          if(claudeInput.resolve) closeClaudeComposer(null);
+          claudeInput.contexts=[]; claudeFiles.value=''; claudePrompt.value=''; updateClaudeContextSummary();
+          claudeComposerTitle.textContent=actionID==='plan'?'Propose actions with Claude':'Ask Claude';
+          claudeSpeechStatus.textContent='Voice stays off until you press a voice control.';
+          claudeInput.priorFocus=document.activeElement; claudeComposer.classList.remove('hidden'); document.querySelector('main').inert=true;
+          setTimeout(()=>claudePrompt.focus(),0);
+          return new Promise(resolve=>{claudeInput.resolve=resolve;});
+        }
+
         async function runHubAction(moduleID,actionID,targetID,deepLink,payload,actionValue) {
           if(actionID==='downloadToDevice'&&targetID) {
             try {
@@ -565,7 +682,7 @@ enum RemoteApprovalWebApp {
             value=JSON.stringify({text:seed.text,category:category||null,baseRevision:seed.baseRevision});
           }
           if(moduleID==='claude'&&(actionID==='ask'||actionID==='plan')) {
-            value=prompt(actionID==='plan'?'Tell Claude what to propose':'Ask Claude'); if(!value||!value.trim()) return; value=value.trim();
+            const draft=await collectClaudeDraft(actionID); if(!draft) return; value=JSON.stringify(draft);
           }
           if(moduleID==='audio'&&actionID==='setVolume') {
             const requested=prompt('Mac output volume (0–100)',actionValue||'50'); if(requested===null) return;
@@ -610,10 +727,22 @@ enum RemoteApprovalWebApp {
         document.getElementById('code').addEventListener('keydown',event=>{if(event.key==='Enter')pairDevice();});
         modes.querySelectorAll('[data-mode]').forEach(button=>button.addEventListener('click',()=>setMode(button.dataset.mode)));
         mediaPreflightDone.addEventListener('click',closeMediaPreflight);
+        claudeHold.addEventListener('pointerdown',event=>{event.preventDefault();claudeHold.setPointerCapture?.(event.pointerId);startClaudeSpeech(false);});
+        ['pointerup','pointercancel','pointerleave'].forEach(name=>claudeHold.addEventListener(name,()=>{if(claudeInput.recognition)stopClaudeSpeech('Voice stopped. Review the transcript before continuing.');}));
+        claudeContinuous.addEventListener('click',()=>{if(claudeInput.recognition)stopClaudeSpeech('Voice stopped. Review the transcript before continuing.');else startClaudeSpeech(true);});
+        claudeFiles.addEventListener('change',async()=>{
+          try { claudeInput.contexts=await loadClaudeFiles(Array.from(claudeFiles.files||[])); updateClaudeContextSummary(); }
+          catch(error) { claudeInput.contexts=[]; claudeFiles.value=''; updateClaudeContextSummary(); alert(error.message); }
+        });
+        document.getElementById('claudeCancel').addEventListener('click',()=>closeClaudeComposer(null));
+        document.getElementById('claudeReview').addEventListener('click',()=>{
+          const prompt=claudePrompt.value.trim(); if(!prompt) { claudePrompt.focus(); return; }
+          closeClaudeComposer({prompt,contexts:claudeInput.contexts});
+        });
         if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
         refresh(); setInterval(()=>{if(document.visibilityState==='visible')refresh();},4000);
-        document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')closeMediaPreflight(); else refresh();});
-        window.addEventListener('pagehide',releaseLocalMedia);
+        document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){closeMediaPreflight();closeClaudeComposer(null);}else refresh();});
+        window.addEventListener('pagehide',()=>{releaseLocalMedia();closeClaudeComposer(null);});
       </script>
     </body>
     </html>
