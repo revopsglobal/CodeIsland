@@ -35,6 +35,12 @@ final class RemoteApprovalClient: ObservableObject {
     @Published var selectedMode: PersonalHubMode {
         didSet {
             UserDefaults.standard.set(selectedMode.rawValue, forKey: Self.selectedModeKey)
+#if DEBUG
+            if usesMockHub {
+                hubSnapshot = Self.mockHubSnapshot(requestedMode: selectedMode)
+                return
+            }
+#endif
             Task { await refreshHub() }
         }
     }
@@ -48,16 +54,36 @@ final class RemoteApprovalClient: ObservableObject {
     private static let pendingApprovalIDKey = "codeisland.remote.pendingApprovalID"
     private static let selectedModeKey = "codeisland.hub.selectedMode.v1"
 
+    private let usesMockHub: Bool
     private var deviceToken: String?
     private var pollTask: Task<Void, Never>?
     private var isActive = true
     private var notificationObservers: [NSObjectProtocol] = []
 
     init() {
+#if DEBUG
+        usesMockHub = ProcessInfo.processInfo.arguments.contains("-CodeIslandCompanionMockHub")
+        let launchMode = Self.mockHubModeFromLaunchArguments()
+#else
+        usesMockHub = false
+        let launchMode: PersonalHubMode? = nil
+#endif
         serverURLText = UserDefaults.standard.string(forKey: Self.serverURLKey) ?? Self.defaultServerURL
-        selectedMode = PersonalHubMode(
+        selectedMode = launchMode ?? PersonalHubMode(
             rawValue: UserDefaults.standard.string(forKey: Self.selectedModeKey) ?? ""
         ) ?? .auto
+
+#if DEBUG
+        if usesMockHub {
+            deviceToken = "ui-test-device-token"
+            state = .connected
+            serverName = "CodeIsland UI Test Mac"
+            lastUpdatedAt = Date()
+            hubSnapshot = Self.mockHubSnapshot(requestedMode: selectedMode)
+            return
+        }
+#endif
+
         deviceToken = Self.readKeychainToken()
         state = deviceToken == nil ? .unpaired : .connecting
 
@@ -88,6 +114,13 @@ final class RemoteApprovalClient: ObservableObject {
     }
 
     func start() {
+#if DEBUG
+        if usesMockHub {
+            state = .connected
+            hubSnapshot = Self.mockHubSnapshot(requestedMode: selectedMode)
+            return
+        }
+#endif
         guard pollTask == nil else { return }
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -109,13 +142,16 @@ final class RemoteApprovalClient: ObservableObject {
     }
 
     func setActive(_ active: Bool) {
+#if DEBUG
+        if usesMockHub { return }
+#endif
         isActive = active
         if active {
             Task { await refresh() }
         }
     }
 
-    func pair(code: String, deviceName: String = UIDevice.current.name) async {
+    func pair(code: String, deviceName: String? = nil) async {
         let trimmedCode = code.filter(\.isNumber)
         guard trimmedCode.count == 6 else {
             state = .offline("Enter the six-digit code from the Mac")
@@ -130,7 +166,9 @@ final class RemoteApprovalClient: ObservableObject {
             var request = URLRequest(url: requestURL)
             request.httpMethod = "POST"
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try Self.encoder.encode(RemotePairRequest(code: trimmedCode, deviceName: deviceName))
+            request.httpBody = try Self.encoder.encode(
+                RemotePairRequest(code: trimmedCode, deviceName: deviceName ?? UIDevice.current.name)
+            )
             let response: RemotePairResponse = try await perform(request, authenticated: false)
             try Self.saveKeychainToken(response.deviceToken)
             deviceToken = response.deviceToken
@@ -201,6 +239,14 @@ final class RemoteApprovalClient: ObservableObject {
     }
 
     func refresh() async {
+#if DEBUG
+        if usesMockHub {
+            state = .connected
+            lastUpdatedAt = Date()
+            hubSnapshot = Self.mockHubSnapshot(requestedMode: selectedMode)
+            return
+        }
+#endif
         guard deviceToken != nil else {
             state = .unpaired
             approvals = []
@@ -231,6 +277,13 @@ final class RemoteApprovalClient: ObservableObject {
     }
 
     func refreshHub() async {
+#if DEBUG
+        if usesMockHub {
+            hubSnapshot = Self.mockHubSnapshot(requestedMode: selectedMode)
+            hubError = nil
+            return
+        }
+#endif
         guard deviceToken != nil else {
             hubSnapshot = nil
             return
@@ -257,6 +310,18 @@ final class RemoteApprovalClient: ObservableObject {
     }
 
     func prepareHubAction(_ intent: PersonalHubActionIntent) async {
+#if DEBUG
+        if usesMockHub {
+            preparedAction = PersonalHubPreparedAction(
+                intent: intent,
+                preview: Self.mockHubPreview(for: intent),
+                actionToken: "ui-test-action-token",
+                actionExpiresAt: Date().addingTimeInterval(120)
+            )
+            hubActionMessage = nil
+            return
+        }
+#endif
         guard !hubActionInFlight,
               let url = endpoint("/api/hub/actions/prepare")
         else { return }
@@ -280,6 +345,10 @@ final class RemoteApprovalClient: ObservableObject {
 
     func reportHubClientAction(_ message: String) {
         hubActionMessage = message
+    }
+
+    func dismissHubActionMessage() {
+        hubActionMessage = nil
     }
 
     func downloadShelfFile(id: String, filename: String) async -> URL? {
@@ -309,6 +378,14 @@ final class RemoteApprovalClient: ObservableObject {
     }
 
     func executeHubAction(_ prepared: PersonalHubPreparedAction) async {
+#if DEBUG
+        if usesMockHub {
+            preparedAction = nil
+            hubActionMessage = "Executed \(prepared.intent.moduleID.rawValue).\(prepared.intent.actionID)"
+            hubSnapshot = Self.mockHubSnapshot(requestedMode: selectedMode)
+            return
+        }
+#endif
         guard !hubActionInFlight,
               let url = endpoint("/api/hub/actions/execute")
         else { return }
@@ -338,6 +415,9 @@ final class RemoteApprovalClient: ObservableObject {
     }
 
     private func registerPendingPushToken() async {
+#if DEBUG
+        if usesMockHub { return }
+#endif
         guard deviceToken != nil,
               let pushToken = UserDefaults.standard.string(forKey: Self.pendingPushTokenKey),
               let url = endpoint("/api/push-token")
@@ -429,6 +509,220 @@ final class RemoteApprovalClient: ObservableObject {
         decoder.dateDecodingStrategy = .iso8601
         return decoder
     }()
+
+#if DEBUG
+    private static func mockHubModeFromLaunchArguments() -> PersonalHubMode? {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let index = arguments.firstIndex(of: "-CodeIslandCompanionMockHubMode"),
+              arguments.indices.contains(index + 1)
+        else { return nil }
+        return PersonalHubMode(rawValue: arguments[index + 1].lowercased())
+    }
+
+    private static func mockHubSnapshot(requestedMode: PersonalHubMode) -> PersonalHubSnapshot {
+        let resolvedMode: PersonalHubMode = requestedMode == .auto ? .home : requestedMode
+        return PersonalHubSnapshot(
+            serverName: "CodeIsland UI Test Mac",
+            requestedMode: requestedMode,
+            resolvedMode: resolvedMode,
+            modules: PersonalHubCatalog.modules(for: resolvedMode).map(mockHubModule)
+        )
+    }
+
+    private static func mockHubModule(_ id: PersonalHubModuleID) -> PersonalHubModuleSnapshot {
+        let ready = PersonalHubAvailability.ready
+        switch id {
+        case .nowPlaying:
+            return .init(
+                id: id,
+                availability: ready,
+                summary: "North Star — Demo Artist",
+                detail: "1:42 / 4:06 · Apple Music",
+                items: [
+                    .init(
+                        id: "queue:1",
+                        title: "Next: Signal Fire",
+                        subtitle: "Demo Artist",
+                        actions: [.init(id: "playFromQueue", label: "Play now", targetID: "queue:1")]
+                    )
+                ],
+                actions: [
+                    .init(id: "previous", label: "Previous", symbol: "backward.fill"),
+                    .init(id: "seekBack", label: "-15", symbol: "gobackward.15"),
+                    .init(id: "playPause", label: "Pause", symbol: "pause.fill"),
+                    .init(id: "seekForward", label: "+15", symbol: "goforward.15"),
+                    .init(id: "next", label: "Next", symbol: "forward.fill"),
+                ]
+            )
+        case .shelf:
+            return .init(
+                id: id,
+                availability: ready,
+                summary: "2 recent items",
+                items: [
+                    .init(
+                        id: "shelf:launch-reel",
+                        title: "launch-reel.mp4",
+                        subtitle: "12.4 MB",
+                        actions: [
+                            .init(id: "download", label: "Download", targetID: "shelf:launch-reel"),
+                            .init(id: "remove", label: "Remove", role: .destructive, targetID: "shelf:launch-reel"),
+                        ]
+                    )
+                ],
+                actions: [
+                    .init(id: "captureClipboard", label: "Save clipboard", symbol: "doc.on.clipboard"),
+                    .init(id: "captureFile", label: "Add file", symbol: "plus"),
+                ]
+            )
+        case .calendar:
+            let start = Date().addingTimeInterval(3_600)
+            let draft = PersonalHubCalendarDraft(
+                title: "Design review",
+                start: start,
+                end: start.addingTimeInterval(1_800),
+                joinURL: URL(string: "https://meet.google.com/test-room")
+            )
+            return .init(
+                id: id,
+                availability: ready,
+                summary: "3 upcoming events",
+                items: [
+                    .init(
+                        id: "event:design-review",
+                        title: "Design review",
+                        subtitle: "Today at 2:00 PM",
+                        actions: [
+                            .init(id: "join", label: "Join", deepLink: draft.joinURL),
+                            .init(id: "edit", label: "Edit", targetID: "event:design-review", value: draft.encodedActionValue()),
+                            .init(id: "delete", label: "Delete", role: .destructive, targetID: "event:design-review"),
+                        ]
+                    )
+                ],
+                actions: [.init(id: "add", label: "Add event", symbol: "plus")]
+            )
+        case .reminders:
+            let task = PersonalHubReminderDraft(
+                title: "Finish the deck",
+                due: Date().addingTimeInterval(7_200),
+                calendarID: "mock-list"
+            )
+            return .init(
+                id: id,
+                availability: ready,
+                summary: "1 open task · Personal",
+                items: [
+                    .init(id: "list:mock-list", title: "Personal", detail: "mock-list"),
+                    .init(
+                        id: "task:finish-deck",
+                        title: "Finish the deck",
+                        subtitle: "Due today",
+                        actions: [
+                            .init(id: "edit", label: "Edit", targetID: "task:finish-deck", value: task.encodedActionValue()),
+                            .init(id: "complete", label: "Complete", targetID: "task:finish-deck"),
+                            .init(id: "down", label: "Move down", targetID: "task:finish-deck"),
+                            .init(id: "delete", label: "Delete", role: .destructive, targetID: "task:finish-deck"),
+                        ]
+                    ),
+                ],
+                actions: [
+                    .init(id: "add", label: "Add task", symbol: "plus"),
+                    .init(id: "addList", label: "Add list", symbol: "folder.badge.plus"),
+                    .init(id: "showCompleted", label: "Completed", symbol: "archivebox"),
+                ]
+            )
+        case .notes:
+            let note = PersonalHubNoteDraft(
+                text: "Launch checklist\n- [ ] Record demo\n- [x] Prepare outline",
+                category: "Work",
+                baseRevision: 4
+            )
+            return .init(
+                id: id,
+                availability: ready,
+                summary: "1 note · Work",
+                items: [
+                    .init(
+                        id: "note:launch",
+                        title: "Launch checklist",
+                        subtitle: "Work · revision 4",
+                        actions: [
+                            .init(id: "edit", label: "Edit", targetID: "note:launch", value: note.encodedActionValue()),
+                            .init(id: "append", label: "Append", targetID: "note:launch", value: note.encodedActionValue()),
+                            .init(id: "copy", label: "Copy", targetID: "note:launch", value: note.text),
+                            .init(
+                                id: "toggleChecklist",
+                                label: "Toggle task",
+                                targetID: "note:launch",
+                                value: PersonalHubChecklistMutation(lineIndex: 1, baseRevision: 4).encodedActionValue()
+                            ),
+                            .init(id: "delete", label: "Delete", role: .destructive, targetID: "note:launch"),
+                        ]
+                    )
+                ],
+                actions: [
+                    .init(id: "add", label: "Add note", symbol: "plus"),
+                    .init(id: "undo", label: "Undo", symbol: "arrow.uturn.backward"),
+                ]
+            )
+        case .system:
+            return .init(id: id, availability: ready, summary: "CPU 18% · Memory 61%", detail: "Thermal state nominal", actions: [.init(id: "refresh", label: "Refresh")])
+        case .weather:
+            return .init(id: id, availability: ready, summary: "68° · Mostly clear", detail: "Los Angeles, CA", actions: [.init(id: "refresh", label: "Refresh")])
+        case .notifications:
+            return .init(id: id, availability: ready, summary: "Push and Live Activity ready", actions: [.init(id: "test", label: "Test notification")])
+        case .claude:
+            return .init(
+                id: id,
+                availability: ready,
+                summary: "Your Claude Code subscription · tools disabled",
+                actions: [
+                    .init(id: "ask", label: "Ask", symbol: "questionmark.bubble"),
+                    .init(id: "plan", label: "Do", symbol: "checkmark.circle"),
+                ]
+            )
+        case .agents:
+            return .init(id: id, availability: ready, summary: "2 active sessions", items: [.init(id: "agent:codex", title: "Codex", subtitle: "Waiting for approval")], actions: [.init(id: "refresh", label: "Refresh")])
+        case .github:
+            return .init(id: id, availability: ready, summary: "1 pull request", items: [.init(id: "pr:8", title: "#8 Crest parity", subtitle: "Merged", actions: [.init(id: "open", label: "Open", deepLink: URL(string: "https://github.com/revopsglobal/CodeIsland/pull/8"))])], actions: [.init(id: "refresh", label: "Refresh")])
+        case .audio:
+            return .init(
+                id: id,
+                availability: ready,
+                summary: "MacBook Air Speakers · 42%",
+                items: [.init(id: "audio:output", title: "MacBook Air Speakers", subtitle: "Default output")],
+                actions: [
+                    .init(id: "volumeDown", label: "-10", symbol: "speaker.minus"),
+                    .init(id: "setVolume", label: "Volume", symbol: "slider.horizontal.3", value: "42"),
+                    .init(id: "volumeUp", label: "+10", symbol: "speaker.plus"),
+                    .init(id: "mute", label: "Mute", symbol: "speaker.slash"),
+                ]
+            )
+        case .bluetooth:
+            return .init(id: id, availability: ready, summary: "AirPods Pro · 76%", items: [.init(id: "bluetooth:airpods", title: "AirPods Pro", subtitle: "Connected · 76%", actions: [.init(id: "disconnect", label: "Disconnect", targetID: "bluetooth:airpods")])], actions: [.init(id: "refresh", label: "Refresh")])
+        case .battery:
+            return .init(id: id, availability: ready, summary: "84% · Normal", detail: "112 cycles", actions: [.init(id: "refresh", label: "Refresh")])
+        case .quickToggles:
+            return .init(id: id, availability: ready, summary: "Appearance and Mac controls", actions: [.init(id: "toggleAppearance", label: "Dark / Light"), .init(id: "mute", label: "Mute"), .init(id: "lock", label: "Lock Mac")])
+        case .downloads:
+            return .init(id: id, availability: ready, summary: "1 active download", items: [.init(id: "download:1", title: "CodeIsland.dmg", subtitle: "72%", progress: 0.72, actions: [.init(id: "open", label: "Open", targetID: "download:1")])], actions: [.init(id: "refresh", label: "Refresh")])
+        case .camera:
+            return .init(id: id, availability: ready, summary: "Front camera preview", actions: [.init(id: "previewOnDevice", label: "Preview", symbol: "camera.fill")])
+        case .teleprompter:
+            return .init(id: id, availability: ready, summary: "Ready · 140 WPM", detail: "Launch remarks", actions: [.init(id: "set", label: "Edit script", value: "Welcome to CodeIsland"), .init(id: "playPause", label: "Play"), .init(id: "slower", label: "Slower"), .init(id: "faster", label: "Faster")])
+        case .windowManager:
+            return .init(id: id, availability: ready, summary: "Finder", actions: [.init(id: "left", label: "Left"), .init(id: "right", label: "Right"), .init(id: "maximize", label: "Maximize")])
+        }
+    }
+
+    private static func mockHubPreview(for intent: PersonalHubActionIntent) -> String {
+        let title = PersonalHubCatalog.definition(for: intent.moduleID).title
+        let value = intent.value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return value.isEmpty
+            ? "\(title): \(intent.actionID)"
+            : "\(title): \(intent.actionID) — \(value)"
+    }
+#endif
 
     private static func saveKeychainToken(_ token: String) throws {
         deleteKeychainToken()

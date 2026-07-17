@@ -5,6 +5,7 @@ import Speech
 
 private enum HubTheme {
     static let accent = Color(red: 1.0, green: 0.69, blue: 0.0)
+    static let foreground = Color.white
     static let surface = Color.white.opacity(0.055)
     static let border = Color.white.opacity(0.09)
 }
@@ -23,12 +24,12 @@ struct PersonalHubSurface: View {
                         .foregroundStyle(HubTheme.accent)
                     Text(snapshot.serverName)
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.ciForeground.opacity(0.48))
+                        .foregroundStyle(HubTheme.foreground.opacity(0.48))
                         .lineLimit(1)
                     Spacer(minLength: 0)
                     Text(snapshot.generatedAt, style: .time)
                         .font(.system(size: 10, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.ciForeground.opacity(0.34))
+                        .foregroundStyle(HubTheme.foreground.opacity(0.34))
                 }
                 .padding(.horizontal, 4)
 
@@ -57,14 +58,6 @@ struct PersonalHubSurface: View {
                 )
             }
 
-            if let message = client.hubActionMessage {
-                Text(message)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.ciForeground.opacity(0.62))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 4)
-                    .accessibilityIdentifier("hub.action.message")
-            }
         }
         .padding(10)
         .background(Color.black.opacity(0.86), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
@@ -93,7 +86,7 @@ struct PersonalHubSurface: View {
                     Text(mode.displayTitle)
                         .font(.system(size: 11, weight: .bold, design: .monospaced))
                         .foregroundStyle(
-                            client.selectedMode == mode ? Color.black : Color.ciForeground.opacity(0.58)
+                            client.selectedMode == mode ? Color.black : HubTheme.foreground.opacity(0.58)
                         )
                         .frame(maxWidth: .infinity, minHeight: 34)
                         .background(
@@ -114,10 +107,10 @@ struct PersonalHubSurface: View {
                 .foregroundStyle(HubTheme.accent)
             Text(title)
                 .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(.ciForeground.opacity(0.86))
+                .foregroundStyle(HubTheme.foreground.opacity(0.86))
             Text(detail)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.ciForeground.opacity(0.48))
+                .foregroundStyle(HubTheme.foreground.opacity(0.48))
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
@@ -158,10 +151,10 @@ private struct PersonalHubModuleCard: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(definition.title)
                         .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(.ciForeground.opacity(0.9))
+                        .foregroundStyle(HubTheme.foreground.opacity(0.9))
                     Text(module.summary)
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.ciForeground.opacity(0.5))
+                        .foregroundStyle(HubTheme.foreground.opacity(0.5))
                         .lineLimit(2)
                 }
 
@@ -172,7 +165,7 @@ private struct PersonalHubModuleCard: View {
             if let detail = module.detail {
                 Text(detail)
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.ciForeground.opacity(0.38))
+                    .foregroundStyle(HubTheme.foreground.opacity(0.38))
             }
 
             if showsComposer {
@@ -225,6 +218,7 @@ private struct PersonalHubModuleCard: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(HubTheme.border, lineWidth: 1)
         )
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("hub.module.\(module.id.rawValue)")
         .fullScreenCover(isPresented: $showsCameraPreview) {
             CameraPreviewScreen()
@@ -254,7 +248,7 @@ private struct PersonalHubModuleCard: View {
         case .unavailable:
             Text("NEXT")
                 .font(.system(size: 8, weight: .black, design: .monospaced))
-                .foregroundStyle(.ciForeground.opacity(0.3))
+                .foregroundStyle(HubTheme.foreground.opacity(0.3))
         }
     }
 
@@ -330,7 +324,7 @@ private struct PersonalHubModuleCard: View {
                 TextEditor(text: $composerText)
                     .scrollContentBackground(.hidden)
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.ciForeground)
+                    .foregroundStyle(HubTheme.foreground)
                     .frame(minHeight: 110)
                     .padding(7)
                     .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
@@ -380,7 +374,7 @@ private struct PersonalHubModuleCard: View {
         TextField(prompt, text: text)
             .textFieldStyle(.plain)
             .font(.system(size: 13, weight: .medium))
-            .foregroundStyle(.ciForeground)
+            .foregroundStyle(HubTheme.foreground)
             .padding(.horizontal, 10)
             .frame(minHeight: 38)
             .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
@@ -450,7 +444,7 @@ private final class HubSpeechRecognizer: ObservableObject {
             SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0) }
         }
         let microphoneAllowed = await withCheckedContinuation { continuation in
-            AVAudioSession.sharedInstance().requestRecordPermission { continuation.resume(returning: $0) }
+            AVAudioApplication.requestRecordPermission { continuation.resume(returning: $0) }
         }
         guard speechAuthorization == .authorized, microphoneAllowed, recognizer?.isAvailable == true else { return }
 
@@ -524,18 +518,18 @@ private struct PersonalHubItemRow: View {
                 if let symbol = item.symbol {
                     Image(systemName: symbol)
                         .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(.ciForeground.opacity(0.42))
+                        .foregroundStyle(HubTheme.foreground.opacity(0.42))
                         .frame(width: 18)
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(item.title)
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.ciForeground.opacity(0.84))
+                        .foregroundStyle(HubTheme.foreground.opacity(0.84))
                         .lineLimit(2)
                     if let subtitle = item.subtitle {
                         Text(subtitle)
                             .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(.ciForeground.opacity(0.42))
+                            .foregroundStyle(HubTheme.foreground.opacity(0.42))
                     }
                 }
                 Spacer(minLength: 4)
@@ -1013,6 +1007,7 @@ private struct PersonalHubConfirmationSheet: View {
             }
         }
         .padding(20)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("hub.action.confirmation")
     }
 }
@@ -1032,7 +1027,7 @@ private struct HubPrimaryButtonStyle: ButtonStyle {
 private struct HubSecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .foregroundStyle(.ciForeground.opacity(configuration.isPressed ? 0.55 : 0.74))
+            .foregroundStyle(HubTheme.foreground.opacity(configuration.isPressed ? 0.55 : 0.74))
             .background(Color.white.opacity(configuration.isPressed ? 0.1 : 0.06), in: RoundedRectangle(cornerRadius: 8))
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
     }
@@ -1043,7 +1038,7 @@ private struct HubCompactButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .foregroundStyle(primary ? Color.black : Color.ciForeground.opacity(0.7))
+            .foregroundStyle(primary ? Color.black : HubTheme.foreground.opacity(0.7))
             .padding(.horizontal, 9)
             .frame(minHeight: 30)
             .background(
