@@ -97,6 +97,7 @@ struct NotchPanelView: View {
     @AppStorage(SettingsKey.collapsedWidthScale) private var collapsedWidthScale = SettingsDefaults.collapsedWidthScale
     @AppStorage(SettingsKey.hapticOnHover) private var hapticOnHover = SettingsDefaults.hapticOnHover
     @AppStorage(SettingsKey.hapticIntensity) private var hapticIntensity = SettingsDefaults.hapticIntensity
+    @ObservedObject private var personalUtilities = PersonalUtilitiesModel.shared
 
     /// Delayed hover: prevents accidental expansion when mouse passes through
     @State private var hoverTimer: Timer?
@@ -112,14 +113,17 @@ struct NotchPanelView: View {
     @State private var showGlances = false
 
     private var isActive: Bool { !appState.sessions.isEmpty }
-    /// First launch / no-session state should still render a visible marker so the app
-    /// doesn't disappear completely behind the physical notch.
+    private var hasPersonalStatus: Bool { personalUtilities.hasCompactStatus }
+    /// The old CodeIsland shell used a non-expandable idle marker when no agents
+    /// were running. This personal build keeps the real bar available so Glances
+    /// and local utilities remain reachable all day.
     private var showIdleIndicator: Bool {
-        !isActive && !hideWhenNoSession
+        false
     }
     /// Whether the bar content should be visible (respects hideWhenNoSession)
     private var showBar: Bool {
-        isActive && !(hideWhenNoSession && appState.activeSessionCount == 0)
+        if !isActive { return hasPersonalStatus || !hideWhenNoSession }
+        return hasPersonalStatus || !(hideWhenNoSession && appState.activeSessionCount == 0)
     }
     private var shouldShowExpanded: Bool {
         showBar && appState.surface.isExpanded
@@ -150,15 +154,16 @@ struct NotchPanelView: View {
         let nw = effectiveNotchW
         let maxWidth = min(620, screenWidth - 40)
         if showIdleIndicator { return idleHovered ? nw + compactWingWidth * 2 + 80 : nw + compactWingWidth * 2 }
-        if !isActive { return hasNotch ? nw - 20 : nw }
         if shouldShowExpanded { return min(max(nw + 200, 580), maxWidth) }
+        if !isActive && !hasPersonalStatus { return nw + compactWingWidth * 2 }
         let wing = compactWingWidth
         let extra: CGFloat = appState.status == .idle ? 0 : 20
         // Reserve space for tool status — proportional to screen width
         let toolExtra: CGFloat = displayedToolStatus ? (hasNotch ? screenWidth * 0.03 : screenWidth * 0.04) : 0
         // Immediate hover acknowledgement: a slight widen while the expand delay runs
         let prehoverExtra: CGFloat = shouldShowPrehover ? NotchHoverInteraction.prehoverWidthDelta : 0
-        return nw + wing * 2 + extra + toolExtra + prehoverExtra
+        let personalExtra: CGFloat = personalUtilities.hasCompactStatus ? 58 : 0
+        return nw + wing * 2 + extra + toolExtra + prehoverExtra + personalExtra
     }
 
     var body: some View {
@@ -541,6 +546,7 @@ private struct CompactRightWing: View {
     @AppStorage(SettingsKey.quietHoursEnabled) private var quietHoursEnabled = SettingsDefaults.quietHoursEnabled
     @AppStorage(SettingsKey.quietHoursStart) private var quietHoursStart = SettingsDefaults.quietHoursStart
     @AppStorage(SettingsKey.quietHoursEnd) private var quietHoursEnd = SettingsDefaults.quietHoursEnd
+    @ObservedObject private var personalUtilities = PersonalUtilitiesModel.shared
 
     /// Re-evaluated on every re-render; the compact bar redraws often enough
     /// that the moon appears/disappears close to the window edges.
@@ -598,6 +604,36 @@ private struct CompactRightWing: View {
                         .font(.system(size: 9, weight: .bold))
                         .foregroundStyle(Color(red: 1.0, green: 0.7, blue: 0.28))
                         .symbolEffect(.pulse, options: .repeating)
+                }
+
+                if let download = personalUtilities.primaryDownload {
+                    HStack(spacing: 3) {
+                        Image(systemName: download.isStalled ? "pause.fill" : "arrow.down")
+                        if let percent = download.percent {
+                            Text("\(percent)%")
+                        } else {
+                            Text(ByteCountFormatter.string(fromByteCount: download.bytesReceived, countStyle: .file))
+                        }
+                    }
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(download.isStalled ? .white.opacity(0.4) : Color(red: 0.3, green: 0.85, blue: 0.4))
+                    .lineLimit(1)
+                    .help("Downloading \(download.name)")
+                } else if let completed = personalUtilities.recentDownloadCompleted {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(Color(red: 0.3, green: 0.85, blue: 0.4))
+                        .help("\(completed) finished")
+                }
+
+                if let battery = personalUtilities.lowBattery {
+                    HStack(spacing: 2) {
+                        Image(systemName: "battery.25percent")
+                        Text("\(battery.primaryPercent)%")
+                    }
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.orange)
+                    .help("\(battery.name): \(battery.summary)")
                 }
 
                 if showToolStatus {
