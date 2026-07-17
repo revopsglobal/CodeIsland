@@ -24,50 +24,52 @@ Sources used for the baseline:
 
 | Capability | macOS | iPhone / away | Required completion proof |
 | --- | --- | --- | --- |
-| Auto, Home, Work, Code modes | Partial: shared catalog, manual selection, and automatic context; each mode's rack is hard-coded and cannot be pinned or reordered | Partial: shared modes and remote selection mirror the same fixed racks | Implement saved per-mode pin/order customization; then capture native automatic-switch and persistence evidence |
-| Now Playing, queue, lyrics, controls | Partial: Music/Spotify metadata, progress, lyrics, ±15-second seek and transport controls; Music queue/play-from-queue; no album art, arbitrary scrubber, visualizer, or floating music circles | Partial: the implemented host controls are mirrored, but the missing visual/scrub behavior is also absent | Implement the missing visual/scrub behavior, then test real Apple Music and Spotify playback; Spotify does not expose queue data through macOS automation |
-| Shelf, clipboard history, file handoff | Partial: guarded clipboard/file history, reveal, copy, and remove; no drag/drop ingest, automatic screenshot Shelf, selection capture, or screen recording | Partial: authenticated file download/share plus copy/remove; it mirrors only the implemented subset | Implement Crest's capture/drop flows, then run a Mac/iPhone/web file round trip; keep the 100 MB private-transfer cap |
-| Calendar two-week agenda, CRUD, Join | Partial: two-week agenda, add/edit/delete, trusted Join, and stable signed TCC identity; no Calendar month surface | Partial: agenda, add/edit/delete, and trusted Join; no month surface | Implement the shared month surface; verify real events, mutations, and one-click Join after TCC access |
+| Auto, Home, Work, Code modes | Ready implementation: shared catalog, automatic/manual context, versioned per-mode pin/order persistence, drag editing, dashboard toggle, and local-day progress | Ready implementation: shared modes, native reorder/pin editing, dashboard, deep links, and confirmed remote persistence | Capture native automatic-switch, edit, restart, and cross-device persistence evidence |
+| Now Playing, queue, lyrics, controls | Ready implementation within public provider limits: bounded artwork, arbitrary scrubber, progress, lyrics, transport, ±15-second seek, Music queue, and low-cost notch media/HUD treatment | Ready implementation: artwork, scrubber, mirrored host controls, and exact-confirmation seek | Test real Apple Music and Spotify playback; Spotify does not expose queue data through macOS automation |
+| Shelf, clipboard history, file handoff | Ready implementation: guarded clipboard/file history, drag/drop and picker ingest, forward-only automatic screenshot capture, user-selected still capture and recording, reveal/copy/remove, and private storage | Ready implementation: authenticated file download/share plus copy/remove and the same 100 MB/path-confinement rules | Run real Mac capture/drop plus iPhone/web file round trips and permission-denial cases |
+| Calendar two-week agenda, CRUD, Join | Ready implementation: six-week month, selected-day events, two-week agenda, add/edit/delete, recurrence-safe IDs, and trusted Join | Ready implementation: month navigation, selected-day events, agenda, CRUD, and trusted Join | Verify real events, mutations, recurrence, and one-click Join after TCC access |
 | Tasks/lists/due dates/reorder/archive | Unverified: list create/delete/filter, due dates, add, complete, reorder, archive/restore, and delete | Unverified: same list and task actions with explicit list selection | Grant Reminders once and run real list/task/reorder/archive mutations |
 | Notes/jot/categories/checklists/merge | Unverified: persistent add/copy/delete/edit/append, categories, checklist toggles, 20-step undo, and revision-safe replacement | Unverified: same editors/actions with stale-revision rejection | Runtime add/edit/conflict/checklist/undo round trip across Mac and iPhone |
 | System CPU/memory/load | Ready: host load/memory/disk/thermal/uptime | Ready: mirrored readings and refresh through an authenticated, exact-confirmation host action | Compare readings with Activity Monitor on the physical Mac/iPhone pair |
 | Weather | Unverified: WeatherKit/location with manual ZIP fallback | Unverified: mirrored remote weather and refresh | Permission, remote refresh, and offline-state runtime tests |
-| Notifications | Missing Crest parity: CodeIsland shows only its own approval/question alerts and does not mirror recent macOS app notifications | Partial personal extension: approval pushes, Live Activity, and Dynamic Island UI are implemented | Implement the Mac notification mirror separately; physical-iPhone permission, token, delivery, and Live Activity tests remain required for the personal extension |
-| Claude co-pilot/voice/proposals | Partial: read-only Ask plus typed Do proposals through authenticated local Claude Code, with tools disabled; no Mac speech recognition, continuous listening/mic indicator, file context, or screen-share-hidden covert strip | Partial: Ask/Do, iPhone speech recognition, proposal review, and a second exact confirmation; no file-context workflow | Implement the missing Mac voice/covert/context behavior; then run real Ask and multi-action Do plus physical-iPhone dictation/task creation |
-| AI Coding sessions/approvals/questions | Ready: sessions, questions, approvals, and exact-confirmation actions | Partial: real-listener pairing/auth/approval/question/replay protection is automated; physical native/Tailscale use is unverified | Physical-iPhone approval/question/action tests away from the Mac |
+| Notifications | Partial by deliberate platform boundary: CodeIsland action-required alerts are prioritized, deduped, redacted, and separated; macOS exposes no public cross-app Notification Center history API, so CodeIsland does not read private databases or request Full Disk Access | Ready personal extension implementation: opaque APNs, pending/resolved routing, token rotation, authenticated detail refresh, Live Activity, and Dynamic Island lifecycle | Physical-iPhone permission, token, delivery, resolved cleanup, and stale-push tests; cross-app history remains unsupported unless Apple adds a public API |
+| Claude co-pilot/voice/proposals | Ready implementation: read-only Ask and reviewed Do through authenticated local Claude Code with tools disabled, push-to-talk/continuous speech, visible listening state, bounded user-selected/drop file context, and best-effort screen-share-hidden strip with honest disclosure | Ready implementation: Ask/Do, speech recognition, proposal review, exact confirmation, and deep-linked task/note preparation | Run real Ask and multi-action Do, Mac voice/file context, and physical-iPhone dictation/task creation |
+| AI Coding sessions/approvals/questions | Ready: sessions, decisions-first attention model, questions, approvals, exact-confirmation actions, and audited continuation | Ready implementation: real-listener pairing/auth/approval/question/replay protection, pending deep links, opaque push routing, Live Activity lifecycle, and away-use action surfaces; physical Tailscale use is unverified | Physical-iPhone approval/question/action tests away from the Mac |
 | GitHub pull requests and CI | Ready: authenticated `gh` PR list/status/deep links | Ready: mirrored list/status/deep links | Runtime refresh/open test from iPhone |
 | Audio device switcher | Unverified: enumerate/default input/output, switch, mute, and exact 0–100 output volume | Unverified: mirrored device actions, ±10, and native/web volume editor | Physical device switch, volume update, and expected failure states |
 | Bluetooth devices/connect/disconnect | Unverified: connected/remembered devices, battery, connect/disconnect | Unverified: mirrored devices and confirmed remote actions | Physical accessory connect/disconnect tests |
 | Battery health | Ready: charge, cycles, health percentage, and condition | Ready: mirrored health and accessory readings | Runtime comparison with macOS System Information |
 | Quick toggles | Unverified: dark/light, mute/unmute, display sleep, and Lock Mac | Unverified: exact-confirmation remote actions | Physical state/action tests, including expected permission failures |
 | Active and recent Downloads | Ready: live progress, 12 recent completed files, Reveal, refresh, age filtering, and a 100 MB private-transfer cap | Ready implementation: paired devices can download/share eligible completed files and the web fallback preserves filenames; physical Tailscale transfer remains unverified | Physical iPhone and web file round trip over Tailscale, plus over-limit rejection |
-| Camera and mic pre-check | Partial: opens Photo Booth; CodeIsland itself has no native camera preview, microphone meter, or input selector | Partial: private front-camera preview with permission/failure UI; no microphone meter or device selector | Implement a private native Mac preview plus input selection/meter and the matching iPhone mic check; then run physical permission/device tests |
-| Teleprompter/present mode | Partial: persistent floating reader and font size; manual scrolling only, no play/pause or WPM pacing, and the window is not hidden from screen sharing | Partial: full-screen reader, play/pause, WPM, and font size | Implement Mac pacing and covert sharing behavior; then run Mac and physical-iPhone presentation/resume tests |
-| Window snapping/remote window actions | Partial: allow-listed left/right/maximize via Accessibility; no drag-a-window-to-the-notch chooser | Partial: confirmed remote left/right/maximize | Implement the notch drag target/expanded layouts, then grant Accessibility and verify real windows |
-| Quick jot and global task/note capture | Missing: no Control-Option-T todo jot or Control-Option-N note jot | Missing as a dedicated one-step surface; normal reviewed task/note creation exists | Implement one-step Mac capture with explicit landing list/note and undo; mirror the resulting state on iPhone |
-| Media-key HUD and Crest ambient polish | Missing: no Crest-style brightness/volume HUD, album-art circles, or audio visualizer | Not applicable as direct iPhone controls; mirrored host state remains useful | Implement only the useful Mac ambient pieces Greg wants and capture multi-display/full-screen evidence |
-| Custom dashboard/day-progress surface | Missing: no saved widget dashboard or day-progress header | Missing | Decide whether this remains useful after mode pinning; if retained, implement one shared configuration model |
-| Private web fallback | Partial: responsive client plus live Tailscale root/401 proof and isolated real-listener pairing/auth/mode/action tests | Partial: authenticated Home/Work/Code, approval, question, push registration, exact-action and replay protection are automated | Physical Tailscale browser module/action/file round trip |
+| Camera and mic pre-check | Ready implementation: local-only native AVFoundation camera preview, camera/microphone selectors, normalized RMS/peak meter, interruption/disconnect handling, and no media transmission | Ready implementation: private camera preview, microphone health/meter, permission/failure UI, and background cleanup | Run physical permission, device-switch, disconnect, and background tests on both devices |
+| Teleprompter/present mode | Ready implementation: floating reader, play/pause, persisted 60–240 WPM pacing, persisted font size, resume/end/manual-scroll behavior, and best-effort sharing exclusion with an honest full-display warning | Ready implementation: full-screen reader, play/pause, WPM, and font size | Run Mac and physical-iPhone presentation/resume tests, including screen-sharing behavior |
+| Window snapping/remote window actions | Ready implementation: Accessibility-backed left/right/maximize plus real-drag notch chooser with halves, thirds, quarters, correct-display targeting, hysteresis, cancel, and self-window exclusion | Ready useful remote implementation: confirmed left/right/maximize | Grant Accessibility and verify real windows across multiple displays; remote thirds/quarters are deliberately Mac drag interactions |
+| Quick jot and global task/note capture | Ready implementation: Carbon Control-Option-T and Control-Option-N panels with explicit destination, Escape/Return behavior, save, and undo through existing mutation paths | Ready implementation: dedicated New Task/New Note entry points, deep links, review, and exact confirmation | Run global-hotkey, undo, and cross-device visibility acceptance with real data |
+| Media-key HUD and Crest ambient polish | Ready supported implementation: short-lived notch HUD for CodeIsland media/volume/brightness actions, bounded artwork, progress, thermal/Reduce Motion-aware ambient bars | Ready useful mirror: artwork/progress and exact host controls; no need to mimic a Mac bezel HUD | Capture multi-display/full-screen evidence; macOS has no public API for intercepting all hardware brightness-key events |
+| Custom dashboard/day-progress surface | Ready implementation: one shared saved dashboard toggle, per-mode rack configuration, and local-day progress header | Ready implementation: same configuration and day progress with native editing | Verify saved state and day rollover on the physical pair |
+| Private web fallback | Ready automated implementation: responsive authenticated Home/Work/Code, approvals, questions, opaque push registration, exact actions, file transfer, retry/offline state, and replay protection | Ready as an iPhone browser fallback; physical Tailscale browser use is unverified | Physical Tailscale browser module/action/file round trip |
 | TestFlight distribution | Ready: signed archive/upload pipeline and internal group | Ready for acceptance: build `1.0.0 (20260717120420)` is Apple `VALID`; `gregharned@gmail.com` is enrolled in the all-builds internal group and Apple explicitly resent invitation `9679ce07-ac35-4b29-b007-461e0b418801`; physical install remains unverified | Accept the fresh invitation, then install, launch, grant permissions, pair, and prove push/Live Activity on Greg's iPhone |
 
-## Behavior-level correction
+## Behavior-level completion adjudication
 
-The table above deliberately distinguishes **module presence** from **Crest
-behavior parity**. The previous ledger treated an advertised module and a few
-actions as parity even when Crest's defining interaction was absent. That was
-incorrect.
+The table distinguishes **implementation**, **automated proof**, and **physical
+acceptance**. Crest's defining behaviors are represented rather than inferred
+from module names: saved mode pin/order, artwork and arbitrary scrub, Shelf
+capture/drop, global quick jot, Calendar month navigation, a supported
+notification boundary, Mac speech/file context, camera and microphone
+preflight, paced teleprompter, and drag-to-notch layouts.
 
-The correction is grounded in the supplied signed Crest 4.9.0 app and its
-current product/changelog pages. Crest 4.9 includes per-mode pinning, album art
-and a scrubber, screenshot/Shelf capture, quick jot, a month Calendar surface,
-macOS notification mirroring, Mac speech/covert presentation, camera **and mic**
-preflight, and drag-to-notch window layouts. Those are product behaviors, not
-visual extras. Pomodoro remains the one explicit exclusion Greg requested.
+Pomodoro remains the explicit exclusion Greg requested. Cross-app macOS
+Notification Center history is the other non-parity item, but for a different
+reason: Apple exposes no public API for it. CodeIsland shows that limitation
+instead of reading private databases or requesting Full Disk Access. Spotify
+queue enumeration and universal hardware brightness-key interception have
+similar provider/API limits and are disclosed at the affected surface.
 
-CodeIsland's personal extensions—away approvals, exact-confirmation actions,
-Downloads transfer, Tailscale, APNs, Live Activities, and Dynamic Island—are
-valuable additions, but they do not erase a missing Crest behavior. The ledger
-must show both dimensions independently.
+CodeIsland's personal extensions—away approvals and questions, exact-confirmation
+actions, Downloads/Shelf transfer, Tailscale, APNs, Live Activities, Dynamic
+Island, App Intents, and web fallback—are evaluated separately. Their automated
+contracts are green; physical iPhone/cellular/TCC proof remains a distinct gate.
 
 ## Architecture invariant
 
@@ -104,21 +106,33 @@ uses an isolated Downloads directory and the real listener to prove:
 - over-limit files are not advertised for transfer and are rejected; and
 - an encoded path outside Downloads is rejected.
 
-The iOS Simulator suite includes
-`CodeIslandCompanionUITests.testCompletedDownloadOpensNativeShareSheet`; the
-full companion UI run passed 12 tests with zero failures on 2026-07-17. This is
-native Simulator evidence, not physical-iPhone or cellular/Tailscale proof.
+Current automated completion evidence on 2026-07-17:
 
-`CodeIslandCompanionUITests.testCameraActionOpensPrivateNativePreview` was then
-added and passed separately, 1 test with zero failures. Its first targeted
-execution visibly handled the real Simulator Camera permission alert; the
-finalized targeted rerun proved the native full-screen preview surface and
-dismissal. A later 13-test aggregate run reached seven passes—including
-camera, Downloads, mode rendering, task creation, Claude Do, landscape, and a
-layout test—before the Xcode 27 beta Simulator launcher stalled and was
-interrupted. The remaining six results are test-runner `signal term`/`signal
-kill` infrastructure failures, not product assertion failures. Do not relabel
-that aggregate run as green.
+- `swift test`: `CodeIslandTests` passed **472** tests with two intentional
+  skips and zero failures; `CodeIslandCoreTests` passed **218** tests with zero
+  failures. This includes the real loopback listener, configuration restart,
+  APNs envelope/privacy, push-token rotation, Live Activity lifecycle, media,
+  Shelf, Calendar, camera/mic, Claude voice/context, teleprompter, quick jot,
+  and drag-to-notch reducers.
+- `swift build -c release` passed. The compiler emitted existing Swift 6
+  migration/deprecation warnings, but no release-build error.
+- The complete `CodeIslandCompanion` Xcode scheme passed **24/24** tests with
+  zero failures and zero skips on isolated Simulator
+  `codex-CodeIsland-Shelf`, iPhone 17 Pro, iOS 27.0. Result bundle:
+  `ios/CodeIslandCompanion/.build/Task13DerivedData/Logs/Test/Test-CodeIslandCompanion-2026.07.17_14-16-45--0700.xcresult`.
+  It covers native mode/module rendering, rack reorder review, Calendar month,
+  Now Playing seek, task/note creation, Claude Do, Downloads and Shelf share,
+  camera preview, deep links, landscape board, pairing recovery, and Live
+  Activity automatic resolution.
+- The first full iOS attempt found a harness-only accessibility-shape failure
+  in `testPersonalHubModesRenderAdvertisedModules`: XCTest sometimes exposed
+  the hub surface but not the parent as a typed `ScrollView` after relaunch.
+  The helper now uses the companion scroll, hub surface, or application gesture
+  target in order. The focused three-mode rerun passed, followed by the clean
+  24-test aggregate above.
+
+This is native Simulator evidence, not physical-iPhone or cellular/Tailscale
+proof.
 
 ## Current signed delivery receipts
 

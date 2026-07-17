@@ -431,9 +431,20 @@ final class CodeIslandCompanionUITests: XCTestCase {
     private func findHubElement(_ identifier: String, in app: XCUIApplication) -> XCUIElement {
         let query = app.descendants(matching: .any).matching(identifier: identifier)
         let element = query.firstMatch
-        let scroll = app.scrollViews["companion.scroll"].firstMatch
+        if element.waitForExistence(timeout: 1) {
+            return element
+        }
+
+        let companionScroll = app.scrollViews["companion.scroll"].firstMatch
+        let hubSurface = app.otherElements["hub.surface"].firstMatch
         for _ in 0..<10 where !element.exists {
-            scroll.swipeUp()
+            if companionScroll.exists {
+                companionScroll.swipeUp()
+            } else if hubSurface.exists {
+                hubSurface.swipeUp()
+            } else {
+                app.swipeUp()
+            }
         }
         return element
     }
