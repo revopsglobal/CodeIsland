@@ -220,6 +220,7 @@ struct PersonalHubMacView: View {
         }
         if action.id == "presentOnDevice", let itemDetail {
             TeleprompterWindowController.shared.show(text: itemDetail)
+            actionMessage = "Teleprompter opened privately on this Mac"
             return
         }
         if action.id == "downloadToDevice", let itemID,
