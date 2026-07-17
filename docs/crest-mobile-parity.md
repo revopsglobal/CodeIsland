@@ -45,7 +45,7 @@ Sources used for the baseline:
 | Teleprompter/present mode | Unverified: persistent floating reader, play/pause, WPM, and font size | Unverified: full-screen reader, play/pause, WPM, and font size | Mac and physical-iPhone presentation/resume tests |
 | Window snapping/remote window actions | Unverified: allow-listed left/right/maximize via Accessibility | Unverified: confirmed remote left/right/maximize | Grant Accessibility and verify real windows |
 | Private web fallback | Partial: responsive client plus live Tailscale root/401 proof and isolated real-listener pairing/auth/mode/action tests | Partial: authenticated Home/Work/Code, approval, question, push registration, exact-action and replay protection are automated | Physical Tailscale browser module/action/file round trip |
-| TestFlight distribution | Ready: signed archive/upload pipeline and internal group | Unverified: build processing/group access proven; physical install pending | Install, launch, permissions, push, Live Activity, and receipt evidence on Greg's iPhone |
+| TestFlight distribution | Ready: signed archive/upload pipeline and internal group | Unverified on the physical phone: build `1.0.0 (20260717113810)` is Apple `VALID` and available to the all-builds internal group; install pending | Install, launch, permissions, push, Live Activity, and receipt evidence on Greg's iPhone |
 
 ## Architecture invariant
 
@@ -72,3 +72,64 @@ starts the real loopback listener with isolated device/audit storage and proves:
 - a real `AskUserQuestion` continuation, answer delivery, and replay rejection;
 - reviewed action prepare/execute, altered-intent rejection, single-use enforcement; and
 - production push-token registration without touching Greg's real paired-device store.
+
+## Current signed delivery receipts
+
+These receipts were captured on 2026-07-17. They prove the automated delivery
+surfaces, not the remaining physical-device interactions.
+
+- macOS `1.0.35`: merged commit `0337d0e7d4ee4dcc408d2feb53fb2c2c5f7a5bed`,
+  Actions run `29576716261`, artifact `8405419352`, DMG SHA-256
+  `59cf43805024991400b0cffc8a290b8c6ffc2402ef334ed1e6aabe58681f8d39`.
+  The downloaded DMG passed `codesign --verify --deep --strict` directly from
+  its mounted image, and that exact app is installed at
+  `/Applications/CodeIsland.app` with team `44JG2Y95CH`.
+- iOS `1.0.0 (20260717113810)`: merged commit
+  `08b8e6ec69759a6294c3c9e46417b0d4a60ce266`, Actions run `29577487124`,
+  signed IPA artifact `8405674273`. App Store Connect reported bundle
+  `com.revopsglobal.codeisland.buddy` as `VALID`, audience
+  `APP_STORE_ELIGIBLE`; internal group `CodeIsland Internal` has access to all
+  builds.
+- The installed Mac host answered both local and Tailscale `/health` with
+  `running: true`; the Tailscale root returned the expected CSP/frame/referrer
+  headers and unauthenticated `/api/hub` access returned `401`.
+
+## Physical acceptance run
+
+This is the remaining morning run. It cannot be completed by CI because it
+requires Greg's physical iPhone, biometric/permission taps, real accessories,
+and real Calendar/Reminders data.
+
+1. On iPhone, install Apple's **TestFlight** app from the App Store. In
+   TestFlight, install **CodeIsland Buddy** `1.0.0 (20260717113810)` from
+   `CodeIsland Internal`. Install or enable Tailscale and confirm the phone is
+   on Greg's tailnet.
+2. Unlock the Mac and open CodeIsland Settings. Use the app's permission
+   buttons, then approve CodeIsland in System Settings under Calendars,
+   Reminders, Location Services, Camera, and Accessibility as each test needs.
+3. Pair the iPhone from CodeIsland Settings using the displayed six-digit code.
+   Confirm Home, Work, and Code load in Buddy over Wi-Fi, then repeat over
+   cellular with Tailscale enabled.
+4. Trigger a real coding approval and a real question on the Mac. Confirm the
+   iPhone receives the push, the Live Activity/Dynamic Island surface appears,
+   approval/answer resumes only the selected request, and replay is rejected.
+5. Create a dedicated test reminder list; add, reorder, complete, archive,
+   restore, and delete a task from iPhone. Confirm the same state on Mac.
+6. Create, edit, and delete a dedicated calendar event. Include a Zoom or Meet
+   URL and verify one-click **Join** from both Mac and iPhone.
+7. Run Claude Ask, then a multi-action Claude Do proposal that creates a task.
+   Review the proposal and confirm it once; verify the write and audit receipt.
+   Repeat once with iPhone dictation after granting microphone and speech access.
+8. Exercise the remaining Crest baseline against real data: Apple Music and
+   Spotify playback controls; Shelf file round trip; clipboard copy/remove;
+   notes/checklists/undo; weather ZIP and location modes; GitHub PR deep link;
+   audio output/input and volume; Bluetooth connect/disconnect and battery;
+   downloads; dark mode/mute/display sleep; camera preview; teleprompter; and
+   Accessibility-backed window snapping.
+9. Leave the Mac host running and connected, lock it, move the iPhone off local
+   Wi-Fi, and repeat one approval, one task creation, and one Calendar read over
+   cellular/Tailscale. This is the final away-from-the-Mac acceptance gate.
+
+Record failures by exact module/action and keep permission denial separate from
+implementation failure. Telegram is only an optional outbound alert/deep link;
+it is not required for the private Tailscale control path to pass.
