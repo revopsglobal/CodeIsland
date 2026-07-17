@@ -1,6 +1,9 @@
 name: Build and Upload iOS TestFlight
 
 on:
+  push:
+    branches:
+      - codex/crest-mobile-parity
   workflow_dispatch:
     inputs:
       build_number:
