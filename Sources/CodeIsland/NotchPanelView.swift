@@ -109,8 +109,8 @@ struct NotchPanelView: View {
     @State private var curtainOffset: CGFloat = 0
     @State private var curtainOpacity: Double = 1
     @State private var displayedToolStatus: Bool = SettingsDefaults.showToolStatus
-    /// Glances (weather / next meeting / reminders) overlay toggle on the session-list surface.
-    @State private var showGlances = false
+    /// Personal surfaces available above the session list.
+    @State private var homePanel: HomePanelSelection = .sessions
 
     private var isActive: Bool { !appState.sessions.isEmpty }
     private var hasPersonalStatus: Bool { personalUtilities.hasCompactStatus }
@@ -263,12 +263,16 @@ struct NotchPanelView: View {
                             .transition(.blurFade.combined(with: .move(edge: .top)))
                     case .sessionList:
                         VStack(spacing: 0) {
-                            GlancesToggleRow(showGlances: $showGlances)
-                            if showGlances {
+                            GlancesToggleRow(selection: $homePanel)
+                            switch homePanel {
+                            case .sessions:
+                                SessionListView(appState: appState, onlySessionId: nil)
+                            case .glances:
                                 GlancesView()
                                     .transition(.blurFade)
-                            } else {
-                                SessionListView(appState: appState, onlySessionId: nil)
+                            case .hub:
+                                PersonalHubMacView(appState: appState)
+                                    .transition(.blurFade)
                             }
                         }
                         .transition(.blurFade.combined(with: .move(edge: .top)))

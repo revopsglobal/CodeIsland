@@ -113,14 +113,28 @@ let remoteApproval = """
 {"version":1,"serverName":"Greg's Mac","generatedAt":"2026-07-17T04:00:00Z",
  "approvals":[{"id":"request-123","sessionId":"session-456","source":"Codex","tool":"Bash",
  "detail":"npm test","workspace":"CodeIsland","createdAt":"2026-07-17T03:59:00Z",
- "actionToken":"single-use-token","actionExpiresAt":"2026-07-17T04:02:00Z"}]}
+ "actionToken":"single-use-token","actionExpiresAt":"2026-07-17T04:02:00Z"}],
+ "questions":[{"id":"question-123","sessionId":"session-456","source":"Codex","workspace":"CodeIsland",
+ "createdAt":"2026-07-17T03:59:30Z","prompts":[{"id":"choice","header":"Mode","question":"Continue?",
+ "options":["Yes","No"],"descriptions":[],"allowsMultipleSelection":false}],"requiresLocalResponse":false,
+ "actionToken":"question-token","actionExpiresAt":"2026-07-17T04:02:30Z"}]}
 """.data(using: .utf8)!
 do {
     let snapshot = try decoder.decode(RemoteApprovalSnapshot.self, from: remoteApproval)
     check("remote approval keeps exact request id", snapshot.approvals.first?.id == "request-123")
     check("remote approval keeps action token", snapshot.approvals.first?.actionToken == "single-use-token")
+    check("remote question keeps exact request id", snapshot.questions.first?.id == "question-123")
+    check("remote question keeps action token", snapshot.questions.first?.actionToken == "question-token")
     let decision = RemoteDecisionRequest(decision: .approve, actionToken: "single-use-token")
     check("remote decision encodes approve", decision.decision == .approve)
 } catch { check("remote approval payload decodes at all", false) }
+
+let legacyRemoteApproval = """
+{"version":1,"serverName":"Greg's Mac","generatedAt":"2026-07-17T04:00:00Z","approvals":[]}
+""".data(using: .utf8)!
+do {
+    let snapshot = try decoder.decode(RemoteApprovalSnapshot.self, from: legacyRemoteApproval)
+    check("legacy remote snapshot defaults questions", snapshot.questions.isEmpty)
+} catch { check("legacy remote snapshot still decodes", false) }
 
 print("ALL PASS")

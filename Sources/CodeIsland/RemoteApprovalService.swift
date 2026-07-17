@@ -246,6 +246,60 @@ final class RemoteApprovalService: ObservableObject {
             return .json(status: 200, encodable: snapshot)
         }
 
+        if request.method == "GET", request.path == "/api/hub" {
+            let snapshot = PersonalHubService.shared.snapshot(
+                appState: appState,
+                requestedMode: .auto
+            )
+            return .json(status: 200, encodable: snapshot)
+        }
+
+        if request.method == "POST", request.path == "/api/hub/snapshot" {
+            guard let snapshotRequest = request.decode(PersonalHubSnapshotRequest.self) else {
+                return .json(status: 400, object: ["error": "invalid hub snapshot request"])
+            }
+            let snapshot = PersonalHubService.shared.snapshot(
+                appState: appState,
+                requestedMode: snapshotRequest.requestedMode
+            )
+            return .json(status: 200, encodable: snapshot)
+        }
+
+        if request.method == "POST", request.path == "/api/hub/actions/prepare" {
+            guard let prepareRequest = request.decode(PersonalHubPrepareActionRequest.self) else {
+                return .json(status: 400, object: ["error": "invalid action intent"])
+            }
+            switch PersonalHubService.shared.prepare(
+                intent: prepareRequest.intent,
+                deviceID: authenticated.id
+            ) {
+            case .success(let prepared):
+                return .json(status: 200, encodable: prepared)
+            case .failure(let error):
+                return .json(status: 400, object: ["error": error.localizedDescription])
+            }
+        }
+
+        if request.method == "POST", request.path == "/api/hub/actions/execute" {
+            guard let executeRequest = request.decode(PersonalHubExecuteActionRequest.self) else {
+                return .json(status: 400, object: ["error": "invalid action confirmation"])
+            }
+            switch PersonalHubService.shared.execute(
+                request: executeRequest,
+                deviceID: authenticated.id
+            ) {
+            case .success(let response):
+                stateDidChange()
+                return .json(status: 200, encodable: response)
+            case .failure(.expired):
+                return .json(status: 409, object: ["error": "action confirmation expired; review it again"])
+            case .failure(.unauthorized):
+                return .json(status: 403, object: ["error": "action confirmation is invalid"])
+            case .failure(let error):
+                return .json(status: 400, object: ["error": error.localizedDescription])
+            }
+        }
+
         if request.method == "POST", request.path == "/api/push-token" {
             guard let registration = request.decode(RemotePushRegistrationRequest.self),
                   registration.token.count >= 32
@@ -295,6 +349,47 @@ final class RemoteApprovalService: ObservableObject {
                 return .json(status: 409, object: ["error": "approval is no longer pending"])
             case .unauthorized:
                 return .json(status: 403, object: ["error": "action token is invalid"])
+            case .invalid:
+                return .json(status: 400, object: ["error": "decision is invalid"])
+            }
+        }
+
+        let questionPrefix = "/api/questions/"
+        let questionSuffix = "/answer"
+        if request.method == "POST",
+           request.path.hasPrefix(questionPrefix), request.path.hasSuffix(questionSuffix) {
+            let start = request.path.index(request.path.startIndex, offsetBy: questionPrefix.count)
+            let end = request.path.index(request.path.endIndex, offsetBy: -questionSuffix.count)
+            let requestID = String(request.path[start..<end]).removingPercentEncoding ?? ""
+            guard !requestID.isEmpty,
+                  let answerRequest = request.decode(RemoteQuestionAnswerRequest.self)
+            else {
+                return .json(status: 400, object: ["error": "invalid question answer"])
+            }
+
+            let result = coordinator.resolveQuestion(
+                appState: appState,
+                requestID: requestID,
+                answers: answerRequest.answers,
+                actionToken: answerRequest.actionToken,
+                deviceID: authenticated.id,
+                deviceName: authenticated.name
+            )
+            switch result {
+            case .resolved:
+                stateDidChange()
+                return .json(
+                    status: 200,
+                    encodable: RemoteQuestionAnswerResponse(answered: true, requestId: requestID)
+                )
+            case .expired:
+                return .json(status: 409, object: ["error": "action token expired; refresh questions"])
+            case .stale:
+                return .json(status: 409, object: ["error": "question is no longer pending"])
+            case .unauthorized:
+                return .json(status: 403, object: ["error": "action token is invalid"])
+            case .invalid:
+                return .json(status: 400, object: ["error": "answer each non-sensitive prompt on this device"])
             }
         }
 
@@ -466,6 +561,7 @@ private final class RemoteApprovalCoordinator {
         case expired
         case stale
         case unauthorized
+        case invalid
     }
 
     private struct AuditEvent: Codable {
@@ -504,9 +600,66 @@ private final class RemoteApprovalCoordinator {
                 actionExpiresAt: action.expiresAt
             )
         }
+        let questions = appState.questionQueue.map { request -> RemoteQuestionItem in
+            let sessionID = request.event.sessionId ?? "default"
+            let workspace = appState.sessions[sessionID]?.cwd.map { URL(fileURLWithPath: $0).lastPathComponent }
+            let source = AppState.sourceLabel(for: request.event)
+            let items = request.askUserQuestionState?.items
+            let containsSecret = items?.contains(where: { $0.payload.isSecret }) ?? request.question.isSecret
+
+            if containsSecret {
+                return RemoteQuestionItem(
+                    id: request.id,
+                    sessionId: sessionID,
+                    source: source,
+                    workspace: workspace,
+                    createdAt: request.createdAt,
+                    prompts: [],
+                    requiresLocalResponse: true,
+                    actionToken: nil,
+                    actionExpiresAt: nil
+                )
+            }
+
+            let prompts: [RemoteQuestionPrompt]
+            if let items, !items.isEmpty {
+                prompts = items.map { item in
+                    RemoteQuestionPrompt(
+                        id: item.answerKey,
+                        header: item.payload.header,
+                        question: String(item.payload.question.prefix(1_000)),
+                        options: Array((item.payload.options ?? []).prefix(20)).map { String($0.prefix(300)) },
+                        descriptions: Array((item.payload.descriptions ?? []).prefix(20)).map { String($0.prefix(500)) },
+                        allowsMultipleSelection: item.multiSelect
+                    )
+                }
+            } else {
+                prompts = [RemoteQuestionPrompt(
+                    id: request.question.header ?? "answer",
+                    header: request.question.header,
+                    question: String(request.question.question.prefix(1_000)),
+                    options: Array((request.question.options ?? []).prefix(20)).map { String($0.prefix(300)) },
+                    descriptions: Array((request.question.descriptions ?? []).prefix(20)).map { String($0.prefix(500)) },
+                    allowsMultipleSelection: false
+                )]
+            }
+            let action = actionTokens.issue(requestID: request.id, deviceID: deviceID, now: now)
+            return RemoteQuestionItem(
+                id: request.id,
+                sessionId: sessionID,
+                source: source,
+                workspace: workspace,
+                createdAt: request.createdAt,
+                prompts: prompts,
+                requiresLocalResponse: false,
+                actionToken: action.rawValue,
+                actionExpiresAt: action.expiresAt
+            )
+        }
         return RemoteApprovalSnapshot(
             serverName: Host.current().localizedName ?? "CodeIsland Mac",
-            approvals: approvals
+            approvals: approvals,
+            questions: questions
         )
     }
 
@@ -559,6 +712,59 @@ private final class RemoteApprovalCoordinator {
             timestamp: Date(), event: "decision", requestID: requestID,
             sessionID: sessionID, deviceID: deviceID, deviceName: deviceName,
             decision: decision.rawValue, outcome: "resolved", source: source, tool: tool
+        ))
+        return .resolved
+    }
+
+    func resolveQuestion(
+        appState: AppState,
+        requestID: String,
+        answers: [String],
+        actionToken: String,
+        deviceID: String,
+        deviceName: String
+    ) -> ResolutionResult {
+        switch actionTokens.consume(
+            requestID: requestID,
+            deviceID: deviceID,
+            token: actionToken
+        ) {
+        case .invalid:
+            appendAudit(AuditEvent(
+                timestamp: Date(), event: "question-answer", requestID: requestID,
+                sessionID: nil, deviceID: deviceID, deviceName: deviceName,
+                decision: nil, outcome: "invalid-token", source: nil, tool: nil
+            ))
+            return .unauthorized
+        case .expired:
+            appendAudit(AuditEvent(
+                timestamp: Date(), event: "question-answer", requestID: requestID,
+                sessionID: nil, deviceID: deviceID, deviceName: deviceName,
+                decision: nil, outcome: "expired", source: nil, tool: nil
+            ))
+            return .expired
+        case .accepted:
+            break
+        }
+
+        guard let pending = appState.questionQueue.first(where: { $0.id == requestID }) else {
+            return .stale
+        }
+        let sessionID = pending.event.sessionId ?? "default"
+        let source = AppState.sourceLabel(for: pending.event)
+        guard appState.resolveRemoteQuestion(requestID: requestID, answers: answers) else {
+            appendAudit(AuditEvent(
+                timestamp: Date(), event: "question-answer", requestID: requestID,
+                sessionID: sessionID, deviceID: deviceID, deviceName: deviceName,
+                decision: nil, outcome: "rejected", source: source, tool: "Question"
+            ))
+            return .invalid
+        }
+        actionTokens.removeAll(forRequestID: requestID)
+        appendAudit(AuditEvent(
+            timestamp: Date(), event: "question-answer", requestID: requestID,
+            sessionID: sessionID, deviceID: deviceID, deviceName: deviceName,
+            decision: "answer", outcome: "resolved", source: source, tool: "Question"
         ))
         return .resolved
     }

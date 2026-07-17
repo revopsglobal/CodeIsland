@@ -1,0 +1,173 @@
+name: Build and Upload iOS TestFlight
+
+on:
+  push:
+    branches:
+      - codex/crest-mobile-parity
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: Optional numeric CFBundleVersion. Defaults to a UTC timestamp.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  testflight:
+    name: Signed iPhone archive and TestFlight upload
+    runs-on: macos-15
+    env:
+      TEAM_ID: 44JG2Y95CH
+      APP_PROFILE_NAME: CodeIsland Buddy App Store
+      WIDGET_PROFILE_NAME: CodeIsland Buddy Widget App Store
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 26
+        run: |
+          XCODE_APP="$(find /Applications -maxdepth 1 -name 'Xcode_26*.app' -type d | sort | tail -n 1)"
+          if [ -z "$XCODE_APP" ]; then
+            echo "::error::Xcode 26 is required to compile AppIcon.icon"
+            exit 1
+          fi
+          sudo xcode-select -s "$XCODE_APP/Contents/Developer"
+          xcodebuild -version
+
+      - name: Resolve build number
+        shell: bash
+        env:
+          INPUT_BUILD_NUMBER: ${{ inputs.build_number }}
+        run: |
+          BUILD_NUMBER="$INPUT_BUILD_NUMBER"
+          if [ -z "$BUILD_NUMBER" ]; then
+            BUILD_NUMBER="$(date -u +%Y%m%d%H%M%S)"
+          fi
+          if ! [[ "$BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
+            echo "::error::build_number must contain digits only"
+            exit 1
+          fi
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
+          echo "Building CodeIsland Buddy 1.0.0 ($BUILD_NUMBER)"
+
+      - name: Validate signing and upload secrets
+        shell: bash
+        env:
+          DIST_P12: ${{ secrets.APPLE_DIST_P12_BASE64 }}
+          DIST_PASSWORD: ${{ secrets.APPLE_DIST_P12_PASSWORD }}
+          APP_PROFILE: ${{ secrets.IOS_APPSTORE_PROFILE_BASE64 }}
+          WIDGET_PROFILE: ${{ secrets.IOS_WIDGET_PROFILE_BASE64 }}
+          ASC_ISSUER: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY: ${{ secrets.ASC_KEY_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8_BASE64 }}
+        run: |
+          missing=0
+          for name in DIST_P12 DIST_PASSWORD APP_PROFILE WIDGET_PROFILE ASC_ISSUER ASC_KEY ASC_KEY_P8; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is required"
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Import distribution certificate and profiles
+        shell: bash
+        env:
+          DIST_P12: ${{ secrets.APPLE_DIST_P12_BASE64 }}
+          DIST_PASSWORD: ${{ secrets.APPLE_DIST_P12_PASSWORD }}
+          APP_PROFILE: ${{ secrets.IOS_APPSTORE_PROFILE_BASE64 }}
+          WIDGET_PROFILE: ${{ secrets.IOS_WIDGET_PROFILE_BASE64 }}
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/codeisland-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          P12_PATH="$RUNNER_TEMP/codeisland-distribution.p12"
+          PROFILES_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+
+          printf '%s' "$DIST_P12" | base64 --decode > "$P12_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$P12_PATH" -P "$DIST_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          security default-keychain -s "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          mkdir -p "$PROFILES_DIR"
+          for entry in "app:$APP_PROFILE" "widget:$WIDGET_PROFILE"; do
+            label="${entry%%:*}"
+            content="${entry#*:}"
+            source="$RUNNER_TEMP/$label.mobileprovision"
+            plist="$RUNNER_TEMP/$label-profile.plist"
+            printf '%s' "$content" | base64 --decode > "$source"
+            security cms -D -i "$source" > "$plist"
+            uuid="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$plist")"
+            cp "$source" "$PROFILES_DIR/$uuid.mobileprovision"
+          done
+
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
+      - name: Archive signed iPhone app
+        run: |
+          xcodebuild \
+            -project ios/CodeIslandCompanion/CodeIslandCompanion.xcodeproj \
+            -scheme CodeIslandCompanion \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/CodeIslandCompanion.xcarchive" \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+            clean archive
+
+      - name: Verify archive signing and privacy contract
+        shell: bash
+        run: |
+          APP="$RUNNER_TEMP/CodeIslandCompanion.xcarchive/Products/Applications/CodeIslandCompanion.app"
+          WIDGET="$APP/PlugIns/CodeIslandCompanionWidget.appex"
+          test -d "$APP"
+          test -d "$WIDGET"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          codesign --verify --strict --verbose=2 "$WIDGET"
+          codesign -d --entitlements :- "$APP" > "$RUNNER_TEMP/app-entitlements.plist" 2>/dev/null
+          test "$(/usr/libexec/PlistBuddy -c 'Print :aps-environment' "$RUNNER_TEMP/app-entitlements.plist")" = production
+          test "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.developer.usernotifications.time-sensitive' "$RUNNER_TEMP/app-entitlements.plist")" = true
+          test "$(/usr/libexec/PlistBuddy -c 'Print :NSSupportsLiveActivities' "$APP/Info.plist")" = true
+
+      - name: Export IPA
+        run: |
+          xcodebuild \
+            -exportArchive \
+            -archivePath "$RUNNER_TEMP/CodeIslandCompanion.xcarchive" \
+            -exportPath "$RUNNER_TEMP/CodeIslandCompanion-export" \
+            -exportOptionsPlist ios/CodeIslandCompanion/ExportOptions.plist
+          test -s "$RUNNER_TEMP/CodeIslandCompanion-export/CodeIslandCompanion.ipa"
+
+      - name: Install App Store Connect API key
+        shell: bash
+        env:
+          ASC_KEY: ${{ secrets.ASC_KEY_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8_BASE64 }}
+        run: |
+          KEY_DIR="$HOME/.appstoreconnect/private_keys"
+          mkdir -p "$KEY_DIR"
+          printf '%s' "$ASC_KEY_P8" | base64 --decode > "$KEY_DIR/AuthKey_$ASC_KEY.p8"
+          chmod 600 "$KEY_DIR/AuthKey_$ASC_KEY.p8"
+
+      - name: Upload to App Store Connect
+        env:
+          ASC_ISSUER: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY: ${{ secrets.ASC_KEY_ID }}
+        run: |
+          xcrun altool --upload-app \
+            --file "$RUNNER_TEMP/CodeIslandCompanion-export/CodeIslandCompanion.ipa" \
+            --type ios \
+            --apiKey "$ASC_KEY" \
+            --apiIssuer "$ASC_ISSUER"
+
+      - name: Upload signed IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CodeIsland-Buddy-TestFlight-${{ env.BUILD_NUMBER }}
+          path: ${{ runner.temp }}/CodeIslandCompanion-export/CodeIslandCompanion.ipa
+          if-no-files-found: error

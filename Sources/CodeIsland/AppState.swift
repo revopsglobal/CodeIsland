@@ -1337,6 +1337,39 @@ final class AppState {
         return true
     }
 
+    /// Resolve the exact non-secret question selected by a remote client.
+    ///
+    /// Question answers are positional because both AskUserQuestion and the
+    /// Codex app-server preserve their prompt order. The selected request is
+    /// promoted only after its identifier, answer count, and secrecy are
+    /// re-validated, so a delayed phone action cannot answer a different prompt.
+    @discardableResult
+    func resolveRemoteQuestion(requestID: String, answers: [String]) -> Bool {
+        guard let index = questionQueue.firstIndex(where: { $0.id == requestID }) else {
+            return false
+        }
+        let selected = questionQueue[index]
+        let prompts = selected.askUserQuestionState?.items.map(\.payload) ?? [selected.question]
+        guard !prompts.isEmpty,
+              prompts.count == answers.count,
+              answers.allSatisfy({ !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }),
+              !prompts.contains(where: { $0.isSecret })
+        else { return false }
+
+        if index != questionQueue.startIndex {
+            questionQueue.insert(questionQueue.remove(at: index), at: questionQueue.startIndex)
+        }
+
+        if let askState = questionQueue[0].askUserQuestionState {
+            answerQuestionMulti(zip(askState.items, answers).map {
+                (question: $0.0.payload.question, answer: $0.1)
+            })
+        } else {
+            answerQuestion(answers[0])
+        }
+        return true
+    }
+
     private func approvePermission(at index: Int, always: Bool) {
         guard permissionQueue.indices.contains(index) else { return }
         let pending = permissionQueue.remove(at: index)

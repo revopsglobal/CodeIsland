@@ -1,0 +1,141 @@
+import XCTest
+@testable import CodeIslandCore
+
+final class PersonalHubProtocolTests: XCTestCase {
+    func testCatalogContainsEveryPersonalBaselineModuleExactlyOnce() {
+        XCTAssertEqual(PersonalHubCatalog.personalBaseline.count, 15)
+        XCTAssertEqual(Set(PersonalHubCatalog.personalBaseline).count, 15)
+        XCTAssertTrue(Set(PersonalHubCatalog.personalBaseline).isSubset(of: Set(PersonalHubModuleID.allCases)))
+    }
+
+    func testEveryBaselineModuleSupportsMacIPhoneAndWeb() {
+        for id in PersonalHubCatalog.personalBaseline {
+            let platforms = PersonalHubCatalog.definition(for: id).platforms
+            XCTAssertTrue(platforms.contains(.mac), "\(id) is missing Mac support")
+            XCTAssertTrue(platforms.contains(.iphone), "\(id) is missing iPhone support")
+            XCTAssertTrue(platforms.contains(.web), "\(id) is missing web fallback support")
+        }
+    }
+
+    func testAutoModePrioritizesWaitingAgent() {
+        let context = PersonalHubAutoContext(
+            foregroundBundleID: "com.apple.Safari",
+            minutesUntilMeeting: 10,
+            agentNeedsAttention: true
+        )
+        XCTAssertEqual(PersonalHubCatalog.resolvedMode(requested: .auto, context: context), .code)
+    }
+
+    func testAutoModeRecognizesCodeApplications() {
+        let context = PersonalHubAutoContext(foregroundBundleID: "com.openai.codex")
+        XCTAssertEqual(PersonalHubCatalog.resolvedMode(requested: .auto, context: context), .code)
+    }
+
+    func testAutoModeChoosesWorkForUpcomingMeeting() {
+        let context = PersonalHubAutoContext(
+            foregroundBundleID: "com.apple.finder",
+            minutesUntilMeeting: 26
+        )
+        XCTAssertEqual(PersonalHubCatalog.resolvedMode(requested: .auto, context: context), .work)
+    }
+
+    func testAutoModeDefaultsToHome() {
+        XCTAssertEqual(
+            PersonalHubCatalog.resolvedMode(requested: .auto, context: PersonalHubAutoContext()),
+            .home
+        )
+    }
+
+    func testExplicitModeNeverAutoSwitches() {
+        let context = PersonalHubAutoContext(agentNeedsAttention: true)
+        XCTAssertEqual(PersonalHubCatalog.resolvedMode(requested: .home, context: context), .home)
+        XCTAssertEqual(PersonalHubCatalog.resolvedMode(requested: .work, context: context), .work)
+        XCTAssertEqual(PersonalHubCatalog.resolvedMode(requested: .code, context: context), .code)
+    }
+
+    func testSnapshotRoundTripPreservesActionBinding() throws {
+        let expiresAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let snapshot = PersonalHubSnapshot(
+            serverName: "Greg's Mac",
+            generatedAt: Date(timeIntervalSince1970: 1_799_999_900),
+            requestedMode: .auto,
+            resolvedMode: .work,
+            modules: [
+                PersonalHubModuleSnapshot(
+                    id: .calendar,
+                    availability: .ready,
+                    summary: "Standup in 26 min",
+                    items: [
+                        PersonalHubItem(
+                            id: "event-1",
+                            title: "Standup",
+                            actions: [
+                                PersonalHubAction(
+                                    id: "join",
+                                    label: "Join",
+                                    role: .primary,
+                                    targetID: "event-1",
+                                    deepLink: URL(string: "https://meet.google.com/abc-defg-hij"),
+                                    actionToken: "exact-token",
+                                    actionExpiresAt: expiresAt
+                                )
+                            ]
+                        )
+                    ]
+                )
+            ]
+        )
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(snapshot)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        XCTAssertEqual(try decoder.decode(PersonalHubSnapshot.self, from: data), snapshot)
+    }
+
+    func testActionBindingChangesWithEveryMutableField() {
+        let baseline = PersonalHubActionIntent(
+            moduleID: .reminders,
+            actionID: "add",
+            targetID: "groceries",
+            value: "Milk"
+        )
+        XCTAssertNotEqual(
+            baseline.bindingID,
+            PersonalHubActionIntent(
+                moduleID: .notes,
+                actionID: "add",
+                targetID: "groceries",
+                value: "Milk"
+            ).bindingID
+        )
+        XCTAssertNotEqual(
+            baseline.bindingID,
+            PersonalHubActionIntent(
+                moduleID: .reminders,
+                actionID: "complete",
+                targetID: "groceries",
+                value: "Milk"
+            ).bindingID
+        )
+        XCTAssertNotEqual(
+            baseline.bindingID,
+            PersonalHubActionIntent(
+                moduleID: .reminders,
+                actionID: "add",
+                targetID: "work",
+                value: "Milk"
+            ).bindingID
+        )
+        XCTAssertNotEqual(
+            baseline.bindingID,
+            PersonalHubActionIntent(
+                moduleID: .reminders,
+                actionID: "add",
+                targetID: "groceries",
+                value: "Eggs"
+            ).bindingID
+        )
+    }
+}

@@ -86,6 +86,9 @@ private struct PortraitIslandView: View {
                     CompactIslandBar()
                         .environmentObject(connection)
 
+                    PersonalHubSurface()
+                        .environmentObject(remoteApprovals)
+
                     RemoteApprovalSurface()
                         .environmentObject(remoteApprovals)
                         .id("companion.remoteApprovals.anchor")

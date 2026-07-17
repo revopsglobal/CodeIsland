@@ -122,7 +122,7 @@ struct SettingsView: View {
 // MARK: - Glances Page
 
 private struct GlancesSettingsPage: View {
-    @StateObject private var model = GlancesModel()
+    @StateObject private var model = GlancesModel.shared
     @ObservedObject private var personalUtilities = PersonalUtilitiesModel.shared
     @AppStorage(SettingsKey.glancesWeatherLocation)
     private var weatherLocation = SettingsDefaults.glancesWeatherLocation

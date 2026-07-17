@@ -21,9 +21,11 @@
 		56486A706E0A4FFBF3BE9F34 /* DexView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6470A3909D478701A3B07E5 /* DexView.swift */; };
 		57D3C0DB02580B82815A37DD /* GeminiView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CA2D1F95A933787580CCAA6 /* GeminiView.swift */; };
 		5CC36A8128BA65E2481142C1 /* WorkBuddyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F91D3F784C8F89A31E63158 /* WorkBuddyView.swift */; };
+		5FFF36D08AECEF380207B9A8 /* PersonalHubView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76D8A0775C5E0593E6BD3927 /* PersonalHubView.swift */; };
 		60EDB1D15F768EF9BEA51D31 /* OpenCodeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23F0ECA53BBAD64BA8C9771F /* OpenCodeView.swift */; };
 		6123D11F09A767D4AFDA5AD3 /* GeminiView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CA2D1F95A933787580CCAA6 /* GeminiView.swift */; };
 		61E65895CCEBAD88E0183D08 /* StepFunView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB1A12DC31BC8AC80FFB96D8 /* StepFunView.swift */; };
+		627A394BE38C43B7815C44B1 /* PersonalHubProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F2D0C28F9B521F6A0F93CAC /* PersonalHubProtocol.swift */; };
 		632DF62531C30A5489CE9819 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = DE41181FECB15FC695E14CCA /* LaunchScreen.storyboard */; };
 		6919B3BB7246E6928F77FF07 /* RemoteApprovalClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CD8A43D80EDE6E68D478FE3 /* RemoteApprovalClient.swift */; };
 		6C444954B6DA9F0B542304EE /* CursorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A637A87231D2C2493FF97990 /* CursorView.swift */; };
@@ -124,11 +126,13 @@
 		32BE6F03B699E8406163EBA2 /* CompanionAppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionAppDelegate.swift; sourceTree = "<group>"; };
 		4708FC8D74184A554015C647 /* CompanionDisplayText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionDisplayText.swift; sourceTree = "<group>"; };
 		4978BAC1D31033F1CFFA542C /* QwenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QwenView.swift; sourceTree = "<group>"; };
+		4F2D0C28F9B521F6A0F93CAC /* PersonalHubProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalHubProtocol.swift; sourceTree = "<group>"; };
 		4F91D3F784C8F89A31E63158 /* WorkBuddyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkBuddyView.swift; sourceTree = "<group>"; };
 		53EE587DE1B0740F9A5B0B19 /* KimiView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KimiView.swift; sourceTree = "<group>"; };
 		5F8B728EC484A892286E9460 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		6516178F733B86DDF5CD26E0 /* CodeIslandCompanionUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = CodeIslandCompanionUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		683697BA44F284DC6FFD36DA /* StandByLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StandByLayoutTests.swift; sourceTree = "<group>"; };
+		76D8A0775C5E0593E6BD3927 /* PersonalHubView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalHubView.swift; sourceTree = "<group>"; };
 		77D70D07D1A0B8E65A8B9C66 /* MascotMotion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotMotion.swift; sourceTree = "<group>"; };
 		78474E5ED47A37C22FB49F33 /* CompanionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionModels.swift; sourceTree = "<group>"; };
 		7CA2D1F95A933787580CCAA6 /* GeminiView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiView.swift; sourceTree = "<group>"; };
@@ -196,6 +200,7 @@
 		50F07FE3ABD9B8EF0309E482 /* CodeIslandCore */ = {
 			isa = PBXGroup;
 			children = (
+				4F2D0C28F9B521F6A0F93CAC /* PersonalHubProtocol.swift */,
 				D22D14326F1AEA2E097F595F /* RemoteApprovalProtocol.swift */,
 			);
 			name = CodeIslandCore;
@@ -226,6 +231,7 @@
 				0CD94C0DFD8C9C1E2D0FA2CD /* Info.plist */,
 				DE41181FECB15FC695E14CCA /* LaunchScreen.storyboard */,
 				030876B03E408787BD569C05 /* LiveActivityController.swift */,
+				76D8A0775C5E0593E6BD3927 /* PersonalHubView.swift */,
 				9CD8A43D80EDE6E68D478FE3 /* RemoteApprovalClient.swift */,
 				8DE9B49B0CC8560A642B3750 /* RemoteApprovalView.swift */,
 				2F1C7AD9BDAF97493D0648FE /* StandByLayout.swift */,
@@ -363,7 +369,6 @@
 				TargetAttributes = {
 					98B3A00FDF4C8093790E92A5 = {
 						DevelopmentTeam = 44JG2Y95CH;
-						ProvisioningStyle = Automatic;
 					};
 					B4BEC668A900808C83219452 = {
 						DevelopmentTeam = 44JG2Y95CH;
@@ -372,7 +377,6 @@
 					};
 					F3973306BF558558774D5BD7 = {
 						DevelopmentTeam = 44JG2Y95CH;
-						ProvisioningStyle = Automatic;
 					};
 				};
 			};
@@ -438,6 +442,8 @@
 				53DCB0D0D0D9FBBF1E6E7560 /* MascotMotion.swift in Sources */,
 				CB75CCB077BD30395637DFCA /* MascotTimeline.swift in Sources */,
 				60EDB1D15F768EF9BEA51D31 /* OpenCodeView.swift in Sources */,
+				627A394BE38C43B7815C44B1 /* PersonalHubProtocol.swift in Sources */,
+				5FFF36D08AECEF380207B9A8 /* PersonalHubView.swift in Sources */,
 				360FEB3C9F4DA28284E96288 /* PixelCharacterView.swift in Sources */,
 				977FDE1B19E4DF1F5985EC0D /* QoderView.swift in Sources */,
 				A19C06D932D5A5FE5DF0D513 /* QwenView.swift in Sources */,
@@ -695,10 +701,12 @@
 		74603115470E26336E6FEFCB /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				APS_ENVIRONMENT = production;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = NO;
 				CODE_SIGN_ENTITLEMENTS = CodeIslandCompanion/CodeIslandCompanion.entitlements;
-				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_IDENTITY = "iPhone Distribution";
+				CODE_SIGN_STYLE = Manual;
 				INFOPLIST_FILE = CodeIslandCompanion/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -706,6 +714,7 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.revopsglobal.codeisland.buddy;
+				PROVISIONING_PROFILE_SPECIFIER = "CodeIsland Buddy App Store";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = 1;
 			};
@@ -715,6 +724,8 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = NO;
+				CODE_SIGN_IDENTITY = "iPhone Distribution";
+				CODE_SIGN_STYLE = Manual;
 				INFOPLIST_FILE = CodeIslandCompanionWidget/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -723,6 +734,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.revopsglobal.codeisland.buddy.widget;
+				PROVISIONING_PROFILE_SPECIFIER = "CodeIsland Buddy Widget App Store";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -732,6 +744,7 @@
 		DFE49D5E64392DB384649B7A /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				APS_ENVIRONMENT = development;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = NO;
 				CODE_SIGN_ENTITLEMENTS = CodeIslandCompanion/CodeIslandCompanion.entitlements;
