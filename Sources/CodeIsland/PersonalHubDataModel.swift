@@ -57,12 +57,23 @@ final class PersonalHubDataModel: ObservableObject {
         let value: String
         let capturedAt: Date
         let filePath: String?
+        let source: String?
+        let byteCount: Int64?
 
-        init(id: String, value: String, capturedAt: Date, filePath: String? = nil) {
+        init(
+            id: String,
+            value: String,
+            capturedAt: Date,
+            filePath: String? = nil,
+            source: String? = nil,
+            byteCount: Int64? = nil
+        ) {
             self.id = id
             self.value = value
             self.capturedAt = capturedAt
             self.filePath = filePath
+            self.source = source
+            self.byteCount = byteCount
         }
 
         var title: String {
@@ -185,6 +196,8 @@ final class PersonalHubDataModel: ObservableObject {
     @Published private(set) var claudeBusy = false
     @Published private(set) var claudeError: String?
 
+    let shelfCaptureController: ShelfCaptureController
+
     private static let notesKey = "codeisland.personalHub.notes.v1"
     private static let shelfKey = "codeisland.personalHub.shelf.v1"
     private static let teleprompterKey = "codeisland.personalHub.teleprompter.v1"
@@ -195,17 +208,26 @@ final class PersonalHubDataModel: ObservableObject {
     private var lastPasteboardChangeCount = NSPasteboard.general.changeCount
     private var started = false
 
-    init(defaults: UserDefaults = .standard) {
+    init(
+        defaults: UserDefaults = .standard,
+        shelfCaptureController: ShelfCaptureController? = nil
+    ) {
         self.defaults = defaults
+        self.shelfCaptureController = shelfCaptureController ?? ShelfCaptureController()
         notes = Self.load([Note].self, key: Self.notesKey, defaults: defaults) ?? []
         shelf = Self.load([ShelfEntry].self, key: Self.shelfKey, defaults: defaults) ?? []
         teleprompterText = defaults.string(forKey: Self.teleprompterKey) ?? ""
+        self.shelfCaptureController.onStoredFile = { [weak self] stored in
+            self?.registerShelfFile(stored)
+        }
+        migrateLegacyShelfFiles()
     }
 
     func start() {
         guard !started else { return }
         started = true
         captureClipboardIfChanged(force: true)
+        shelfCaptureController.startWatchingScreenshots()
         refreshHostData()
         refreshNowPlaying()
         clipboardTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
@@ -495,9 +517,14 @@ final class PersonalHubDataModel: ObservableObject {
     }
 
     func removeShelfEntry(id: String) -> Bool {
+        guard let entry = shelf.first(where: { $0.id == id }) else { return false }
         let before = shelf.count
         shelf.removeAll { $0.id == id }
         guard shelf.count != before else { return false }
+        if let filePath = entry.filePath,
+           shelfCaptureController.validatedStoredFileURL(path: filePath) != nil {
+            try? shelfCaptureController.removeStoredFile(path: filePath)
+        }
         persist(shelf, key: Self.shelfKey)
         return true
     }
@@ -505,11 +532,31 @@ final class PersonalHubDataModel: ObservableObject {
     func shelfFileURL(id: String) -> URL? {
         guard let entry = shelf.first(where: { $0.id == id }),
               let filePath = entry.filePath else { return nil }
-        let url = URL(fileURLWithPath: filePath).standardizedFileURL
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
-              !isDirectory.boolValue else { return nil }
-        return url
+        return shelfCaptureController.validatedStoredFileURL(path: filePath)
+    }
+
+    func shelfFileIsTransferable(id: String) -> Bool {
+        guard let url = shelfFileURL(id: id),
+              let fileSize = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize else {
+            return false
+        }
+        return fileSize <= PersonalUtilitiesModel.maximumRemoteTransferBytes
+    }
+
+    @discardableResult
+    func importShelfFile(at url: URL, source: ShelfCaptureController.Source) -> Bool {
+        do {
+            let stored = try shelfCaptureController.importFile(at: url, source: source)
+            registerShelfFile(stored)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    @discardableResult
+    func captureClipboardNow() -> Bool {
+        captureClipboardIfChanged(force: true)
     }
 
     func runMediaCommand(_ action: String, targetID: String? = nil) -> Bool {
@@ -589,35 +636,89 @@ final class PersonalHubDataModel: ObservableObject {
         }
     }
 
-    private func captureClipboardIfChanged(force: Bool = false) {
+    @discardableResult
+    private func captureClipboardIfChanged(force: Bool = false) -> Bool {
         let pasteboard = NSPasteboard.general
-        guard force || pasteboard.changeCount != lastPasteboardChangeCount else { return }
+        guard force || pasteboard.changeCount != lastPasteboardChangeCount else { return false }
         lastPasteboardChangeCount = pasteboard.changeCount
         guard !(pasteboard.types ?? []).contains(where: {
             $0.rawValue.localizedCaseInsensitiveContains("concealed")
                 || $0.rawValue.localizedCaseInsensitiveContains("transient")
-        }) else { return }
+        }) else { return false }
 
-        if let fileURL = (pasteboard.readObjects(forClasses: [NSURL.self]) as? [URL])?.first(where: \.isFileURL),
-           shelf.first?.filePath != fileURL.path {
-            let entry = ShelfEntry(
-                id: UUID().uuidString,
-                value: fileURL.lastPathComponent,
-                capturedAt: Date(),
-                filePath: fileURL.path
-            )
-            shelf.insert(entry, at: 0)
-            if shelf.count > 20 { shelf.removeLast(shelf.count - 20) }
-            persist(shelf, key: Self.shelfKey)
-            return
+        if let fileURL = (pasteboard.readObjects(forClasses: [NSURL.self]) as? [URL])?.first(where: \.isFileURL) {
+            return importShelfFile(at: fileURL, source: .clipboardFile)
         }
 
         guard let value = pasteboard.string(forType: .string)?.trimmingCharacters(in: .whitespacesAndNewlines),
               !value.isEmpty, value.count <= 10_000, shelf.first?.value != value
-        else { return }
+        else { return false }
         shelf.insert(.init(id: UUID().uuidString, value: value, capturedAt: Date()), at: 0)
-        if shelf.count > 20 { shelf.removeLast(shelf.count - 20) }
+        trimShelfToLimit()
         persist(shelf, key: Self.shelfKey)
+        return true
+    }
+
+    private func registerShelfFile(_ stored: ShelfCaptureController.StoredFile) {
+        let entry = ShelfEntry(
+            id: UUID().uuidString,
+            value: stored.url.lastPathComponent,
+            capturedAt: stored.capturedAt,
+            filePath: stored.url.path,
+            source: stored.source.rawValue,
+            byteCount: stored.byteCount
+        )
+        shelf.insert(entry, at: 0)
+        trimShelfToLimit()
+        persist(shelf, key: Self.shelfKey)
+    }
+
+    private func trimShelfToLimit() {
+        guard shelf.count > 20 else { return }
+        let evicted = Array(shelf.suffix(from: 20))
+        shelf.removeLast(shelf.count - 20)
+        for entry in evicted {
+            guard let filePath = entry.filePath,
+                  shelfCaptureController.validatedStoredFileURL(path: filePath) != nil else { continue }
+            try? shelfCaptureController.removeStoredFile(path: filePath)
+        }
+    }
+
+    private func migrateLegacyShelfFiles() {
+        var didChange = false
+        shelf = shelf.map { entry in
+            guard let filePath = entry.filePath else { return entry }
+            if let privateURL = shelfCaptureController.validatedStoredFileURL(path: filePath) {
+                let size = (try? privateURL.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init)
+                guard entry.byteCount == nil || entry.source == nil else { return entry }
+                didChange = true
+                return ShelfEntry(
+                    id: entry.id,
+                    value: entry.value,
+                    capturedAt: entry.capturedAt,
+                    filePath: privateURL.path,
+                    source: entry.source ?? ShelfCaptureController.Source.filePicker.rawValue,
+                    byteCount: entry.byteCount ?? size
+                )
+            }
+            guard let stored = try? shelfCaptureController.importFile(
+                at: URL(fileURLWithPath: filePath),
+                source: .filePicker,
+                capturedAt: entry.capturedAt
+            ) else {
+                return entry
+            }
+            didChange = true
+            return ShelfEntry(
+                id: entry.id,
+                value: stored.url.lastPathComponent,
+                capturedAt: entry.capturedAt,
+                filePath: stored.url.path,
+                source: entry.source ?? stored.source.rawValue,
+                byteCount: entry.byteCount ?? stored.byteCount
+            )
+        }
+        if didChange { persist(shelf, key: Self.shelfKey) }
     }
 
     private func persist<T: Encodable>(_ value: T, key: String) {

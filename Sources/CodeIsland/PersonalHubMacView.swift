@@ -8,6 +8,8 @@ import SwiftUI
 struct PersonalHubMacView: View {
     var appState: AppState
 
+    @ObservedObject private var personalData = PersonalHubDataModel.shared
+
     @State private var requestedMode: PersonalHubMode = .auto
     @State private var snapshot: PersonalHubSnapshot?
     @State private var preparedAction: PersonalHubPreparedAction?
@@ -111,6 +113,7 @@ struct PersonalHubMacView: View {
             }
         }
         .onChange(of: requestedMode) { _, _ in refresh() }
+        .onReceive(personalData.$shelf) { _ in refresh() }
         .confirmationDialog(
             "Review action",
             isPresented: Binding(
@@ -545,6 +548,10 @@ private struct MacHubModuleCard: View {
                 }
             }
 
+            if module.id == .shelf {
+                MacShelfCaptureControls()
+            }
+
             if let month = module.calendarMonth {
                 MacCalendarMonthView(month: month, onSelection: selectCalendarDate)
                 Text(month.selectedEvents.isEmpty ? "NO EVENTS" : "SELECTED DAY")
@@ -678,6 +685,105 @@ private struct MacHubModuleCard: View {
         module.items.compactMap { item in
             guard item.id.hasPrefix("list:"), let id = item.detail else { return nil }
             return .init(id: id, title: item.title)
+        }
+    }
+}
+
+private struct MacShelfCaptureControls: View {
+    @ObservedObject private var capture = PersonalHubDataModel.shared.shelfCaptureController
+    @State private var isDropTarget = false
+
+    private let data = PersonalHubDataModel.shared
+    private let accent = Color(red: 1.0, green: 0.69, blue: 0.0)
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 5) {
+                captureButton("Add", symbol: "plus") { chooseFiles() }
+                captureButton("Clipboard", symbol: "doc.on.clipboard") {
+                    _ = data.captureClipboardNow()
+                }
+                captureButton("Capture", symbol: "viewfinder") {
+                    capture.presentSelectionCapture()
+                }
+                captureButton(
+                    capture.isRecording ? "Stop" : "Record",
+                    symbol: capture.isRecording ? "stop.fill" : "record.circle"
+                ) {
+                    if capture.isRecording {
+                        capture.stopRecording()
+                    } else {
+                        capture.presentRecordingCapture()
+                    }
+                }
+            }
+
+            HStack(spacing: 6) {
+                Image(systemName: isDropTarget ? "arrow.down.doc.fill" : "arrow.down.doc")
+                Text(isDropTarget ? "RELEASE TO ADD" : "DROP FILES INTO SHELF")
+            }
+            .font(.system(size: 7, weight: .black, design: .monospaced))
+            .foregroundStyle(isDropTarget ? .black : .white.opacity(0.36))
+            .frame(maxWidth: .infinity, minHeight: 28)
+            .background(
+                isDropTarget ? accent : Color.white.opacity(0.035),
+                in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .stroke(isDropTarget ? accent : Color.white.opacity(0.08), lineWidth: 1)
+            )
+            .dropDestination(for: URL.self) { urls, _ in
+                urls.reduce(false) { imported, url in
+                    data.importShelfFile(at: url, source: .drop) || imported
+                }
+            } isTargeted: { targeted in
+                isDropTarget = targeted
+            }
+
+            if capture.isPresentingPicker {
+                Text("Choose a window, app, or display in the system picker")
+                    .font(.system(size: 8, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.38))
+            } else if capture.isRecording {
+                Text("Recording selected content · Stop when finished")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(accent)
+            } else if let error = capture.lastError {
+                Text(error)
+                    .font(.system(size: 8, weight: .medium))
+                    .foregroundStyle(Color.red.opacity(0.82))
+            }
+        }
+        .padding(7)
+        .background(Color.black.opacity(0.24), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private func captureButton(
+        _ label: String,
+        symbol: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Label(label, systemImage: symbol)
+                .font(.system(size: 8, weight: .bold))
+                .frame(maxWidth: .infinity, minHeight: 24)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(label == "Stop" ? Color.red.opacity(0.9) : .white.opacity(0.66))
+        .background(Color.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 6))
+    }
+
+    private func chooseFiles() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = true
+        panel.resolvesAliases = true
+        panel.prompt = "Add to Shelf"
+        guard panel.runModal() == .OK else { return }
+        for url in panel.urls {
+            _ = data.importShelfFile(at: url, source: .filePicker)
         }
     }
 }

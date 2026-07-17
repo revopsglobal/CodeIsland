@@ -956,16 +956,26 @@ final class PersonalHubService {
             return .init(
                 id: id,
                 availability: .ready,
-                summary: data.shelf.isEmpty ? "Clipboard history is empty" : "\(data.shelf.count) recent clips",
-                detail: "Stored locally on this Mac",
+                summary: data.shelf.isEmpty ? "Shelf is empty" : "\(data.shelf.count) recent items",
+                detail: "Private Mac storage · files up to 100 MB transfer to paired devices",
                 items: data.shelf.prefix(12).map { entry in
-                    let actions: [PersonalHubAction]
+                    var actions: [PersonalHubAction]
                     if entry.filePath != nil {
                         actions = [
-                            .init(id: "downloadToDevice", label: "Download", symbol: "square.and.arrow.down", role: .primary, targetID: entry.id),
-                            .init(id: "revealOnMac", label: "Reveal on Mac", symbol: "folder", targetID: entry.id),
-                            .init(id: "remove", label: "Remove", symbol: "trash", role: .destructive, targetID: entry.id)
+                            .init(id: "remove", label: "Remove", symbol: "trash", role: .destructive, targetID: entry.id),
                         ]
+                        if data.shelfFileURL(id: entry.id) != nil {
+                            actions.insert(
+                                .init(id: "revealOnMac", label: "Reveal on Mac", symbol: "folder", targetID: entry.id),
+                                at: 0
+                            )
+                        }
+                        if data.shelfFileIsTransferable(id: entry.id) {
+                            actions.insert(
+                                .init(id: "downloadToDevice", label: "Download", symbol: "square.and.arrow.down", role: .primary, targetID: entry.id),
+                                at: 0
+                            )
+                        }
                     } else {
                         actions = [
                             .init(id: "copyToDevice", label: "Copy here", symbol: "doc.on.doc", role: .primary),
@@ -975,7 +985,14 @@ final class PersonalHubService {
                     return .init(
                         id: entry.id,
                         title: entry.title,
-                        subtitle: Self.relativeDate(entry.capturedAt),
+                        subtitle: [
+                            entry.source.flatMap(Self.shelfSourceLabel),
+                            entry.byteCount.map(Self.fileSize),
+                            Self.relativeDate(entry.capturedAt),
+                            entry.filePath != nil && !data.shelfFileIsTransferable(id: entry.id)
+                                ? "Mac only"
+                                : nil,
+                        ].compactMap { $0 }.joined(separator: " · "),
                         detail: entry.filePath == nil ? entry.value : nil,
                         symbol: entry.filePath == nil ? "doc.on.clipboard" : "doc.fill",
                         actions: actions
@@ -1709,6 +1726,18 @@ final class PersonalHubService {
 
     private static func fileSize(_ bytes: Int64) -> String {
         ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+    }
+
+    private static func shelfSourceLabel(_ value: String) -> String? {
+        guard let source = ShelfCaptureController.Source(rawValue: value) else { return nil }
+        switch source {
+        case .clipboardFile: return "Clipboard"
+        case .filePicker: return "File"
+        case .drop: return "Dropped"
+        case .automaticScreenshot: return "Screenshot"
+        case .selection: return "Capture"
+        case .recording: return "Recording"
+        }
     }
 
     private static func duration(_ seconds: TimeInterval) -> String {

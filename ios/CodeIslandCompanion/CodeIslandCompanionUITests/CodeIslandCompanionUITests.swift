@@ -257,6 +257,26 @@ final class CodeIslandCompanionUITests: XCTestCase {
     }
 
     @MainActor
+    func testShelfFileOpensNativeShareSheet() throws {
+        let app = launchHubApp(mode: "code")
+        XCTAssertTrue(app.otherElements["hub.surface"].waitForExistence(timeout: 8))
+
+        let shelfModule = findHubElement("hub.module.shelf", in: app)
+        XCTAssertTrue(shelfModule.exists)
+        let download = app.buttons["hub.action.shelf.downloadToDevice"].firstMatch
+        for _ in 0..<4 where !download.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(download.waitForExistence(timeout: 4))
+        download.tap()
+
+        let activityList = app.otherElements["ActivityListView"].firstMatch
+        let nativeSheetAppeared = app.sheets.firstMatch.waitForExistence(timeout: 5)
+            || activityList.waitForExistence(timeout: 2)
+        XCTAssertTrue(nativeSheetAppeared, "Shelf file did not open the native share sheet")
+    }
+
+    @MainActor
     func testCameraActionOpensPrivateNativePreview() throws {
         let app = launchHubApp(mode: "work")
         XCTAssertTrue(app.otherElements["hub.surface"].waitForExistence(timeout: 8))

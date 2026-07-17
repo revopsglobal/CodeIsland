@@ -128,10 +128,101 @@ final class PersonalHubDataModelTests: XCTestCase {
             id: "file-1",
             value: "Quarterly-plan.pdf",
             capturedAt: Date(),
-            filePath: "/Users/greg/Quarterly-plan.pdf"
+            filePath: "/Users/greg/Quarterly-plan.pdf",
+            source: ShelfCaptureController.Source.filePicker.rawValue,
+            byteCount: 42
         )
 
         XCTAssertEqual(entry.title, "Quarterly-plan.pdf")
+        XCTAssertEqual(entry.source, ShelfCaptureController.Source.filePicker.rawValue)
+        XCTAssertEqual(entry.byteCount, 42)
+    }
+
+    @MainActor
+    func testShelfImportPersistsPrivateMetadataAndRemovalDeletesOnlyStoredCopy() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CodeIslandShelfModel-\(UUID().uuidString)", isDirectory: true)
+        let storage = root.appendingPathComponent("Shelf", isDirectory: true)
+        let desktop = root.appendingPathComponent("Desktop", isDirectory: true)
+        try FileManager.default.createDirectory(at: desktop, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("brief.txt")
+        try Data("handoff".utf8).write(to: source)
+        let suite = "PersonalHubDataModelTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        let controller = ShelfCaptureController(storageDirectory: storage, screenshotDirectory: desktop)
+        let model = PersonalHubDataModel(defaults: defaults, shelfCaptureController: controller)
+
+        XCTAssertTrue(model.importShelfFile(at: source, source: .drop))
+        let entry = try XCTUnwrap(model.shelf.first)
+        let storedURL = try XCTUnwrap(model.shelfFileURL(id: entry.id))
+        XCTAssertTrue(controller.containsStoredFile(storedURL))
+        XCTAssertEqual(entry.source, ShelfCaptureController.Source.drop.rawValue)
+        XCTAssertEqual(entry.byteCount, 7)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: source.path))
+
+        XCTAssertTrue(model.removeShelfEntry(id: entry.id))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: storedURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: source.path))
+    }
+
+    @MainActor
+    func testShelfRetentionRemovesEvictedPrivateCopy() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CodeIslandShelfRetention-\(UUID().uuidString)", isDirectory: true)
+        let storage = root.appendingPathComponent("Shelf", isDirectory: true)
+        let desktop = root.appendingPathComponent("Desktop", isDirectory: true)
+        try FileManager.default.createDirectory(at: desktop, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("capture.txt")
+        try Data("capture".utf8).write(to: source)
+        let suite = "PersonalHubDataModelTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        let controller = ShelfCaptureController(storageDirectory: storage, screenshotDirectory: desktop)
+        let model = PersonalHubDataModel(defaults: defaults, shelfCaptureController: controller)
+
+        XCTAssertTrue(model.importShelfFile(at: source, source: .drop))
+        let firstStoredURL = try XCTUnwrap(model.shelfFileURL(id: XCTUnwrap(model.shelf.first?.id)))
+        for _ in 0..<20 {
+            XCTAssertTrue(model.importShelfFile(at: source, source: .drop))
+        }
+
+        XCTAssertEqual(model.shelf.count, 20)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: firstStoredURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: source.path))
+    }
+
+    @MainActor
+    func testLegacyOutsideShelfReferenceMigratesIntoPrivateStore() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CodeIslandShelfMigration-\(UUID().uuidString)", isDirectory: true)
+        let storage = root.appendingPathComponent("Shelf", isDirectory: true)
+        let desktop = root.appendingPathComponent("Desktop", isDirectory: true)
+        try FileManager.default.createDirectory(at: desktop, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let legacyFile = root.appendingPathComponent("legacy.pdf")
+        try Data("legacy".utf8).write(to: legacyFile)
+        let suite = "PersonalHubDataModelTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        let legacy = [PersonalHubDataModel.ShelfEntry(
+            id: "legacy-file",
+            value: "legacy.pdf",
+            capturedAt: Date(timeIntervalSince1970: 1),
+            filePath: legacyFile.path
+        )]
+        defaults.set(try JSONEncoder().encode(legacy), forKey: "codeisland.personalHub.shelf.v1")
+        let controller = ShelfCaptureController(storageDirectory: storage, screenshotDirectory: desktop)
+
+        let model = PersonalHubDataModel(defaults: defaults, shelfCaptureController: controller)
+        let migrated = try XCTUnwrap(model.shelf.first)
+
+        XCTAssertEqual(migrated.id, "legacy-file")
+        XCTAssertEqual(migrated.source, ShelfCaptureController.Source.filePicker.rawValue)
+        XCTAssertNotEqual(migrated.filePath, legacyFile.path)
+        XCTAssertNotNil(model.shelfFileURL(id: migrated.id))
     }
 
     func testLegacyNoteDecodesWithSafeRevisionDefaults() throws {

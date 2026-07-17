@@ -33,6 +33,8 @@
 	<string>CodeIsland shows your next meeting in the notch's Glances so you can join the call with one tap.</string>
 	<key>NSRemindersFullAccessUsageDescription</key>
 	<string>CodeIsland shows your reminders in the notch's Glances so you can check them off.</string>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>CodeIsland captures only the screen, window, or app you select and saves it privately to your Shelf.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>CodeIsland shows local weather in the notch's Glances.</string>
 	<key>NSLocationUsageDescription</key>

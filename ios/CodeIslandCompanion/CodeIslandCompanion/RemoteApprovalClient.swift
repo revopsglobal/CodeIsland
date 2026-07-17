@@ -660,14 +660,15 @@ final class RemoteApprovalClient: ObservableObject {
                         title: "launch-reel.mp4",
                         subtitle: "12.4 MB",
                         actions: [
-                            .init(id: "download", label: "Download", targetID: "shelf:launch-reel"),
+                            .init(
+                                id: "downloadToDevice",
+                                label: "Download",
+                                role: .primary,
+                                targetID: "shelf:launch-reel"
+                            ),
                             .init(id: "remove", label: "Remove", role: .destructive, targetID: "shelf:launch-reel"),
                         ]
                     )
-                ],
-                actions: [
-                    .init(id: "captureClipboard", label: "Save clipboard", symbol: "doc.on.clipboard"),
-                    .init(id: "captureFile", label: "Add file", symbol: "plus"),
                 ]
             )
         case .calendar:
