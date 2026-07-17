@@ -246,6 +246,60 @@ final class RemoteApprovalService: ObservableObject {
             return .json(status: 200, encodable: snapshot)
         }
 
+        if request.method == "GET", request.path == "/api/hub" {
+            let snapshot = PersonalHubService.shared.snapshot(
+                appState: appState,
+                requestedMode: .auto
+            )
+            return .json(status: 200, encodable: snapshot)
+        }
+
+        if request.method == "POST", request.path == "/api/hub/snapshot" {
+            guard let snapshotRequest = request.decode(PersonalHubSnapshotRequest.self) else {
+                return .json(status: 400, object: ["error": "invalid hub snapshot request"])
+            }
+            let snapshot = PersonalHubService.shared.snapshot(
+                appState: appState,
+                requestedMode: snapshotRequest.requestedMode
+            )
+            return .json(status: 200, encodable: snapshot)
+        }
+
+        if request.method == "POST", request.path == "/api/hub/actions/prepare" {
+            guard let prepareRequest = request.decode(PersonalHubPrepareActionRequest.self) else {
+                return .json(status: 400, object: ["error": "invalid action intent"])
+            }
+            switch PersonalHubService.shared.prepare(
+                intent: prepareRequest.intent,
+                deviceID: authenticated.id
+            ) {
+            case .success(let prepared):
+                return .json(status: 200, encodable: prepared)
+            case .failure(let error):
+                return .json(status: 400, object: ["error": error.localizedDescription])
+            }
+        }
+
+        if request.method == "POST", request.path == "/api/hub/actions/execute" {
+            guard let executeRequest = request.decode(PersonalHubExecuteActionRequest.self) else {
+                return .json(status: 400, object: ["error": "invalid action confirmation"])
+            }
+            switch PersonalHubService.shared.execute(
+                request: executeRequest,
+                deviceID: authenticated.id
+            ) {
+            case .success(let response):
+                stateDidChange()
+                return .json(status: 200, encodable: response)
+            case .failure(.expired):
+                return .json(status: 409, object: ["error": "action confirmation expired; review it again"])
+            case .failure(.unauthorized):
+                return .json(status: 403, object: ["error": "action confirmation is invalid"])
+            case .failure(let error):
+                return .json(status: 400, object: ["error": error.localizedDescription])
+            }
+        }
+
         if request.method == "POST", request.path == "/api/push-token" {
             guard let registration = request.decode(RemotePushRegistrationRequest.self),
                   registration.token.count >= 32

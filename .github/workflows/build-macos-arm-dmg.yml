@@ -68,7 +68,9 @@ jobs:
           echo "::warning::Building an unsigned, non-notarized DMG. macOS Gatekeeper will block it after download unless quarantine is removed or the app is opened manually."
 
       - name: Test personal utilities
-        run: swift test --filter PersonalUtilitiesModelTests
+        run: |
+          swift test --filter PersonalUtilitiesModelTests
+          swift test --filter PersonalHubProtocolTests
 
       - name: Test remote approval security and exact-request routing
         run: |

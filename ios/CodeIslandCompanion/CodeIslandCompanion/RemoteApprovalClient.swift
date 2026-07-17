@@ -26,6 +26,17 @@ final class RemoteApprovalClient: ObservableObject {
     @Published private(set) var lastUpdatedAt: Date?
     @Published private(set) var busyRequestIDs: Set<String> = []
     @Published private(set) var highlightedApprovalID: String?
+    @Published private(set) var hubSnapshot: PersonalHubSnapshot?
+    @Published private(set) var hubError: String?
+    @Published private(set) var hubActionInFlight = false
+    @Published private(set) var hubActionMessage: String?
+    @Published var preparedAction: PersonalHubPreparedAction?
+    @Published var selectedMode: PersonalHubMode {
+        didSet {
+            UserDefaults.standard.set(selectedMode.rawValue, forKey: Self.selectedModeKey)
+            Task { await refreshHub() }
+        }
+    }
     @Published var serverURLText: String
 
     private static let defaultServerURL = "https://gregs-macbook-air.tail62f27c.ts.net:9443"
@@ -34,6 +45,7 @@ final class RemoteApprovalClient: ObservableObject {
     private static let tokenAccount = "device-token"
     private static let pendingPushTokenKey = "codeisland.remote.pendingPushToken"
     private static let pendingApprovalIDKey = "codeisland.remote.pendingApprovalID"
+    private static let selectedModeKey = "codeisland.hub.selectedMode.v1"
 
     private var deviceToken: String?
     private var pollTask: Task<Void, Never>?
@@ -42,6 +54,9 @@ final class RemoteApprovalClient: ObservableObject {
 
     init() {
         serverURLText = UserDefaults.standard.string(forKey: Self.serverURLKey) ?? Self.defaultServerURL
+        selectedMode = PersonalHubMode(
+            rawValue: UserDefaults.standard.string(forKey: Self.selectedModeKey) ?? ""
+        ) ?? .auto
         deviceToken = Self.readKeychainToken()
         state = deviceToken == nil ? .unpaired : .connecting
 
@@ -133,6 +148,9 @@ final class RemoteApprovalClient: ObservableObject {
         deviceToken = nil
         approvals = []
         serverName = nil
+        hubSnapshot = nil
+        hubError = nil
+        preparedAction = nil
         state = .unpaired
     }
 
@@ -178,10 +196,88 @@ final class RemoteApprovalClient: ObservableObject {
             serverName = snapshot.serverName
             lastUpdatedAt = Date()
             state = .connected
+            await refreshHub()
         } catch RemoteClientError.unauthorized {
             unpair()
         } catch {
             state = .offline(error.localizedDescription)
+        }
+    }
+
+    func refreshHub() async {
+        guard deviceToken != nil else {
+            hubSnapshot = nil
+            return
+        }
+        guard let url = endpoint("/api/hub/snapshot") else {
+            hubError = "Enter a valid Tailscale HTTPS URL"
+            return
+        }
+        do {
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try Self.encoder.encode(
+                PersonalHubSnapshotRequest(requestedMode: selectedMode)
+            )
+            let snapshot: PersonalHubSnapshot = try await perform(request, authenticated: true)
+            hubSnapshot = snapshot
+            hubError = nil
+        } catch RemoteClientError.unauthorized {
+            unpair()
+        } catch {
+            hubError = error.localizedDescription
+        }
+    }
+
+    func prepareHubAction(_ intent: PersonalHubActionIntent) async {
+        guard !hubActionInFlight,
+              let url = endpoint("/api/hub/actions/prepare")
+        else { return }
+        hubActionInFlight = true
+        defer { hubActionInFlight = false }
+        do {
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try Self.encoder.encode(
+                PersonalHubPrepareActionRequest(intent: intent)
+            )
+            preparedAction = try await perform(request, authenticated: true)
+            hubActionMessage = nil
+        } catch RemoteClientError.unauthorized {
+            unpair()
+        } catch {
+            hubActionMessage = error.localizedDescription
+        }
+    }
+
+    func executeHubAction(_ prepared: PersonalHubPreparedAction) async {
+        guard !hubActionInFlight,
+              let url = endpoint("/api/hub/actions/execute")
+        else { return }
+        hubActionInFlight = true
+        defer { hubActionInFlight = false }
+        do {
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try Self.encoder.encode(
+                PersonalHubExecuteActionRequest(
+                    intent: prepared.intent,
+                    actionToken: prepared.actionToken
+                )
+            )
+            let response: PersonalHubActionResponse = try await perform(request, authenticated: true)
+            preparedAction = nil
+            hubActionMessage = response.message
+            await refreshHub()
+        } catch RemoteClientError.unauthorized {
+            unpair()
+        } catch {
+            preparedAction = nil
+            hubActionMessage = error.localizedDescription
+            await refreshHub()
         }
     }
 

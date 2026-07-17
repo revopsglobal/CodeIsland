@@ -13,7 +13,10 @@ import os.log
 /// city or ZIP through Open-Meteo's geocoder, with no API key or location grant.
 @MainActor
 final class GlancesModel: NSObject, ObservableObject {
+    static let shared = GlancesModel()
+
     struct EventInfo: Equatable {
+        let id: String
         let title: String
         let start: Date
         let end: Date
@@ -66,7 +69,7 @@ final class GlancesModel: NSObject, ObservableObject {
     private var lastRefresh: Date = .distantPast
     private var refreshing = false
 
-    override init() {
+    private override init() {
         super.init()
         locationManager.delegate = self
         locationManager.desiredAccuracy = kCLLocationAccuracyKilometer
@@ -182,6 +185,7 @@ final class GlancesModel: NSObject, ObservableObject {
             return
         }
         nextEvent = EventInfo(
+            id: next.calendarItemIdentifier,
             title: next.title ?? "Untitled event",
             start: next.startDate,
             end: next.endDate,

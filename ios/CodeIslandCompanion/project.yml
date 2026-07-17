@@ -21,6 +21,7 @@ targets:
           - WatchBridge.swift
       - path: Shared
       - path: ../../Sources/CodeIslandCore/RemoteApprovalProtocol.swift
+      - path: ../../Sources/CodeIslandCore/PersonalHubProtocol.swift
       - path: ../../Sources/CodeIsland/AntiGravityView.swift
       - path: ../../Sources/CodeIsland/BuddyView.swift
       - path: ../../Sources/CodeIsland/ClineView.swift

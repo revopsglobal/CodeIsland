@@ -4,7 +4,7 @@ import AppKit
 /// Glances surface — weather, next meeting (+ one-tap join), and reminders.
 /// Styled to match the notch panel: monospaced type, green accent, dark chrome.
 struct GlancesView: View {
-    @StateObject private var model = GlancesModel()
+    @StateObject private var model = GlancesModel.shared
     @ObservedObject private var personalUtilities = PersonalUtilitiesModel.shared
     @State private var isAddingReminder = false
     @State private var newReminderTitle = ""
