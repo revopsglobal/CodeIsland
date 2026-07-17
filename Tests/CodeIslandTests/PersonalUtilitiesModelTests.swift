@@ -3,6 +3,27 @@ import XCTest
 
 @MainActor
 final class PersonalUtilitiesModelTests: XCTestCase {
+    func testStartDoesNotBlockOnProtectedDownloadsDirectory() throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let openerEntered = expectation(description: "directory opener runs off the main actor")
+        let releaseOpener = DispatchSemaphore(value: 0)
+        let model = PersonalUtilitiesModel(downloadsURL: directory) { _ in
+            openerEntered.fulfill()
+            releaseOpener.wait()
+            return -1
+        }
+
+        let startedAt = Date()
+        model.start()
+        let startDuration = Date().timeIntervalSince(startedAt)
+
+        XCTAssertLessThan(startDuration, 0.1)
+        wait(for: [openerEntered], timeout: 1)
+        model.stop()
+        releaseOpener.signal()
+    }
+
     func testParsesConnectedBluetoothBatteryLevels() throws {
         let data = Data(
             """
