@@ -139,13 +139,14 @@ proof.
 These receipts were captured on 2026-07-17. They prove the automated delivery
 surfaces, not the remaining physical-device interactions.
 
-- macOS `1.0.36`: merged commit `6ad428e952fb200c51f68182471c38fe7c32e796`,
-  Actions run `29578951355`, artifact `8406349680`, DMG SHA-256
-  `7025c470ab22782f3ebc505ba9c358d97def778758b9955e374f906e675079fb`.
+- macOS `1.0.39`: merged commit `2f7a6b1bb66e14baad870d45fd0767553f816968`,
+  Actions run `29616108584`, artifact `8420619293`, DMG SHA-256
+  `17d45d870aa8cb8267eeabd537026889b068784e2342fc3e724bae8cdff74041`.
   The downloaded DMG passed `codesign --verify --deep --strict` directly from
   its mounted image, and that exact app is installed at
   `/Applications/CodeIsland.app` with team `44JG2Y95CH` and CDHash
-  `e7749f3369d10cac87e6495843de22d683a5a425`.
+  `e0f24c10a72e631b05de10fef17d3a6c4ca57458`. The prior installed 1.0.38 app
+  is preserved at `/Applications/CodeIsland-backup-1.0.38-20260717-1449.app`.
 - iOS `1.0.0 (20260717120420)`: merged commit
   `6ad428e952fb200c51f68182471c38fe7c32e796`, Actions run `29578952503`,
   signed IPA artifact `8406281069`. App Store Connect reported bundle
@@ -161,14 +162,15 @@ surfaces, not the remaining physical-device interactions.
 - The installed Mac host answered both local and Tailscale `/health` with
   `running: true`; the Tailscale root returned the expected CSP/frame/referrer
   headers and unauthenticated Downloads-file access returned `401`.
-- The installed app's designated requirement is stable across 1.0.35 and
-  1.0.36 (bundle `com.codeisland.app`, the same Apple Development certificate
-  and Team `44JG2Y95CH`). Its signed entitlements include Calendar and Apple
-  Events automation. Unified logs show the real app requested full Calendar
-  access on 2026-07-16 at 23:43:06, received EventKit result `3`, `error = 0`,
-  completion `YES`, and immediately issued a Calendar event predicate. This is
-  strong proof that the access request succeeded in that installed identity;
-  it is not proof of the current visible event list after the 1.0.36 restart.
+- The installed app's designated requirement is stable across the preserved
+  1.0.38 and installed 1.0.39 (bundle `com.codeisland.app`, the same Apple
+  Development certificate and Team `44JG2Y95CH`). Its signed entitlements
+  include Calendar and Apple Events automation. Unified logs show the real app
+  requested full Calendar access on 2026-07-16 at 23:43:06, received EventKit
+  result `3`, `error = 0`, completion `YES`, and immediately issued a Calendar
+  event predicate. This is strong proof that the access request succeeded in
+  that installed identity; it is not proof of the current visible event list
+  after the 1.0.39 restart.
 - APNs team, key ID, topic, and private-key path are configured on the Mac and
   the private key exists. The paired-device store still contains zero devices
   and therefore zero physical push tokens, so delivery cannot be exercised

@@ -30,6 +30,11 @@ on:
         required: false
         default: false
         type: boolean
+      verify_uploaded_build_only:
+        description: Verify an already-uploaded build without archiving or uploading again.
+        required: false
+        default: false
+        type: boolean
       repair_app_memberships_only:
         description: Restore Harned Estate and remove the obsolete TestFlight app without building.
         required: false
@@ -112,7 +117,7 @@ jobs:
 
   manage-tester:
     name: Verify internal TestFlight tester
-    if: ${{ !inputs.repair_app_memberships_only }}
+    if: ${{ !inputs.repair_app_memberships_only && !inputs.verify_uploaded_build_only }}
     runs-on: macos-15
     steps:
       - name: Checkout
@@ -180,7 +185,7 @@ jobs:
   testflight:
     name: Signed iPhone archive and TestFlight upload
     needs: manage-tester
-    if: ${{ !inputs.manage_tester_only && !inputs.repair_app_memberships_only }}
+    if: ${{ !inputs.manage_tester_only && !inputs.repair_app_memberships_only && !inputs.verify_uploaded_build_only }}
     runs-on: macos-15
     env:
       TEAM_ID: 44JG2Y95CH
@@ -350,3 +355,55 @@ jobs:
           name: CodeIsland-Buddy-TestFlight-${{ env.BUILD_NUMBER }}
           path: ${{ runner.temp }}/CodeIslandCompanion-export/CodeIslandCompanion.ipa
           if-no-files-found: error
+
+  verify-uploaded-build:
+    name: Verify uploaded TestFlight build
+    if: ${{ inputs.verify_uploaded_build_only && !inputs.manage_tester_only && !inputs.repair_app_memberships_only }}
+    runs-on: ubuntu-24.04
+    env:
+      BUNDLE_ID: com.revopsglobal.codeisland.buddy
+      BUILD_NUMBER: ${{ inputs.build_number }}
+      TESTFLIGHT_PROCESSING_TIMEOUT_MINUTES: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate build and App Store Connect secrets
+        shell: bash
+        env:
+          ASC_ISSUER: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY: ${{ secrets.ASC_KEY_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8_BASE64 }}
+        run: |
+          missing=0
+          for name in BUILD_NUMBER ASC_ISSUER ASC_KEY ASC_KEY_P8; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is required"
+              missing=1
+            fi
+          done
+          if ! [[ "$BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
+            echo "::error::build_number must contain digits only"
+            missing=1
+          fi
+          exit "$missing"
+
+      - name: Install App Store Connect API key
+        shell: bash
+        env:
+          ASC_KEY: ${{ secrets.ASC_KEY_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8_BASE64 }}
+        run: |
+          KEY_DIR="$HOME/.appstoreconnect/private_keys"
+          mkdir -p "$KEY_DIR"
+          printf '%s' "$ASC_KEY_P8" | base64 --decode > "$KEY_DIR/AuthKey_$ASC_KEY.p8"
+          chmod 600 "$KEY_DIR/AuthKey_$ASC_KEY.p8"
+          echo "ASC_PRIVATE_KEY_PATH=$KEY_DIR/AuthKey_$ASC_KEY.p8" >> "$GITHUB_ENV"
+
+      - name: Verify TestFlight processing and internal availability
+        shell: bash
+        env:
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+        run: scripts/wait-for-testflight-build.sh
