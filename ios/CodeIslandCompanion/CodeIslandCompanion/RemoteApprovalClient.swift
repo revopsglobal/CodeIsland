@@ -56,17 +56,24 @@ final class RemoteApprovalClient: ObservableObject {
     private static let selectedModeKey = "codeisland.hub.selectedMode.v1"
 
     private let usesMockHub: Bool
+    private let usesMockPairing: Bool
     private var deviceToken: String?
     private var pollTask: Task<Void, Never>?
     private var isActive = true
     private var notificationObservers: [NSObjectProtocol] = []
 
+    var hasPairingCredential: Bool {
+        deviceToken != nil
+    }
+
     init() {
 #if DEBUG
         usesMockHub = ProcessInfo.processInfo.arguments.contains("-CodeIslandCompanionMockHub")
+        usesMockPairing = ProcessInfo.processInfo.arguments.contains("-CodeIslandCompanionMockPairing")
         let launchMode = Self.mockHubModeFromLaunchArguments()
 #else
         usesMockHub = false
+        usesMockPairing = false
         let launchMode: PersonalHubMode? = nil
 #endif
         serverURLText = UserDefaults.standard.string(forKey: Self.serverURLKey) ?? Self.defaultServerURL
@@ -75,6 +82,11 @@ final class RemoteApprovalClient: ObservableObject {
         ) ?? .auto
 
 #if DEBUG
+        if usesMockPairing {
+            deviceToken = nil
+            state = .unpaired
+            return
+        }
         if usesMockHub {
             deviceToken = "ui-test-device-token"
             state = .connected
@@ -116,6 +128,10 @@ final class RemoteApprovalClient: ObservableObject {
 
     func start() {
 #if DEBUG
+        if usesMockPairing {
+            state = .unpaired
+            return
+        }
         if usesMockHub {
             state = .connected
             hubSnapshot = Self.mockHubSnapshot(requestedMode: selectedMode)
@@ -152,17 +168,24 @@ final class RemoteApprovalClient: ObservableObject {
         }
     }
 
-    func pair(code: String, deviceName: String? = nil) async {
+    @discardableResult
+    func pair(code: String, deviceName: String? = nil) async -> Bool {
         let trimmedCode = code.filter(\.isNumber)
         guard trimmedCode.count == 6 else {
             state = .offline("Enter the six-digit code from the Mac")
-            return
+            return false
         }
         guard let requestURL = endpoint("/api/pair") else {
             state = .offline("Enter a valid Tailscale HTTPS URL")
-            return
+            return false
         }
         state = .connecting
+#if DEBUG
+        if usesMockPairing {
+            state = .offline(Self.expiredPairingCodeMessage)
+            return false
+        }
+#endif
         do {
             var request = URLRequest(url: requestURL)
             request.httpMethod = "POST"
@@ -178,10 +201,20 @@ final class RemoteApprovalClient: ObservableObject {
             state = .connected
             await registerPendingPushToken()
             await refresh()
+            return true
         } catch {
-            state = .offline(error.localizedDescription)
+            let message = error.localizedDescription
+            state = .offline(
+                message == "pairing code is invalid or expired"
+                    ? Self.expiredPairingCodeMessage
+                    : message
+            )
+            return false
         }
     }
+
+    private static let expiredPairingCodeMessage =
+        "That code expired. Open CodeIsland Settings → Buddy on your Mac for the current code."
 
     func unpair() {
         Self.deleteKeychainToken()

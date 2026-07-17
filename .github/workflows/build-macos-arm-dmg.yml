@@ -127,6 +127,8 @@ jobs:
           swift test --filter RemoteActionTokenVaultTests
           swift test --filter RemoteApprovalHTTPServerTests
           swift test --filter RemotePairAttemptLimiterTests
+          swift test --filter RemotePairingCodeLifecycleTests
+          swift test --filter SessionAttentionRouterTests
           swift test --filter AppStatePermissionFlowTests/testRemoteDecisionResolvesOnlyTheSelectedPermission
           swift test --filter AppStateQuestionFlowTests/testRemoteAnswerResolvesOnlyTheSelectedQuestion
           swift test --filter AppStateQuestionFlowTests/testRemoteAnswerNeverResolvesSecretQuestion

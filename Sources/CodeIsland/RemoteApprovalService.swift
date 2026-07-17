@@ -131,6 +131,17 @@ final class RemoteApprovalService: ObservableObject {
         syncPublishedState()
     }
 
+    /// Keeps the code shown in Settings usable. Pairing codes deliberately
+    /// expire after ten minutes, but an expired value should never remain the
+    /// primary code presented to the user.
+    @discardableResult
+    func ensureActivePairingCode(at date: Date = Date()) -> Bool {
+        guard deviceStore.ensureActivePairingCode(at: date) else { return false }
+        pairAttemptLimiter.reset()
+        syncPublishedState()
+        return true
+    }
+
     func revokeDevice(id: String) {
         deviceStore.revoke(deviceID: id)
         syncPublishedState()
@@ -521,16 +532,23 @@ final class RemoteApprovalDeviceStore {
         rotatePairingCode()
     }
 
-    func rotatePairingCode() {
+    func rotatePairingCode(at date: Date = Date()) {
         var bytes = [UInt8](repeating: 0, count: 4)
         guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else {
             pairingCode = String(format: "%06d", Int.random(in: 0...999_999))
-            pairingExpiresAt = Date().addingTimeInterval(600)
+            pairingExpiresAt = date.addingTimeInterval(600)
             return
         }
         let value = bytes.reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
         pairingCode = String(format: "%06d", Int(value % 1_000_000))
-        pairingExpiresAt = Date().addingTimeInterval(600)
+        pairingExpiresAt = date.addingTimeInterval(600)
+    }
+
+    @discardableResult
+    func ensureActivePairingCode(at date: Date = Date()) -> Bool {
+        guard date >= pairingExpiresAt else { return false }
+        rotatePairingCode(at: date)
+        return true
     }
 
     func pair(_ request: RemotePairRequest) -> RemotePairResponse? {

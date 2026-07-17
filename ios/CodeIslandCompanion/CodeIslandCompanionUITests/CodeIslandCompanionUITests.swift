@@ -40,6 +40,33 @@ final class CodeIslandCompanionUITests: XCTestCase {
     }
 
     @MainActor
+    func testPairingSurfaceKeepsRecoveryInline() throws {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-CodeIslandCompanionMockState", "idle",
+            "-CodeIslandCompanionMockPairing",
+        ]
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["Connect to your Mac"].waitForExistence(timeout: 8))
+        let pairingCode = app.textFields["Pairing code"]
+        XCTAssertTrue(pairingCode.waitForExistence(timeout: 3))
+        pairingCode.tap()
+        pairingCode.typeText("123456")
+
+        let connect = app.buttons["Connect securely"]
+        XCTAssertTrue(connect.waitForExistence(timeout: 3))
+        connect.tap()
+
+        XCTAssertTrue(
+            app.staticTexts[
+                "That code expired. Open CodeIsland Settings → Buddy on your Mac for the current code."
+            ].waitForExistence(timeout: 3)
+        )
+        XCTAssertTrue(app.staticTexts["Connect to your Mac"].exists)
+    }
+
+    @MainActor
     func testLandscapeMultiSessionShowsBoard() throws {
         let app = launchApp(mockState: "multi")
         XCUIDevice.shared.orientation = .landscapeLeft
