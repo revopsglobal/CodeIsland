@@ -164,10 +164,14 @@ final class RemoteApprovalHTTPServerTests: XCTestCase {
 
         let stateURL = temporaryDirectory.appendingPathComponent("devices.json")
         let auditURL = temporaryDirectory.appendingPathComponent("audit.jsonl")
+        let configurationURL = temporaryDirectory.appendingPathComponent("hub-configuration.json")
         let deviceStore = RemoteApprovalDeviceStore(stateURL: stateURL)
+        let configurationStore = PersonalHubConfigurationStore(stateURL: configurationURL)
+        let personalHub = PersonalHubService(configurationStore: configurationStore)
         let service = RemoteApprovalService(
             deviceStore: deviceStore,
             coordinator: RemoteApprovalCoordinator(auditURL: auditURL),
+            personalHub: personalHub,
             localPortOverride: 0,
             enabledOverride: true,
             tailscaleConfigurator: { _, _ in "https://codeisland-e2e.invalid" }
@@ -185,6 +189,10 @@ final class RemoteApprovalHTTPServerTests: XCTestCase {
         XCTAssertTrue(
             root.response.value(forHTTPHeaderField: "Content-Security-Policy")?.contains("frame-ancestors 'none'") == true
         )
+        let webApp = try XCTUnwrap(String(data: root.data, encoding: .utf8))
+        XCTAssertTrue(webApp.contains("id=\"hubConfig\""))
+        XCTAssertTrue(webApp.contains("setModeRack"))
+        XCTAssertTrue(webApp.contains("setDashboard"))
 
         let unauthenticated = try await send(port: port, method: "GET", path: "/api/hub")
         XCTAssertEqual(unauthenticated.response.statusCode, 401)
@@ -222,6 +230,81 @@ final class RemoteApprovalHTTPServerTests: XCTestCase {
             XCTAssertEqual(snapshot.resolvedMode, mode)
             XCTAssertEqual(snapshot.modules.map(\.id), PersonalHubCatalog.modules(for: mode))
         }
+
+        let configuredWorkRack: [PersonalHubModuleID] = [.reminders, .calendar, .downloads]
+        let rackIntent = PersonalHubActionIntent(
+            moduleID: .quickToggles,
+            actionID: "setModeRack",
+            value: PersonalHubConfigurationMutation(
+                mode: .work,
+                modules: configuredWorkRack
+            ).encodedActionValue()
+        )
+        let preparedRack = try decode(
+            PersonalHubPreparedAction.self,
+            from: try await send(
+                port: port,
+                method: "POST",
+                path: "/api/hub/actions/prepare",
+                bearer: pair.deviceToken,
+                body: try encode(PersonalHubPrepareActionRequest(intent: rackIntent))
+            ).data
+        )
+        let savedRack = try await send(
+            port: port,
+            method: "POST",
+            path: "/api/hub/actions/execute",
+            bearer: pair.deviceToken,
+            body: try encode(PersonalHubExecuteActionRequest(
+                intent: rackIntent,
+                actionToken: preparedRack.actionToken
+            ))
+        )
+        XCTAssertEqual(savedRack.response.statusCode, 200)
+
+        let dashboardIntent = PersonalHubActionIntent(
+            moduleID: .quickToggles,
+            actionID: "setDashboard",
+            value: PersonalHubConfigurationMutation(dashboardEnabled: false).encodedActionValue()
+        )
+        let preparedDashboard = try decode(
+            PersonalHubPreparedAction.self,
+            from: try await send(
+                port: port,
+                method: "POST",
+                path: "/api/hub/actions/prepare",
+                bearer: pair.deviceToken,
+                body: try encode(PersonalHubPrepareActionRequest(intent: dashboardIntent))
+            ).data
+        )
+        let savedDashboard = try await send(
+            port: port,
+            method: "POST",
+            path: "/api/hub/actions/execute",
+            bearer: pair.deviceToken,
+            body: try encode(PersonalHubExecuteActionRequest(
+                intent: dashboardIntent,
+                actionToken: preparedDashboard.actionToken
+            ))
+        )
+        XCTAssertEqual(savedDashboard.response.statusCode, 200)
+
+        let configuredSnapshotResult = try await send(
+            port: port,
+            method: "POST",
+            path: "/api/hub/snapshot",
+            bearer: pair.deviceToken,
+            body: try encode(PersonalHubSnapshotRequest(requestedMode: .work))
+        )
+        let configuredSnapshot = try decode(PersonalHubSnapshot.self, from: configuredSnapshotResult.data)
+        XCTAssertEqual(configuredSnapshot.modules.map(\.id), configuredWorkRack)
+        XCTAssertEqual(configuredSnapshot.configuration?.rack(for: .work), configuredWorkRack)
+        XCTAssertEqual(configuredSnapshot.configuration?.dashboardEnabled, false)
+        XCTAssertNotNil(configuredSnapshot.dayProgress)
+
+        let reloadedConfiguration = PersonalHubConfigurationStore(stateURL: configurationURL).configuration
+        XCTAssertEqual(reloadedConfiguration.rack(for: .work), configuredWorkRack)
+        XCTAssertEqual(reloadedConfiguration.dashboardEnabled, false)
 
         let event = try makePermissionRequestEvent(sessionID: "remote-e2e", toolName: "Bash")
         let permissionResponse = Task<Data, Never> {

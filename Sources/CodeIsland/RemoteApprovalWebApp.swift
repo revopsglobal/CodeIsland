@@ -86,6 +86,11 @@ enum RemoteApprovalWebApp {
         .hub-actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
         .hub-action { min-height:34px; padding:0 10px; border-radius:9px; background:#1b241e; color:#dce3dd; font-size:11px; box-shadow:inset 0 0 0 1px #344037; }
         .hub-action.primary { background:var(--amber); color:#171006; box-shadow:none; }
+        .hub-config { margin:0 0 10px; padding:13px; }
+        .hub-config-head { display:flex; align-items:center; gap:10px; }
+        .hub-config-actions { display:flex; flex-wrap:wrap; gap:7px; margin-top:10px; }
+        .hub-config-actions button { min-height:36px; padding:0 11px; border-radius:9px; font-size:11px; }
+        .rack-summary { margin-top:7px; color:#aeb8b0; font-size:11px; line-height:1.45; }
         progress { width:100%; height:5px; margin-top:7px; accent-color:var(--amber); }
         .hidden { display:none !important; }
         #error { color:#ff9da0; font-size:13px; margin-top:10px; white-space:pre-wrap; }
@@ -121,6 +126,7 @@ enum RemoteApprovalWebApp {
           <button class="mode" data-mode="code">Code</button>
         </nav>
         <div id="hubTitle" class="section-title hidden">Personal hub</div>
+        <section id="hubConfig" class="module hub-config hidden"></section>
         <section id="hub" class="module-grid"></section>
         <div id="questionTitle" class="section-title hidden">Agent questions</div>
         <section id="questions"></section>
@@ -148,6 +154,7 @@ enum RemoteApprovalWebApp {
         const errorBox = document.getElementById('error');
         const modes = document.getElementById('modes');
         const hub = document.getElementById('hub');
+        const hubConfig = document.getElementById('hubConfig');
         const hubTitle = document.getElementById('hubTitle');
         const approvalTitle = document.getElementById('approvalTitle');
         const questionTitle = document.getElementById('questionTitle');
@@ -260,12 +267,40 @@ enum RemoteApprovalWebApp {
           hubTitle.textContent=`${snapshot.resolvedMode.toUpperCase()} · ${snapshot.serverName}`;
           hubTitle.classList.remove('hidden'); modes.classList.remove('hidden');
           modes.querySelectorAll('[data-mode]').forEach(button=>button.classList.toggle('active',button.dataset.mode===selectedMode));
+          renderHubConfiguration(snapshot);
           hub.innerHTML=(snapshot.modules||[]).map(module=>`<article class="module">
             <div class="module-head"><div><div class="module-title">${escapeHTML(moduleNames[module.id]||module.id)}</div><div class="module-summary">${escapeHTML(module.summary||'')}</div></div><div class="availability">${escapeHTML(module.availability)}</div></div>
             ${(module.items||[]).map(item=>`<div class="hub-item"><div class="hub-item-title">${escapeHTML(item.title)}</div>${item.subtitle?`<div class="hub-item-subtitle">${escapeHTML(item.subtitle)}</div>`:''}${item.progress!==null&&item.progress!==undefined?`<progress value="${Number(item.progress)}" max="1"></progress>`:''}${renderHubActions(module.id,item.actions||[],item.id,item.detail||'')}</div>`).join('')}
             ${renderHubActions(module.id,module.actions||[],null,'')}
           </article>`).join('');
           hub.querySelectorAll('[data-hub-action]').forEach(button=>button.addEventListener('click',()=>runHubAction(button.dataset.module,button.dataset.action,button.dataset.target||null,button.dataset.deeplink||null,button.dataset.payload||'',button.dataset.value||'')));
+        }
+
+        function renderHubConfiguration(snapshot) {
+          const configuration=snapshot.configuration;
+          if(!configuration) { hubConfig.classList.add('hidden'); hubConfig.innerHTML=''; return; }
+          const rack=(configuration.racks||[]).find(item=>item.mode===snapshot.resolvedMode);
+          const modules=rack?.modules||[];
+          const dayProgress=Number(snapshot.dayProgress);
+          const showDay=configuration.dashboardEnabled&&Number.isFinite(dayProgress);
+          hubConfig.classList.remove('hidden');
+          hubConfig.innerHTML=`<div class="hub-config-head"><div><div class="module-title">${escapeHTML(snapshot.resolvedMode.toUpperCase())} rack</div><div class="module-summary">Saved across Mac, iPhone, and web</div></div><div class="availability">${configuration.dashboardEnabled?'DASHBOARD ON':'DASHBOARD OFF'}</div></div>
+            ${showDay?`<div class="rack-summary">Day progress · ${Math.round(dayProgress*100)}%</div><progress value="${dayProgress}" max="1"></progress>`:''}
+            <div class="rack-summary">${modules.map(id=>escapeHTML(moduleNames[id]||id)).join(' · ')}</div>
+            <div class="hub-config-actions"><button id="editRack" class="hub-action primary">Edit rack</button><button id="toggleDashboard" class="hub-action">${configuration.dashboardEnabled?'Hide dashboard':'Show dashboard'}</button></div>`;
+          document.getElementById('editRack').addEventListener('click',()=>editRack(snapshot,modules));
+          document.getElementById('toggleDashboard').addEventListener('click',()=>runHubAction('quickToggles','setDashboard',null,null,'',JSON.stringify({dashboardEnabled:!configuration.dashboardEnabled})));
+        }
+
+        async function editRack(snapshot,currentModules) {
+          const catalog=Object.keys(moduleNames);
+          const answer=prompt(`Enter ${snapshot.resolvedMode.toUpperCase()} modules in order, separated by commas.\n\nAvailable: ${catalog.join(', ')}`,currentModules.join(', '));
+          if(answer===null) return;
+          const reverseNames=Object.fromEntries(Object.entries(moduleNames).map(([id,title])=>[title.toLowerCase(),id]));
+          const modules=answer.split(',').map(value=>value.trim()).filter(Boolean).map(value=>catalog.includes(value)?value:reverseNames[value.toLowerCase()]).filter(Boolean);
+          if(!modules.length) { alert('Keep at least one valid module in the rack.'); return; }
+          if(new Set(modules).size!==modules.length) { alert('A module can appear only once.'); return; }
+          await runHubAction('quickToggles','setModeRack',null,null,'',JSON.stringify({mode:snapshot.resolvedMode,modules}));
         }
 
         function renderHubActions(moduleID,actions,targetID,payload) {
@@ -404,7 +439,7 @@ enum RemoteApprovalWebApp {
         }
 
         async function refresh() {
-          if(!deviceToken) { pair.classList.remove('hidden'); approvals.innerHTML=''; questions.innerHTML=''; hub.innerHTML=''; modes.classList.add('hidden'); hubTitle.classList.add('hidden'); approvalTitle.classList.add('hidden'); questionTitle.classList.add('hidden'); empty.classList.add('hidden'); setStatus('Pairing required'); return; }
+          if(!deviceToken) { pair.classList.remove('hidden'); approvals.innerHTML=''; questions.innerHTML=''; hub.innerHTML=''; hubConfig.innerHTML=''; hubConfig.classList.add('hidden'); modes.classList.add('hidden'); hubTitle.classList.add('hidden'); approvalTitle.classList.add('hidden'); questionTitle.classList.add('hidden'); empty.classList.add('hidden'); setStatus('Pairing required'); return; }
           try {
             const response=await fetch('/api/approvals',{headers:authHeaders(),cache:'no-store'});
             if(response.status===401) { deviceToken=''; localStorage.removeItem(tokenKey); pair.classList.remove('hidden'); setStatus('Pairing required'); return; }

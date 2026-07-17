@@ -12,6 +12,8 @@ private enum HubTheme {
 
 struct PersonalHubSurface: View {
     @EnvironmentObject private var client: RemoteApprovalClient
+    @State private var showingRackEditor = false
+    @State private var pendingRack: (PersonalHubMode, [PersonalHubModuleID])?
 
     var body: some View {
         VStack(spacing: 10) {
@@ -30,8 +32,47 @@ struct PersonalHubSurface: View {
                     Text(snapshot.generatedAt, style: .time)
                         .font(.system(size: 10, weight: .medium, design: .monospaced))
                         .foregroundStyle(HubTheme.foreground.opacity(0.34))
+                    Button {
+                        toggleDashboard(snapshot)
+                    } label: {
+                        Image(systemName: snapshot.configuration?.dashboardEnabled == false
+                            ? "gauge.with.dots.needle.0percent"
+                            : "gauge.with.dots.needle.67percent")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(HubTheme.foreground.opacity(0.52))
+                    .accessibilityLabel(snapshot.configuration?.dashboardEnabled == false
+                        ? "Show day dashboard"
+                        : "Hide day dashboard")
+                    .accessibilityIdentifier("hub.dashboard.toggle")
+                    Button {
+                        showingRackEditor = true
+                    } label: {
+                        Image(systemName: "slider.horizontal.3")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(HubTheme.accent)
+                    .accessibilityLabel("Edit \(snapshot.resolvedMode.displayTitle) rack")
+                    .accessibilityIdentifier("hub.rack.edit")
                 }
                 .padding(.horizontal, 4)
+
+                if snapshot.configuration?.dashboardEnabled != false,
+                   let dayProgress = snapshot.dayProgress {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("DAY")
+                            Spacer()
+                            Text("\(Int((dayProgress * 100).rounded()))%")
+                        }
+                        .font(.system(size: 9, weight: .black, design: .monospaced))
+                        .foregroundStyle(HubTheme.foreground.opacity(0.42))
+                        ProgressView(value: dayProgress)
+                            .tint(HubTheme.accent)
+                    }
+                    .padding(.horizontal, 4)
+                    .accessibilityIdentifier("hub.dayProgress")
+                }
 
                 LazyVStack(spacing: 9) {
                     ForEach(snapshot.modules) { module in
@@ -72,7 +113,45 @@ struct PersonalHubSurface: View {
                 .presentationDetents([.height(260)])
                 .presentationDragIndicator(.visible)
         }
+        .sheet(isPresented: $showingRackEditor, onDismiss: preparePendingRack) {
+            if let snapshot = client.hubSnapshot,
+               let configuration = snapshot.configuration {
+                PersonalHubModeRackEditor(
+                    mode: snapshot.resolvedMode,
+                    modules: configuration.rack(for: snapshot.resolvedMode)
+                ) { modules in
+                    pendingRack = (snapshot.resolvedMode, modules)
+                    showingRackEditor = false
+                }
+            }
+        }
         .accessibilityIdentifier("hub.surface")
+    }
+
+    private func toggleDashboard(_ snapshot: PersonalHubSnapshot) {
+        let mutation = PersonalHubConfigurationMutation(
+            dashboardEnabled: !(snapshot.configuration?.dashboardEnabled ?? true)
+        )
+        Task {
+            await client.prepareHubAction(.init(
+                moduleID: .quickToggles,
+                actionID: "setDashboard",
+                value: mutation.encodedActionValue()
+            ))
+        }
+    }
+
+    private func preparePendingRack() {
+        guard let (mode, modules) = pendingRack else { return }
+        pendingRack = nil
+        let mutation = PersonalHubConfigurationMutation(mode: mode, modules: modules)
+        Task {
+            await client.prepareHubAction(.init(
+                moduleID: .quickToggles,
+                actionID: "setModeRack",
+                value: mutation.encodedActionValue()
+            ))
+        }
     }
 
     private var modeStrip: some View {
@@ -115,6 +194,128 @@ struct PersonalHubSurface: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 22)
+    }
+}
+
+private struct PersonalHubModeRackEditor: View {
+    let mode: PersonalHubMode
+    let onSave: ([PersonalHubModuleID]) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var modules: [PersonalHubModuleID]
+
+    init(
+        mode: PersonalHubMode,
+        modules: [PersonalHubModuleID],
+        onSave: @escaping ([PersonalHubModuleID]) -> Void
+    ) {
+        self.mode = mode
+        self.onSave = onSave
+        _modules = State(initialValue: modules)
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 9) {
+                    Text("PINNED")
+                        .font(.system(size: 10, weight: .black, design: .monospaced))
+                        .foregroundStyle(.secondary)
+
+                    ForEach(Array(modules.enumerated()), id: \.element) { index, module in
+                        moduleRow(module) {
+                            HStack(spacing: 14) {
+                                Button { move(index, by: -1) } label: {
+                                    Image(systemName: "arrow.up")
+                                }
+                                .disabled(index == 0)
+                                .accessibilityLabel("Move \(PersonalHubCatalog.definition(for: module).title) up")
+                                .accessibilityIdentifier("hub.rack.moveUp.\(module.rawValue)")
+                                Button { move(index, by: 1) } label: {
+                                    Image(systemName: "arrow.down")
+                                }
+                                .disabled(index == modules.count - 1)
+                                .accessibilityLabel("Move \(PersonalHubCatalog.definition(for: module).title) down")
+                                .accessibilityIdentifier("hub.rack.moveDown.\(module.rawValue)")
+                                Button { modules.remove(at: index) } label: {
+                                    Image(systemName: "minus.circle")
+                                }
+                                .disabled(modules.count == 1)
+                                .accessibilityLabel("Remove \(PersonalHubCatalog.definition(for: module).title)")
+                                .accessibilityIdentifier("hub.rack.remove.\(module.rawValue)")
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(HubTheme.accent)
+                        }
+                    }
+
+                    if !availableModules.isEmpty {
+                        Text("AVAILABLE")
+                            .font(.system(size: 10, weight: .black, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .padding(.top, 10)
+
+                        ForEach(availableModules) { module in
+                            moduleRow(module) {
+                                Button { modules.append(module) } label: {
+                                    Image(systemName: "plus.circle.fill")
+                                        .foregroundStyle(HubTheme.accent)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+                .padding(16)
+            }
+            .background(Color.black)
+            .navigationTitle("\(mode.displayTitle) rack")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Review") { onSave(modules) }
+                        .disabled(modules.isEmpty)
+                        .accessibilityIdentifier("hub.rack.review")
+                }
+            }
+        }
+        .preferredColorScheme(.dark)
+        .accessibilityIdentifier("hub.rack.editor")
+    }
+
+    private func moduleRow<Trailing: View>(
+        _ module: PersonalHubModuleID,
+        @ViewBuilder trailing: () -> Trailing
+    ) -> some View {
+        HStack(spacing: 11) {
+            Image(systemName: PersonalHubCatalog.definition(for: module).symbol)
+                .foregroundStyle(HubTheme.accent)
+                .frame(width: 24)
+            Text(PersonalHubCatalog.definition(for: module).title)
+                .font(.system(size: 14, weight: .semibold))
+            Spacer()
+            trailing()
+        }
+        .padding(12)
+        .background(HubTheme.surface, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .stroke(HubTheme.border, lineWidth: 1)
+        )
+        .accessibilityIdentifier("hub.rack.module.\(module.rawValue)")
+    }
+
+    private var availableModules: [PersonalHubModuleID] {
+        PersonalHubModuleID.allCases.filter { !modules.contains($0) }
+    }
+
+    private func move(_ index: Int, by offset: Int) {
+        let destination = index + offset
+        guard modules.indices.contains(index), modules.indices.contains(destination) else { return }
+        modules.swapAt(index, destination)
     }
 }
 

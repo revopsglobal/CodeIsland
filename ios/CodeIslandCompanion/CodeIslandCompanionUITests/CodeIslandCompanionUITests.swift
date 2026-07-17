@@ -106,6 +106,29 @@ final class CodeIslandCompanionUITests: XCTestCase {
     }
 
     @MainActor
+    func testModeRackReorderRequiresReviewAndExplicitExecution() throws {
+        let app = launchHubApp(mode: "work")
+        XCTAssertTrue(app.otherElements["hub.surface"].waitForExistence(timeout: 8))
+
+        let edit = app.buttons["Edit WORK rack"].firstMatch
+        XCTAssertTrue(edit.waitForExistence(timeout: 4))
+        edit.tap()
+
+        XCTAssertTrue(app.otherElements["hub.rack.editor"].waitForExistence(timeout: 5))
+        let moveTasksUp = app.buttons["Move Tasks up"].firstMatch
+        XCTAssertTrue(moveTasksUp.waitForExistence(timeout: 4))
+        moveTasksUp.tap()
+        app.buttons["Review"].tap()
+
+        XCTAssertTrue(app.otherElements["hub.action.confirmation"].waitForExistence(timeout: 5))
+        app.buttons["Do it"].tap()
+
+        let message = app.staticTexts["hub.action.message"].firstMatch
+        XCTAssertTrue(message.waitForExistence(timeout: 5))
+        XCTAssertTrue(message.label.contains("Executed quickToggles.setModeRack"))
+    }
+
+    @MainActor
     func testClaudeDoProposalRequiresReviewAndExplicitExecution() throws {
         let app = launchHubApp(mode: "code")
         XCTAssertTrue(app.otherElements["hub.surface"].waitForExistence(timeout: 8))

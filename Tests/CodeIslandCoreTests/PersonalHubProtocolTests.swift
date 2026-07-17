@@ -212,4 +212,50 @@ final class PersonalHubProtocolTests: XCTestCase {
             mutation
         )
     }
+
+    func testModeRackConfigurationSanitizesDuplicatesUnknownModesAndNewModules() {
+        let configuration = PersonalHubConfiguration.sanitized(
+            .init(
+                version: 1,
+                racks: [
+                    .init(mode: .work, modules: [.notes, .calendar, .notes]),
+                    .init(mode: .auto, modules: [.system]),
+                ],
+                dashboardEnabled: true,
+                knownModules: []
+            )
+        )
+
+        XCTAssertEqual(configuration.rack(for: .work).prefix(2), [.notes, .calendar])
+        XCTAssertEqual(Set(configuration.rack(for: .work)), Set(PersonalHubCatalog.modules(for: .work)))
+        XCTAssertEqual(configuration.rack(for: .auto), configuration.rack(for: .home))
+        XCTAssertTrue(configuration.dashboardEnabled)
+    }
+
+    func testModeRackMutationRoundTripsThroughActionValue() throws {
+        let mutation = PersonalHubConfigurationMutation(
+            mode: .code,
+            modules: [.agents, .claude, .github],
+            dashboardEnabled: false
+        )
+
+        XCTAssertEqual(
+            PersonalHubConfigurationMutation.decodeActionValue(
+                try XCTUnwrap(mutation.encodedActionValue())
+            ),
+            mutation
+        )
+    }
+
+    func testDayProgressUsesTheProvidedLocalCalendarDay() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: -8 * 60 * 60)!
+        let now = Date(timeIntervalSince1970: 1_735_718_400) // 2025-01-01 08:00:00Z
+
+        XCTAssertEqual(
+            PersonalHubConfiguration.dayProgress(at: now, calendar: calendar),
+            0,
+            accuracy: 0.0001
+        )
+    }
 }

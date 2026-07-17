@@ -12,6 +12,7 @@ struct PersonalHubMacView: View {
     @State private var snapshot: PersonalHubSnapshot?
     @State private var preparedAction: PersonalHubPreparedAction?
     @State private var actionMessage: String?
+    @State private var showingRackEditor = false
 
     private let service = PersonalHubService.shared
     private let accent = Color(red: 1.0, green: 0.69, blue: 0.0)
@@ -32,8 +33,47 @@ struct PersonalHubMacView: View {
                     Text(snapshot.generatedAt, style: .time)
                         .font(.system(size: 8, weight: .medium, design: .monospaced))
                         .foregroundStyle(.white.opacity(0.25))
+                    Button {
+                        toggleDashboard(snapshot)
+                    } label: {
+                        Image(systemName: snapshot.configuration?.dashboardEnabled == false
+                            ? "gauge.with.dots.needle.0percent"
+                            : "gauge.with.dots.needle.67percent")
+                            .font(.system(size: 10, weight: .bold))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.white.opacity(0.48))
+                    .help(snapshot.configuration?.dashboardEnabled == false
+                        ? "Show day dashboard"
+                        : "Hide day dashboard")
+                    Button {
+                        showingRackEditor = true
+                    } label: {
+                        Image(systemName: "slider.horizontal.3")
+                            .font(.system(size: 10, weight: .bold))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(accent)
+                    .help("Edit \(snapshot.resolvedMode.rawValue.capitalized) rack")
                 }
                 .padding(.horizontal, 12)
+
+                if snapshot.configuration?.dashboardEnabled != false,
+                   let dayProgress = snapshot.dayProgress {
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack {
+                            Text("DAY")
+                            Spacer()
+                            Text("\(Int((dayProgress * 100).rounded()))%")
+                        }
+                        .font(.system(size: 8, weight: .black, design: .monospaced))
+                        .foregroundStyle(.white.opacity(0.36))
+                        ProgressView(value: dayProgress)
+                            .tint(accent)
+                            .controlSize(.mini)
+                    }
+                    .padding(.horizontal, 12)
+                }
 
                 ScrollView {
                     LazyVStack(spacing: 7) {
@@ -82,6 +122,18 @@ struct PersonalHubMacView: View {
         } message: { prepared in
             Text(prepared.preview)
         }
+        .sheet(isPresented: $showingRackEditor) {
+            if let snapshot,
+               let configuration = snapshot.configuration {
+                MacModeRackEditor(
+                    mode: snapshot.resolvedMode,
+                    modules: configuration.rack(for: snapshot.resolvedMode)
+                ) { modules in
+                    showingRackEditor = false
+                    saveRack(mode: snapshot.resolvedMode, modules: modules)
+                }
+            }
+        }
     }
 
     private var modeStrip: some View {
@@ -108,6 +160,31 @@ struct PersonalHubMacView: View {
 
     private func refresh() {
         snapshot = service.snapshot(appState: appState, requestedMode: requestedMode)
+    }
+
+    private func saveRack(mode: PersonalHubMode, modules: [PersonalHubModuleID]) {
+        let mutation = PersonalHubConfigurationMutation(mode: mode, modules: modules)
+        acceptPrepared(service.prepare(
+            intent: .init(
+                moduleID: .quickToggles,
+                actionID: "setModeRack",
+                value: mutation.encodedActionValue()
+            ),
+            deviceID: "local-mac"
+        ))
+    }
+
+    private func toggleDashboard(_ snapshot: PersonalHubSnapshot) {
+        let enabled = !(snapshot.configuration?.dashboardEnabled ?? true)
+        let mutation = PersonalHubConfigurationMutation(dashboardEnabled: enabled)
+        acceptPrepared(service.prepare(
+            intent: .init(
+                moduleID: .quickToggles,
+                actionID: "setDashboard",
+                value: mutation.encodedActionValue()
+            ),
+            deviceID: "local-mac"
+        ))
     }
 
     private func prepare(
@@ -571,4 +648,112 @@ private struct MacHubModuleCard: View {
 private struct MacReminderListChoice: Identifiable {
     let id: String
     let title: String
+}
+
+private struct MacModeRackEditor: View {
+    let mode: PersonalHubMode
+    let onSave: ([PersonalHubModuleID]) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var modules: [PersonalHubModuleID]
+
+    init(
+        mode: PersonalHubMode,
+        modules: [PersonalHubModuleID],
+        onSave: @escaping ([PersonalHubModuleID]) -> Void
+    ) {
+        self.mode = mode
+        self.onSave = onSave
+        _modules = State(initialValue: modules)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("\(mode.rawValue.capitalized) rack")
+                        .font(.system(size: 17, weight: .bold))
+                    Text("Choose the modules and order shared by Mac, iPhone, and web.")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("Cancel") { dismiss() }
+                Button("Review") { onSave(modules) }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.orange)
+                    .disabled(modules.isEmpty)
+            }
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("PINNED")
+                        .font(.system(size: 9, weight: .black, design: .monospaced))
+                        .foregroundStyle(.secondary)
+
+                    ForEach(Array(modules.enumerated()), id: \.element) { index, module in
+                        HStack(spacing: 9) {
+                            Label(
+                                PersonalHubCatalog.definition(for: module).title,
+                                systemImage: PersonalHubCatalog.definition(for: module).symbol
+                            )
+                            .font(.system(size: 12, weight: .semibold))
+                            Spacer()
+                            Button { move(index, by: -1) } label: {
+                                Image(systemName: "arrow.up")
+                            }
+                            .disabled(index == 0)
+                            Button { move(index, by: 1) } label: {
+                                Image(systemName: "arrow.down")
+                            }
+                            .disabled(index == modules.count - 1)
+                            Button { modules.remove(at: index) } label: {
+                                Image(systemName: "minus.circle")
+                            }
+                            .disabled(modules.count == 1)
+                        }
+                        .buttonStyle(.borderless)
+                        .padding(9)
+                        .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 8))
+                    }
+
+                    if !availableModules.isEmpty {
+                        Text("AVAILABLE")
+                            .font(.system(size: 9, weight: .black, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .padding(.top, 7)
+
+                        ForEach(availableModules) { module in
+                            HStack {
+                                Label(
+                                    PersonalHubCatalog.definition(for: module).title,
+                                    systemImage: PersonalHubCatalog.definition(for: module).symbol
+                                )
+                                .font(.system(size: 12, weight: .semibold))
+                                Spacer()
+                                Button { modules.append(module) } label: {
+                                    Image(systemName: "plus.circle.fill")
+                                }
+                                .buttonStyle(.borderless)
+                            }
+                            .padding(9)
+                            .background(Color.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 8))
+                        }
+                    }
+                }
+            }
+        }
+        .padding(18)
+        .frame(width: 500, height: 560)
+    }
+
+    private var availableModules: [PersonalHubModuleID] {
+        PersonalHubModuleID.allCases.filter { !modules.contains($0) }
+    }
+
+    private func move(_ index: Int, by offset: Int) {
+        let destination = index + offset
+        guard modules.indices.contains(index), modules.indices.contains(destination) else { return }
+        modules.swapAt(index, destination)
+    }
 }

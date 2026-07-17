@@ -267,6 +267,121 @@ public struct PersonalHubChecklistMutation: Codable, Equatable, Sendable {
     }
 }
 
+public struct PersonalHubModeRack: Codable, Equatable, Sendable {
+    public let mode: PersonalHubMode
+    public let modules: [PersonalHubModuleID]
+
+    public init(mode: PersonalHubMode, modules: [PersonalHubModuleID]) {
+        self.mode = mode
+        self.modules = modules
+    }
+}
+
+public struct PersonalHubConfiguration: Codable, Equatable, Sendable {
+    public static let currentVersion = 1
+
+    public let version: Int
+    public let racks: [PersonalHubModeRack]
+    public let dashboardEnabled: Bool
+    /// Optional for backward compatibility with the first configuration files.
+    /// Sanitization replaces it with the current catalog after migrations.
+    public let knownModules: [PersonalHubModuleID]?
+
+    public init(
+        version: Int = currentVersion,
+        racks: [PersonalHubModeRack],
+        dashboardEnabled: Bool = true,
+        knownModules: [PersonalHubModuleID]? = PersonalHubModuleID.allCases
+    ) {
+        self.version = version
+        self.racks = racks
+        self.dashboardEnabled = dashboardEnabled
+        self.knownModules = knownModules
+    }
+
+    public static var `default`: Self {
+        .init(
+            racks: [.home, .work, .code].map {
+                PersonalHubModeRack(mode: $0, modules: PersonalHubCatalog.modules(for: $0))
+            }
+        )
+    }
+
+    public static func sanitized(_ candidate: Self) -> Self {
+        let previousKnown = Set(candidate.knownModules ?? [])
+        let currentKnown = Set(PersonalHubModuleID.allCases)
+        let introduced = currentKnown.subtracting(previousKnown)
+        var rackByMode: [PersonalHubMode: [PersonalHubModuleID]] = [:]
+
+        for mode in [PersonalHubMode.home, .work, .code] {
+            let supplied = candidate.racks.first(where: { $0.mode == mode })?.modules
+                ?? PersonalHubCatalog.modules(for: mode)
+            var seen = Set<PersonalHubModuleID>()
+            var modules = supplied.filter { currentKnown.contains($0) && seen.insert($0).inserted }
+            for module in PersonalHubCatalog.modules(for: mode)
+                where introduced.contains(module) && seen.insert(module).inserted {
+                modules.append(module)
+            }
+            if modules.isEmpty {
+                modules = PersonalHubCatalog.modules(for: mode)
+            }
+            rackByMode[mode] = modules
+        }
+
+        return .init(
+            version: currentVersion,
+            racks: [.home, .work, .code].map {
+                PersonalHubModeRack(mode: $0, modules: rackByMode[$0] ?? [])
+            },
+            dashboardEnabled: candidate.dashboardEnabled,
+            knownModules: PersonalHubModuleID.allCases
+        )
+    }
+
+    public func rack(for mode: PersonalHubMode) -> [PersonalHubModuleID] {
+        let concreteMode = mode == .auto ? PersonalHubMode.home : mode
+        return racks.first(where: { $0.mode == concreteMode })?.modules
+            ?? PersonalHubCatalog.modules(for: concreteMode)
+    }
+
+    public static func dayProgress(
+        at date: Date = Date(),
+        calendar: Calendar = .current
+    ) -> Double {
+        let start = calendar.startOfDay(for: date)
+        guard let end = calendar.date(byAdding: .day, value: 1, to: start) else { return 0 }
+        let duration = end.timeIntervalSince(start)
+        guard duration > 0 else { return 0 }
+        return min(max(date.timeIntervalSince(start) / duration, 0), 1)
+    }
+}
+
+public struct PersonalHubConfigurationMutation: Codable, Equatable, Sendable {
+    public let mode: PersonalHubMode?
+    public let modules: [PersonalHubModuleID]?
+    public let dashboardEnabled: Bool?
+
+    public init(
+        mode: PersonalHubMode? = nil,
+        modules: [PersonalHubModuleID]? = nil,
+        dashboardEnabled: Bool? = nil
+    ) {
+        self.mode = mode
+        self.modules = modules
+        self.dashboardEnabled = dashboardEnabled
+    }
+
+    public func encodedActionValue() -> String? {
+        guard let data = try? JSONEncoder().encode(self) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    public static func decodeActionValue(_ value: String?) -> Self? {
+        guard let value, let data = value.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(Self.self, from: data)
+    }
+}
+
 public struct PersonalHubPrepareActionRequest: Codable, Equatable, Sendable {
     public let intent: PersonalHubActionIntent
 
@@ -376,6 +491,8 @@ public struct PersonalHubSnapshot: Codable, Equatable, Sendable {
     public let requestedMode: PersonalHubMode
     public let resolvedMode: PersonalHubMode
     public let modules: [PersonalHubModuleSnapshot]
+    public let configuration: PersonalHubConfiguration?
+    public let dayProgress: Double?
 
     public init(
         version: Int = 1,
@@ -383,7 +500,9 @@ public struct PersonalHubSnapshot: Codable, Equatable, Sendable {
         generatedAt: Date = Date(),
         requestedMode: PersonalHubMode,
         resolvedMode: PersonalHubMode,
-        modules: [PersonalHubModuleSnapshot]
+        modules: [PersonalHubModuleSnapshot],
+        configuration: PersonalHubConfiguration? = nil,
+        dayProgress: Double? = nil
     ) {
         self.version = version
         self.serverName = serverName
@@ -391,6 +510,8 @@ public struct PersonalHubSnapshot: Codable, Equatable, Sendable {
         self.requestedMode = requestedMode
         self.resolvedMode = resolvedMode
         self.modules = modules
+        self.configuration = configuration
+        self.dayProgress = dayProgress
     }
 }
 

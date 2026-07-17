@@ -545,7 +545,9 @@ final class RemoteApprovalClient: ObservableObject {
             serverName: "CodeIsland UI Test Mac",
             requestedMode: requestedMode,
             resolvedMode: resolvedMode,
-            modules: PersonalHubCatalog.modules(for: resolvedMode).map(mockHubModule)
+            modules: PersonalHubCatalog.modules(for: resolvedMode).map(mockHubModule),
+            configuration: .default,
+            dayProgress: 0.5
         )
     }
 

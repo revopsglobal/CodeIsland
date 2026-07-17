@@ -31,15 +31,18 @@ final class PersonalHubService {
     private let glances: GlancesModel
     private let utilities: PersonalUtilitiesModel
     private let data: PersonalHubDataModel
+    private let configurationStore: PersonalHubConfigurationStore
 
     init(
         glances: GlancesModel? = nil,
         utilities: PersonalUtilitiesModel? = nil,
-        data: PersonalHubDataModel? = nil
+        data: PersonalHubDataModel? = nil,
+        configurationStore: PersonalHubConfigurationStore? = nil
     ) {
         self.glances = glances ?? .shared
         self.utilities = utilities ?? .shared
         self.data = data ?? .shared
+        self.configurationStore = configurationStore ?? .shared
     }
 
     func shelfFileURL(id: String) -> URL? {
@@ -69,13 +72,16 @@ final class PersonalHubService {
             mediaIsPlaying: false
         )
         let resolvedMode = PersonalHubCatalog.resolvedMode(requested: requestedMode, context: context)
-        let moduleIDs = PersonalHubCatalog.modules(for: resolvedMode)
+        let configuration = configurationStore.configuration
+        let moduleIDs = configuration.rack(for: resolvedMode)
 
         return PersonalHubSnapshot(
             serverName: serverName,
             requestedMode: requestedMode,
             resolvedMode: resolvedMode,
-            modules: moduleIDs.map { moduleSnapshot(id: $0, appState: appState) }
+            modules: moduleIDs.map { moduleSnapshot(id: $0, appState: appState) },
+            configuration: configuration,
+            dayProgress: PersonalHubConfiguration.dayProgress()
         )
     }
 
@@ -123,6 +129,34 @@ final class PersonalHubService {
 
         let intent = request.intent
         switch (intent.moduleID, intent.actionID) {
+        case (.quickToggles, "setModeRack"):
+            guard let mutation = PersonalHubConfigurationMutation.decodeActionValue(intent.value),
+                  let mode = mutation.mode,
+                  let modules = mutation.modules else {
+                return .failure(.invalid("Mode rack settings are incomplete"))
+            }
+            do {
+                try configurationStore.updateRack(mode: mode, modules: modules)
+                return .success(.init(executed: true, message: "\(mode.rawValue.capitalized) rack updated"))
+            } catch {
+                return .failure(.failed(error.localizedDescription))
+            }
+
+        case (.quickToggles, "setDashboard"):
+            guard let mutation = PersonalHubConfigurationMutation.decodeActionValue(intent.value),
+                  let enabled = mutation.dashboardEnabled else {
+                return .failure(.invalid("Dashboard setting is incomplete"))
+            }
+            do {
+                try configurationStore.setDashboardEnabled(enabled)
+                return .success(.init(
+                    executed: true,
+                    message: enabled ? "Dashboard enabled" : "Dashboard hidden"
+                ))
+            } catch {
+                return .failure(.failed(error.localizedDescription))
+            }
+
         case (.notes, "add"):
             guard let value = intent.value, data.addNote(value) else {
                 return .failure(.failed("Could not add the note"))
@@ -461,6 +495,31 @@ final class PersonalHubService {
 
     private func validate(intent: PersonalHubActionIntent) -> Result<String, ActionError> {
         switch (intent.moduleID, intent.actionID) {
+        case (.quickToggles, "setModeRack"):
+            guard let mutation = PersonalHubConfigurationMutation.decodeActionValue(intent.value),
+                  let mode = mutation.mode,
+                  mode != .auto,
+                  let modules = mutation.modules else {
+                return .failure(.invalid("Choose a Home, Work, or Code rack"))
+            }
+            var seen = Set<PersonalHubModuleID>()
+            let unique = modules.filter { seen.insert($0).inserted }
+            guard !unique.isEmpty else {
+                return .failure(.invalid("Keep at least one module in this rack"))
+            }
+            guard unique == modules else {
+                return .failure(.invalid("A module can appear only once in a rack"))
+            }
+            let names = unique.map { PersonalHubCatalog.definition(for: $0).title }.joined(separator: ", ")
+            return .success("Set the \(mode.rawValue.capitalized) rack to: \(names)")
+
+        case (.quickToggles, "setDashboard"):
+            guard let mutation = PersonalHubConfigurationMutation.decodeActionValue(intent.value),
+                  let enabled = mutation.dashboardEnabled else {
+                return .failure(.invalid("Choose whether to show the dashboard"))
+            }
+            return .success(enabled ? "Show the dashboard and day progress" : "Hide the dashboard and day progress")
+
         case (.notes, "add"):
             let value = intent.value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             guard !value.isEmpty else { return .failure(.invalid("Enter a note")) }
