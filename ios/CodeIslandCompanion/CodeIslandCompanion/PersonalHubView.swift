@@ -103,7 +103,7 @@ struct PersonalHubSurface: View {
             } else if let error = client.hubError {
                 hubEmptyState(
                     symbol: "wifi.exclamationmark",
-                    title: "Personal hub unavailable",
+                    title: "Tools unavailable",
                     detail: error,
                     showsRetry: true
                 )
@@ -150,6 +150,7 @@ struct PersonalHubSurface: View {
                 client.quickJotDestination = nil
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("hub.surface")
     }
 
@@ -161,7 +162,7 @@ struct PersonalHubSurface: View {
                 } label: {
                     Label("New \(destination.title)", systemImage: destination.symbol)
                         .font(.system(size: 11, weight: .bold))
-                        .frame(maxWidth: .infinity, minHeight: 34)
+                        .frame(maxWidth: .infinity, minHeight: 44)
                 }
                 .buttonStyle(HubSecondaryButtonStyle())
                 .accessibilityIdentifier("hub.quickJot.\(destination.rawValue)")
@@ -252,7 +253,7 @@ struct PersonalHubSurface: View {
                         .foregroundStyle(
                             client.selectedMode == mode ? Color.black : HubTheme.foreground.opacity(0.58)
                         )
-                        .frame(maxWidth: .infinity, minHeight: 34)
+                        .frame(maxWidth: .infinity, minHeight: 44)
                         .background(
                             client.selectedMode == mode ? HubTheme.accent : HubTheme.surface,
                             in: RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -606,7 +607,7 @@ private struct PersonalHubModuleCard: View {
                         } label: {
                             Label(action.label, systemImage: action.symbol ?? "arrow.right")
                                 .font(.system(size: 11, weight: .bold))
-                                .frame(maxWidth: .infinity, minHeight: 34)
+                                .frame(maxWidth: .infinity, minHeight: 44)
                         }
                         .buttonStyle(HubSecondaryButtonStyle())
                     }
@@ -779,7 +780,7 @@ private struct PersonalHubModuleCard: View {
                                 Text(mode == .pushToTalk ? "HOLD" : "CONTINUOUS")
                                     .font(.system(size: 8, weight: .black, design: .monospaced))
                                     .foregroundStyle(speech.mode == mode ? Color.black : HubTheme.foreground.opacity(0.5))
-                                    .frame(minWidth: mode == .pushToTalk ? 48 : 76, minHeight: 28)
+                                    .frame(minWidth: mode == .pushToTalk ? 72 : 96, minHeight: 44)
                                     .background(
                                         speech.mode == mode ? HubTheme.accent : Color.clear,
                                         in: RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -799,7 +800,7 @@ private struct PersonalHubModuleCard: View {
                             .font(.system(size: 10, weight: .bold))
                             .foregroundStyle(speech.isRecording ? HubTheme.accent : HubTheme.foreground.opacity(0.7))
                             .padding(.horizontal, 10)
-                            .frame(minHeight: 34)
+                            .frame(minHeight: 44)
                             .background(Color.white.opacity(0.06), in: Capsule())
                             .contentShape(Capsule())
                             .onLongPressGesture(
@@ -822,7 +823,7 @@ private struct PersonalHubModuleCard: View {
                         } label: {
                             Label(speech.isRecording ? "Stop" : "Listen", systemImage: speech.isRecording ? "stop.fill" : "waveform")
                                 .font(.system(size: 10, weight: .bold))
-                                .frame(minHeight: 34)
+                                .frame(minHeight: 44)
                         }
                         .buttonStyle(HubPrimaryButtonStyle())
                     }
@@ -868,7 +869,7 @@ private struct PersonalHubModuleCard: View {
                     } label: {
                         Label("Attach text", systemImage: "paperclip")
                             .font(.system(size: 10, weight: .bold))
-                            .frame(minHeight: 32)
+                            .frame(minHeight: 44)
                     }
                     .buttonStyle(HubSecondaryButtonStyle())
                     .accessibilityIdentifier("hub.claude.attach")
@@ -903,7 +904,7 @@ private struct PersonalHubModuleCard: View {
             .font(.system(size: 13, weight: .medium))
             .foregroundStyle(HubTheme.foreground)
             .padding(.horizontal, 10)
-            .frame(minHeight: 38)
+            .frame(minHeight: 44)
             .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
             .accessibilityIdentifier("hub.\(module.id.rawValue).composer")
     }
@@ -1061,7 +1062,7 @@ private struct BuddyCalendarMonthView: View {
             eventDots(day.eventCount)
         }
         .foregroundStyle(foreground)
-        .frame(maxWidth: .infinity, minHeight: 34)
+        .frame(maxWidth: .infinity, minHeight: 44)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous).fill(fill)
         )
@@ -1101,7 +1102,7 @@ private struct BuddyCalendarMonthView: View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: 11, weight: .bold))
-                .frame(width: 30, height: 30)
+                .frame(width: 44, height: 44)
                 .background(Color.white.opacity(0.055), in: Circle())
         }
         .buttonStyle(.plain)
@@ -1783,7 +1784,7 @@ private struct HubPrimaryButtonStyle: ButtonStyle {
             .font(.system(size: 11, weight: .bold))
             .foregroundStyle(.black)
             .padding(.horizontal, 12)
-            .frame(minHeight: 38)
+            .frame(minHeight: 44)
             .background(HubTheme.accent.opacity(configuration.isPressed ? 0.72 : 1), in: RoundedRectangle(cornerRadius: 8))
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
     }
@@ -1805,7 +1806,7 @@ private struct HubCompactButtonStyle: ButtonStyle {
         configuration.label
             .foregroundStyle(primary ? Color.black : HubTheme.foreground.opacity(0.7))
             .padding(.horizontal, 9)
-            .frame(minHeight: 30)
+            .frame(minHeight: 44)
             .background(
                 primary ? HubTheme.accent : Color.white.opacity(0.06),
                 in: RoundedRectangle(cornerRadius: 7)
