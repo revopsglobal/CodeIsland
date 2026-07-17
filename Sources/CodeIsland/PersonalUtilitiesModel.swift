@@ -231,6 +231,12 @@ final class PersonalUtilitiesModel: ObservableObject {
 
         var total: Int64 = 0
         for case let fileURL as URL in enumerator {
+            // Safari stores progress/control data inside the `.download`
+            // package. It is not downloaded payload and can otherwise make a
+            // fresh transfer appear to exceed its recorded byte count.
+            guard !["plist", "downloadmetadata"].contains(fileURL.pathExtension.lowercased()) else {
+                continue
+            }
             guard let values = try? fileURL.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
                   values.isRegularFile == true else { continue }
             total += Int64(values.fileSize ?? 0)
