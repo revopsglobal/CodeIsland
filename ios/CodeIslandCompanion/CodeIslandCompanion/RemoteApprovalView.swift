@@ -9,6 +9,12 @@ struct RemoteApprovalSurface: View {
             case .unpaired:
                 RemotePairingCard()
                     .environmentObject(client)
+            case .connecting where !client.hasPairingCredential:
+                RemotePairingCard()
+                    .environmentObject(client)
+            case .offline where !client.hasPairingCredential:
+                RemotePairingCard()
+                    .environmentObject(client)
             case .connecting where client.approvals.isEmpty && client.questions.isEmpty:
                 RemoteApprovalStatusStrip(icon: "lock.iphone", title: "Remote approvals", detail: "Connecting to Mac…", tint: .orange)
             case .offline(let message) where client.approvals.isEmpty && client.questions.isEmpty:
@@ -16,16 +22,7 @@ struct RemoteApprovalSurface: View {
                     .environmentObject(client)
             default:
                 if client.approvals.isEmpty && client.questions.isEmpty {
-                    RemoteApprovalStatusStrip(
-                        icon: "checkmark.shield.fill",
-                        title: "Remote agents",
-                        detail: "Connected · Nothing waiting",
-                        tint: .green
-                    )
-                    .contextMenu {
-                        Button("Refresh") { Task { await client.refresh() } }
-                        Button("Forget Mac", role: .destructive) { client.unpair() }
-                    }
+                    EmptyView()
                 } else {
                     VStack(spacing: 10) {
                         ForEach(client.questions) { question in
@@ -162,7 +159,12 @@ private struct RemoteQuestionCard: View {
         }
         .padding(14)
         .background(IslandShellShape().fill(Color.ciSurface))
-        .overlay(IslandShellShape().stroke(Color.cyan.opacity(0.48), lineWidth: 1))
+        .overlay(
+            IslandShellShape().stroke(
+                client.highlightedQuestionID == question.id ? Color.cyan : Color.cyan.opacity(0.48),
+                lineWidth: client.highlightedQuestionID == question.id ? 2 : 1
+            )
+        )
         .confirmationDialog(
             "Send this answer to the exact waiting agent request?",
             isPresented: $confirming
@@ -196,15 +198,35 @@ private struct RemotePairingCard: View {
     @EnvironmentObject private var client: RemoteApprovalClient
     @State private var code = ""
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label("Pair remote approvals", systemImage: "lock.iphone")
-                .font(.system(size: 16, weight: .bold, design: .rounded))
-                .foregroundStyle(.ciForeground)
+    private var isConnecting: Bool {
+        client.state == .connecting
+    }
 
-            Text("Use the six-digit code in CodeIsland Settings → Buddy on your Mac.")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.ciForeground.opacity(0.56))
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 11) {
+                Image(systemName: "iphone.and.arrow.forward")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.orange)
+                    .frame(width: 38, height: 38)
+                    .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Connect to your Mac")
+                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                        .foregroundStyle(.ciForeground)
+                    Text("Private to your Tailscale network")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.ciForeground.opacity(0.5))
+                }
+            }
+
+            Label("On your Mac: CodeIsland Settings → Buddy", systemImage: "1.circle.fill")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.ciForeground.opacity(0.7))
+
+            Label("Enter the current six-digit code", systemImage: "2.circle.fill")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.ciForeground.opacity(0.7))
 
             TextField("Tailscale HTTPS URL", text: $client.serverURLText)
                 .textInputAutocapitalization(.never)
@@ -230,28 +252,46 @@ private struct RemotePairingCard: View {
                 .accessibilityIdentifier("companion.remote.pairingCode")
 
             Button {
-                Task { await client.pair(code: code) }
+                Task {
+                    if !(await client.pair(code: code)) {
+                        code = ""
+                    }
+                }
             } label: {
-                Label("Pair securely", systemImage: "link.badge.plus")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(.black)
-                    .frame(maxWidth: .infinity, minHeight: 46)
-                    .background(Color(red: 0.3, green: 0.85, blue: 0.4), in: RoundedRectangle(cornerRadius: 10))
+                HStack(spacing: 8) {
+                    if isConnecting {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(.black)
+                    } else {
+                        Image(systemName: "lock.open.fill")
+                    }
+                    Text(isConnecting ? "Connecting…" : "Connect securely")
+                }
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(.black)
+                .frame(maxWidth: .infinity, minHeight: 48)
+                .background(Color(red: 0.3, green: 0.85, blue: 0.4), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
             .buttonStyle(.plain)
-            .disabled(code.count != 6 || client.state == .connecting)
+            .disabled(code.count != 6 || isConnecting)
+            .opacity(code.count == 6 && !isConnecting ? 1 : 0.5)
             .accessibilityIdentifier("companion.remote.pair")
 
             if case .offline(let message) = client.state {
-                Text(message)
-                    .font(.caption)
-                    .foregroundStyle(.red)
+                Label(message, systemImage: "exclamationmark.circle.fill")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
         }
-        .padding(14)
+        .padding(16)
         .background(IslandShellShape().fill(Color.ciSurface))
         .overlay(IslandShellShape().stroke(Color.ciForeground.opacity(0.08), lineWidth: 1))
+        .accessibilityIdentifier("companion.remote.pairingCard")
     }
 }
 

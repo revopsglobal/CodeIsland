@@ -9,10 +9,16 @@ CodeIsland is Greg's private Mac host plus iPhone companion for Crest-class
 notch utilities and away-from-Mac coding control. Pomodoro and Apple Watch are
 out of scope.
 
-- The installed Mac and current TestFlight binaries come from product commit
-  `6ad428e952fb200c51f68182471c38fe7c32e796`. The last merged handoff refresh
-  before this behavior audit is `f8473e6029d77a4ec4f3cb7c6c26d7fe7e30a3c0`
-  (PR #17).
+- The Crest/mobile completion implementation is on branch
+  `codex/crest-completion`. Its current product head is `ea5351e`; the
+  verification/handoff change containing this document follows it. Automated
+  Mac/core/iPhone gates are green, but this branch is not yet the source of the
+  installed Mac/TestFlight binaries until the signed-distribution step merges
+  and rebuilds from `main`.
+- The installed Mac and current TestFlight binaries still come from product
+  commit `6ad428e952fb200c51f68182471c38fe7c32e796`. The last merged handoff
+  refresh before this completion branch is
+  `f8473e6029d77a4ec4f3cb7c6c26d7fe7e30a3c0` (PR #17).
 - Signed macOS `1.0.36` is installed at `/Applications/CodeIsland.app`, running
   as Team `44JG2Y95CH`, CDHash
   `e7749f3369d10cac87e6495843de22d683a5a425`.
@@ -22,13 +28,20 @@ out of scope.
 - iOS `1.0.0 (20260717120420)` is Apple `VALID`, audience
   `APP_STORE_ELIGIBLE`, and available to the all-builds internal group
   `CodeIsland Internal` in TestFlight.
+- `gregharned@gmail.com` is now verified as an `ACCOUNT_HOLDER,ADMIN` App Store
+  Connect user, enrolled in `CodeIsland Internal`, and Apple explicitly sent a
+  fresh TestFlight invitation at 2026-07-17 15:20:54Z. Workflow run
+  `29591716380`, tester receipt artifact `8411326331`, invitation
+  `9679ce07-ac35-4b29-b007-461e0b418801`.
 - Mac local and Tailscale `/health` both returned `running: true` after install.
   The Tailscale root returned the expected security headers and an
   unauthenticated Downloads-file request returned `401`.
 
-These receipts prove build, signing, transport, install, and automated runtime
-surfaces. They do not prove Greg's physical iPhone, macOS TCC grants, APNs
-delivery, Dynamic Island, or real accessory/data mutations.
+Those signed receipts prove the previous baseline's build, signing, transport,
+install, and automated runtime surfaces. They do not deliver the completion
+branch and they do not prove Greg's physical iPhone, macOS TCC grants, APNs
+delivery, Dynamic Island, or real accessory/data mutations. Replace this
+section with the new merged-SHA receipts after the next DMG/TestFlight run.
 
 ## Architecture decision
 
@@ -70,6 +83,9 @@ single-user setup rather than scale.
 - Bundle: `com.revopsglobal.codeisland.buddy`
 - Apple processing: `VALID`, `APP_STORE_ELIGIBLE`
 - Internal group: `CodeIsland Internal`, all-build access
+- Internal tester: `gregharned@gmail.com`, enrollment `ready`
+- Fresh invitation receipt: run `29591716380`, artifact `8411326331`,
+  invitation `9679ce07-ac35-4b29-b007-461e0b418801`
 
 The current Mac build and current TestFlight build come from the same merged
 source SHA.
@@ -79,26 +95,39 @@ source SHA.
 The exact readiness and proof boundary for every capability lives in
 `docs/crest-mobile-parity.md`. Treat that ledger as authoritative.
 
-Implemented surfaces include the useful subsets below. This list is not a
-claim of full Crest behavior parity; the behavior-level gaps are recorded in
-`docs/crest-mobile-parity.md`.
+Implemented surfaces now include the useful Crest 4.9 behavior baseline plus
+the single-user away extensions below. `docs/crest-mobile-parity.md` remains
+authoritative for API limits and physical-proof state.
 
-- Auto, Home, Work, and Code modes on Mac, native iPhone, and private web.
+- Auto, Home, Work, and Code modes on Mac, native iPhone, and private web, with
+  versioned saved per-mode pin/order, rack editors, dashboard toggle, and
+  local-day progress.
 - Claude/Codex session status, approvals, questions, exact confirmation,
-  replay protection, notifications, and audited host execution.
-- Calendar two-week agenda, add/edit/delete, and trusted one-click Join.
+  replay protection, decisions-first attention, opaque APNs, audited host
+  execution, pending deep links, Live Activity, and Dynamic Island lifecycle.
+- Calendar six-week month, selected-day events, two-week agenda,
+  add/edit/delete, and trusted one-click Join.
 - Reminders list selection plus list/task add, reorder, complete,
   archive/restore, and delete.
 - Notes/jot persistence, categories, checklists, append/replace, undo, and
   stale-revision rejection.
-- Now Playing controls/lyrics/queue where the source app exposes them.
-- Shelf and clipboard history with guarded private file transfer.
+- Now Playing bounded artwork, arbitrary scrubber, controls/lyrics/queue where
+  the source app exposes them, and notch media/volume/brightness HUD feedback.
+- Shelf and clipboard history with drag/drop, picker ingest, forward-only
+  screenshot watching, user-selected still/recording capture, private storage,
+  and guarded private file transfer.
 - Active Downloads plus 12 recent completed files, filename-preserving iPhone
   share/web download, path confinement, and a 100 MB cap.
 - Weather with location and manual ZIP fallback; system, battery, Bluetooth,
-  audio, quick toggles, teleprompter, camera preview, GitHub, and window actions.
-- APNs registration/provider path, time-sensitive notifications, widgets, Live
-  Activities, and Dynamic Island UI.
+  audio, quick toggles, GitHub, and confirmed host window actions.
+- Global task/note quick-jot hotkeys and native/deep-linked Buddy entry points.
+- Native Mac/iPhone camera and microphone preflight; Mac Claude push-to-talk or
+  continuous speech plus bounded user-selected file context; paced/persisted
+  teleprompter; and real-drag notch window layouts including halves, thirds,
+  quarters, and correct-display targeting.
+- Native Buddy editors, retry/offline/Tailscale state, module and pending-action
+  deep links, App Intents, and web fallback over the same allow-listed action
+  contract.
 
 Several of those implementations remain runtime-unverified against Greg's real
 Calendar, Reminders, Music/Spotify, Bluetooth/audio devices, windows, and
@@ -106,19 +135,18 @@ physical phone. Do not turn implementation presence into a live claim.
 
 ## Verification already green
 
-- Full Swift run: 402 app tests with 2 intentional skips and 0 failures, plus
-  202 core tests with 0 failures.
-- Release Mac build passed.
-- Full native companion UI suite: 12 tests, 0 failures on the already-booted
-  iPhone Simulator.
-- The added camera-path UI test separately passed 1/1 on 2026-07-17. The first
-  targeted execution visibly handled the real Simulator Camera permission
-  alert; the finalized targeted rerun verified the native full-screen preview
-  surface and dismissal. A subsequent 13-test full rerun
-  was interrupted by the Xcode 27 beta Simulator launcher after 7 passes; its
-  six failures were test-runner `signal term`/`signal kill` infrastructure
-  crashes, not assertion failures. Keep the earlier clean 12-test receipt and
-  the new focused 1-test receipt separate.
+- Full current-head Swift run: 472 app tests with two intentional skips and
+  zero failures, plus 218 core tests with zero failures.
+- Release Mac build passed. Existing Swift 6 migration/deprecation warnings are
+  non-fatal and should be retired separately.
+- Complete native companion scheme: 24 tests, zero failures, zero skips on
+  isolated Simulator `codex-CodeIsland-Shelf`, iPhone 17 Pro, iOS 27.0.
+  Result bundle:
+  `ios/CodeIslandCompanion/.build/Task13DerivedData/Logs/Test/Test-CodeIslandCompanion-2026.07.17_14-16-45--0700.xcresult`.
+- A first aggregate run found an XCTest accessibility-shape assumption in the
+  hub module helper. The focused Home/Work/Code matrix passed after the helper
+  was hardened, followed by the clean 24-test aggregate. This is not being
+  hidden as a product failure or mislabeled as physical-device proof.
 - Real-loopback lifecycle E2E proves pairing, bearer auth, all modes, approvals,
   questions, exact action confirmation, altered-intent/replay rejection, audit
   receipt, and push-token registration.
@@ -136,8 +164,9 @@ full-suite load demonstrated cooperative-executor starvation.
 Greg must perform the physical/TCC steps in
 `docs/crest-mobile-parity.md#physical-acceptance-run`. The short version:
 
-1. Install or update TestFlight, then install CodeIsland Buddy
-   `1.0.0 (20260717120420)`. Enable Tailscale on the iPhone.
+1. Open the fresh Apple TestFlight invitation sent to
+   `gregharned@gmail.com`, accept it in TestFlight, then install CodeIsland
+   Buddy `1.0.0 (20260717120420)`. Enable Tailscale on the iPhone.
 2. On the unlocked Mac, use CodeIsland Settings permission buttons and approve
    Calendar, Reminders, Location Services, Camera, Microphone/Speech, and
    Accessibility when prompted.
@@ -154,31 +183,24 @@ Greg must perform the physical/TCC steps in
 Until those taps happen, the honest final state is: automated E2E and signed
 distribution are ready; physical iPhone/TCC/cellular acceptance is pending.
 
-## Known gaps that are not permission-only
+## Deliberate limits and remaining non-automated proof
 
-- Mode racks are hard-coded. Crest-style per-mode pinning and reordering are
-  not implemented.
-- Now Playing has no album artwork, arbitrary scrubber, visualizer, or floating
-  music circles. Spotify does not expose a queue through macOS automation.
-- Shelf has clipboard/file history but not drag/drop ingest, automatic
-  screenshot capture, selection capture, or screen recording.
-- Calendar has the two-week agenda and CRUD but no month surface.
-- Notifications shows CodeIsland alerts only; it does not mirror macOS app
-  notifications.
-- Mac Claude is typed only and lacks continuous speech, file context, and the
-  screen-share-hidden covert strip. iPhone dictation exists.
-- Mac camera pre-check launches Photo Booth; native iPhone has a private
-  front-camera preview. Microphone metering/device selection is incomplete.
-- Mac teleprompter is manual-scroll only and is not hidden from screen sharing;
-  iPhone has play/pause and WPM pacing.
-- Window actions expose left/right/maximize but not Crest's drag-to-notch layout
-  chooser.
-- Crest's quick-jot hotkeys, media-key HUD, and custom dashboard/day-progress
-  behavior are not implemented.
-- Automatic mode switching has unit coverage but still needs native runtime
-  evidence.
-- Real module actions listed as `Unverified` in the parity ledger still need
-  physical data/accessory proof.
+- macOS has no public API for cross-app Notification Center history. CodeIsland
+  never reads private notification databases or requests Full Disk Access; the
+  Notifications module shows the provider limitation and keeps action-required
+  alerts separate.
+- Spotify does not expose queue enumeration through its macOS automation API.
+  Apple Music queue behavior remains implemented where exposed.
+- macOS has no public API for intercepting every hardware brightness-key event.
+  The HUD covers CodeIsland-initiated media/volume/brightness actions.
+- Teleprompter/Claude windows request AppKit sharing exclusion, but full-display
+  capture can still include them. The UI discloses that instead of promising
+  covert behavior the platform cannot guarantee.
+- iPhone remote window actions intentionally expose left/right/maximize; the
+  expanded halves/thirds/quarters chooser is a direct Mac drag interaction.
+- Automatic mode switching, TCC-backed data, media/accessory actions, physical
+  push/Live Activity/Dynamic Island, App Intents, cellular Tailscale, and all
+  real module mutations still require the physical acceptance matrix.
 
 ## Source map
 
@@ -214,6 +236,11 @@ gh workflow run testflight-ios.yml \
   --repo revopsglobal/CodeIsland \
   --ref main
 ```
+
+To verify enrollment or explicitly resend Greg's TestFlight email without
+building another IPA, dispatch the same workflow with
+`manage_tester_only=true`, `tester_email=gregharned@gmail.com`, and
+`resend_testflight_invitation=true`.
 
 Never claim a TestFlight build is ready until the workflow reports Apple
 `VALID` and internal-group access. Never claim a Mac build is installed until

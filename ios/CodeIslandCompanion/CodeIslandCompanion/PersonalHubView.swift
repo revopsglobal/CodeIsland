@@ -2,20 +2,34 @@ import SwiftUI
 import UIKit
 import AVFoundation
 import Speech
+import UniformTypeIdentifiers
 
-private enum HubTheme {
+enum HubTheme {
     static let accent = Color(red: 1.0, green: 0.69, blue: 0.0)
     static let foreground = Color.white
     static let surface = Color.white.opacity(0.055)
     static let border = Color.white.opacity(0.09)
 }
 
+typealias BuddyQuickJotDestination = PersonalHubQuickJotDestination
+
+extension PersonalHubQuickJotDestination: Identifiable {
+    public var id: String { rawValue }
+    var title: String { self == .task ? "Task" : "Note" }
+    var symbol: String { self == .task ? "checklist" : "note.text" }
+}
+
 struct PersonalHubSurface: View {
     @EnvironmentObject private var client: RemoteApprovalClient
+    @State private var showingRackEditor = false
+    @State private var pendingRack: (PersonalHubMode, [PersonalHubModuleID])?
+    @State private var pendingQuickJot: (BuddyQuickJotDestination, String)?
 
     var body: some View {
         VStack(spacing: 10) {
             modeStrip
+            connectionStrip
+            quickJotStrip
 
             if let snapshot = client.hubSnapshot {
                 HStack(spacing: 8) {
@@ -30,12 +44,54 @@ struct PersonalHubSurface: View {
                     Text(snapshot.generatedAt, style: .time)
                         .font(.system(size: 10, weight: .medium, design: .monospaced))
                         .foregroundStyle(HubTheme.foreground.opacity(0.34))
+                    Button {
+                        toggleDashboard(snapshot)
+                    } label: {
+                        Image(systemName: snapshot.configuration?.dashboardEnabled == false
+                            ? "gauge.with.dots.needle.0percent"
+                            : "gauge.with.dots.needle.67percent")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(HubTheme.foreground.opacity(0.52))
+                    .accessibilityLabel(snapshot.configuration?.dashboardEnabled == false
+                        ? "Show day dashboard"
+                        : "Hide day dashboard")
+                    .accessibilityIdentifier("hub.dashboard.toggle")
+                    Button {
+                        showingRackEditor = true
+                    } label: {
+                        Image(systemName: "slider.horizontal.3")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(HubTheme.accent)
+                    .accessibilityLabel("Edit \(snapshot.resolvedMode.displayTitle) rack")
+                    .accessibilityIdentifier("hub.rack.edit")
                 }
                 .padding(.horizontal, 4)
 
+                if snapshot.configuration?.dashboardEnabled != false,
+                   let dayProgress = snapshot.dayProgress {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("DAY")
+                            Spacer()
+                            Text("\(Int((dayProgress * 100).rounded()))%")
+                        }
+                        .font(.system(size: 9, weight: .black, design: .monospaced))
+                        .foregroundStyle(HubTheme.foreground.opacity(0.42))
+                        ProgressView(value: dayProgress)
+                            .tint(HubTheme.accent)
+                    }
+                    .padding(.horizontal, 4)
+                    .accessibilityIdentifier("hub.dayProgress")
+                }
+
                 LazyVStack(spacing: 9) {
                     ForEach(snapshot.modules) { module in
-                        PersonalHubModuleCard(module: module)
+                        PersonalHubModuleCard(
+                            module: module,
+                            isHighlighted: client.highlightedHubModuleID == module.id
+                        )
                     }
                 }
             } else if client.state == .unpaired {
@@ -48,7 +104,8 @@ struct PersonalHubSurface: View {
                 hubEmptyState(
                     symbol: "wifi.exclamationmark",
                     title: "Personal hub unavailable",
-                    detail: error
+                    detail: error,
+                    showsRetry: true
                 )
             } else {
                 hubEmptyState(
@@ -72,7 +129,114 @@ struct PersonalHubSurface: View {
                 .presentationDetents([.height(260)])
                 .presentationDragIndicator(.visible)
         }
+        .sheet(isPresented: $showingRackEditor, onDismiss: preparePendingRack) {
+            if let snapshot = client.hubSnapshot,
+               let configuration = snapshot.configuration {
+                PersonalHubModeRackEditor(
+                    mode: snapshot.resolvedMode,
+                    modules: configuration.rack(for: snapshot.resolvedMode)
+                ) { modules in
+                    pendingRack = (snapshot.resolvedMode, modules)
+                    showingRackEditor = false
+                }
+            }
+        }
+        .sheet(item: $client.quickJotDestination, onDismiss: {
+            preparePendingQuickJot()
+            client.clearQuickJotSeed()
+        }) { destination in
+            BuddyQuickJotSheet(destination: destination, initialText: client.quickJotSeedText ?? "") { text in
+                pendingQuickJot = (destination, text)
+                client.quickJotDestination = nil
+            }
+        }
         .accessibilityIdentifier("hub.surface")
+    }
+
+    private var quickJotStrip: some View {
+        HStack(spacing: 7) {
+            ForEach(BuddyQuickJotDestination.allCases) { destination in
+                Button {
+                    client.quickJotDestination = destination
+                } label: {
+                    Label("New \(destination.title)", systemImage: destination.symbol)
+                        .font(.system(size: 11, weight: .bold))
+                        .frame(maxWidth: .infinity, minHeight: 34)
+                }
+                .buttonStyle(HubSecondaryButtonStyle())
+                .accessibilityIdentifier("hub.quickJot.\(destination.rawValue)")
+            }
+        }
+    }
+
+    private var connectionStrip: some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(client.state == .connected ? Color.green : Color.orange)
+                .frame(width: 7, height: 7)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(client.state.label.uppercased())
+                    .font(.system(size: 9, weight: .black, design: .monospaced))
+                    .foregroundStyle(client.state == .connected ? Color.green : Color.orange)
+                Text(client.connectionDetail)
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .foregroundStyle(HubTheme.foreground.opacity(0.42))
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            if case .offline = client.state {
+                Button("Retry") { Task { await client.refresh() } }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .tint(HubTheme.accent)
+                    .accessibilityIdentifier("hub.connection.retry")
+            }
+        }
+        .padding(.horizontal, 4)
+        .accessibilityIdentifier("hub.connection.status")
+    }
+
+    private func toggleDashboard(_ snapshot: PersonalHubSnapshot) {
+        let mutation = PersonalHubConfigurationMutation(
+            dashboardEnabled: !(snapshot.configuration?.dashboardEnabled ?? true)
+        )
+        Task {
+            await client.prepareHubAction(.init(
+                moduleID: .quickToggles,
+                actionID: "setDashboard",
+                value: mutation.encodedActionValue()
+            ))
+        }
+    }
+
+    private func preparePendingRack() {
+        guard let (mode, modules) = pendingRack else { return }
+        pendingRack = nil
+        let mutation = PersonalHubConfigurationMutation(mode: mode, modules: modules)
+        Task {
+            await client.prepareHubAction(.init(
+                moduleID: .quickToggles,
+                actionID: "setModeRack",
+                value: mutation.encodedActionValue()
+            ))
+        }
+    }
+
+    private func preparePendingQuickJot() {
+        guard let (destination, text) = pendingQuickJot else { return }
+        pendingQuickJot = nil
+        let intent: PersonalHubActionIntent
+        switch destination {
+        case .task:
+            intent = .init(
+                moduleID: .reminders,
+                actionID: "add",
+                value: PersonalHubReminderDraft(title: text).encodedActionValue()
+            )
+        case .note:
+            intent = .init(moduleID: .notes, actionID: "add", value: text)
+        }
+        Task { await client.prepareHubAction(intent) }
     }
 
     private var modeStrip: some View {
@@ -100,7 +264,12 @@ struct PersonalHubSurface: View {
         }
     }
 
-    private func hubEmptyState(symbol: String, title: String, detail: String) -> some View {
+    private func hubEmptyState(
+        symbol: String,
+        title: String,
+        detail: String,
+        showsRetry: Bool = false
+    ) -> some View {
         VStack(spacing: 8) {
             Image(systemName: symbol)
                 .font(.system(size: 24, weight: .medium))
@@ -112,16 +281,207 @@ struct PersonalHubSurface: View {
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(HubTheme.foreground.opacity(0.48))
                 .multilineTextAlignment(.center)
+            if showsRetry {
+                Button("Retry") { Task { await client.refresh() } }
+                    .buttonStyle(.borderedProminent)
+                    .tint(HubTheme.accent)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 22)
     }
 }
 
+private struct BuddyQuickJotSheet: View {
+    let destination: BuddyQuickJotDestination
+    let initialText: String
+    let onReview: (String) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var text: String
+    @FocusState private var focused: Bool
+
+    init(
+        destination: BuddyQuickJotDestination,
+        initialText: String = "",
+        onReview: @escaping (String) -> Void
+    ) {
+        self.destination = destination
+        self.initialText = initialText
+        self.onReview = onReview
+        _text = State(initialValue: initialText)
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 14) {
+                Label("Save to \(destination.title)", systemImage: destination.symbol)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(HubTheme.accent)
+                TextField(
+                    destination == .task ? "What needs doing?" : "What do you want to remember?",
+                    text: $text,
+                    axis: .vertical
+                )
+                .lineLimit(1...6)
+                .textFieldStyle(.plain)
+                .font(.system(size: 16, weight: .medium))
+                .padding(12)
+                .background(HubTheme.surface, in: RoundedRectangle(cornerRadius: 11))
+                .focused($focused)
+                .accessibilityIdentifier("hub.quickJot.text")
+                Spacer()
+            }
+            .padding(16)
+            .background(Color.black)
+            .navigationTitle("New \(destination.title)")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Review") {
+                        onReview(text.trimmingCharacters(in: .whitespacesAndNewlines))
+                    }
+                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+        .preferredColorScheme(.dark)
+        .onAppear { focused = true }
+        .accessibilityIdentifier("hub.quickJot.sheet")
+    }
+}
+
+private struct PersonalHubModeRackEditor: View {
+    let mode: PersonalHubMode
+    let onSave: ([PersonalHubModuleID]) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var modules: [PersonalHubModuleID]
+
+    init(
+        mode: PersonalHubMode,
+        modules: [PersonalHubModuleID],
+        onSave: @escaping ([PersonalHubModuleID]) -> Void
+    ) {
+        self.mode = mode
+        self.onSave = onSave
+        _modules = State(initialValue: modules)
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 9) {
+                    Text("PINNED")
+                        .font(.system(size: 10, weight: .black, design: .monospaced))
+                        .foregroundStyle(.secondary)
+
+                    ForEach(Array(modules.enumerated()), id: \.element) { index, module in
+                        moduleRow(module) {
+                            HStack(spacing: 14) {
+                                Button { move(index, by: -1) } label: {
+                                    Image(systemName: "arrow.up")
+                                }
+                                .disabled(index == 0)
+                                .accessibilityLabel("Move \(PersonalHubCatalog.definition(for: module).title) up")
+                                .accessibilityIdentifier("hub.rack.moveUp.\(module.rawValue)")
+                                Button { move(index, by: 1) } label: {
+                                    Image(systemName: "arrow.down")
+                                }
+                                .disabled(index == modules.count - 1)
+                                .accessibilityLabel("Move \(PersonalHubCatalog.definition(for: module).title) down")
+                                .accessibilityIdentifier("hub.rack.moveDown.\(module.rawValue)")
+                                Button { modules.remove(at: index) } label: {
+                                    Image(systemName: "minus.circle")
+                                }
+                                .disabled(modules.count == 1)
+                                .accessibilityLabel("Remove \(PersonalHubCatalog.definition(for: module).title)")
+                                .accessibilityIdentifier("hub.rack.remove.\(module.rawValue)")
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(HubTheme.accent)
+                        }
+                    }
+
+                    if !availableModules.isEmpty {
+                        Text("AVAILABLE")
+                            .font(.system(size: 10, weight: .black, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .padding(.top, 10)
+
+                        ForEach(availableModules) { module in
+                            moduleRow(module) {
+                                Button { modules.append(module) } label: {
+                                    Image(systemName: "plus.circle.fill")
+                                        .foregroundStyle(HubTheme.accent)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+                .padding(16)
+            }
+            .background(Color.black)
+            .navigationTitle("\(mode.displayTitle) rack")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Review") { onSave(modules) }
+                        .disabled(modules.isEmpty)
+                        .accessibilityIdentifier("hub.rack.review")
+                }
+            }
+        }
+        .preferredColorScheme(.dark)
+        .accessibilityIdentifier("hub.rack.editor")
+    }
+
+    private func moduleRow<Trailing: View>(
+        _ module: PersonalHubModuleID,
+        @ViewBuilder trailing: () -> Trailing
+    ) -> some View {
+        HStack(spacing: 11) {
+            Image(systemName: PersonalHubCatalog.definition(for: module).symbol)
+                .foregroundStyle(HubTheme.accent)
+                .frame(width: 24)
+            Text(PersonalHubCatalog.definition(for: module).title)
+                .font(.system(size: 14, weight: .semibold))
+            Spacer()
+            trailing()
+        }
+        .padding(12)
+        .background(HubTheme.surface, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .stroke(HubTheme.border, lineWidth: 1)
+        )
+        .accessibilityIdentifier("hub.rack.module.\(module.rawValue)")
+    }
+
+    private var availableModules: [PersonalHubModuleID] {
+        PersonalHubModuleID.allCases.filter { !modules.contains($0) }
+    }
+
+    private func move(_ index: Int, by offset: Int) {
+        let destination = index + offset
+        guard modules.indices.contains(index), modules.indices.contains(destination) else { return }
+        modules.swapAt(index, destination)
+    }
+}
+
 private struct PersonalHubModuleCard: View {
     let module: PersonalHubModuleSnapshot
+    let isHighlighted: Bool
     @EnvironmentObject private var client: RemoteApprovalClient
     @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
     @State private var composerText = ""
     @State private var showsComposer = false
     @State private var composerActionID = "add"
@@ -133,6 +493,9 @@ private struct PersonalHubModuleCard: View {
     @State private var selectedReminderCalendarID = ""
     @State private var outputVolume = 50.0
     @State private var showsCameraPreview = false
+    @State private var claudeContexts: [PersonalHubClaudeContext] = []
+    @State private var claudeContextError: String?
+    @State private var showsClaudeFileImporter = false
     @StateObject private var speech = HubSpeechRecognizer()
 
     private var definition: PersonalHubModuleDefinition {
@@ -163,20 +526,58 @@ private struct PersonalHubModuleCard: View {
             }
 
             if let detail = module.detail {
-                Text(detail)
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .foregroundStyle(HubTheme.foreground.opacity(0.38))
+                HStack(alignment: .top, spacing: 7) {
+                    Image(systemName: module.id == .notifications ? "eye.slash" : "info.circle")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(module.id == .notifications ? HubTheme.accent : HubTheme.foreground.opacity(0.38))
+                    Text(detail)
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .foregroundStyle(HubTheme.foreground.opacity(0.44))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(8)
+                .background(Color.black.opacity(0.16), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
             }
 
             if showsComposer {
                 composer
             }
 
+            if let month = module.calendarMonth {
+                BuddyCalendarMonthView(month: month)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(month.selectedEvents.isEmpty ? "NO EVENTS" : "SELECTED DAY")
+                        .font(.system(size: 9, weight: .black, design: .monospaced))
+                        .tracking(1.1)
+                        .foregroundStyle(HubTheme.foreground.opacity(0.32))
+                    if !month.selectedEvents.isEmpty {
+                        LazyVStack(spacing: 0) {
+                            ForEach(month.selectedEvents) { item in
+                                PersonalHubItemRow(moduleID: module.id, item: item)
+                                if item.id != month.selectedEvents.last?.id {
+                                    Divider().overlay(Color.white.opacity(0.06))
+                                }
+                            }
+                        }
+                        .background(Color.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 9))
+                    }
+                }
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("hub.calendar.selectedEvents")
+            }
+
             if !module.items.isEmpty {
+                if module.calendarMonth != nil {
+                    Text("UPCOMING")
+                        .font(.system(size: 9, weight: .black, design: .monospaced))
+                        .tracking(1.1)
+                        .foregroundStyle(HubTheme.foreground.opacity(0.32))
+                }
                 LazyVStack(spacing: 0) {
-                    ForEach(module.items) { item in
+                    ForEach(module.calendarMonth == nil ? module.items : Array(module.items.prefix(6))) { item in
                         PersonalHubItemRow(moduleID: module.id, item: item)
-                        if item.id != module.items.last?.id {
+                        if item.id != (module.calendarMonth == nil ? module.items.last?.id : module.items.prefix(6).last?.id) {
                             Divider().overlay(Color.white.opacity(0.06))
                         }
                     }
@@ -216,18 +617,29 @@ private struct PersonalHubModuleCard: View {
         .background(HubTheme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(HubTheme.border, lineWidth: 1)
+                .stroke(isHighlighted ? HubTheme.accent : HubTheme.border, lineWidth: isHighlighted ? 2 : 1)
         )
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("hub.module.\(module.id.rawValue)")
+        .accessibilityValue(isHighlighted ? "Opened from link" : "")
         .fullScreenCover(isPresented: $showsCameraPreview) {
-            CameraPreviewScreen()
+            MediaPreflightView()
         }
+        .fileImporter(
+            isPresented: $showsClaudeFileImporter,
+            allowedContentTypes: [.plainText, .json, .commaSeparatedText, .sourceCode, .data],
+            allowsMultipleSelection: true,
+            onCompletion: importClaudeFiles
+        )
         .onAppear {
             if selectedReminderCalendarID.isEmpty {
                 selectedReminderCalendarID = reminderLists.first?.id ?? ""
             }
         }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active { speech.cancel() }
+        }
+        .onDisappear { speech.cancel() }
     }
 
     @ViewBuilder
@@ -253,7 +665,7 @@ private struct PersonalHubModuleCard: View {
     }
 
     private func prepare(_ action: PersonalHubAction) {
-        if module.id == .camera, action.id == "previewOnDevice" {
+        if module.id == .camera, action.id == "previewLocal" {
             showsCameraPreview = true
             return
         }
@@ -346,21 +758,136 @@ private struct PersonalHubModuleCard: View {
                 )
             }
         } else if module.id == .claude {
-            HStack(spacing: 7) {
-                hubTextField(composerActionID == "plan" ? "Tell Claude what to do" : "Ask Claude", text: $composerText)
-                Button {
-                    speech.toggle { transcript in composerText = transcript }
-                } label: {
-                    Image(systemName: speech.isRecording ? "stop.fill" : "mic.fill")
-                        .font(.system(size: 13, weight: .bold))
-                        .frame(width: 36, height: 36)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 7) {
+                    hubTextField(composerActionID == "plan" ? "Tell Claude what to propose" : "Ask Claude", text: $composerText)
+                    reviewButton(
+                        actionID: composerActionID,
+                        value: PersonalHubClaudeDraft(
+                            prompt: composerText.trimmingCharacters(in: .whitespacesAndNewlines),
+                            contexts: claudeContexts
+                        ).encodedActionValue()
+                    )
                 }
-                .buttonStyle(HubSecondaryButtonStyle())
-                .accessibilityLabel(speech.isRecording ? "Stop voice input" : "Start voice input")
-                reviewButton(
-                    actionID: composerActionID,
-                    value: composerText.trimmingCharacters(in: .whitespacesAndNewlines)
-                )
+
+                HStack(spacing: 6) {
+                    HStack(spacing: 2) {
+                        ForEach(HubSpeechRecognizer.Mode.allCases) { mode in
+                            Button {
+                                speech.setMode(mode)
+                            } label: {
+                                Text(mode == .pushToTalk ? "HOLD" : "CONTINUOUS")
+                                    .font(.system(size: 8, weight: .black, design: .monospaced))
+                                    .foregroundStyle(speech.mode == mode ? Color.black : HubTheme.foreground.opacity(0.5))
+                                    .frame(minWidth: mode == .pushToTalk ? 48 : 76, minHeight: 28)
+                                    .background(
+                                        speech.mode == mode ? HubTheme.accent : Color.clear,
+                                        in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("hub.claude.voice.\(mode.rawValue)")
+                        }
+                    }
+                    .padding(3)
+                    .background(Color.black.opacity(0.24), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                    Spacer(minLength: 0)
+
+                    if speech.mode == .pushToTalk {
+                        Label(speech.isRecording ? "Listening" : "Hold to talk", systemImage: speech.isRecording ? "waveform" : "mic.fill")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(speech.isRecording ? HubTheme.accent : HubTheme.foreground.opacity(0.7))
+                            .padding(.horizontal, 10)
+                            .frame(minHeight: 34)
+                            .background(Color.white.opacity(0.06), in: Capsule())
+                            .contentShape(Capsule())
+                            .onLongPressGesture(
+                                minimumDuration: 0,
+                                maximumDistance: 32,
+                                pressing: { pressing in
+                                    if pressing {
+                                        speech.press { composerText = $0 }
+                                    } else {
+                                        speech.release()
+                                    }
+                                },
+                                perform: {}
+                            )
+                            .accessibilityLabel("Hold to dictate a Claude request")
+                            .accessibilityIdentifier("hub.claude.voice.hold")
+                    } else {
+                        Button {
+                            speech.toggle { composerText = $0 }
+                        } label: {
+                            Label(speech.isRecording ? "Stop" : "Listen", systemImage: speech.isRecording ? "stop.fill" : "waveform")
+                                .font(.system(size: 10, weight: .bold))
+                                .frame(minHeight: 34)
+                        }
+                        .buttonStyle(HubPrimaryButtonStyle())
+                    }
+                }
+
+                if speech.phase == .requestingPermission {
+                    Label("Requesting private microphone access…", systemImage: "lock.shield")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(HubTheme.foreground.opacity(0.48))
+                } else if let error = speech.errorMessage {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(HubTheme.accent)
+                }
+
+                if !claudeContexts.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach(Array(claudeContexts.enumerated()), id: \.offset) { index, context in
+                                HStack(spacing: 5) {
+                                    Image(systemName: "doc.text")
+                                    Text(context.name).lineLimit(1)
+                                    Button {
+                                        claudeContexts.remove(at: index)
+                                    } label: {
+                                        Image(systemName: "xmark")
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(context.wasTruncated ? HubTheme.accent : HubTheme.foreground.opacity(0.7))
+                                .padding(.horizontal, 9)
+                                .frame(minHeight: 30)
+                                .background(Color.white.opacity(0.065), in: Capsule())
+                            }
+                        }
+                    }
+                }
+
+                HStack(spacing: 7) {
+                    Button {
+                        showsClaudeFileImporter = true
+                    } label: {
+                        Label("Attach text", systemImage: "paperclip")
+                            .font(.system(size: 10, weight: .bold))
+                            .frame(minHeight: 32)
+                    }
+                    .buttonStyle(HubSecondaryButtonStyle())
+                    .accessibilityIdentifier("hub.claude.attach")
+                    Text("5 files max · 2 MB each")
+                        .font(.system(size: 9, weight: .black, design: .monospaced))
+                        .foregroundStyle(HubTheme.foreground.opacity(0.34))
+                }
+
+                if let claudeContextError {
+                    Text(claudeContextError)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(HubTheme.accent)
+                }
+
+                Text("Voice and attached text are sent privately to your paired Mac. Ask is read-only; Do only creates proposals you must review again.")
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(HubTheme.foreground.opacity(0.36))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("hub.claude.safety")
             }
         } else {
             HStack(spacing: 7) {
@@ -419,34 +946,229 @@ private struct PersonalHubModuleCard: View {
             return ReminderListChoice(id: id, title: item.title)
         }
     }
+
+    private func importClaudeFiles(_ result: Result<[URL], Error>) {
+        do {
+            let urls = try result.get()
+            let namedData = try urls.map { url -> (String, Data) in
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                return (url.lastPathComponent, try Data(contentsOf: url, options: [.mappedIfSafe]))
+            }
+            claudeContexts = try PersonalHubClaudeContextPolicy.validate(namedData: namedData)
+            claudeContextError = nil
+        } catch {
+            claudeContextError = error.localizedDescription
+        }
+    }
+}
+
+private struct BuddyCalendarMonthView: View {
+    let month: PersonalHubCalendarMonth
+
+    @EnvironmentObject private var client: RemoteApprovalClient
+    private let calendar = Calendar.current
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 7)
+
+    var body: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                navigationButton("chevron.left", label: "Previous month", identifier: "previous") {
+                    moveMonth(-1)
+                }
+                Spacer(minLength: 0)
+                Text(month.displayedMonth.formatted(.dateTime.month(.wide).year()))
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundStyle(HubTheme.foreground.opacity(0.9))
+                    .accessibilityIdentifier("hub.calendar.monthTitle")
+                Spacer(minLength: 0)
+                Button("Today") {
+                    Task { await client.refreshCalendar(referenceDate: Date(), selectedDate: Date()) }
+                }
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(HubTheme.accent)
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("hub.calendar.today")
+                navigationButton("chevron.right", label: "Next month", identifier: "next") {
+                    moveMonth(1)
+                }
+            }
+
+            LazyVGrid(columns: columns, spacing: 4) {
+                ForEach(weekdaySymbols, id: \.self) { symbol in
+                    Text(symbol.uppercased())
+                        .font(.system(size: 8, weight: .black, design: .monospaced))
+                        .foregroundStyle(HubTheme.foreground.opacity(0.28))
+                        .frame(maxWidth: .infinity)
+                }
+                ForEach(month.days) { day in
+                    Button {
+                        Task {
+                            await client.refreshCalendar(
+                                referenceDate: month.displayedMonth,
+                                selectedDate: day.date
+                            )
+                        }
+                    } label: {
+                        VStack(spacing: 2) {
+                            Text("\(calendar.component(.day, from: day.date))")
+                                .font(.system(size: 11, weight: isSelected(day) ? .bold : .medium, design: .rounded))
+                            HStack(spacing: 1.5) {
+                                ForEach(0..<min(day.eventCount, 3), id: \.self) { _ in
+                                    Circle().frame(width: 2.5, height: 2.5)
+                                }
+                            }
+                            .frame(height: 3)
+                        }
+                        .foregroundStyle(day.isInDisplayedMonth
+                            ? HubTheme.foreground.opacity(0.86)
+                            : HubTheme.foreground.opacity(0.22))
+                        .frame(maxWidth: .infinity, minHeight: 34)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(isSelected(day) ? HubTheme.accent.opacity(0.24) : Color.clear)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(day.isToday ? HubTheme.accent.opacity(0.92) : Color.clear, lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("hub.calendar.day.\(day.id)")
+                    .accessibilityLabel(day.date.formatted(date: .complete, time: .omitted))
+                    .accessibilityValue(day.eventCount == 1 ? "1 event" : "\(day.eventCount) events")
+                }
+            }
+        }
+        .padding(9)
+        .background(Color.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.white.opacity(0.075), lineWidth: 1)
+        )
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("hub.calendar.month")
+    }
+
+    private func navigationButton(
+        _ symbol: String,
+        label: String,
+        identifier: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 11, weight: .bold))
+                .frame(width: 30, height: 30)
+                .background(Color.white.opacity(0.055), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(HubTheme.accent)
+        .accessibilityLabel(label)
+        .accessibilityIdentifier("hub.calendar.\(identifier)")
+    }
+
+    private var weekdaySymbols: [String] {
+        let symbols = calendar.veryShortStandaloneWeekdaySymbols
+        let offset = max(0, min(symbols.count - 1, calendar.firstWeekday - 1))
+        return Array(symbols[offset...] + symbols[..<offset])
+    }
+
+    private func isSelected(_ day: PersonalHubCalendarDay) -> Bool {
+        calendar.isDate(day.date, inSameDayAs: month.selectedDate)
+    }
+
+    private func moveMonth(_ offset: Int) {
+        guard let reference = calendar.date(byAdding: .month, value: offset, to: month.displayedMonth) else { return }
+        Task { await client.refreshCalendar(referenceDate: reference, selectedDate: reference) }
+    }
 }
 
 @MainActor
 private final class HubSpeechRecognizer: ObservableObject {
+    enum Mode: String, CaseIterable, Identifiable {
+        case pushToTalk
+        case continuous
+        var id: String { rawValue }
+    }
+
+    enum Phase: Equatable {
+        case idle
+        case requestingPermission
+        case listening
+        case blocked
+    }
+
     @Published private(set) var isRecording = false
+    @Published private(set) var mode: Mode = .pushToTalk
+    @Published private(set) var phase: Phase = .idle
+    @Published private(set) var errorMessage: String?
 
     private let recognizer = SFSpeechRecognizer(locale: Locale.current)
     private let audioEngine = AVAudioEngine()
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
+    private var silenceTask: Task<Void, Never>?
     private var tapInstalled = false
+    private let sessionQueue = DispatchQueue(label: "com.codeisland.buddy.speech-session")
+    private var startGeneration = UUID()
+
+    func setMode(_ mode: Mode) {
+        startGeneration = UUID()
+        if isRecording { stop() }
+        self.mode = mode
+        errorMessage = nil
+    }
+
+    func press(onTranscript: @escaping (String) -> Void) {
+        guard mode == .pushToTalk, !isRecording else { return }
+        beginStart(onTranscript: onTranscript)
+    }
+
+    func release() {
+        guard mode == .pushToTalk else { return }
+        startGeneration = UUID()
+        if isRecording {
+            stop()
+        } else if phase == .requestingPermission {
+            phase = .idle
+        }
+    }
 
     func toggle(onTranscript: @escaping (String) -> Void) {
         if isRecording {
             stop()
         } else {
-            Task { await start(onTranscript: onTranscript) }
+            beginStart(onTranscript: onTranscript)
         }
     }
 
-    private func start(onTranscript: @escaping (String) -> Void) async {
+    private func beginStart(onTranscript: @escaping (String) -> Void) {
+        let generation = UUID()
+        startGeneration = generation
+        Task { await start(generation: generation, onTranscript: onTranscript) }
+    }
+
+    private func start(generation: UUID, onTranscript: @escaping (String) -> Void) async {
+        phase = .requestingPermission
+        errorMessage = nil
         let speechAuthorization = await withCheckedContinuation { continuation in
             SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0) }
         }
         let microphoneAllowed = await withCheckedContinuation { continuation in
             AVAudioApplication.requestRecordPermission { continuation.resume(returning: $0) }
         }
-        guard speechAuthorization == .authorized, microphoneAllowed, recognizer?.isAvailable == true else { return }
+        guard startGeneration == generation else { return }
+        guard speechAuthorization == .authorized, microphoneAllowed else {
+            phase = .blocked
+            errorMessage = "Enable Speech Recognition and Microphone in Settings"
+            return
+        }
+        guard recognizer?.isAvailable == true else {
+            phase = .blocked
+            errorMessage = "Speech Recognition is currently unavailable"
+            return
+        }
 
         stop()
         let request = SFSpeechAudioBufferRecognitionRequest()
@@ -455,9 +1177,7 @@ private final class HubSpeechRecognizer: ObservableObject {
         self.request = request
 
         do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.record, mode: .measurement, options: [.duckOthers])
-            try session.setActive(true, options: .notifyOthersOnDeactivation)
+            try await activateAudioSession()
             let node = audioEngine.inputNode
             let format = node.outputFormat(forBus: 0)
             node.installTap(onBus: 0, bufferSize: 1_024, format: format) { buffer, _ in
@@ -467,10 +1187,13 @@ private final class HubSpeechRecognizer: ObservableObject {
             audioEngine.prepare()
             try audioEngine.start()
             isRecording = true
+            phase = .listening
+            scheduleSilenceTimeout()
             task = recognizer?.recognitionTask(with: request) { [weak self] result, error in
                 Task { @MainActor in
                     if let result {
                         onTranscript(result.bestTranscription.formattedString)
+                        self?.scheduleSilenceTimeout()
                     }
                     if result?.isFinal == true || error != nil {
                         self?.stop()
@@ -479,10 +1202,24 @@ private final class HubSpeechRecognizer: ObservableObject {
             }
         } catch {
             stop()
+            phase = .blocked
+            errorMessage = "Microphone could not start: \(error.localizedDescription)"
+        }
+    }
+
+    private func scheduleSilenceTimeout() {
+        silenceTask?.cancel()
+        guard mode == .continuous else { return }
+        silenceTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            self?.stop()
         }
     }
 
     func stop() {
+        silenceTask?.cancel()
+        silenceTask = nil
         if audioEngine.isRunning { audioEngine.stop() }
         if tapInstalled {
             audioEngine.inputNode.removeTap(onBus: 0)
@@ -493,7 +1230,36 @@ private final class HubSpeechRecognizer: ObservableObject {
         request = nil
         task = nil
         isRecording = false
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        if phase != .blocked { phase = .idle }
+        deactivateAudioSession()
+    }
+
+    func cancel() {
+        startGeneration = UUID()
+        stop()
+        errorMessage = nil
+        phase = .idle
+    }
+
+    private func activateAudioSession() async throws {
+        try await withCheckedThrowingContinuation { continuation in
+            sessionQueue.async {
+                do {
+                    let session = AVAudioSession.sharedInstance()
+                    try session.setCategory(.record, mode: .measurement, options: [.duckOthers])
+                    try session.setActive(true, options: .notifyOthersOnDeactivation)
+                    continuation.resume()
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    private func deactivateAudioSession() {
+        sessionQueue.async {
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        }
     }
 }
 
@@ -511,11 +1277,23 @@ private struct PersonalHubItemRow: View {
     @State private var noteMutation: NoteMutation?
     @State private var calendarMutation: CalendarMutation?
     @State private var sharedFile: SharedFile?
+    @State private var mediaSeekPosition = 0.0
+    @State private var isMediaSeeking = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .top, spacing: 8) {
-                if let symbol = item.symbol {
+                if let data = item.decodedArtworkJPEG, let image = UIImage(data: data) {
+                    Image(uiImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 48, height: 48)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(HubTheme.border, lineWidth: 1)
+                        )
+                } else if let symbol = item.symbol {
                     Image(systemName: symbol)
                         .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(HubTheme.foreground.opacity(0.42))
@@ -537,6 +1315,42 @@ private struct PersonalHubItemRow: View {
 
             if let progress = item.progress {
                 ProgressView(value: progress).tint(HubTheme.accent)
+            }
+
+            if let duration = item.mediaDuration, duration.isFinite, duration > 0 {
+                Slider(
+                    value: $mediaSeekPosition,
+                    in: 0...duration,
+                    onEditingChanged: { editing in
+                        isMediaSeeking = editing
+                        guard !editing else { return }
+                        Task {
+                            await client.prepareHubAction(.init(
+                                moduleID: moduleID,
+                                actionID: "seek",
+                                targetID: item.id,
+                                value: String(mediaSeekPosition)
+                            ))
+                        }
+                    }
+                )
+                .tint(HubTheme.accent)
+                .accessibilityLabel("Playback position")
+                .accessibilityIdentifier("hub.seek.\(moduleID.rawValue)")
+                HStack {
+                    Text(playbackTime(mediaSeekPosition))
+                    Spacer()
+                    Text(playbackTime(duration))
+                }
+                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                .foregroundStyle(HubTheme.foreground.opacity(0.36))
+                .onAppear {
+                    mediaSeekPosition = min(max(item.mediaPosition ?? 0, 0), duration)
+                }
+                .onChange(of: item.mediaPosition) { _, position in
+                    guard !isMediaSeeking else { return }
+                    mediaSeekPosition = min(max(position ?? 0, 0), duration)
+                }
             }
 
             if !item.actions.isEmpty {
@@ -614,6 +1428,11 @@ private struct PersonalHubItemRow: View {
         .sheet(item: $sharedFile) { file in
             ActivityView(items: [file.url])
         }
+    }
+
+    private func playbackTime(_ seconds: TimeInterval) -> String {
+        let whole = max(Int(seconds.rounded()), 0)
+        return String(format: "%d:%02d", whole / 60, whole % 60)
     }
 }
 
@@ -868,110 +1687,6 @@ private struct TeleprompterReader: View {
             .toolbarBackground(.black, for: .navigationBar, .bottomBar)
             .toolbarColorScheme(.dark, for: .navigationBar, .bottomBar)
         }
-    }
-}
-
-private struct CameraPreviewScreen: View {
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        ZStack(alignment: .topTrailing) {
-            CameraPreviewHost()
-                .ignoresSafeArea()
-            Button("Done") { dismiss() }
-                .accessibilityIdentifier("hub.camera.done")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(.black)
-                .padding(.horizontal, 16)
-                .frame(minHeight: 40)
-                .background(HubTheme.accent, in: Capsule())
-                .padding(.top, 16)
-                .padding(.trailing, 16)
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("hub.camera.preview")
-        .background(Color.black.ignoresSafeArea())
-    }
-}
-
-private struct CameraPreviewHost: UIViewControllerRepresentable {
-    func makeUIViewController(context: Context) -> CameraPreviewController {
-        CameraPreviewController()
-    }
-
-    func updateUIViewController(_ uiViewController: CameraPreviewController, context: Context) {}
-}
-
-private final class CameraPreviewController: UIViewController {
-    private let session = AVCaptureSession()
-    private let sessionQueue = DispatchQueue(label: "codeisland.camera-preview")
-    private var previewLayer: AVCaptureVideoPreviewLayer?
-
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        view.backgroundColor = .black
-        switch AVCaptureDevice.authorizationStatus(for: .video) {
-        case .authorized:
-            configureSession()
-        case .notDetermined:
-            AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
-                DispatchQueue.main.async {
-                    if granted { self?.configureSession() }
-                    else { self?.showUnavailable("Camera access is off") }
-                }
-            }
-        default:
-            showUnavailable("Enable Camera access in Settings → Privacy & Security → Camera")
-        }
-    }
-
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        previewLayer?.frame = view.bounds
-    }
-
-    override func viewWillDisappear(_ animated: Bool) {
-        super.viewWillDisappear(animated)
-        sessionQueue.async { [session] in
-            if session.isRunning { session.stopRunning() }
-        }
-    }
-
-    private func configureSession() {
-        guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front),
-              let input = try? AVCaptureDeviceInput(device: camera),
-              session.canAddInput(input)
-        else {
-            showUnavailable("Front camera is unavailable")
-            return
-        }
-        session.beginConfiguration()
-        session.sessionPreset = .high
-        session.addInput(input)
-        session.commitConfiguration()
-
-        let layer = AVCaptureVideoPreviewLayer(session: session)
-        layer.videoGravity = .resizeAspectFill
-        layer.frame = view.bounds
-        view.layer.insertSublayer(layer, at: 0)
-        previewLayer = layer
-        sessionQueue.async { [session] in session.startRunning() }
-    }
-
-    private func showUnavailable(_ message: String) {
-        let label = UILabel()
-        label.text = message
-        label.textColor = .white
-        label.font = .systemFont(ofSize: 17, weight: .semibold)
-        label.numberOfLines = 0
-        label.textAlignment = .center
-        label.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(label)
-        NSLayoutConstraint.activate([
-            label.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 32),
-            label.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -32),
-            label.centerYAnchor.constraint(equalTo: view.centerYAnchor)
-        ])
     }
 }
 

@@ -1,0 +1,71 @@
+name: Manage TestFlight App Memberships
+
+on:
+  workflow_dispatch:
+    inputs:
+      tester_email:
+        description: TestFlight tester email
+        required: true
+        default: gregharned@gmail.com
+        type: string
+      add_bundle_id:
+        description: App bundle ID to restore
+        required: true
+        default: com.harned.estate
+        type: string
+      remove_app_name:
+        description: App name to remove from active testing
+        required: true
+        default: Orca IDE
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    name: Restore requested app and remove obsolete app
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate App Store Connect secrets
+        shell: bash
+        env:
+          ASC_ISSUER: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY: ${{ secrets.ASC_KEY_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8_BASE64 }}
+        run: |
+          test -n "$ASC_ISSUER"
+          test -n "$ASC_KEY"
+          test -n "$ASC_KEY_P8"
+
+      - name: Install App Store Connect API key
+        shell: bash
+        env:
+          ASC_KEY: ${{ secrets.ASC_KEY_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8_BASE64 }}
+        run: |
+          KEY_DIR="$HOME/.appstoreconnect/private_keys"
+          mkdir -p "$KEY_DIR"
+          printf '%s' "$ASC_KEY_P8" | base64 --decode > "$KEY_DIR/AuthKey_$ASC_KEY.p8"
+          chmod 600 "$KEY_DIR/AuthKey_$ASC_KEY.p8"
+          echo "ASC_PRIVATE_KEY_PATH=$KEY_DIR/AuthKey_$ASC_KEY.p8" >> "$GITHUB_ENV"
+
+      - name: Update TestFlight memberships
+        shell: bash
+        env:
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          TESTER_EMAIL: ${{ inputs.tester_email }}
+          ADD_BUNDLE_ID: ${{ inputs.add_bundle_id }}
+          REMOVE_APP_NAME: ${{ inputs.remove_app_name }}
+          ASC_RECEIPT_PATH: ${{ runner.temp }}/testflight-membership-receipt.json
+        run: scripts/relocate-testflight-tester.sh
+
+      - name: Upload membership receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: TestFlight-membership-receipt
+          path: ${{ runner.temp }}/testflight-membership-receipt.json
+          if-no-files-found: error

@@ -31,15 +31,18 @@ final class PersonalHubService {
     private let glances: GlancesModel
     private let utilities: PersonalUtilitiesModel
     private let data: PersonalHubDataModel
+    private let configurationStore: PersonalHubConfigurationStore
 
     init(
         glances: GlancesModel? = nil,
         utilities: PersonalUtilitiesModel? = nil,
-        data: PersonalHubDataModel? = nil
+        data: PersonalHubDataModel? = nil,
+        configurationStore: PersonalHubConfigurationStore? = nil
     ) {
         self.glances = glances ?? .shared
         self.utilities = utilities ?? .shared
         self.data = data ?? .shared
+        self.configurationStore = configurationStore ?? .shared
     }
 
     func shelfFileURL(id: String) -> URL? {
@@ -53,6 +56,8 @@ final class PersonalHubService {
     func snapshot(
         appState: AppState,
         requestedMode: PersonalHubMode,
+        calendarReferenceDate: Date? = nil,
+        calendarSelectedDate: Date? = nil,
         serverName: String = Host.current().localizedName ?? "CodeIsland Mac"
     ) -> PersonalHubSnapshot {
         glances.refresh()
@@ -69,13 +74,23 @@ final class PersonalHubService {
             mediaIsPlaying: false
         )
         let resolvedMode = PersonalHubCatalog.resolvedMode(requested: requestedMode, context: context)
-        let moduleIDs = PersonalHubCatalog.modules(for: resolvedMode)
+        let configuration = configurationStore.configuration
+        let moduleIDs = configuration.rack(for: resolvedMode)
 
         return PersonalHubSnapshot(
             serverName: serverName,
             requestedMode: requestedMode,
             resolvedMode: resolvedMode,
-            modules: moduleIDs.map { moduleSnapshot(id: $0, appState: appState) }
+            modules: moduleIDs.map {
+                moduleSnapshot(
+                    id: $0,
+                    appState: appState,
+                    calendarReferenceDate: calendarReferenceDate,
+                    calendarSelectedDate: calendarSelectedDate
+                )
+            },
+            configuration: configuration,
+            dayProgress: PersonalHubConfiguration.dayProgress()
         )
     }
 
@@ -123,6 +138,34 @@ final class PersonalHubService {
 
         let intent = request.intent
         switch (intent.moduleID, intent.actionID) {
+        case (.quickToggles, "setModeRack"):
+            guard let mutation = PersonalHubConfigurationMutation.decodeActionValue(intent.value),
+                  let mode = mutation.mode,
+                  let modules = mutation.modules else {
+                return .failure(.invalid("Mode rack settings are incomplete"))
+            }
+            do {
+                try configurationStore.updateRack(mode: mode, modules: modules)
+                return .success(.init(executed: true, message: "\(mode.rawValue.capitalized) rack updated"))
+            } catch {
+                return .failure(.failed(error.localizedDescription))
+            }
+
+        case (.quickToggles, "setDashboard"):
+            guard let mutation = PersonalHubConfigurationMutation.decodeActionValue(intent.value),
+                  let enabled = mutation.dashboardEnabled else {
+                return .failure(.invalid("Dashboard setting is incomplete"))
+            }
+            do {
+                try configurationStore.setDashboardEnabled(enabled)
+                return .success(.init(
+                    executed: true,
+                    message: enabled ? "Dashboard enabled" : "Dashboard hidden"
+                ))
+            } catch {
+                return .failure(.failed(error.localizedDescription))
+            }
+
         case (.notes, "add"):
             guard let value = intent.value, data.addNote(value) else {
                 return .failure(.failed("Could not add the note"))
@@ -190,13 +233,17 @@ final class PersonalHubService {
             return .success(.init(executed: true, message: "Teleprompter script saved"))
 
         case (.claude, "ask"):
-            guard let value = intent.value, data.askClaude(value) else {
+            guard let draft = PersonalHubClaudeDraft.decodeActionValue(intent.value),
+                  let contexts = try? draft.validatedFileContexts(),
+                  data.askClaude(draft.prompt, contexts: contexts) else {
                 return .failure(.failed(data.claudeError ?? "Claude is already answering another question"))
             }
             return .success(.init(executed: true, message: "Question sent to Claude on the Mac"))
 
         case (.claude, "plan"):
-            guard let value = intent.value, data.planClaudeActions(value) else {
+            guard let draft = PersonalHubClaudeDraft.decodeActionValue(intent.value),
+                  let contexts = try? draft.validatedFileContexts(),
+                  data.planClaudeActions(draft.prompt, contexts: contexts) else {
                 return .failure(.failed(data.claudeError ?? "Claude is already working"))
             }
             return .success(.init(executed: true, message: "Claude is preparing reviewable actions"))
@@ -244,8 +291,13 @@ final class PersonalHubService {
             return .success(.init(executed: true, message: "Shelf file revealed on the Mac"))
 
         case (.nowPlaying, "playPause"), (.nowPlaying, "next"), (.nowPlaying, "previous"),
-             (.nowPlaying, "seekBack"), (.nowPlaying, "seekForward"), (.nowPlaying, "playQueueItem"):
-            guard data.runMediaCommand(intent.actionID, targetID: intent.targetID) else {
+             (.nowPlaying, "seekBack"), (.nowPlaying, "seekForward"), (.nowPlaying, "seek"),
+             (.nowPlaying, "playQueueItem"):
+            guard data.runMediaCommand(
+                intent.actionID,
+                targetID: intent.targetID,
+                value: intent.value
+            ) else {
                 return .failure(.failed("Could not control the current media app"))
             }
             return .success(.init(executed: true, message: "Media control sent"))
@@ -461,6 +513,31 @@ final class PersonalHubService {
 
     private func validate(intent: PersonalHubActionIntent) -> Result<String, ActionError> {
         switch (intent.moduleID, intent.actionID) {
+        case (.quickToggles, "setModeRack"):
+            guard let mutation = PersonalHubConfigurationMutation.decodeActionValue(intent.value),
+                  let mode = mutation.mode,
+                  mode != .auto,
+                  let modules = mutation.modules else {
+                return .failure(.invalid("Choose a Home, Work, or Code rack"))
+            }
+            var seen = Set<PersonalHubModuleID>()
+            let unique = modules.filter { seen.insert($0).inserted }
+            guard !unique.isEmpty else {
+                return .failure(.invalid("Keep at least one module in this rack"))
+            }
+            guard unique == modules else {
+                return .failure(.invalid("A module can appear only once in a rack"))
+            }
+            let names = unique.map { PersonalHubCatalog.definition(for: $0).title }.joined(separator: ", ")
+            return .success("Set the \(mode.rawValue.capitalized) rack to: \(names)")
+
+        case (.quickToggles, "setDashboard"):
+            guard let mutation = PersonalHubConfigurationMutation.decodeActionValue(intent.value),
+                  let enabled = mutation.dashboardEnabled else {
+                return .failure(.invalid("Choose whether to show the dashboard"))
+            }
+            return .success(enabled ? "Show the dashboard and day progress" : "Hide the dashboard and day progress")
+
         case (.notes, "add"):
             let value = intent.value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             guard !value.isEmpty else { return .failure(.invalid("Enter a note")) }
@@ -527,18 +604,28 @@ final class PersonalHubService {
             return .success("Replace the teleprompter script with \(value.count) characters")
 
         case (.claude, "ask"):
-            let value = intent.value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard let draft = PersonalHubClaudeDraft.decodeActionValue(intent.value),
+                  let contexts = try? draft.validatedFileContexts() else {
+                return .failure(.invalid("Attach up to 5 supported text files, no larger than 2 MB each"))
+            }
+            let value = draft.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !data.claudeBusy else { return .failure(.invalid("Claude is already answering")) }
             guard !value.isEmpty else { return .failure(.invalid("Enter a question")) }
             guard value.count <= 20_000 else { return .failure(.invalid("Question is too long")) }
-            return .success("Ask Claude: “\(value.prefix(160))\(value.count > 160 ? "…" : "")”")
+            let files = contexts.isEmpty ? "" : " with \(contexts.count) attached text file\(contexts.count == 1 ? "" : "s")"
+            return .success("Ask Claude\(files): “\(value.prefix(160))\(value.count > 160 ? "…" : "")”")
 
         case (.claude, "plan"):
-            let value = intent.value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard let draft = PersonalHubClaudeDraft.decodeActionValue(intent.value),
+                  let contexts = try? draft.validatedFileContexts() else {
+                return .failure(.invalid("Attach up to 5 supported text files, no larger than 2 MB each"))
+            }
+            let value = draft.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !data.claudeBusy else { return .failure(.invalid("Claude is already working")) }
             guard !value.isEmpty else { return .failure(.invalid("Describe what Claude should propose")) }
             guard value.count <= 20_000 else { return .failure(.invalid("Request is too long")) }
-            return .success("Ask Claude to propose CodeIsland actions for: “\(value.prefix(160))\(value.count > 160 ? "…" : "")”")
+            let files = contexts.isEmpty ? "" : " using \(contexts.count) attached text file\(contexts.count == 1 ? "" : "s")"
+            return .success("Ask Claude to propose CodeIsland actions\(files) for: “\(value.prefix(160))\(value.count > 160 ? "…" : "")”")
 
         case (.claude, "applyProposal"):
             guard let targetID = intent.targetID,
@@ -589,6 +676,15 @@ final class PersonalHubService {
         case (.nowPlaying, "seekForward"):
             guard data.nowPlaying?.position != nil else { return .failure(.invalid("Playback position is unavailable")) }
             return .success("Advance the current track 15 seconds")
+
+        case (.nowPlaying, "seek"):
+            guard let value = intent.value,
+                  let requested = Double(value),
+                  let duration = data.nowPlaying?.duration,
+                  let destination = PersonalHubDataModel.clampedSeekPosition(requested, duration: duration) else {
+                return .failure(.invalid("Choose a valid position in the current track"))
+            }
+            return .success("Seek the current track to \(Self.playbackTime(destination))")
 
         case (.nowPlaying, "playQueueItem"):
             guard let targetID = intent.targetID,
@@ -807,7 +903,9 @@ final class PersonalHubService {
 
     private func moduleSnapshot(
         id: PersonalHubModuleID,
-        appState: AppState
+        appState: AppState,
+        calendarReferenceDate: Date?,
+        calendarSelectedDate: Date?
     ) -> PersonalHubModuleSnapshot {
         switch id {
         case .nowPlaying:
@@ -828,6 +926,11 @@ final class PersonalHubService {
                     detail: media.lyrics ?? media.album,
                     symbol: media.isPlaying ? "speaker.wave.2.fill" : "pause.fill",
                     progress: progress,
+                    artworkDataURL: media.artworkJPEG.map {
+                        "data:image/jpeg;base64,\($0.base64EncodedString())"
+                    },
+                    mediaPosition: media.position,
+                    mediaDuration: media.duration,
                     actions: itemActions
                 )
                 let queueItems = media.queue.map { queued in
@@ -886,16 +989,26 @@ final class PersonalHubService {
             return .init(
                 id: id,
                 availability: .ready,
-                summary: data.shelf.isEmpty ? "Clipboard history is empty" : "\(data.shelf.count) recent clips",
-                detail: "Stored locally on this Mac",
+                summary: data.shelf.isEmpty ? "Shelf is empty" : "\(data.shelf.count) recent items",
+                detail: "Private Mac storage · files up to 100 MB transfer to paired devices",
                 items: data.shelf.prefix(12).map { entry in
-                    let actions: [PersonalHubAction]
+                    var actions: [PersonalHubAction]
                     if entry.filePath != nil {
                         actions = [
-                            .init(id: "downloadToDevice", label: "Download", symbol: "square.and.arrow.down", role: .primary, targetID: entry.id),
-                            .init(id: "revealOnMac", label: "Reveal on Mac", symbol: "folder", targetID: entry.id),
-                            .init(id: "remove", label: "Remove", symbol: "trash", role: .destructive, targetID: entry.id)
+                            .init(id: "remove", label: "Remove", symbol: "trash", role: .destructive, targetID: entry.id),
                         ]
+                        if data.shelfFileURL(id: entry.id) != nil {
+                            actions.insert(
+                                .init(id: "revealOnMac", label: "Reveal on Mac", symbol: "folder", targetID: entry.id),
+                                at: 0
+                            )
+                        }
+                        if data.shelfFileIsTransferable(id: entry.id) {
+                            actions.insert(
+                                .init(id: "downloadToDevice", label: "Download", symbol: "square.and.arrow.down", role: .primary, targetID: entry.id),
+                                at: 0
+                            )
+                        }
                     } else {
                         actions = [
                             .init(id: "copyToDevice", label: "Copy here", symbol: "doc.on.doc", role: .primary),
@@ -905,7 +1018,14 @@ final class PersonalHubService {
                     return .init(
                         id: entry.id,
                         title: entry.title,
-                        subtitle: Self.relativeDate(entry.capturedAt),
+                        subtitle: [
+                            entry.source.flatMap(Self.shelfSourceLabel),
+                            entry.byteCount.map(Self.fileSize),
+                            Self.relativeDate(entry.capturedAt),
+                            entry.filePath != nil && !data.shelfFileIsTransferable(id: entry.id)
+                                ? "Mac only"
+                                : nil,
+                        ].compactMap { $0 }.joined(separator: " · "),
                         detail: entry.filePath == nil ? entry.value : nil,
                         symbol: entry.filePath == nil ? "doc.on.clipboard" : "doc.fill",
                         actions: actions
@@ -1018,61 +1138,27 @@ final class PersonalHubService {
                 )
             }
             let events = glances.upcomingEvents
+            let referenceDate = calendarReferenceDate ?? Date()
+            let selectedDate = calendarSelectedDate ?? referenceDate
+            let monthInfo = glances.calendarMonth(
+                referenceDate: referenceDate,
+                selectedDate: selectedDate
+            )
+            let selectedItems = monthInfo.selectedEvents.map(calendarItem)
+            let calendarMonth = PersonalHubCalendarMonth(
+                displayedMonth: monthInfo.month.displayedMonth,
+                selectedDate: monthInfo.month.selectedDate,
+                days: monthInfo.month.days,
+                selectedEvents: selectedItems
+            )
             return .init(
                 id: id,
                 availability: .ready,
                 summary: events.isEmpty ? "No events in the next two weeks" : "\(events.count) upcoming",
-                detail: "Two-week agenda from the Mac's calendars",
-                items: events.map { event in
-                    var actions: [PersonalHubAction] = []
-                    if let joinURL = event.joinURL {
-                        actions.append(.init(
-                            id: "join",
-                            label: "Join here",
-                            symbol: "video.fill",
-                            role: .primary,
-                            targetID: event.id,
-                            deepLink: joinURL
-                        ))
-                        actions.append(.init(
-                            id: "openOnMac",
-                            label: "Open on Mac",
-                            symbol: "macbook",
-                            targetID: event.id
-                        ))
-                    }
-                    if event.isEditable {
-                        let draft = PersonalHubCalendarDraft(
-                            title: event.title,
-                            start: event.start,
-                            end: event.end,
-                            joinURL: event.joinURL,
-                            notes: event.notes
-                        )
-                        actions.append(.init(
-                            id: "edit",
-                            label: "Edit",
-                            symbol: "square.and.pencil",
-                            targetID: event.id,
-                            value: draft.encodedActionValue()
-                        ))
-                        actions.append(.init(
-                            id: "delete",
-                            label: "Delete",
-                            symbol: "trash",
-                            role: .destructive,
-                            targetID: event.id
-                        ))
-                    }
-                    return .init(
-                        id: event.id,
-                        title: event.title,
-                        subtitle: "\(Self.eventTime(event)) · \(event.calendarTitle)",
-                        symbol: "calendar",
-                        actions: actions
-                    )
-                },
-                actions: [.init(id: "add", label: "Add event", symbol: "plus", role: .primary)]
+                detail: "Month and two-week agenda from the Mac's calendars",
+                items: events.map(calendarItem),
+                actions: [.init(id: "add", label: "Add event", symbol: "plus", role: .primary)],
+                calendarMonth: calendarMonth
             )
 
         case .reminders:
@@ -1176,19 +1262,38 @@ final class PersonalHubService {
             )
 
         case .agents:
-            let sessions = appState.sessions.sorted { $0.value.lastActivity > $1.value.lastActivity }
+            let attentionIDs = SessionAttentionRouter.orderedSessionIDs(
+                appState.sessions.map { sessionID, session in
+                    SessionAttentionCandidate(
+                        id: sessionID,
+                        status: session.status,
+                        lastActivity: session.lastActivity
+                    )
+                }
+            )
+            let recentIDs = appState.sessions
+                .sorted { $0.value.lastActivity > $1.value.lastActivity }
+                .map(\.key)
+            let visibleIDs = attentionIDs.isEmpty ? Array(recentIDs.prefix(1)) : attentionIDs
             let waiting = appState.permissionQueue.count + appState.questionQueue.count
+            let running = appState.sessions.values.filter {
+                $0.status == .running || $0.status == .processing
+            }.count
             return .init(
                 id: id,
                 availability: .ready,
-                summary: waiting > 0 ? "\(waiting) waiting · \(sessions.count) sessions" : "\(sessions.count) sessions",
-                items: sessions.prefix(12).map { sessionID, session in
-                    .init(
+                summary: waiting > 0
+                    ? "\(waiting) needs you · \(running) running"
+                    : (running > 0 ? "\(running) running · no decisions waiting" : "No decisions waiting"),
+                detail: "\(appState.sessions.count) total sessions",
+                items: visibleIDs.prefix(6).compactMap { sessionID in
+                    guard let session = appState.sessions[sessionID] else { return nil }
+                    return .init(
                         id: sessionID,
                         title: session.displayName,
-                        subtitle: session.sourceLabel,
+                        subtitle: "\(Self.agentAttentionLabel(session.status)) · \(session.sourceLabel)",
                         detail: String(describing: session.status),
-                        symbol: "terminal"
+                        symbol: Self.agentAttentionSymbol(session.status)
                     )
                 }
             )
@@ -1386,11 +1491,27 @@ final class PersonalHubService {
             )
 
         case .notifications:
-            let count = appState.permissionQueue.count + appState.questionQueue.count
+            let mirror = SystemNotificationMirror.makeSnapshot(
+                candidates: Self.notificationCandidates(appState: appState),
+                providerState: SystemNotificationMirror.currentProviderState
+            )
+            let count = mirror.actionRequired.count
             return .init(
                 id: id,
                 availability: .partial,
-                summary: count == 0 ? "No CodeIsland alerts" : "\(count) CodeIsland alerts"
+                summary: count == 0
+                    ? "No CodeIsland alerts need attention"
+                    : "\(count) CodeIsland alert\(count == 1 ? "" : "s") need attention",
+                detail: mirror.providerState.message,
+                items: mirror.actionRequired.map { alert in
+                    .init(
+                        id: alert.id,
+                        title: alert.title,
+                        subtitle: "\(alert.source) · Action required",
+                        detail: alert.body,
+                        symbol: alert.isRedacted ? "eye.slash.fill" : "exclamationmark.circle.fill"
+                    )
+                }
             )
 
         case .github:
@@ -1474,10 +1595,10 @@ final class PersonalHubService {
             return .init(
                 id: id,
                 availability: .ready,
-                summary: "Private camera pre-check",
-                detail: "Preview stays on the device and is never sent to the Mac",
+                summary: "Private camera and microphone pre-check",
+                detail: "Preview and input levels stay on the device running the check. No media enters the remote snapshot.",
                 actions: [
-                    .init(id: "previewOnDevice", label: "Open preview", symbol: "camera.fill", role: .primary)
+                    .init(id: "previewLocal", label: "Preview", symbol: "camera.fill", role: .primary)
                 ]
             )
 
@@ -1542,6 +1663,76 @@ final class PersonalHubService {
         }
     }
 
+    private func calendarItem(_ event: GlancesModel.EventInfo) -> PersonalHubItem {
+        var actions: [PersonalHubAction] = []
+        if let joinURL = event.joinURL {
+            actions.append(.init(
+                id: "join",
+                label: "Join here",
+                symbol: "video.fill",
+                role: .primary,
+                targetID: event.sourceID,
+                deepLink: joinURL
+            ))
+            actions.append(.init(
+                id: "openOnMac",
+                label: "Open on Mac",
+                symbol: "macbook",
+                targetID: event.sourceID
+            ))
+        }
+        if event.isEditable {
+            let draft = PersonalHubCalendarDraft(
+                title: event.title,
+                start: event.start,
+                end: event.end,
+                joinURL: event.joinURL,
+                notes: event.notes
+            )
+            actions.append(.init(
+                id: "edit",
+                label: "Edit",
+                symbol: "square.and.pencil",
+                targetID: event.sourceID,
+                value: draft.encodedActionValue()
+            ))
+            actions.append(.init(
+                id: "delete",
+                label: "Delete",
+                symbol: "trash",
+                role: .destructive,
+                targetID: event.sourceID
+            ))
+        }
+        return .init(
+            id: event.id,
+            title: event.title,
+            subtitle: "\(Self.eventTime(event)) · \(event.calendarTitle)",
+            symbol: "calendar",
+            date: event.start,
+            actions: actions
+        )
+    }
+
+    private static func agentAttentionLabel(_ status: AgentStatus) -> String {
+        switch status {
+        case .waitingApproval: return "Needs approval"
+        case .waitingQuestion: return "Needs an answer"
+        case .running: return "Running"
+        case .processing: return "Processing"
+        case .idle: return "Recent"
+        }
+    }
+
+    private static func agentAttentionSymbol(_ status: AgentStatus) -> String {
+        switch status {
+        case .waitingApproval: return "checkmark.shield.fill"
+        case .waitingQuestion: return "questionmark.bubble.fill"
+        case .running, .processing: return "terminal.fill"
+        case .idle: return "clock"
+        }
+    }
+
     private static func eventTime(_ event: GlancesModel.EventInfo) -> String {
         if event.isAllDay { return "All day" }
         let formatter = DateFormatter()
@@ -1584,6 +1775,51 @@ final class PersonalHubService {
 
     private static func fileSize(_ bytes: Int64) -> String {
         ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+    }
+
+    private static func shelfSourceLabel(_ value: String) -> String? {
+        guard let source = ShelfCaptureController.Source(rawValue: value) else { return nil }
+        switch source {
+        case .clipboardFile: return "Clipboard"
+        case .filePicker: return "File"
+        case .drop: return "Dropped"
+        case .automaticScreenshot: return "Screenshot"
+        case .selection: return "Capture"
+        case .recording: return "Recording"
+        }
+    }
+
+    private static func notificationCandidates(appState: AppState) -> [SystemNotificationMirror.Entry] {
+        let approvals = appState.permissionQueue.map { request in
+            let tool = request.event.toolName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let description = request.event.toolDescription?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return SystemNotificationMirror.Entry(
+                id: request.id,
+                source: AppState.sourceLabel(for: request.event),
+                title: tool.isEmpty ? "Approval required" : tool,
+                body: description.isEmpty ? "A waiting agent needs your approval." : description,
+                createdAt: request.createdAt,
+                origin: .codeIslandAction,
+                sessionID: request.event.sessionId ?? "default"
+            )
+        }
+        let questions = appState.questionQueue.map { request in
+            SystemNotificationMirror.Entry(
+                id: request.id,
+                source: AppState.sourceLabel(for: request.event),
+                title: "Decision required",
+                body: request.question.question,
+                createdAt: request.createdAt,
+                origin: .codeIslandAction,
+                sessionID: request.event.sessionId ?? "default"
+            )
+        }
+        return approvals + questions
+    }
+
+    private static func playbackTime(_ seconds: TimeInterval) -> String {
+        let whole = max(Int(seconds.rounded()), 0)
+        return String(format: "%d:%02d", whole / 60, whole % 60)
     }
 
     private static func duration(_ seconds: TimeInterval) -> String {

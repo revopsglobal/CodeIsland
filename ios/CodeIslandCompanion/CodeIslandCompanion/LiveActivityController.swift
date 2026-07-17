@@ -4,7 +4,7 @@ import Foundation
 @MainActor
 final class LiveActivityController: ObservableObject {
     private static let layoutVersionKey = "CodeIslandLiveActivityLayoutVersion"
-    private static let currentLayoutVersion = "2026-05-29-compact-multi-session-v3"
+    private static let currentLayoutVersion = "2026-07-17-private-lifecycle-v4"
 
     @Published private(set) var activityID: String?
     @Published private(set) var lastError: String?
@@ -12,6 +12,7 @@ final class LiveActivityController: ObservableObject {
 
     private var activity: Activity<CodeIslandActivityAttributes>?
     private var lastContentState: CodeIslandActivityAttributes.ContentState?
+    private var lifecycleCursor: LiveActivityLifecycleCursor?
     private var activityStateTask: Task<Void, Never>?
 
     var isRunning: Bool {
@@ -36,7 +37,7 @@ final class LiveActivityController: ObservableObject {
             let shouldRecreate = await migrateLiveActivityLayoutIfNeeded()
             await recoverExistingActivity(endingDuplicates: true)
             guard activity != nil || shouldRecreate else { return }
-            await apply(payload, createIfNeeded: shouldRecreate)
+            await apply(payload, createIfNeeded: shouldRecreate, allowIdleCreation: false)
         }
     }
 
@@ -49,7 +50,12 @@ final class LiveActivityController: ObservableObject {
         Task {
             await migrateLiveActivityLayoutIfNeeded()
             await recoverExistingActivity(endingDuplicates: true)
-            await apply(payload, createIfNeeded: true)
+            if activity == nil {
+                // An explicit user start is a fresh lifecycle even when the
+                // latest synchronized payload has not changed.
+                lifecycleCursor = nil
+            }
+            await apply(payload, createIfNeeded: true, allowIdleCreation: true)
         }
     }
 
@@ -62,7 +68,7 @@ final class LiveActivityController: ObservableObject {
             for activity in Activity<CodeIslandActivityAttributes>.activities {
                 await activity.end(nil, dismissalPolicy: .immediate)
             }
-            clearActivity(id: activityID)
+            clearActivity(id: activityID, resetCursor: true)
             existingActivityCount = 0
             lastError = nil
         }
@@ -74,6 +80,10 @@ final class LiveActivityController: ObservableObject {
         activity = existing
         activityID = existing.id
         lastContentState = existing.content.state
+        lifecycleCursor = LiveActivityLifecycleCursor(
+            sequence: existing.content.state.sequence,
+            updatedAt: existing.content.state.updatedAt
+        )
         observeState(of: existing)
     }
 
@@ -90,6 +100,10 @@ final class LiveActivityController: ObservableObject {
             activity = existing
             activityID = existing.id
             lastContentState = existing.content.state
+            lifecycleCursor = LiveActivityLifecycleCursor(
+                sequence: existing.content.state.sequence,
+                updatedAt: existing.content.state.updatedAt
+            )
             observeState(of: existing)
         }
 
@@ -117,25 +131,56 @@ final class LiveActivityController: ObservableObject {
         }
 
         if !existingActivities.isEmpty {
-            clearActivity(id: activityID)
+            clearActivity(id: activityID, resetCursor: true)
         }
         existingActivityCount = Activity<CodeIslandActivityAttributes>.activities.count
         UserDefaults.standard.set(Self.currentLayoutVersion, forKey: Self.layoutVersionKey)
         return !existingActivities.isEmpty
     }
 
-    private func apply(_ payload: CompanionStatePayload, createIfNeeded: Bool) async {
+    private func apply(
+        _ payload: CompanionStatePayload,
+        createIfNeeded: Bool,
+        allowIdleCreation: Bool
+    ) async {
         do {
             let contentState = CodeIslandActivityAttributes.ContentState(payload: payload)
+            let transition = LiveActivityLifecycle.transition(
+                current: lifecycleCursor,
+                incoming: LiveActivityLifecycleCursor(
+                    sequence: payload.sequence,
+                    updatedAt: payload.updatedAt
+                ),
+                hasActivity: activity != nil,
+                hasActiveContent: Self.hasActiveContent(payload),
+                createIfNeeded: createIfNeeded,
+                allowIdleCreation: allowIdleCreation
+            )
+            lifecycleCursor = transition.cursor
+
+            switch transition.decision {
+            case .ignore:
+                return
+            case .end:
+                for existing in Activity<CodeIslandActivityAttributes>.activities {
+                    await existing.end(nil, dismissalPolicy: .immediate)
+                }
+                clearActivity(id: activityID)
+                existingActivityCount = 0
+                lastError = nil
+                return
+            case .create, .update:
+                break
+            }
             lastContentState = contentState
 
-            if let activity {
+            if transition.decision == .update, let activity {
                 await update(activity, with: contentState, status: payload.status)
                 lastError = nil
                 return
             }
 
-            guard createIfNeeded else { return }
+            guard transition.decision == .create else { return }
             let attributes = CodeIslandActivityAttributes(sessionId: payload.sessionId)
             let content = ActivityContent(
                 state: contentState,
@@ -177,11 +222,12 @@ final class LiveActivityController: ObservableObject {
         }
     }
 
-    private func clearActivity(id: String?) {
+    private func clearActivity(id: String?, resetCursor: Bool = false) {
         guard activityID == nil || activityID == id else { return }
         activity = nil
         activityID = nil
         lastContentState = nil
+        if resetCursor { lifecycleCursor = nil }
         existingActivityCount = Activity<CodeIslandActivityAttributes>.activities.count
         activityStateTask?.cancel()
         activityStateTask = nil
@@ -196,5 +242,9 @@ final class LiveActivityController: ObservableObject {
         case .idle:
             return 0.25
         }
+    }
+
+    private static func hasActiveContent(_ payload: CompanionStatePayload) -> Bool {
+        payload.status != .idle || payload.sessions.contains(where: { $0.status != .idle })
     }
 }

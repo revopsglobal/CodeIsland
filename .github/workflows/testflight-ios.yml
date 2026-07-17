@@ -10,13 +10,177 @@ on:
         description: Optional numeric CFBundleVersion. Defaults to a UTC timestamp.
         required: false
         type: string
+      tester_email:
+        description: Internal tester email to verify or invite.
+        required: false
+        default: gregharned@gmail.com
+        type: string
+      force_new_tester_invitation:
+        description: Cancel any pending team invitation and send a fresh one.
+        required: false
+        default: false
+        type: boolean
+      resend_testflight_invitation:
+        description: Explicitly send or resend the TestFlight email after enrollment.
+        required: false
+        default: false
+        type: boolean
+      manage_tester_only:
+        description: Repair TestFlight tester access without building another IPA.
+        required: false
+        default: false
+        type: boolean
+      repair_app_memberships_only:
+        description: Restore Harned Estate and remove the obsolete TestFlight app without building.
+        required: false
+        default: false
+        type: boolean
+      add_bundle_id:
+        description: App bundle ID to restore when repairing app memberships.
+        required: false
+        default: com.harned.estate
+        type: string
+      remove_app_name:
+        description: App to remove when repairing app memberships.
+        required: false
+        default: Orca IDE
+        type: string
+      force_readd_harned_membership:
+        description: Remove and recreate only the Harned Estate beta-group relationship.
+        required: false
+        default: false
+        type: boolean
+      resend_harned_invitation:
+        description: Send a fresh Harned Estate TestFlight invitation after enrollment.
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
 
 jobs:
+  repair-memberships:
+    name: Restore requested app and remove obsolete app
+    if: ${{ inputs.repair_app_memberships_only }}
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate App Store Connect secrets
+        shell: bash
+        env:
+          ASC_ISSUER: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY: ${{ secrets.ASC_KEY_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8_BASE64 }}
+        run: |
+          test -n "$ASC_ISSUER"
+          test -n "$ASC_KEY"
+          test -n "$ASC_KEY_P8"
+
+      - name: Install App Store Connect API key
+        shell: bash
+        env:
+          ASC_KEY: ${{ secrets.ASC_KEY_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8_BASE64 }}
+        run: |
+          KEY_DIR="$HOME/.appstoreconnect/private_keys"
+          mkdir -p "$KEY_DIR"
+          printf '%s' "$ASC_KEY_P8" | base64 --decode > "$KEY_DIR/AuthKey_$ASC_KEY.p8"
+          chmod 600 "$KEY_DIR/AuthKey_$ASC_KEY.p8"
+          echo "ASC_PRIVATE_KEY_PATH=$KEY_DIR/AuthKey_$ASC_KEY.p8" >> "$GITHUB_ENV"
+
+      - name: Update TestFlight memberships
+        shell: bash
+        env:
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          TESTER_EMAIL: ${{ inputs.tester_email || 'gregharned@gmail.com' }}
+          ADD_BUNDLE_ID: ${{ inputs.add_bundle_id || 'com.harned.estate' }}
+          REMOVE_APP_NAME: ${{ inputs.remove_app_name || 'Orca IDE' }}
+          FORCE_READD: ${{ inputs.force_readd_harned_membership && '1' || '0' }}
+          RESEND_TESTFLIGHT_INVITATION: ${{ inputs.resend_harned_invitation && '1' || '0' }}
+          ASC_RECEIPT_PATH: ${{ runner.temp }}/testflight-membership-receipt.json
+        run: scripts/relocate-testflight-tester.sh
+
+      - name: Upload membership receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: TestFlight-membership-receipt
+          path: ${{ runner.temp }}/testflight-membership-receipt.json
+          if-no-files-found: error
+
+  manage-tester:
+    name: Verify internal TestFlight tester
+    if: ${{ !inputs.repair_app_memberships_only }}
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate App Store Connect secrets
+        shell: bash
+        env:
+          ASC_ISSUER: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY: ${{ secrets.ASC_KEY_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8_BASE64 }}
+        run: |
+          missing=0
+          for name in ASC_ISSUER ASC_KEY ASC_KEY_P8; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is required"
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Install App Store Connect API key
+        shell: bash
+        env:
+          ASC_KEY: ${{ secrets.ASC_KEY_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8_BASE64 }}
+        run: |
+          KEY_DIR="$HOME/.appstoreconnect/private_keys"
+          mkdir -p "$KEY_DIR"
+          printf '%s' "$ASC_KEY_P8" | base64 --decode > "$KEY_DIR/AuthKey_$ASC_KEY.p8"
+          chmod 600 "$KEY_DIR/AuthKey_$ASC_KEY.p8"
+          echo "ASC_PRIVATE_KEY_PATH=$KEY_DIR/AuthKey_$ASC_KEY.p8" >> "$GITHUB_ENV"
+
+      - name: Verify or invite internal tester
+        shell: bash
+        env:
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          TESTER_EMAIL: ${{ inputs.tester_email || 'gregharned@gmail.com' }}
+          FORCE_NEW_INVITATION: ${{ inputs.force_new_tester_invitation && '1' || '0' }}
+          RESEND_TESTFLIGHT_INVITATION: ${{ inputs.resend_testflight_invitation && '1' || '0' }}
+          ASC_RECEIPT_PATH: ${{ runner.temp }}/testflight-tester-receipt.json
+        run: |
+          scripts/manage-testflight-internal-tester.sh | tee "$RUNNER_TEMP/testflight-tester-output.txt"
+          state="$(jq -r '.state' "$ASC_RECEIPT_PATH")"
+          {
+            echo "### Internal TestFlight tester"
+            echo
+            echo "- Email: \`$TESTER_EMAIL\`"
+            echo "- State: \`$state\`"
+            if [ "$state" = "acceptance-required" ]; then
+              echo "- Apple sent a fresh App Store Connect invitation. Accept it once from email; group enrollment can then be rerun."
+            else
+              echo "- The tester is enrolled in \`CodeIsland Internal\`."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload tester receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: CodeIsland-TestFlight-tester-receipt
+          path: ${{ runner.temp }}/testflight-tester-receipt.json
+          if-no-files-found: error
+
   testflight:
     name: Signed iPhone archive and TestFlight upload
+    needs: manage-tester
+    if: ${{ !inputs.manage_tester_only && !inputs.repair_app_memberships_only }}
     runs-on: macos-15
     env:
       TEAM_ID: 44JG2Y95CH
@@ -133,6 +297,7 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print :aps-environment' "$RUNNER_TEMP/app-entitlements.plist")" = production
           test "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.developer.usernotifications.time-sensitive' "$RUNNER_TEMP/app-entitlements.plist")" = true
           test "$(/usr/libexec/PlistBuddy -c 'Print :NSSupportsLiveActivities' "$APP/Info.plist")" = true
+          test -n "$(/usr/libexec/PlistBuddy -c 'Print :NSCameraUsageDescription' "$APP/Info.plist")"
           test -n "$(/usr/libexec/PlistBuddy -c 'Print :NSMicrophoneUsageDescription' "$APP/Info.plist")"
           test -n "$(/usr/libexec/PlistBuddy -c 'Print :NSSpeechRecognitionUsageDescription' "$APP/Info.plist")"
           BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")"

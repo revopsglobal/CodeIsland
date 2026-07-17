@@ -27,11 +27,17 @@ final class RemoteApprovalClient: ObservableObject {
     @Published private(set) var lastUpdatedAt: Date?
     @Published private(set) var busyRequestIDs: Set<String> = []
     @Published private(set) var highlightedApprovalID: String?
+    @Published private(set) var highlightedQuestionID: String?
+    @Published private(set) var highlightedHubModuleID: PersonalHubModuleID?
     @Published private(set) var hubSnapshot: PersonalHubSnapshot?
+    private var calendarReferenceDate: Date?
+    private var calendarSelectedDate: Date?
     @Published private(set) var hubError: String?
     @Published private(set) var hubActionInFlight = false
     @Published private(set) var hubActionMessage: String?
     @Published var preparedAction: PersonalHubPreparedAction?
+    @Published var quickJotDestination: BuddyQuickJotDestination?
+    @Published var quickJotSeedText: String?
     @Published var selectedMode: PersonalHubMode {
         didSet {
             UserDefaults.standard.set(selectedMode.rawValue, forKey: Self.selectedModeKey)
@@ -52,20 +58,29 @@ final class RemoteApprovalClient: ObservableObject {
     private static let tokenAccount = "device-token"
     private static let pendingPushTokenKey = "codeisland.remote.pendingPushToken"
     private static let pendingApprovalIDKey = "codeisland.remote.pendingApprovalID"
+    private static let pendingQuestionIDKey = "codeisland.remote.pendingQuestionID"
     private static let selectedModeKey = "codeisland.hub.selectedMode.v1"
 
     private let usesMockHub: Bool
+    private let usesMockPairing: Bool
     private var deviceToken: String?
     private var pollTask: Task<Void, Never>?
     private var isActive = true
     private var notificationObservers: [NSObjectProtocol] = []
+    var onSnapshotReceived: ((RemoteApprovalSnapshot) -> Void)?
+
+    var hasPairingCredential: Bool {
+        deviceToken != nil
+    }
 
     init() {
 #if DEBUG
         usesMockHub = ProcessInfo.processInfo.arguments.contains("-CodeIslandCompanionMockHub")
+        usesMockPairing = ProcessInfo.processInfo.arguments.contains("-CodeIslandCompanionMockPairing")
         let launchMode = Self.mockHubModeFromLaunchArguments()
 #else
         usesMockHub = false
+        usesMockPairing = false
         let launchMode: PersonalHubMode? = nil
 #endif
         serverURLText = UserDefaults.standard.string(forKey: Self.serverURLKey) ?? Self.defaultServerURL
@@ -74,12 +89,20 @@ final class RemoteApprovalClient: ObservableObject {
         ) ?? .auto
 
 #if DEBUG
+        if usesMockPairing {
+            deviceToken = nil
+            state = .unpaired
+            return
+        }
         if usesMockHub {
             deviceToken = "ui-test-device-token"
             state = .connected
             serverName = "CodeIsland UI Test Mac"
             lastUpdatedAt = Date()
             hubSnapshot = Self.mockHubSnapshot(requestedMode: selectedMode)
+            if let url = Self.mockDeepLinkFromLaunchArguments() {
+                openDeepLink(url)
+            }
             return
         }
 #endif
@@ -95,14 +118,33 @@ final class RemoteApprovalClient: ObservableObject {
             Task { @MainActor in await self?.registerPendingPushToken() }
         })
         notificationObservers.append(NotificationCenter.default.addObserver(
-            forName: .codeIslandRemoteApprovalOpened,
+            forName: .codeIslandRemoteAttentionChanged,
             object: nil,
             queue: .main
         ) { [weak self] notification in
             Task { @MainActor in
-                self?.highlightedApprovalID = notification.userInfo?["approvalId"] as? String
-                await self?.refresh()
+                guard let self else { return }
+                let requestID = notification.userInfo?["requestId"] as? String
+                let kind = (notification.userInfo?["kind"] as? String).flatMap(RemoteAttentionKind.init(rawValue:))
+                let attentionState = (notification.userInfo?["state"] as? String).flatMap(RemoteAttentionState.init(rawValue:))
+                if attentionState == .pending, kind == .approval {
+                    self.highlightedApprovalID = requestID
+                } else if attentionState == .pending, kind == .question {
+                    self.highlightedQuestionID = requestID
+                } else if kind == .approval, self.highlightedApprovalID == requestID {
+                    self.highlightedApprovalID = nil
+                } else if kind == .question, self.highlightedQuestionID == requestID {
+                    self.highlightedQuestionID = nil
+                }
+                await self.refresh()
             }
+        })
+        notificationObservers.append(NotificationCenter.default.addObserver(
+            forName: .codeIslandIntentRouteAvailable,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.consumePendingIntentRoute() }
         })
     }
 
@@ -114,7 +156,12 @@ final class RemoteApprovalClient: ObservableObject {
     }
 
     func start() {
+        consumePendingIntentRoute()
 #if DEBUG
+        if usesMockPairing {
+            state = .unpaired
+            return
+        }
         if usesMockHub {
             state = .connected
             hubSnapshot = Self.mockHubSnapshot(requestedMode: selectedMode)
@@ -136,6 +183,10 @@ final class RemoteApprovalClient: ObservableObject {
                 highlightedApprovalID = pendingID
                 UserDefaults.standard.removeObject(forKey: Self.pendingApprovalIDKey)
             }
+            if let pendingID = UserDefaults.standard.string(forKey: Self.pendingQuestionIDKey) {
+                highlightedQuestionID = pendingID
+                UserDefaults.standard.removeObject(forKey: Self.pendingQuestionIDKey)
+            }
             await refresh()
             await registerPendingPushToken()
         }
@@ -147,21 +198,29 @@ final class RemoteApprovalClient: ObservableObject {
 #endif
         isActive = active
         if active {
+            consumePendingIntentRoute()
             Task { await refresh() }
         }
     }
 
-    func pair(code: String, deviceName: String? = nil) async {
+    @discardableResult
+    func pair(code: String, deviceName: String? = nil) async -> Bool {
         let trimmedCode = code.filter(\.isNumber)
         guard trimmedCode.count == 6 else {
             state = .offline("Enter the six-digit code from the Mac")
-            return
+            return false
         }
         guard let requestURL = endpoint("/api/pair") else {
             state = .offline("Enter a valid Tailscale HTTPS URL")
-            return
+            return false
         }
         state = .connecting
+#if DEBUG
+        if usesMockPairing {
+            state = .offline(Self.expiredPairingCodeMessage)
+            return false
+        }
+#endif
         do {
             var request = URLRequest(url: requestURL)
             request.httpMethod = "POST"
@@ -177,10 +236,20 @@ final class RemoteApprovalClient: ObservableObject {
             state = .connected
             await registerPendingPushToken()
             await refresh()
+            return true
         } catch {
-            state = .offline(error.localizedDescription)
+            let message = error.localizedDescription
+            state = .offline(
+                message == "pairing code is invalid or expired"
+                    ? Self.expiredPairingCodeMessage
+                    : message
+            )
+            return false
         }
     }
+
+    private static let expiredPairingCodeMessage =
+        "That code expired. Open CodeIsland Settings → Buddy on your Mac for the current code."
 
     func unpair() {
         Self.deleteKeychainToken()
@@ -231,6 +300,7 @@ final class RemoteApprovalClient: ObservableObject {
                 RemoteQuestionAnswerRequest(answers: answers, actionToken: actionToken)
             )
             let _: RemoteQuestionAnswerResponse = try await perform(request, authenticated: true)
+            highlightedQuestionID = nil
             await refresh()
         } catch {
             state = .offline(error.localizedDescription)
@@ -265,9 +335,18 @@ final class RemoteApprovalClient: ObservableObject {
             let snapshot: RemoteApprovalSnapshot = try await perform(request, authenticated: true)
             approvals = snapshot.approvals
             questions = snapshot.questions
+            if let highlightedApprovalID,
+               !approvals.contains(where: { $0.id == highlightedApprovalID }) {
+                self.highlightedApprovalID = nil
+            }
+            if let highlightedQuestionID,
+               !questions.contains(where: { $0.id == highlightedQuestionID }) {
+                self.highlightedQuestionID = nil
+            }
             serverName = snapshot.serverName
             lastUpdatedAt = Date()
             state = .connected
+            onSnapshotReceived?(snapshot)
             await refreshHub()
         } catch RemoteClientError.unauthorized {
             unpair()
@@ -279,7 +358,11 @@ final class RemoteApprovalClient: ObservableObject {
     func refreshHub() async {
 #if DEBUG
         if usesMockHub {
-            hubSnapshot = Self.mockHubSnapshot(requestedMode: selectedMode)
+            hubSnapshot = Self.mockHubSnapshot(
+                requestedMode: selectedMode,
+                calendarReferenceDate: calendarReferenceDate,
+                calendarSelectedDate: calendarSelectedDate
+            )
             hubError = nil
             return
         }
@@ -297,7 +380,11 @@ final class RemoteApprovalClient: ObservableObject {
             request.httpMethod = "POST"
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try Self.encoder.encode(
-                PersonalHubSnapshotRequest(requestedMode: selectedMode)
+                PersonalHubSnapshotRequest(
+                    requestedMode: selectedMode,
+                    calendarReferenceDate: calendarReferenceDate,
+                    calendarSelectedDate: calendarSelectedDate
+                )
             )
             let snapshot: PersonalHubSnapshot = try await perform(request, authenticated: true)
             hubSnapshot = snapshot
@@ -307,6 +394,12 @@ final class RemoteApprovalClient: ObservableObject {
         } catch {
             hubError = error.localizedDescription
         }
+    }
+
+    func refreshCalendar(referenceDate: Date, selectedDate: Date) async {
+        calendarReferenceDate = referenceDate
+        calendarSelectedDate = selectedDate
+        await refreshHub()
     }
 
     func prepareHubAction(_ intent: PersonalHubActionIntent) async {
@@ -349,6 +442,42 @@ final class RemoteApprovalClient: ObservableObject {
 
     func dismissHubActionMessage() {
         hubActionMessage = nil
+    }
+
+    func openDeepLink(_ url: URL) {
+        guard let route = PersonalHubDeepLink(url: url) else { return }
+        switch route {
+        case .pendingApproval(let id):
+            highlightedApprovalID = id ?? approvals.first?.id
+            Task { await refresh() }
+        case .module(let module):
+            highlightedHubModuleID = module
+            selectedMode = PersonalHubCatalog.preferredMode(for: module)
+        case .quickJot(let destination, let text):
+            quickJotSeedText = text
+            quickJotDestination = BuddyQuickJotDestination(rawValue: destination.rawValue)
+        }
+    }
+
+    var connectionDetail: String {
+        let host = normalizedServerURL?.host ?? serverURLText
+        let transport = host.lowercased().hasSuffix(".ts.net") ? "Tailscale HTTPS" : "Private HTTPS"
+        return [serverName, host, transport].compactMap { value in
+            guard let value, !value.isEmpty else { return nil }
+            return value
+        }.joined(separator: " · ")
+    }
+
+    func clearQuickJotSeed() {
+        quickJotSeedText = nil
+    }
+
+    private func consumePendingIntentRoute() {
+        guard let raw = UserDefaults.standard.string(forKey: CodeIslandIntentBridge.pendingRouteKey),
+              let url = URL(string: raw)
+        else { return }
+        UserDefaults.standard.removeObject(forKey: CodeIslandIntentBridge.pendingRouteKey)
+        openDeepLink(url)
     }
 
     func downloadHubFile(moduleID: PersonalHubModuleID, id: String, filename: String) async -> URL? {
@@ -531,6 +660,14 @@ final class RemoteApprovalClient: ObservableObject {
     }()
 
 #if DEBUG
+    private static func mockDeepLinkFromLaunchArguments() -> URL? {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let index = arguments.firstIndex(of: "-CodeIslandCompanionMockDeepLink"),
+              arguments.indices.contains(index + 1)
+        else { return nil }
+        return URL(string: arguments[index + 1])
+    }
+
     private static func mockHubModeFromLaunchArguments() -> PersonalHubMode? {
         let arguments = ProcessInfo.processInfo.arguments
         guard let index = arguments.firstIndex(of: "-CodeIslandCompanionMockHubMode"),
@@ -539,17 +676,33 @@ final class RemoteApprovalClient: ObservableObject {
         return PersonalHubMode(rawValue: arguments[index + 1].lowercased())
     }
 
-    private static func mockHubSnapshot(requestedMode: PersonalHubMode) -> PersonalHubSnapshot {
+    private static func mockHubSnapshot(
+        requestedMode: PersonalHubMode,
+        calendarReferenceDate: Date? = nil,
+        calendarSelectedDate: Date? = nil
+    ) -> PersonalHubSnapshot {
         let resolvedMode: PersonalHubMode = requestedMode == .auto ? .home : requestedMode
         return PersonalHubSnapshot(
             serverName: "CodeIsland UI Test Mac",
             requestedMode: requestedMode,
             resolvedMode: resolvedMode,
-            modules: PersonalHubCatalog.modules(for: resolvedMode).map(mockHubModule)
+            modules: PersonalHubCatalog.modules(for: resolvedMode).map {
+                mockHubModule(
+                    $0,
+                    calendarReferenceDate: calendarReferenceDate,
+                    calendarSelectedDate: calendarSelectedDate
+                )
+            },
+            configuration: .default,
+            dayProgress: 0.5
         )
     }
 
-    private static func mockHubModule(_ id: PersonalHubModuleID) -> PersonalHubModuleSnapshot {
+    private static func mockHubModule(
+        _ id: PersonalHubModuleID,
+        calendarReferenceDate: Date? = nil,
+        calendarSelectedDate: Date? = nil
+    ) -> PersonalHubModuleSnapshot {
         let ready = PersonalHubAvailability.ready
         switch id {
         case .nowPlaying:
@@ -560,10 +713,18 @@ final class RemoteApprovalClient: ObservableObject {
                 detail: "1:42 / 4:06 · Apple Music",
                 items: [
                     .init(
+                        id: "current",
+                        title: "North Star",
+                        subtitle: "Demo Artist",
+                        progress: 102.0 / 246.0,
+                        mediaPosition: 102,
+                        mediaDuration: 246
+                    ),
+                    .init(
                         id: "queue:1",
                         title: "Next: Signal Fire",
                         subtitle: "Demo Artist",
-                        actions: [.init(id: "playFromQueue", label: "Play now", targetID: "queue:1")]
+                        actions: [.init(id: "playQueueItem", label: "Play now", targetID: "1")]
                     )
                 ],
                 actions: [
@@ -585,14 +746,15 @@ final class RemoteApprovalClient: ObservableObject {
                         title: "launch-reel.mp4",
                         subtitle: "12.4 MB",
                         actions: [
-                            .init(id: "download", label: "Download", targetID: "shelf:launch-reel"),
+                            .init(
+                                id: "downloadToDevice",
+                                label: "Download",
+                                role: .primary,
+                                targetID: "shelf:launch-reel"
+                            ),
                             .init(id: "remove", label: "Remove", role: .destructive, targetID: "shelf:launch-reel"),
                         ]
                     )
-                ],
-                actions: [
-                    .init(id: "captureClipboard", label: "Save clipboard", symbol: "doc.on.clipboard"),
-                    .init(id: "captureFile", label: "Add file", symbol: "plus"),
                 ]
             )
         case .calendar:
@@ -603,23 +765,33 @@ final class RemoteApprovalClient: ObservableObject {
                 end: start.addingTimeInterval(1_800),
                 joinURL: URL(string: "https://meet.google.com/test-room")
             )
+            let eventItem = PersonalHubItem(
+                id: "event:design-review",
+                title: "Design review",
+                subtitle: "Today at 2:00 PM",
+                date: start,
+                actions: [
+                    .init(id: "join", label: "Join", deepLink: draft.joinURL),
+                    .init(id: "edit", label: "Edit", targetID: "event:design-review", value: draft.encodedActionValue()),
+                    .init(id: "delete", label: "Delete", role: .destructive, targetID: "event:design-review"),
+                ]
+            )
+            let month = PersonalHubCalendarMonth.make(
+                referenceDate: calendarReferenceDate ?? Date(),
+                selectedDate: calendarSelectedDate ?? calendarReferenceDate ?? Date(),
+                eventDates: [start],
+                selectedEvents: Calendar.current.isDate(
+                    calendarSelectedDate ?? calendarReferenceDate ?? Date(),
+                    inSameDayAs: start
+                ) ? [eventItem] : []
+            )
             return .init(
                 id: id,
                 availability: ready,
                 summary: "3 upcoming events",
-                items: [
-                    .init(
-                        id: "event:design-review",
-                        title: "Design review",
-                        subtitle: "Today at 2:00 PM",
-                        actions: [
-                            .init(id: "join", label: "Join", deepLink: draft.joinURL),
-                            .init(id: "edit", label: "Edit", targetID: "event:design-review", value: draft.encodedActionValue()),
-                            .init(id: "delete", label: "Delete", role: .destructive, targetID: "event:design-review"),
-                        ]
-                    )
-                ],
-                actions: [.init(id: "add", label: "Add event", symbol: "plus")]
+                items: [eventItem],
+                actions: [.init(id: "add", label: "Add event", symbol: "plus")],
+                calendarMonth: month
             )
         case .reminders:
             let task = PersonalHubReminderDraft(
@@ -690,7 +862,21 @@ final class RemoteApprovalClient: ObservableObject {
         case .weather:
             return .init(id: id, availability: ready, summary: "68° · Mostly clear", detail: "Los Angeles, CA", actions: [.init(id: "refresh", label: "Refresh")])
         case .notifications:
-            return .init(id: id, availability: ready, summary: "Push and Live Activity ready", actions: [.init(id: "test", label: "Test notification")])
+            return .init(
+                id: id,
+                availability: .partial,
+                summary: "1 CodeIsland alert needs attention",
+                detail: "macOS does not expose other apps’ Notification Center history through a public API. CodeIsland never reads private notification databases or asks for Full Disk Access.",
+                items: [
+                    .init(
+                        id: "alert:approval",
+                        title: "Shell approval",
+                        subtitle: "Codex · Action required",
+                        detail: "Review the exact command in the approval card.",
+                        symbol: "exclamationmark.circle.fill"
+                    )
+                ]
+            )
         case .claude:
             return .init(
                 id: id,
@@ -747,7 +933,12 @@ final class RemoteApprovalClient: ObservableObject {
                 actions: [.init(id: "refresh", label: "Refresh")]
             )
         case .camera:
-            return .init(id: id, availability: ready, summary: "Front camera preview", actions: [.init(id: "previewOnDevice", label: "Preview", symbol: "camera.fill")])
+            return .init(
+                id: id,
+                availability: ready,
+                summary: "Private camera and microphone pre-check",
+                actions: [.init(id: "previewLocal", label: "Preview", symbol: "camera.fill")]
+            )
         case .teleprompter:
             return .init(id: id, availability: ready, summary: "Ready · 140 WPM", detail: "Launch remarks", actions: [.init(id: "set", label: "Edit script", value: "Welcome to CodeIsland"), .init(id: "playPause", label: "Play"), .init(id: "slower", label: "Slower"), .init(id: "faster", label: "Faster")])
         case .windowManager:
@@ -807,5 +998,5 @@ final class RemoteApprovalClient: ObservableObject {
 
 extension Notification.Name {
     static let codeIslandPushTokenAvailable = Notification.Name("codeisland.push-token-available")
-    static let codeIslandRemoteApprovalOpened = Notification.Name("codeisland.remote-approval-opened")
+    static let codeIslandRemoteAttentionChanged = Notification.Name("codeisland.remote-attention-changed")
 }

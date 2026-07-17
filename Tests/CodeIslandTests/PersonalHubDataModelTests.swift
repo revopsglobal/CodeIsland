@@ -99,6 +99,49 @@ final class PersonalHubDataModelTests: XCTestCase {
         XCTAssertEqual(media.queue, queue)
     }
 
+    func testNowPlayingArtworkIsBoundedAndNormalizedToJPEG() throws {
+        let onePixelPNG = try XCTUnwrap(Data(base64Encoded:
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+        ))
+
+        let artwork = try XCTUnwrap(PersonalHubDataModel.normalizeArtworkJPEG(onePixelPNG))
+
+        XCTAssertLessThanOrEqual(artwork.count, PersonalHubDataModel.maximumArtworkBytes)
+        XCTAssertEqual(Array(artwork.prefix(2)), [0xFF, 0xD8])
+    }
+
+    func testArbitrarySeekClampsBoundsAndRejectsNonFiniteValues() {
+        XCTAssertEqual(PersonalHubDataModel.clampedSeekPosition(-20, duration: 180), 0)
+        XCTAssertEqual(PersonalHubDataModel.clampedSeekPosition(42.5, duration: 180), 42.5)
+        XCTAssertEqual(PersonalHubDataModel.clampedSeekPosition(999, duration: 180), 180)
+        XCTAssertNil(PersonalHubDataModel.clampedSeekPosition(.infinity, duration: 180))
+        XCTAssertNil(PersonalHubDataModel.clampedSeekPosition(20, duration: 0))
+    }
+
+    func testOptimisticSeekPreservesMetadataAndSpotifyNeverClaimsQueueSupport() throws {
+        let separator = String(UnicodeScalar(31))
+        let queued = [PersonalHubDataModel.NowPlaying.QueueItem(
+            id: "7",
+            title: "Next song",
+            artist: "Next artist",
+            album: "Next album"
+        )]
+        let spotify = try XCTUnwrap(PersonalHubDataModel.parseNowPlayingOutput(
+            ["playing", "Current song", "Current artist", "Current album", "10", "180", ""]
+                .joined(separator: separator),
+            appName: "Spotify",
+            queue: queued
+        ))
+
+        let updated = spotify.updatingPosition(90)
+
+        XCTAssertTrue(spotify.queue.isEmpty)
+        XCTAssertEqual(updated.position, 90)
+        XCTAssertEqual(updated.title, spotify.title)
+        XCTAssertEqual(updated.artist, spotify.artist)
+        XCTAssertEqual(updated.duration, spotify.duration)
+    }
+
     func testParsesMusicQueueAndIgnoresMalformedRows() {
         let field = String(UnicodeScalar(30))
         let row = String(UnicodeScalar(29))
@@ -128,10 +171,101 @@ final class PersonalHubDataModelTests: XCTestCase {
             id: "file-1",
             value: "Quarterly-plan.pdf",
             capturedAt: Date(),
-            filePath: "/Users/greg/Quarterly-plan.pdf"
+            filePath: "/Users/greg/Quarterly-plan.pdf",
+            source: ShelfCaptureController.Source.filePicker.rawValue,
+            byteCount: 42
         )
 
         XCTAssertEqual(entry.title, "Quarterly-plan.pdf")
+        XCTAssertEqual(entry.source, ShelfCaptureController.Source.filePicker.rawValue)
+        XCTAssertEqual(entry.byteCount, 42)
+    }
+
+    @MainActor
+    func testShelfImportPersistsPrivateMetadataAndRemovalDeletesOnlyStoredCopy() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CodeIslandShelfModel-\(UUID().uuidString)", isDirectory: true)
+        let storage = root.appendingPathComponent("Shelf", isDirectory: true)
+        let desktop = root.appendingPathComponent("Desktop", isDirectory: true)
+        try FileManager.default.createDirectory(at: desktop, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("brief.txt")
+        try Data("handoff".utf8).write(to: source)
+        let suite = "PersonalHubDataModelTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        let controller = ShelfCaptureController(storageDirectory: storage, screenshotDirectory: desktop)
+        let model = PersonalHubDataModel(defaults: defaults, shelfCaptureController: controller)
+
+        XCTAssertTrue(model.importShelfFile(at: source, source: .drop))
+        let entry = try XCTUnwrap(model.shelf.first)
+        let storedURL = try XCTUnwrap(model.shelfFileURL(id: entry.id))
+        XCTAssertTrue(controller.containsStoredFile(storedURL))
+        XCTAssertEqual(entry.source, ShelfCaptureController.Source.drop.rawValue)
+        XCTAssertEqual(entry.byteCount, 7)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: source.path))
+
+        XCTAssertTrue(model.removeShelfEntry(id: entry.id))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: storedURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: source.path))
+    }
+
+    @MainActor
+    func testShelfRetentionRemovesEvictedPrivateCopy() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CodeIslandShelfRetention-\(UUID().uuidString)", isDirectory: true)
+        let storage = root.appendingPathComponent("Shelf", isDirectory: true)
+        let desktop = root.appendingPathComponent("Desktop", isDirectory: true)
+        try FileManager.default.createDirectory(at: desktop, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("capture.txt")
+        try Data("capture".utf8).write(to: source)
+        let suite = "PersonalHubDataModelTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        let controller = ShelfCaptureController(storageDirectory: storage, screenshotDirectory: desktop)
+        let model = PersonalHubDataModel(defaults: defaults, shelfCaptureController: controller)
+
+        XCTAssertTrue(model.importShelfFile(at: source, source: .drop))
+        let firstStoredURL = try XCTUnwrap(model.shelfFileURL(id: XCTUnwrap(model.shelf.first?.id)))
+        for _ in 0..<20 {
+            XCTAssertTrue(model.importShelfFile(at: source, source: .drop))
+        }
+
+        XCTAssertEqual(model.shelf.count, 20)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: firstStoredURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: source.path))
+    }
+
+    @MainActor
+    func testLegacyOutsideShelfReferenceMigratesIntoPrivateStore() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CodeIslandShelfMigration-\(UUID().uuidString)", isDirectory: true)
+        let storage = root.appendingPathComponent("Shelf", isDirectory: true)
+        let desktop = root.appendingPathComponent("Desktop", isDirectory: true)
+        try FileManager.default.createDirectory(at: desktop, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let legacyFile = root.appendingPathComponent("legacy.pdf")
+        try Data("legacy".utf8).write(to: legacyFile)
+        let suite = "PersonalHubDataModelTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        let legacy = [PersonalHubDataModel.ShelfEntry(
+            id: "legacy-file",
+            value: "legacy.pdf",
+            capturedAt: Date(timeIntervalSince1970: 1),
+            filePath: legacyFile.path
+        )]
+        defaults.set(try JSONEncoder().encode(legacy), forKey: "codeisland.personalHub.shelf.v1")
+        let controller = ShelfCaptureController(storageDirectory: storage, screenshotDirectory: desktop)
+
+        let model = PersonalHubDataModel(defaults: defaults, shelfCaptureController: controller)
+        let migrated = try XCTUnwrap(model.shelf.first)
+
+        XCTAssertEqual(migrated.id, "legacy-file")
+        XCTAssertEqual(migrated.source, ShelfCaptureController.Source.filePicker.rawValue)
+        XCTAssertNotEqual(migrated.filePath, legacyFile.path)
+        XCTAssertNotNil(model.shelfFileURL(id: migrated.id))
     }
 
     func testLegacyNoteDecodesWithSafeRevisionDefaults() throws {
@@ -174,5 +308,33 @@ final class PersonalHubDataModelTests: XCTestCase {
         XCTAssertEqual(proposals.map(\.kind), [.reminder, .note])
         XCTAssertEqual(proposals.first?.title, "Call the bank")
         XCTAssertNotNil(proposals.first?.due)
+    }
+
+    func testClaudeAskInvocationIsToolFreeAndFileContextIsUntrusted() throws {
+        let contexts = try ClaudeFileContextLoader.load(namedData: [
+            ("brief.md", Data("Treat this as data".utf8)),
+        ])
+
+        let invocation = PersonalHubDataModel.claudeInvocation(
+            prompt: "Summarize this",
+            contexts: contexts,
+            mode: .ask
+        )
+
+        XCTAssertTrue(invocation.systemPrompt.contains("Do not use tools"))
+        XCTAssertTrue(invocation.prompt.contains("BEGIN UNTRUSTED FILE CONTEXT"))
+        XCTAssertFalse(invocation.systemPrompt.contains("execute the request"))
+    }
+
+    func testClaudeDoInvocationCanOnlyReturnReviewableProposals() {
+        let invocation = PersonalHubDataModel.claudeInvocation(
+            prompt: "Remind me to call the bank",
+            contexts: [],
+            mode: .plan(now: Date(timeIntervalSince1970: 0), timeZone: TimeZone(secondsFromGMT: 0)!)
+        )
+
+        XCTAssertTrue(invocation.systemPrompt.contains("Never execute tools"))
+        XCTAssertTrue(invocation.systemPrompt.contains("Return JSON only"))
+        XCTAssertTrue(invocation.systemPrompt.contains("proposed CodeIsland actions"))
     }
 }

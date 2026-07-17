@@ -8,6 +8,9 @@ struct GlancesView: View {
     @ObservedObject private var personalUtilities = PersonalUtilitiesModel.shared
     @State private var isAddingReminder = false
     @State private var newReminderTitle = ""
+    @State private var calendarReferenceDate = Date()
+    @State private var calendarSelectedDate = Date()
+    @State private var calendarMonthInfo: GlancesModel.CalendarMonthInfo?
     @FocusState private var reminderFieldFocused: Bool
 
     private static let accent = Color(red: 0.3, green: 0.85, blue: 0.4)
@@ -25,6 +28,10 @@ struct GlancesView: View {
                 }
                 Divider().overlay(Color.white.opacity(0.08))
                 meetingSection
+                if model.calendarAuthorized, let calendarMonthInfo {
+                    Divider().overlay(Color.white.opacity(0.08))
+                    calendarMonthSection(calendarMonthInfo)
+                }
                 if !personalUtilities.deviceBatteries.isEmpty {
                     Divider().overlay(Color.white.opacity(0.08))
                     devicesSection
@@ -39,8 +46,60 @@ struct GlancesView: View {
         .frame(maxHeight: 560)
         .onAppear {
             model.refresh()
+            refreshCalendarMonth()
             personalUtilities.start()
         }
+        .onReceive(model.$upcomingEvents) { _ in refreshCalendarMonth() }
+    }
+
+    private func calendarMonthSection(_ info: GlancesModel.CalendarMonthInfo) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            sectionLabel("CALENDAR")
+            MacCalendarMonthView(month: info.month) { referenceDate, selectedDate in
+                calendarReferenceDate = referenceDate
+                calendarSelectedDate = selectedDate
+                refreshCalendarMonth()
+            }
+
+            if info.selectedEvents.isEmpty {
+                emptyText("No events on the selected day")
+            } else {
+                ForEach(info.selectedEvents, id: \.id) { event in
+                    HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(event.title)
+                                .font(Self.monoSmall.weight(.semibold))
+                                .foregroundStyle(.white.opacity(0.82))
+                                .lineLimit(1)
+                            Text(Self.timeText(for: event))
+                                .font(.system(size: 8, weight: .medium, design: .monospaced))
+                                .foregroundStyle(.white.opacity(0.34))
+                        }
+                        Spacer(minLength: 4)
+                        if let url = event.joinURL {
+                            Button("JOIN") { NSWorkspace.shared.open(url) }
+                                .font(.system(size: 8, weight: .black, design: .monospaced))
+                                .buttonStyle(.borderedProminent)
+                                .tint(Self.actionAccent)
+                                .controlSize(.mini)
+                                .accessibilityLabel("Join \(event.title)")
+                        }
+                    }
+                    .padding(.horizontal, 4)
+                }
+            }
+        }
+    }
+
+    private func refreshCalendarMonth() {
+        guard model.calendarAuthorized else {
+            calendarMonthInfo = nil
+            return
+        }
+        calendarMonthInfo = model.calendarMonth(
+            referenceDate: calendarReferenceDate,
+            selectedDate: calendarSelectedDate
+        )
     }
 
     // MARK: - Weather

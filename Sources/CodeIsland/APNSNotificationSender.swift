@@ -1,4 +1,5 @@
 import Combine
+import CodeIslandCore
 import CryptoKit
 import Foundation
 import os.log
@@ -15,10 +16,23 @@ final class APNSNotificationSender: ObservableObject {
 
     private init() {}
 
-    func notify(requestID: String, source: String, tool: String, devices: [RemoteApprovalDevice]) {
+    func notify(
+        requestID: String,
+        kind: RemoteAttentionKind,
+        state: RemoteAttentionState,
+        devices: [RemoteApprovalDevice]
+    ) {
         let targets = devices.filter { $0.pushToken?.isEmpty == false }
         guard !targets.isEmpty else { return }
         guard let configuration = configuration() else { return }
+        let issuedAt = Date()
+        let envelope = RemoteAttentionPushEnvelope(
+            kind: kind,
+            state: state,
+            requestID: requestID,
+            issuedAt: issuedAt,
+            expiresAt: issuedAt.addingTimeInterval(state == .pending ? 600 : 60)
+        )
 
         Task {
             do {
@@ -26,9 +40,7 @@ final class APNSNotificationSender: ObservableObject {
                 for device in targets {
                     guard let token = device.pushToken else { continue }
                     try await send(
-                        requestID: requestID,
-                        source: source,
-                        tool: tool,
+                        envelope: envelope,
                         token: token,
                         environment: device.pushEnvironment ?? "production",
                         configuration: configuration,
@@ -112,9 +124,7 @@ final class APNSNotificationSender: ObservableObject {
     }
 
     private func send(
-        requestID: String,
-        source: String,
-        tool: String,
+        envelope: RemoteAttentionPushEnvelope,
         token: String,
         environment: String,
         configuration: Configuration,
@@ -130,21 +140,24 @@ final class APNSNotificationSender: ObservableObject {
         request.httpMethod = "POST"
         request.setValue("bearer \(jwt)", forHTTPHeaderField: "authorization")
         request.setValue(configuration.topic, forHTTPHeaderField: "apns-topic")
-        request.setValue("alert", forHTTPHeaderField: "apns-push-type")
-        request.setValue("10", forHTTPHeaderField: "apns-priority")
-        request.setValue("approval-\(requestID)", forHTTPHeaderField: "apns-collapse-id")
+        request.setValue(
+            APNSNotificationPayloadBuilder.pushType(for: envelope),
+            forHTTPHeaderField: "apns-push-type"
+        )
+        request.setValue(
+            APNSNotificationPayloadBuilder.priority(for: envelope),
+            forHTTPHeaderField: "apns-priority"
+        )
+        request.setValue(
+            APNSNotificationPayloadBuilder.collapseID(for: envelope),
+            forHTTPHeaderField: "apns-collapse-id"
+        )
+        request.setValue(
+            String(Int(envelope.expiresAt.timeIntervalSince1970)),
+            forHTTPHeaderField: "apns-expiration"
+        )
         request.setValue("application/json", forHTTPHeaderField: "content-type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: [
-            "aps": [
-                "alert": [
-                    "title": "CodeIsland approval waiting",
-                    "body": "Open Buddy to review it privately."
-                ],
-                "sound": "default",
-                "interruption-level": "time-sensitive"
-            ],
-            "approvalId": requestID
-        ])
+        request.httpBody = try APNSNotificationPayloadBuilder.data(for: envelope)
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw PushError.invalidResponse }
@@ -153,6 +166,43 @@ final class APNSNotificationSender: ObservableObject {
             let reason = object?["reason"] as? String ?? String(data: data, encoding: .utf8) ?? "unknown"
             throw PushError.rejected(status: http.statusCode, reason: reason)
         }
+    }
+}
+
+enum APNSNotificationPayloadBuilder {
+    static func data(for envelope: RemoteAttentionPushEnvelope) throws -> Data {
+        var object = envelope.payloadFields
+        if envelope.state == .pending {
+            let noun = envelope.kind == .approval ? "approval" : "answer"
+            object["aps"] = [
+                "alert": [
+                    "title": "CodeIsland needs your \(noun)",
+                    "body": "Open Buddy to review it privately.",
+                ],
+                "sound": "default",
+                "interruption-level": "time-sensitive",
+            ]
+            // One-release compatibility for the already-distributed Buddy.
+            if envelope.kind == .approval {
+                object["approvalId"] = envelope.requestID
+            }
+        } else {
+            object["aps"] = ["content-available": 1]
+        }
+        return try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+    }
+
+    static func collapseID(for envelope: RemoteAttentionPushEnvelope) -> String {
+        let raw = "ci-\(envelope.kind.rawValue)-\(envelope.requestID)"
+        return String(raw.prefix(64))
+    }
+
+    static func pushType(for envelope: RemoteAttentionPushEnvelope) -> String {
+        envelope.state == .pending ? "alert" : "background"
+    }
+
+    static func priority(for envelope: RemoteAttentionPushEnvelope) -> String {
+        envelope.state == .pending ? "10" : "5"
     }
 }
 

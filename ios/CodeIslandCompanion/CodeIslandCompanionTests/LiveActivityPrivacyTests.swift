@@ -1,0 +1,100 @@
+import XCTest
+@testable import CodeIslandCompanion
+
+final class LiveActivityPrivacyTests: XCTestCase {
+    func testLockScreenStateRedactsPromptTranscriptAndWorkspace() throws {
+        let payload = CompanionStatePayload(
+            version: 1,
+            sequence: 41,
+            sessionId: "sensitive-session",
+            source: "codex",
+            status: .waitingQuestion,
+            toolName: "SecretTool",
+            workspaceName: "ConfidentialWorkspace",
+            messages: [CompanionMessagePreview(role: .assistant, text: "Secret transcript")],
+            pendingAction: .question,
+            question: CompanionQuestionPayload(
+                header: "Secret header",
+                question: "Secret question text",
+                options: ["Secret option"],
+                descriptions: ["Secret description"],
+                index: 1,
+                total: 1,
+                allowsMultipleSelection: false
+            ),
+            sessions: [
+                CompanionSessionPreview(
+                    sessionId: "sensitive-session",
+                    source: "codex",
+                    status: .waitingQuestion,
+                    toolName: "SecretTool",
+                    workspaceName: "ConfidentialWorkspace",
+                    message: "Secret session message",
+                    updatedAt: Date()
+                )
+            ],
+            updatedAt: Date()
+        )
+
+        let state = CodeIslandActivityAttributes.ContentState(payload: payload)
+        XCTAssertNil(state.toolName)
+        XCTAssertNil(state.workspaceName)
+        XCTAssertNil(state.questionText)
+        XCTAssertNil(state.questionHeader)
+        XCTAssertNil(state.sessions.first?.toolName)
+        XCTAssertNil(state.sessions.first?.workspaceName)
+
+        let encoded = try JSONEncoder().encode(state)
+        let text = try XCTUnwrap(String(data: encoded, encoding: .utf8))
+        for secret in [
+            "SecretTool", "ConfidentialWorkspace", "Secret transcript",
+            "Secret header", "Secret question text", "Secret option",
+            "Secret description", "Secret session message",
+        ] {
+            XCTAssertFalse(text.contains(secret), "Live Activity leaked \(secret)")
+        }
+        XCTAssertTrue(text.contains("open Buddy privately"))
+    }
+
+    func testAuthenticatedSnapshotPreservesSequenceAndOnlyGenericActivityCopy() throws {
+        let generatedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let snapshot = RemoteApprovalSnapshot(
+            serverName: "Private Mac",
+            generatedAt: generatedAt,
+            companionSequence: 88,
+            approvals: [],
+            questions: [
+                RemoteQuestionItem(
+                    id: "question-id",
+                    sessionId: "session-id",
+                    source: "claude",
+                    workspace: "SecretWorkspace",
+                    createdAt: generatedAt,
+                    prompts: [
+                        RemoteQuestionPrompt(
+                            id: "prompt",
+                            header: "SecretHeader",
+                            question: "SecretQuestion",
+                            options: ["SecretOption"],
+                            descriptions: ["SecretDescription"],
+                            allowsMultipleSelection: false
+                        )
+                    ],
+                    requiresLocalResponse: false,
+                    actionToken: "secret-token",
+                    actionExpiresAt: generatedAt.addingTimeInterval(120)
+                )
+            ]
+        )
+
+        let payload = try XCTUnwrap(CompanionStatePayload(remoteApprovalSnapshot: snapshot))
+        XCTAssertEqual(payload.sequence, 88)
+        XCTAssertEqual(payload.status, .waitingQuestion)
+        let activity = CodeIslandActivityAttributes.ContentState(payload: payload)
+        let text = try XCTUnwrap(String(data: try JSONEncoder().encode(activity), encoding: .utf8))
+        XCTAssertFalse(text.contains("SecretQuestion"))
+        XCTAssertFalse(text.contains("SecretWorkspace"))
+        XCTAssertFalse(text.contains("secret-token"))
+        XCTAssertTrue(text.contains("open Buddy privately"))
+    }
+}

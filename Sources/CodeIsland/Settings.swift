@@ -527,6 +527,8 @@ enum ShortcutAction: String, CaseIterable, Identifiable {
     case deny
     case skipQuestion
     case jumpToTerminal
+    case quickTask
+    case quickNote
 
     var id: String { rawValue }
 
@@ -538,12 +540,14 @@ enum ShortcutAction: String, CaseIterable, Identifiable {
         case .approveAlways:  return nil
         case .skipQuestion:   return nil
         case .jumpToTerminal: return nil
+        case .quickTask:      return ShortcutBinding(keyCode: 17, modifiers: [.control, .option]) // ⌃⌥T
+        case .quickNote:      return ShortcutBinding(keyCode: 45, modifiers: [.control, .option]) // ⌃⌥N
         }
     }
 
     var defaultEnabled: Bool {
         switch self {
-        case .togglePanel: return true
+        case .togglePanel, .quickTask, .quickNote: return true
         default: return false
         }
     }

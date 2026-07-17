@@ -218,6 +218,98 @@ public struct PersonalHubReminderDraft: Codable, Equatable, Sendable {
     }
 }
 
+/// Exact Claude prompt and bounded text attachments included in the reviewed
+/// action token. Legacy clients may still send a plain prompt with no files.
+public struct PersonalHubClaudeContext: Codable, Equatable, Sendable {
+    public let name: String
+    public let text: String
+    public let byteCount: Int
+    public let wasTruncated: Bool
+
+    public init(name: String, text: String, byteCount: Int, wasTruncated: Bool) {
+        self.name = name
+        self.text = text
+        self.byteCount = byteCount
+        self.wasTruncated = wasTruncated
+    }
+}
+
+public enum PersonalHubClaudeContextError: LocalizedError, Equatable {
+    case tooManyFiles
+    case unsupportedType(String)
+    case fileTooLarge(String)
+    case unreadable(String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .tooManyFiles: return "Attach no more than \(PersonalHubClaudeContextPolicy.maximumFiles) text files"
+        case .unsupportedType(let name): return "\(name) is not a supported text file"
+        case .fileTooLarge(let name): return "\(name) is larger than 2 MB"
+        case .unreadable(let name): return "\(name) is not readable UTF-8 text"
+        }
+    }
+}
+
+/// Shared limits for Mac, iPhone, web-originated payloads, and server-side
+/// revalidation. Only bounded UTF-8 text crosses the remote action protocol.
+public enum PersonalHubClaudeContextPolicy {
+    public static let maximumFiles = 5
+    public static let maximumFileBytes = 2_000_000
+    public static let maximumCharactersPerFile = 12_000
+    public static let maximumTotalCharacters = 20_000
+
+    private static let allowedExtensions: Set<String> = [
+        "txt", "md", "swift", "json", "yml", "yaml", "log", "csv", "ts", "tsx",
+        "js", "jsx", "py", "sh", "zsh", "rb", "html", "css", "sql", "toml", "xml"
+    ]
+
+    public static func validate(namedData: [(String, Data)]) throws -> [PersonalHubClaudeContext] {
+        guard namedData.count <= maximumFiles else { throw PersonalHubClaudeContextError.tooManyFiles }
+        var remainingCharacters = maximumTotalCharacters
+        return try namedData.map { name, data in
+            let ext = URL(fileURLWithPath: name).pathExtension.lowercased()
+            guard allowedExtensions.contains(ext) else { throw PersonalHubClaudeContextError.unsupportedType(name) }
+            guard data.count <= maximumFileBytes else { throw PersonalHubClaudeContextError.fileTooLarge(name) }
+            guard let rawText = String(data: data, encoding: .utf8) else {
+                throw PersonalHubClaudeContextError.unreadable(name)
+            }
+            let allowedCount = min(maximumCharactersPerFile, remainingCharacters)
+            let text = String(rawText.prefix(allowedCount))
+            remainingCharacters = max(remainingCharacters - text.count, 0)
+            return .init(
+                name: String(name.prefix(240)),
+                text: text,
+                byteCount: data.count,
+                wasTruncated: text.count < rawText.count
+            )
+        }
+    }
+}
+
+public struct PersonalHubClaudeDraft: Codable, Equatable, Sendable {
+    public let prompt: String
+    public let contexts: [PersonalHubClaudeContext]
+
+    public init(prompt: String, contexts: [PersonalHubClaudeContext] = []) {
+        self.prompt = prompt
+        self.contexts = contexts
+    }
+
+    public func encodedActionValue() -> String? {
+        guard let data = try? JSONEncoder().encode(self) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    public static func decodeActionValue(_ value: String?) -> Self? {
+        guard let value else { return nil }
+        if let data = value.data(using: .utf8),
+           let decoded = try? JSONDecoder().decode(Self.self, from: data) {
+            return decoded
+        }
+        return .init(prompt: value)
+    }
+}
+
 /// Conflict-safe note editor payload. A client edits the seed it received in a
 /// snapshot and sends the base revision back; the Mac rejects a stale replace
 /// instead of silently overwriting a newer edit from another device.
@@ -254,6 +346,121 @@ public struct PersonalHubChecklistMutation: Codable, Equatable, Sendable {
     public init(lineIndex: Int, baseRevision: Int) {
         self.lineIndex = lineIndex
         self.baseRevision = baseRevision
+    }
+
+    public func encodedActionValue() -> String? {
+        guard let data = try? JSONEncoder().encode(self) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    public static func decodeActionValue(_ value: String?) -> Self? {
+        guard let value, let data = value.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(Self.self, from: data)
+    }
+}
+
+public struct PersonalHubModeRack: Codable, Equatable, Sendable {
+    public let mode: PersonalHubMode
+    public let modules: [PersonalHubModuleID]
+
+    public init(mode: PersonalHubMode, modules: [PersonalHubModuleID]) {
+        self.mode = mode
+        self.modules = modules
+    }
+}
+
+public struct PersonalHubConfiguration: Codable, Equatable, Sendable {
+    public static let currentVersion = 1
+
+    public let version: Int
+    public let racks: [PersonalHubModeRack]
+    public let dashboardEnabled: Bool
+    /// Optional for backward compatibility with the first configuration files.
+    /// Sanitization replaces it with the current catalog after migrations.
+    public let knownModules: [PersonalHubModuleID]?
+
+    public init(
+        version: Int = currentVersion,
+        racks: [PersonalHubModeRack],
+        dashboardEnabled: Bool = true,
+        knownModules: [PersonalHubModuleID]? = PersonalHubModuleID.allCases
+    ) {
+        self.version = version
+        self.racks = racks
+        self.dashboardEnabled = dashboardEnabled
+        self.knownModules = knownModules
+    }
+
+    public static var `default`: Self {
+        .init(
+            racks: [.home, .work, .code].map {
+                PersonalHubModeRack(mode: $0, modules: PersonalHubCatalog.modules(for: $0))
+            }
+        )
+    }
+
+    public static func sanitized(_ candidate: Self) -> Self {
+        let previousKnown = Set(candidate.knownModules ?? [])
+        let currentKnown = Set(PersonalHubModuleID.allCases)
+        let introduced = currentKnown.subtracting(previousKnown)
+        var rackByMode: [PersonalHubMode: [PersonalHubModuleID]] = [:]
+
+        for mode in [PersonalHubMode.home, .work, .code] {
+            let supplied = candidate.racks.first(where: { $0.mode == mode })?.modules
+                ?? PersonalHubCatalog.modules(for: mode)
+            var seen = Set<PersonalHubModuleID>()
+            var modules = supplied.filter { currentKnown.contains($0) && seen.insert($0).inserted }
+            for module in PersonalHubCatalog.modules(for: mode)
+                where introduced.contains(module) && seen.insert(module).inserted {
+                modules.append(module)
+            }
+            if modules.isEmpty {
+                modules = PersonalHubCatalog.modules(for: mode)
+            }
+            rackByMode[mode] = modules
+        }
+
+        return .init(
+            version: currentVersion,
+            racks: [.home, .work, .code].map {
+                PersonalHubModeRack(mode: $0, modules: rackByMode[$0] ?? [])
+            },
+            dashboardEnabled: candidate.dashboardEnabled,
+            knownModules: PersonalHubModuleID.allCases
+        )
+    }
+
+    public func rack(for mode: PersonalHubMode) -> [PersonalHubModuleID] {
+        let concreteMode = mode == .auto ? PersonalHubMode.home : mode
+        return racks.first(where: { $0.mode == concreteMode })?.modules
+            ?? PersonalHubCatalog.modules(for: concreteMode)
+    }
+
+    public static func dayProgress(
+        at date: Date = Date(),
+        calendar: Calendar = .current
+    ) -> Double {
+        let start = calendar.startOfDay(for: date)
+        guard let end = calendar.date(byAdding: .day, value: 1, to: start) else { return 0 }
+        let duration = end.timeIntervalSince(start)
+        guard duration > 0 else { return 0 }
+        return min(max(date.timeIntervalSince(start) / duration, 0), 1)
+    }
+}
+
+public struct PersonalHubConfigurationMutation: Codable, Equatable, Sendable {
+    public let mode: PersonalHubMode?
+    public let modules: [PersonalHubModuleID]?
+    public let dashboardEnabled: Bool?
+
+    public init(
+        mode: PersonalHubMode? = nil,
+        modules: [PersonalHubModuleID]? = nil,
+        dashboardEnabled: Bool? = nil
+    ) {
+        self.mode = mode
+        self.modules = modules
+        self.dashboardEnabled = dashboardEnabled
     }
 
     public func encodedActionValue() -> String? {
@@ -323,6 +530,16 @@ public struct PersonalHubItem: Codable, Equatable, Identifiable, Sendable {
     public let detail: String?
     public let symbol: String?
     public let progress: Double?
+    /// Small, bounded artwork encoded as a data URL so the authenticated
+    /// snapshot renders identically on Mac, iPhone, and the private web app.
+    public let artworkDataURL: String?
+    /// Absolute playback values allow clients to render and submit an
+    /// arbitrary seek without inferring duration from a rounded progress bar.
+    public let mediaPosition: Double?
+    public let mediaDuration: Double?
+    /// Optional semantic date used by calendar-style clients. Existing module
+    /// items remain date-free and legacy payloads decode this as nil.
+    public let date: Date?
     public let actions: [PersonalHubAction]
 
     public init(
@@ -332,6 +549,10 @@ public struct PersonalHubItem: Codable, Equatable, Identifiable, Sendable {
         detail: String? = nil,
         symbol: String? = nil,
         progress: Double? = nil,
+        artworkDataURL: String? = nil,
+        mediaPosition: Double? = nil,
+        mediaDuration: Double? = nil,
+        date: Date? = nil,
         actions: [PersonalHubAction] = []
     ) {
         self.id = id
@@ -340,7 +561,121 @@ public struct PersonalHubItem: Codable, Equatable, Identifiable, Sendable {
         self.detail = detail
         self.symbol = symbol
         self.progress = progress
+        self.artworkDataURL = artworkDataURL
+        self.mediaPosition = mediaPosition
+        self.mediaDuration = mediaDuration
+        self.date = date
         self.actions = actions
+    }
+}
+
+public extension PersonalHubItem {
+    /// Only accepts the bounded JPEG data URL emitted by the Mac. Clients do
+    /// not load remote artwork URLs, preserving tailnet-only snapshot privacy.
+    var decodedArtworkJPEG: Data? {
+        let prefix = "data:image/jpeg;base64,"
+        guard let artworkDataURL,
+              artworkDataURL.hasPrefix(prefix),
+              let data = Data(base64Encoded: String(artworkDataURL.dropFirst(prefix.count))),
+              data.count <= 300_000,
+              data.starts(with: [0xFF, 0xD8]) else {
+            return nil
+        }
+        return data
+    }
+}
+
+public struct PersonalHubCalendarDay: Codable, Equatable, Identifiable, Sendable {
+    public let id: String
+    public let date: Date
+    public let isInDisplayedMonth: Bool
+    public let isToday: Bool
+    public let eventCount: Int
+
+    public init(
+        id: String,
+        date: Date,
+        isInDisplayedMonth: Bool,
+        isToday: Bool,
+        eventCount: Int
+    ) {
+        self.id = id
+        self.date = date
+        self.isInDisplayedMonth = isInDisplayedMonth
+        self.isToday = isToday
+        self.eventCount = eventCount
+    }
+}
+
+/// A fixed six-week month grid generated in the Mac's local Calendar. Dates
+/// are semantic values; each client formats them for presentation without
+/// reconstructing month boundaries in a potentially different time zone.
+public struct PersonalHubCalendarMonth: Codable, Equatable, Sendable {
+    public let displayedMonth: Date
+    public let selectedDate: Date
+    public let days: [PersonalHubCalendarDay]
+    public let selectedEvents: [PersonalHubItem]
+
+    public init(
+        displayedMonth: Date,
+        selectedDate: Date,
+        days: [PersonalHubCalendarDay],
+        selectedEvents: [PersonalHubItem] = []
+    ) {
+        self.displayedMonth = displayedMonth
+        self.selectedDate = selectedDate
+        self.days = days
+        self.selectedEvents = selectedEvents
+    }
+
+    public static func make(
+        referenceDate: Date,
+        selectedDate: Date,
+        eventDates: [Date],
+        selectedEvents: [PersonalHubItem] = [],
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> Self {
+        let monthStart = calendar.dateInterval(of: .month, for: referenceDate)?.start
+            ?? calendar.startOfDay(for: referenceDate)
+        let weekday = calendar.component(.weekday, from: monthStart)
+        let leadingDays = (weekday - calendar.firstWeekday + 7) % 7
+        let gridStart = calendar.date(byAdding: .day, value: -leadingDays, to: monthStart)
+            ?? monthStart
+        let gridEnd = calendar.date(byAdding: .day, value: 42, to: gridStart)
+            ?? gridStart.addingTimeInterval(42 * 86_400)
+        let requestedSelection = calendar.startOfDay(for: selectedDate)
+        let normalizedSelection = (requestedSelection >= gridStart && requestedSelection < gridEnd)
+            ? requestedSelection
+            : monthStart
+
+        var eventCounts: [Date: Int] = [:]
+        for date in eventDates {
+            eventCounts[calendar.startOfDay(for: date), default: 0] += 1
+        }
+
+        let displayedComponents = calendar.dateComponents([.era, .year, .month], from: monthStart)
+        let days = (0..<42).compactMap { offset -> PersonalHubCalendarDay? in
+            guard let date = calendar.date(byAdding: .day, value: offset, to: gridStart) else { return nil }
+            let start = calendar.startOfDay(for: date)
+            let components = calendar.dateComponents([.era, .year, .month, .day], from: start)
+            let identifier = String(format: "%04d-%02d-%02d", components.year ?? 0, components.month ?? 0, components.day ?? 0)
+            let monthComponents = calendar.dateComponents([.era, .year, .month], from: start)
+            return PersonalHubCalendarDay(
+                id: identifier,
+                date: start,
+                isInDisplayedMonth: monthComponents == displayedComponents,
+                isToday: calendar.isDate(start, inSameDayAs: now),
+                eventCount: eventCounts[start, default: 0]
+            )
+        }
+
+        return .init(
+            displayedMonth: monthStart,
+            selectedDate: normalizedSelection,
+            days: days,
+            selectedEvents: selectedEvents
+        )
     }
 }
 
@@ -351,6 +686,7 @@ public struct PersonalHubModuleSnapshot: Codable, Equatable, Identifiable, Senda
     public let detail: String?
     public let items: [PersonalHubItem]
     public let actions: [PersonalHubAction]
+    public let calendarMonth: PersonalHubCalendarMonth?
 
     public init(
         id: PersonalHubModuleID,
@@ -358,7 +694,8 @@ public struct PersonalHubModuleSnapshot: Codable, Equatable, Identifiable, Senda
         summary: String,
         detail: String? = nil,
         items: [PersonalHubItem] = [],
-        actions: [PersonalHubAction] = []
+        actions: [PersonalHubAction] = [],
+        calendarMonth: PersonalHubCalendarMonth? = nil
     ) {
         self.id = id
         self.availability = availability
@@ -366,6 +703,7 @@ public struct PersonalHubModuleSnapshot: Codable, Equatable, Identifiable, Senda
         self.detail = detail
         self.items = items
         self.actions = actions
+        self.calendarMonth = calendarMonth
     }
 }
 
@@ -376,6 +714,8 @@ public struct PersonalHubSnapshot: Codable, Equatable, Sendable {
     public let requestedMode: PersonalHubMode
     public let resolvedMode: PersonalHubMode
     public let modules: [PersonalHubModuleSnapshot]
+    public let configuration: PersonalHubConfiguration?
+    public let dayProgress: Double?
 
     public init(
         version: Int = 1,
@@ -383,7 +723,9 @@ public struct PersonalHubSnapshot: Codable, Equatable, Sendable {
         generatedAt: Date = Date(),
         requestedMode: PersonalHubMode,
         resolvedMode: PersonalHubMode,
-        modules: [PersonalHubModuleSnapshot]
+        modules: [PersonalHubModuleSnapshot],
+        configuration: PersonalHubConfiguration? = nil,
+        dayProgress: Double? = nil
     ) {
         self.version = version
         self.serverName = serverName
@@ -391,14 +733,24 @@ public struct PersonalHubSnapshot: Codable, Equatable, Sendable {
         self.requestedMode = requestedMode
         self.resolvedMode = resolvedMode
         self.modules = modules
+        self.configuration = configuration
+        self.dayProgress = dayProgress
     }
 }
 
 public struct PersonalHubSnapshotRequest: Codable, Equatable, Sendable {
     public let requestedMode: PersonalHubMode
+    public let calendarReferenceDate: Date?
+    public let calendarSelectedDate: Date?
 
-    public init(requestedMode: PersonalHubMode) {
+    public init(
+        requestedMode: PersonalHubMode,
+        calendarReferenceDate: Date? = nil,
+        calendarSelectedDate: Date? = nil
+    ) {
         self.requestedMode = requestedMode
+        self.calendarReferenceDate = calendarReferenceDate
+        self.calendarSelectedDate = calendarSelectedDate
     }
 }
 
@@ -459,6 +811,12 @@ public enum PersonalHubCatalog {
             ?? PersonalHubModuleDefinition(id: id, title: id.rawValue, symbol: "square.grid.2x2")
     }
 
+    public static func preferredMode(for id: PersonalHubModuleID) -> PersonalHubMode {
+        if modules(for: .code).contains(id) { return .code }
+        if modules(for: .work).contains(id) { return .work }
+        return .home
+    }
+
     public static func modules(for mode: PersonalHubMode) -> [PersonalHubModuleID] {
         switch mode {
         case .auto:
@@ -493,5 +851,122 @@ public enum PersonalHubCatalog {
             "visual-studio-code", "cursor", "warp", "terminal", "iterm",
         ]
         return fragments.contains(where: bundleID.contains)
+    }
+}
+
+public enum PersonalHubQuickJotDestination: String, Codable, CaseIterable, Sendable {
+    case task
+    case note
+}
+
+public enum PersonalHubDeepLink: Equatable, Sendable {
+    case pendingApproval(id: String?)
+    case module(PersonalHubModuleID)
+    case quickJot(destination: PersonalHubQuickJotDestination, text: String?)
+
+    public init?(url: URL) {
+        guard url.scheme?.lowercased() == "codeisland",
+              let host = url.host?.lowercased()
+        else { return nil }
+        let path = Array(url.pathComponents.dropFirst())
+        switch host {
+        case "approval", "approvals":
+            let rawID = path.first
+            self = .pendingApproval(id: rawID == "pending" ? nil : rawID)
+        case "hub":
+            guard let raw = path.first, let module = PersonalHubModuleID(rawValue: raw) else { return nil }
+            self = .module(module)
+        case "quick-jot":
+            guard let raw = path.first,
+                  let destination = PersonalHubQuickJotDestination(rawValue: raw.lowercased())
+            else { return nil }
+            let text = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                .queryItems?.first(where: { $0.name == "text" })?.value
+            self = .quickJot(destination: destination, text: text)
+        default:
+            return nil
+        }
+    }
+
+    public var url: URL {
+        var components = URLComponents()
+        components.scheme = "codeisland"
+        switch self {
+        case .pendingApproval(let id):
+            components.host = "approvals"
+            components.path = "/\(id ?? "pending")"
+        case .module(let module):
+            components.host = "hub"
+            components.path = "/\(module.rawValue)"
+        case .quickJot(let destination, let text):
+            components.host = "quick-jot"
+            components.path = "/\(destination.rawValue)"
+            if let text, !text.isEmpty {
+                components.queryItems = [URLQueryItem(name: "text", value: text)]
+            }
+        }
+        return components.url!
+    }
+}
+
+public enum PersonalHubBuddyActionDisposition: Equatable, Sendable {
+    case native
+    case readOnly
+    case macOnly(reason: String)
+}
+
+public struct PersonalHubBuddyRoute: Equatable, Sendable {
+    public let moduleID: PersonalHubModuleID
+    public let actionDispositions: [String: PersonalHubBuddyActionDisposition]
+
+    public init(
+        moduleID: PersonalHubModuleID,
+        actionDispositions: [String: PersonalHubBuddyActionDisposition]
+    ) {
+        self.moduleID = moduleID
+        self.actionDispositions = actionDispositions
+    }
+}
+
+public enum PersonalHubBuddyParity {
+    public static let routes: [PersonalHubBuddyRoute] = [
+        .init(moduleID: .nowPlaying, actionDispositions: native("previous", "playPause", "playQueueItem", "next", "seek", "seekBack", "seekForward", "copyToDevice")),
+        .init(moduleID: .shelf, actionDispositions: native("downloadToDevice", "copyToDevice", "remove").merging(macOnly("revealOnMac", reason: "Reveals the source file in Finder on the Mac"), uniquingKeysWith: { first, _ in first })),
+        .init(moduleID: .calendar, actionDispositions: native("add", "edit", "delete", "join", "openOnMac")),
+        .init(moduleID: .reminders, actionDispositions: native("add", "addList", "deleteList", "complete", "restore", "delete", "moveUp", "moveTop", "moveDown", "copyToDevice")),
+        .init(moduleID: .notes, actionDispositions: native("add", "delete", "append", "replace", "setCategory", "undo", "toggleChecklist", "copyToDevice")),
+        .init(moduleID: .system, actionDispositions: readOnly("refresh")),
+        .init(moduleID: .weather, actionDispositions: readOnly("refresh")),
+        .init(moduleID: .notifications, actionDispositions: ["view": .readOnly]),
+        .init(moduleID: .claude, actionDispositions: native("ask", "plan", "applyProposal", "copyToDevice")),
+        .init(moduleID: .agents, actionDispositions: ["view": .readOnly]),
+        .init(moduleID: .github, actionDispositions: native("open")),
+        .init(moduleID: .audio, actionDispositions: native("volumeDown", "setVolume", "volumeUp", "setInput", "setOutput", "openSettings")),
+        .init(moduleID: .bluetooth, actionDispositions: native("refresh", "connect", "disconnect")),
+        .init(moduleID: .battery, actionDispositions: ["view": .readOnly]),
+        .init(moduleID: .quickToggles, actionDispositions: native("darkMode", "mute", "displaySleep", "lockMac", "setModeRack", "setDashboard")),
+        .init(moduleID: .downloads, actionDispositions: native("refresh", "downloadToDevice").merging(macOnly("reveal", reason: "Reveals the download in Finder on the Mac"), uniquingKeysWith: { first, _ in first })),
+        .init(moduleID: .camera, actionDispositions: native("previewLocal")),
+        .init(moduleID: .teleprompter, actionDispositions: native("set", "presentOnDevice", "copyToDevice")),
+        .init(moduleID: .windowManager, actionDispositions: native("left", "maximize", "right").merging(macOnly("openAccessibility", reason: "Accessibility permission must be granted in Mac System Settings"), uniquingKeysWith: { first, _ in first })),
+    ]
+
+    public static func route(for moduleID: PersonalHubModuleID) -> PersonalHubBuddyRoute? {
+        routes.first(where: { $0.moduleID == moduleID })
+    }
+
+    private static func native(_ ids: String...) -> [String: PersonalHubBuddyActionDisposition] {
+        Dictionary(uniqueKeysWithValues: ids.map { ($0, .native) })
+    }
+
+    private static func readOnly(_ ids: String...) -> [String: PersonalHubBuddyActionDisposition] {
+        Dictionary(uniqueKeysWithValues: ids.map { ($0, .readOnly) })
+    }
+
+    private static func macOnly(
+        _ id: String,
+        reason: String
+    ) -> [String: PersonalHubBuddyActionDisposition] {
+        [id: .macOnly(reason: reason)]
     }
 }

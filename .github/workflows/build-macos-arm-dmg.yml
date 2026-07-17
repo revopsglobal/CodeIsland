@@ -124,12 +124,7 @@ jobs:
 
       - name: Test remote approval security and exact-request routing
         run: |
-          swift test --filter RemoteActionTokenVaultTests
-          swift test --filter RemoteApprovalHTTPServerTests
-          swift test --filter RemotePairAttemptLimiterTests
-          swift test --filter AppStatePermissionFlowTests/testRemoteDecisionResolvesOnlyTheSelectedPermission
-          swift test --filter AppStateQuestionFlowTests/testRemoteAnswerResolvesOnlyTheSelectedQuestion
-          swift test --filter AppStateQuestionFlowTests/testRemoteAnswerNeverResolvesSecretQuestion
+          swift test --filter 'RemoteActionTokenVaultTests|RemoteApprovalHTTPServerTests|RemotePairAttemptLimiterTests|RemotePairingCodeLifecycleTests|SessionAttentionRouterTests|AppStatePermissionFlowTests/testRemoteDecisionResolvesOnlyTheSelectedPermission|AppStateQuestionFlowTests/testRemoteAnswerResolvesOnlyTheSelectedQuestion|AppStateQuestionFlowTests/testRemoteAnswerNeverResolvesSecretQuestion'
 
       - name: Test iPhone companion models
         run: ios/CodeIslandCompanion/scripts/run-model-tests.sh
@@ -223,6 +218,9 @@ jobs:
           test "$SPARKLE_ARCHS" = "arm64"
           test -s .build/dmg-staging/CodeIsland.app/Contents/Resources/AppIcon.icns
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' .build/dmg-staging/CodeIsland.app/Contents/Info.plist)" = "AppIcon"
+          test -n "$(/usr/libexec/PlistBuddy -c 'Print :NSCameraUsageDescription' .build/dmg-staging/CodeIsland.app/Contents/Info.plist)"
+          test -n "$(/usr/libexec/PlistBuddy -c 'Print :NSMicrophoneUsageDescription' .build/dmg-staging/CodeIsland.app/Contents/Info.plist)"
+          test -n "$(/usr/libexec/PlistBuddy -c 'Print :NSSpeechRecognitionUsageDescription' .build/dmg-staging/CodeIsland.app/Contents/Info.plist)"
           codesign --verify --deep --strict --verbose=2 .build/dmg-staging/CodeIsland.app
           codesign -d --entitlements :- .build/dmg-staging/CodeIsland.app 2>&1 \
             | grep -q '<key>com.apple.security.personal-information.calendars</key>'

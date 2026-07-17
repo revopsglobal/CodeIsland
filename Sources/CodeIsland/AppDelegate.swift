@@ -186,6 +186,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         appState.stopCodexAppServerWatcher()
         appState.stopSessionDiscovery()
         PersonalUtilitiesModel.shared.stop()
+        WindowLayoutDropController.shared.stop()
     }
 
     // MARK: - Global Shortcuts
@@ -261,6 +262,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             if let id = appState.activeSessionId, let session = appState.sessions[id] {
                 TerminalActivator.activate(session: session, sessionId: id)
             }
+        case .quickTask:
+            QuickJotWindowController.shared.show(destination: .task)
+        case .quickNote:
+            QuickJotWindowController.shared.show(destination: .note)
         }
     }
 

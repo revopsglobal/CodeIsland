@@ -8,6 +8,35 @@ final class PersonalHubProtocolTests: XCTestCase {
         XCTAssertTrue(Set(PersonalHubCatalog.personalBaseline).isSubset(of: Set(PersonalHubModuleID.allCases)))
     }
 
+    func testEveryCatalogModuleHasAnExplicitBuddyRouteAndActionDisposition() {
+        let allModules = PersonalHubCatalog.personalBaseline + PersonalHubCatalog.personalExtensions
+        XCTAssertEqual(Set(PersonalHubBuddyParity.routes.map(\.moduleID)), Set(allModules))
+        XCTAssertEqual(PersonalHubBuddyParity.routes.count, allModules.count)
+        for route in PersonalHubBuddyParity.routes {
+            XCTAssertFalse(route.actionDispositions.isEmpty, "\(route.moduleID) has no Buddy action policy")
+            for disposition in route.actionDispositions.values {
+                if case .macOnly(let reason) = disposition {
+                    XCTAssertFalse(reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+
+    func testPersonalHubDeepLinksRoundTripAllRoutesAndEscapedQuickJotText() throws {
+        let routes: [PersonalHubDeepLink] = [
+            .pendingApproval(id: nil),
+            .pendingApproval(id: "approval-123"),
+            .module(.calendar),
+            .module(.reminders),
+            .quickJot(destination: .task, text: "Call bank & review"),
+            .quickJot(destination: .note, text: nil),
+        ]
+        for route in routes {
+            XCTAssertEqual(PersonalHubDeepLink(url: route.url), route)
+        }
+        XCTAssertNil(PersonalHubDeepLink(url: try XCTUnwrap(URL(string: "https://example.com"))))
+    }
+
     func testEveryBaselineModuleSupportsMacIPhoneAndWeb() {
         for id in PersonalHubCatalog.personalBaseline {
             let platforms = PersonalHubCatalog.definition(for: id).platforms
@@ -95,6 +124,34 @@ final class PersonalHubProtocolTests: XCTestCase {
         XCTAssertEqual(try decoder.decode(PersonalHubSnapshot.self, from: data), snapshot)
     }
 
+    func testMediaItemRoundTripAndLegacyDecode() throws {
+        let item = PersonalHubItem(
+            id: "current",
+            title: "Current song",
+            artworkDataURL: "data:image/jpeg;base64,/9j/2Q==",
+            mediaPosition: 42.5,
+            mediaDuration: 180
+        )
+        let data = try JSONEncoder().encode(item)
+        XCTAssertEqual(try JSONDecoder().decode(PersonalHubItem.self, from: data), item)
+        XCTAssertEqual(item.decodedArtworkJPEG, Data([0xFF, 0xD8, 0xFF, 0xD9]))
+
+        let rejectedArtwork = PersonalHubItem(
+            id: "unsafe",
+            title: "Remote image",
+            artworkDataURL: "data:image/png;base64,iVBORw0KGgo="
+        )
+        XCTAssertNil(rejectedArtwork.decodedArtworkJPEG)
+
+        let legacy = try JSONDecoder().decode(
+            PersonalHubItem.self,
+            from: Data(#"{"id":"legacy","title":"Song","actions":[]}"#.utf8)
+        )
+        XCTAssertNil(legacy.artworkDataURL)
+        XCTAssertNil(legacy.mediaPosition)
+        XCTAssertNil(legacy.mediaDuration)
+    }
+
     func testActionBindingChangesWithEveryMutableField() {
         let baseline = PersonalHubActionIntent(
             moduleID: .reminders,
@@ -155,6 +212,84 @@ final class PersonalHubProtocolTests: XCTestCase {
         )
     }
 
+    func testCalendarMonthBuildsSixLocalWeeksWithAdjacentDaysAndCounts() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "America/Los_Angeles"))
+        calendar.firstWeekday = 1
+
+        let reference = try XCTUnwrap(calendar.date(from: DateComponents(
+            year: 2026, month: 4, day: 15, hour: 12
+        )))
+        let selected = try XCTUnwrap(calendar.date(from: DateComponents(
+            year: 2026, month: 4, day: 1, hour: 18
+        )))
+        let maySecond = try XCTUnwrap(calendar.date(from: DateComponents(
+            year: 2026, month: 5, day: 2, hour: 9
+        )))
+
+        let month = PersonalHubCalendarMonth.make(
+            referenceDate: reference,
+            selectedDate: selected,
+            eventDates: [selected, selected.addingTimeInterval(3_600), maySecond],
+            now: reference,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(month.days.count, 42)
+        XCTAssertEqual(calendar.dateComponents([.year, .month, .day], from: month.days[0].date),
+                       DateComponents(year: 2026, month: 3, day: 29))
+        XCTAssertEqual(calendar.dateComponents([.year, .month, .day], from: month.days[41].date),
+                       DateComponents(year: 2026, month: 5, day: 9))
+        XCTAssertFalse(month.days[0].isInDisplayedMonth)
+        XCTAssertTrue(month.days[3].isInDisplayedMonth)
+        XCTAssertEqual(month.days.first(where: { calendar.isDate($0.date, inSameDayAs: selected) })?.eventCount, 2)
+        XCTAssertEqual(month.days.first(where: { calendar.isDate($0.date, inSameDayAs: maySecond) })?.eventCount, 1)
+        XCTAssertTrue(month.days.first(where: { calendar.isDate($0.date, inSameDayAs: reference) })?.isToday == true)
+        XCTAssertTrue(calendar.isDate(month.selectedDate, inSameDayAs: selected))
+    }
+
+    func testCalendarMonthFallsBackToDisplayedMonthWhenSelectionIsOutsideGrid() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "America/Los_Angeles"))
+        calendar.firstWeekday = 1
+        let reference = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 4, day: 15)))
+        let outside = try XCTUnwrap(calendar.date(from: DateComponents(year: 2027, month: 1, day: 1)))
+
+        let month = PersonalHubCalendarMonth.make(
+            referenceDate: reference,
+            selectedDate: outside,
+            eventDates: [],
+            now: reference,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(calendar.component(.day, from: month.selectedDate), 1)
+        XCTAssertEqual(calendar.component(.month, from: month.selectedDate), 4)
+        XCTAssertEqual(month.days.reduce(0) { $0 + $1.eventCount }, 0)
+    }
+
+    func testCalendarSnapshotRequestRoundTripsMonthSelectionAndDecodesLegacyPayload() throws {
+        let request = PersonalHubSnapshotRequest(
+            requestedMode: .work,
+            calendarReferenceDate: Date(timeIntervalSince1970: 1_800_000_000),
+            calendarSelectedDate: Date(timeIntervalSince1970: 1_800_086_400)
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        XCTAssertEqual(try decoder.decode(PersonalHubSnapshotRequest.self, from: encoder.encode(request)), request)
+
+        let legacy = try decoder.decode(
+            PersonalHubSnapshotRequest.self,
+            from: Data(#"{"requestedMode":"home"}"#.utf8)
+        )
+        XCTAssertEqual(legacy.requestedMode, .home)
+        XCTAssertNil(legacy.calendarReferenceDate)
+        XCTAssertNil(legacy.calendarSelectedDate)
+    }
+
     func testReminderDraftSupportsStructuredAndLegacyValues() throws {
         let draft = PersonalHubReminderDraft(
             title: "Finish the deck",
@@ -205,11 +340,90 @@ final class PersonalHubProtocolTests: XCTestCase {
         )
     }
 
+    func testClaudeDraftBindsPromptAndFileContextToReviewedAction() throws {
+        let draft = PersonalHubClaudeDraft(
+            prompt: "Summarize this",
+            contexts: [
+                .init(name: "brief.md", text: "Private context", byteCount: 15, wasTruncated: false)
+            ]
+        )
+
+        XCTAssertEqual(
+            PersonalHubClaudeDraft.decodeActionValue(try XCTUnwrap(draft.encodedActionValue())),
+            draft
+        )
+        XCTAssertEqual(
+            PersonalHubClaudeDraft.decodeActionValue("Legacy question"),
+            PersonalHubClaudeDraft(prompt: "Legacy question")
+        )
+    }
+
+    func testClaudeContextPolicyRejectsBinaryAndBoundsTotalText() throws {
+        XCTAssertThrowsError(try PersonalHubClaudeContextPolicy.validate(namedData: [
+            ("photo.png", Data())
+        ]))
+        let contexts = try PersonalHubClaudeContextPolicy.validate(namedData: [
+            ("a.md", Data(String(repeating: "a", count: 15_000).utf8)),
+            ("b.txt", Data(String(repeating: "b", count: 15_000).utf8))
+        ])
+        XCTAssertLessThanOrEqual(
+            contexts.reduce(0) { $0 + $1.text.count },
+            PersonalHubClaudeContextPolicy.maximumTotalCharacters
+        )
+        XCTAssertTrue(contexts.contains(where: \.wasTruncated))
+    }
+
     func testChecklistMutationRoundTrips() throws {
         let mutation = PersonalHubChecklistMutation(lineIndex: 3, baseRevision: 9)
         XCTAssertEqual(
             PersonalHubChecklistMutation.decodeActionValue(try XCTUnwrap(mutation.encodedActionValue())),
             mutation
+        )
+    }
+
+    func testModeRackConfigurationSanitizesDuplicatesUnknownModesAndNewModules() {
+        let configuration = PersonalHubConfiguration.sanitized(
+            .init(
+                version: 1,
+                racks: [
+                    .init(mode: .work, modules: [.notes, .calendar, .notes]),
+                    .init(mode: .auto, modules: [.system]),
+                ],
+                dashboardEnabled: true,
+                knownModules: []
+            )
+        )
+
+        XCTAssertEqual(configuration.rack(for: .work).prefix(2), [.notes, .calendar])
+        XCTAssertEqual(Set(configuration.rack(for: .work)), Set(PersonalHubCatalog.modules(for: .work)))
+        XCTAssertEqual(configuration.rack(for: .auto), configuration.rack(for: .home))
+        XCTAssertTrue(configuration.dashboardEnabled)
+    }
+
+    func testModeRackMutationRoundTripsThroughActionValue() throws {
+        let mutation = PersonalHubConfigurationMutation(
+            mode: .code,
+            modules: [.agents, .claude, .github],
+            dashboardEnabled: false
+        )
+
+        XCTAssertEqual(
+            PersonalHubConfigurationMutation.decodeActionValue(
+                try XCTUnwrap(mutation.encodedActionValue())
+            ),
+            mutation
+        )
+    }
+
+    func testDayProgressUsesTheProvidedLocalCalendarDay() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: -8 * 60 * 60)!
+        let now = Date(timeIntervalSince1970: 1_735_718_400) // 2025-01-01 08:00:00Z
+
+        XCTAssertEqual(
+            PersonalHubConfiguration.dayProgress(at: now, calendar: calendar),
+            0,
+            accuracy: 0.0001
         )
     }
 }

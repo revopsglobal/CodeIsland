@@ -29,6 +29,7 @@ final class RemoteApprovalService: ObservableObject {
     private let tailscaleConfigurator: @Sendable (Int, Int) throws -> String
     private var pairAttemptLimiter = RemotePairAttemptLimiter()
     private var lastPendingIDs: Set<String> = []
+    private var lastPendingQuestionIDs: Set<String> = []
     private var sleepActivity: NSObjectProtocol?
 
     init(
@@ -131,6 +132,17 @@ final class RemoteApprovalService: ObservableObject {
         syncPublishedState()
     }
 
+    /// Keeps the code shown in Settings usable. Pairing codes deliberately
+    /// expire after ten minutes, but an expired value should never remain the
+    /// primary code presented to the user.
+    @discardableResult
+    func ensureActivePairingCode(at date: Date = Date()) -> Bool {
+        guard deviceStore.ensureActivePairingCode(at: date) else { return false }
+        pairAttemptLimiter.reset()
+        syncPublishedState()
+        return true
+    }
+
     func revokeDevice(id: String) {
         deviceStore.revoke(deviceID: id)
         syncPublishedState()
@@ -142,17 +154,45 @@ final class RemoteApprovalService: ObservableObject {
     func stateDidChange() {
         guard let appState else { return }
         let currentIDs = Set(appState.permissionQueue.map(\.id))
-        updateSleepActivity(hasPending: !currentIDs.isEmpty)
+        let currentQuestionIDs = Set(appState.questionQueue.map(\.id))
+        updateSleepActivity(hasPending: !currentIDs.isEmpty || !currentQuestionIDs.isEmpty)
 
         let newIDs = currentIDs.subtracting(lastPendingIDs)
+        let resolvedIDs = lastPendingIDs.subtracting(currentIDs)
+        let newQuestionIDs = currentQuestionIDs.subtracting(lastPendingQuestionIDs)
+        let resolvedQuestionIDs = lastPendingQuestionIDs.subtracting(currentQuestionIDs)
         lastPendingIDs = currentIDs
-        guard !newIDs.isEmpty else { return }
+        lastPendingQuestionIDs = currentQuestionIDs
 
         for request in appState.permissionQueue where newIDs.contains(request.id) {
             APNSNotificationSender.shared.notify(
                 requestID: request.id,
-                source: AppState.sourceLabel(for: request.event),
-                tool: request.event.toolName ?? "Approval",
+                kind: .approval,
+                state: .pending,
+                devices: deviceStore.devices
+            )
+        }
+        for request in appState.questionQueue where newQuestionIDs.contains(request.id) {
+            APNSNotificationSender.shared.notify(
+                requestID: request.id,
+                kind: .question,
+                state: .pending,
+                devices: deviceStore.devices
+            )
+        }
+        for requestID in resolvedIDs {
+            APNSNotificationSender.shared.notify(
+                requestID: requestID,
+                kind: .approval,
+                state: .resolved,
+                devices: deviceStore.devices
+            )
+        }
+        for requestID in resolvedQuestionIDs {
+            APNSNotificationSender.shared.notify(
+                requestID: requestID,
+                kind: .question,
+                state: .resolved,
                 devices: deviceStore.devices
             )
         }
@@ -267,7 +307,11 @@ final class RemoteApprovalService: ObservableObject {
         }
 
         if request.method == "GET", request.path == "/api/approvals" {
-            let snapshot = coordinator.snapshot(appState: appState, deviceID: authenticated.id)
+            let snapshot = coordinator.snapshot(
+                appState: appState,
+                deviceID: authenticated.id,
+                companionSequence: AppleCompanionPublisher.shared.currentSequence
+            )
             return .json(status: 200, encodable: snapshot)
         }
 
@@ -285,7 +329,9 @@ final class RemoteApprovalService: ObservableObject {
             }
             let snapshot = personalHub.snapshot(
                 appState: appState,
-                requestedMode: snapshotRequest.requestedMode
+                requestedMode: snapshotRequest.requestedMode,
+                calendarReferenceDate: snapshotRequest.calendarReferenceDate,
+                calendarSelectedDate: snapshotRequest.calendarSelectedDate
             )
             return .json(status: 200, encodable: snapshot)
         }
@@ -521,16 +567,23 @@ final class RemoteApprovalDeviceStore {
         rotatePairingCode()
     }
 
-    func rotatePairingCode() {
+    func rotatePairingCode(at date: Date = Date()) {
         var bytes = [UInt8](repeating: 0, count: 4)
         guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else {
             pairingCode = String(format: "%06d", Int.random(in: 0...999_999))
-            pairingExpiresAt = Date().addingTimeInterval(600)
+            pairingExpiresAt = date.addingTimeInterval(600)
             return
         }
         let value = bytes.reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
         pairingCode = String(format: "%06d", Int(value % 1_000_000))
-        pairingExpiresAt = Date().addingTimeInterval(600)
+        pairingExpiresAt = date.addingTimeInterval(600)
+    }
+
+    @discardableResult
+    func ensureActivePairingCode(at date: Date = Date()) -> Bool {
+        guard date >= pairingExpiresAt else { return false }
+        rotatePairingCode(at: date)
+        return true
     }
 
     func pair(_ request: RemotePairRequest) -> RemotePairResponse? {
@@ -668,7 +721,11 @@ final class RemoteApprovalCoordinator {
             .appendingPathComponent("remote-approval-audit.jsonl")
     }
 
-    func snapshot(appState: AppState, deviceID: String) -> RemoteApprovalSnapshot {
+    func snapshot(
+        appState: AppState,
+        deviceID: String,
+        companionSequence: UInt64? = nil
+    ) -> RemoteApprovalSnapshot {
         let now = Date()
 
         let approvals = appState.permissionQueue.map { request -> RemoteApprovalItem in
@@ -745,6 +802,7 @@ final class RemoteApprovalCoordinator {
         }
         return RemoteApprovalSnapshot(
             serverName: Host.current().localizedName ?? "CodeIsland Mac",
+            companionSequence: companionSequence,
             approvals: approvals,
             questions: questions
         )

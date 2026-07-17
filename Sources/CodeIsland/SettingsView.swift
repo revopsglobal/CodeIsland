@@ -581,7 +581,6 @@ private struct BehaviorPage: View {
     @AppStorage(SettingsKey.hapticOnHover) private var hapticOnHover = SettingsDefaults.hapticOnHover
     @AppStorage(SettingsKey.hapticIntensity) private var hapticIntensity = SettingsDefaults.hapticIntensity
     @AppStorage(SettingsKey.sessionTimeout) private var sessionTimeout = SettingsDefaults.sessionTimeout
-    @AppStorage(SettingsKey.rotationInterval) private var rotationInterval = SettingsDefaults.rotationInterval
     @AppStorage(SettingsKey.maxToolHistory) private var maxToolHistory = SettingsDefaults.maxToolHistory
     @AppStorage(SettingsKey.autoApproveTools) private var autoApproveRaw: String = SettingsDefaults.autoApproveTools
     @AppStorage(SettingsKey.excludedHookCwdSubstrings) private var excludedHookCwdSubstrings: String = SettingsDefaults.excludedHookCwdSubstrings
@@ -732,15 +731,6 @@ private struct BehaviorPage: View {
                 } label: {
                     Text(l10n["session_cleanup"])
                     Text(l10n["session_cleanup_desc"])
-                }
-                Picker(selection: $rotationInterval) {
-                    Text(l10n["3_seconds"]).tag(3)
-                    Text(l10n["5_seconds"]).tag(5)
-                    Text(l10n["8_seconds"]).tag(8)
-                    Text(l10n["10_seconds"]).tag(10)
-                } label: {
-                    Text(l10n["rotation_interval"])
-                    Text(l10n["rotation_interval_desc"])
                 }
                 Picker(selection: $maxToolHistory) {
                     Text("10").tag(10)
@@ -1902,9 +1892,17 @@ private struct BuddyPage: View {
                     Text(remoteApprovals.pairingCode)
                         .font(.system(size: 28, weight: .bold, design: .monospaced))
                         .textSelection(.enabled)
-                    Text(pairingExpiryText)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        Text(pairingExpiryText(at: context.date))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .onChange(of: context.date) { _, date in
+                                remoteApprovals.ensureActivePairingCode(at: date)
+                            }
+                    }
+                }
+                .onAppear {
+                    remoteApprovals.ensureActivePairingCode()
                 }
 
                 Button {
@@ -1982,7 +1980,7 @@ private struct BuddyPage: View {
                         .textSelection(.enabled)
                 }
 
-                Text("The private key stays on this Mac. Push messages contain only the agent and tool name; Buddy fetches the live request over Tailscale after you open it.")
+                Text("The private key stays on this Mac. Push messages contain only an opaque request ID and state; Buddy fetches the private details over authenticated Tailscale HTTPS after you open it.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -2037,9 +2035,9 @@ private struct BuddyPage: View {
         return appleCompanion.connectedPeerNames.isEmpty ? .orange : .green
     }
 
-    private var pairingExpiryText: String {
-        let seconds = max(0, Int(remoteApprovals.pairingExpiresAt.timeIntervalSinceNow))
-        return seconds > 0 ? "Expires in \(seconds / 60):\(String(format: "%02d", seconds % 60))" : "Expired — create a new code"
+    private func pairingExpiryText(at date: Date) -> String {
+        let seconds = max(0, Int(remoteApprovals.pairingExpiresAt.timeIntervalSince(date)))
+        return "Active for \(seconds / 60):\(String(format: "%02d", seconds % 60))"
     }
 
     private func chooseAPNSPrivateKey() {

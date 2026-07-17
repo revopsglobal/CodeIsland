@@ -182,7 +182,6 @@ final class AppState {
         guard let rid = rotatingSessionId else { return nil }
         return sessions[rid]
     }
-    private var rotationTimer: Timer?
 
     private func startCleanupTimer() {
         guard cleanupTimer == nil else { return }
@@ -619,16 +618,15 @@ final class AppState {
     private var cachedActiveIds: [String] = []
 
     private func refreshActiveIds() {
-        cachedActiveIds = sessions
-            .filter { $0.value.status != .idle }
-            .sorted { a, b in
-                let pa = statusPriority(a.value.status)
-                let pb = statusPriority(b.value.status)
-                if pa != pb { return pa > pb }
-                // Same priority — most recently active first
-                return a.value.lastActivity > b.value.lastActivity
+        cachedActiveIds = SessionAttentionRouter.orderedSessionIDs(
+            sessions.map { sessionID, session in
+                SessionAttentionCandidate(
+                    id: sessionID,
+                    status: session.status,
+                    lastActivity: session.lastActivity
+                )
             }
-            .map(\.key)
+        )
     }
 
     /// Higher = more urgent, shown first in rotation
@@ -645,50 +643,26 @@ final class AppState {
     private func startRotationIfNeeded() {
         refreshActiveIds()
         if cachedActiveIds.count > 1 {
-            // If the most urgent session changed, snap to it immediately
-            if let top = cachedActiveIds.first, top != rotatingSessionId {
-                let topStatus = sessions[top]?.status ?? .idle
-                let currentStatus = rotatingSessionId.flatMap { sessions[$0]?.status } ?? .idle
-                if statusPriority(topStatus) > statusPriority(currentStatus) {
-                    rotatingSessionId = top
-                }
-            }
-            if rotatingSessionId == nil || !cachedActiveIds.contains(rotatingSessionId!) {
-                rotatingSessionId = cachedActiveIds.first
-            }
-            if rotationTimer == nil {
-                let interval = TimeInterval(max(1, SettingsManager.shared.rotationInterval))
-                rotationTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
-                    Task { @MainActor in
-                        self?.rotateToNextSession()
-                    }
-                }
-            }
+            rotatingSessionId = SessionAttentionRouter.preferredSessionID(
+                candidates: sessions.map { sessionID, session in
+                    SessionAttentionCandidate(
+                        id: sessionID,
+                        status: session.status,
+                        lastActivity: session.lastActivity
+                    )
+                },
+                currentSessionID: rotatingSessionId,
+                selectedSessionID: activeSessionId
+            )
         } else {
-            rotationTimer?.invalidate()
-            rotationTimer = nil
             rotatingSessionId = nil
-            // When rotation stops, ensure activeSessionId points to the remaining
+            // When routing stops, ensure activeSessionId points to the remaining
             // active session (if any) so the collapsed bar doesn't stick on an idle one.
             if let active = cachedActiveIds.first,
                activeSessionId != active {
                 activeSessionId = active
             }
         }
-    }
-
-    private func rotateToNextSession() {
-        guard cachedActiveIds.count > 1 else {
-            rotatingSessionId = nil
-            return
-        }
-        if let current = rotatingSessionId, let idx = cachedActiveIds.firstIndex(of: current) {
-            rotatingSessionId = cachedActiveIds[(idx + 1) % cachedActiveIds.count]
-        } else {
-            rotatingSessionId = cachedActiveIds.first
-        }
-        ESP32StatePublisher.shared.notifyDirty()
-        AppleCompanionPublisher.shared.notifyDirty()
     }
 
     /// Start monitoring the CLI process for a session.
@@ -2906,7 +2880,6 @@ final class AppState {
 
     deinit {
         MainActor.assumeIsolated {
-            rotationTimer?.invalidate()
             cleanupTimer?.invalidate()
             saveTimer?.invalidate()
             if let stream = fsEventStream {

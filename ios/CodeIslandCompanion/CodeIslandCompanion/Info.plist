@@ -2,6 +2,17 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.revopsglobal.codeisland.buddy</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>codeisland</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleDisplayName</key>
 	<string>CodeIsland Buddy</string>
 	<key>CFBundleExecutable</key>
@@ -29,7 +40,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>CodeIsland Buddy uses the front camera only for your private camera pre-check preview.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>CodeIsland Buddy uses the microphone only while you dictate a private Claude request.</string>
+	<string>CodeIsland Buddy uses the microphone only while you run a private local microphone pre-check or dictate a private Claude request.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>CodeIsland Buddy turns your dictated Claude request into text for you to review before sending.</string>
 	<key>NSSupportsLiveActivities</key>

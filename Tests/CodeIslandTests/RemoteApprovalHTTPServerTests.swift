@@ -156,6 +156,110 @@ final class RemoteApprovalHTTPServerTests: XCTestCase {
         XCTAssertEqual(traversal.response.statusCode, 404)
     }
 
+    func testAuthenticatedShelfTransferIsPrivateAndSuppressesOverLimitAction() async throws {
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CodeIslandShelfE2E-\(UUID().uuidString)", isDirectory: true)
+        let shelfDirectory = temporaryDirectory.appendingPathComponent("Shelf", isDirectory: true)
+        let desktopDirectory = temporaryDirectory.appendingPathComponent("Desktop", isDirectory: true)
+        try FileManager.default.createDirectory(at: shelfDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: desktopDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let suite = "RemoteApprovalHTTPServerTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        let capture = ShelfCaptureController(
+            storageDirectory: shelfDirectory,
+            screenshotDirectory: desktopDirectory
+        )
+        let data = PersonalHubDataModel(defaults: defaults, shelfCaptureController: capture)
+        let expectedBody = Data("private Shelf handoff".utf8)
+        let transferable = shelfDirectory.appendingPathComponent("handoff.txt")
+        try expectedBody.write(to: transferable)
+        try capture.completeCapture(at: transferable, source: .drop)
+        let oversized = shelfDirectory.appendingPathComponent("over-limit.mov")
+        _ = FileManager.default.createFile(atPath: oversized.path, contents: Data())
+        let oversizedHandle = try FileHandle(forWritingTo: oversized)
+        try oversizedHandle.truncate(
+            atOffset: UInt64(PersonalUtilitiesModel.maximumRemoteTransferBytes + 1)
+        )
+        try oversizedHandle.close()
+        try capture.completeCapture(at: oversized, source: .recording)
+
+        let hub = PersonalHubService(data: data)
+        let service = RemoteApprovalService(
+            deviceStore: RemoteApprovalDeviceStore(
+                stateURL: temporaryDirectory.appendingPathComponent("devices.json")
+            ),
+            coordinator: RemoteApprovalCoordinator(
+                auditURL: temporaryDirectory.appendingPathComponent("audit.jsonl")
+            ),
+            personalHub: hub,
+            localPortOverride: 0,
+            enabledOverride: true,
+            tailscaleConfigurator: { _, _ in "https://codeisland-shelf-e2e.invalid" }
+        )
+        let appState = AppState()
+        service.start(appState: appState)
+        defer { service.stop() }
+        let port = try await waitForPort(service)
+
+        let paired = try await send(
+            port: port,
+            method: "POST",
+            path: "/api/pair",
+            body: try encode(RemotePairRequest(code: service.pairingCode, deviceName: "Shelf E2E iPhone"))
+        )
+        let pair = try decode(RemotePairResponse.self, from: paired.data)
+        let result = try await send(
+            port: port,
+            method: "POST",
+            path: "/api/hub/snapshot",
+            bearer: pair.deviceToken,
+            body: try encode(PersonalHubSnapshotRequest(requestedMode: .code))
+        )
+        let snapshot = try decode(PersonalHubSnapshot.self, from: result.data)
+        let shelf = try XCTUnwrap(snapshot.modules.first(where: { $0.id == .shelf }))
+        let transferableItem = try XCTUnwrap(shelf.items.first(where: { $0.title == "handoff.txt" }))
+        let oversizedItem = try XCTUnwrap(shelf.items.first(where: { $0.title == "over-limit.mov" }))
+        XCTAssertNotNil(transferableItem.actions.first(where: { $0.id == "downloadToDevice" }))
+        XCTAssertNil(oversizedItem.actions.first(where: { $0.id == "downloadToDevice" }))
+
+        var pathAllowed = CharacterSet.urlPathAllowed
+        pathAllowed.remove(charactersIn: "/")
+        let encodedID = try XCTUnwrap(
+            transferableItem.id.addingPercentEncoding(withAllowedCharacters: pathAllowed)
+        )
+        let transferred = try await send(
+            port: port,
+            method: "GET",
+            path: "/api/hub/shelf/\(encodedID)/file",
+            bearer: pair.deviceToken
+        )
+        XCTAssertEqual(transferred.response.statusCode, 200)
+        XCTAssertEqual(transferred.data, expectedBody)
+
+        let oversizedID = try XCTUnwrap(
+            oversizedItem.id.addingPercentEncoding(withAllowedCharacters: pathAllowed)
+        )
+        let rejected = try await send(
+            port: port,
+            method: "GET",
+            path: "/api/hub/shelf/\(oversizedID)/file",
+            bearer: pair.deviceToken
+        )
+        XCTAssertEqual(rejected.response.statusCode, 413)
+
+        let outsideID = try XCTUnwrap("/etc/hosts".addingPercentEncoding(withAllowedCharacters: pathAllowed))
+        let traversal = try await send(
+            port: port,
+            method: "GET",
+            path: "/api/hub/shelf/\(outsideID)/file",
+            bearer: pair.deviceToken
+        )
+        XCTAssertEqual(traversal.response.statusCode, 404)
+    }
+
     func testAuthenticatedHostLifecycleOverRealListener() async throws {
         let temporaryDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("CodeIslandRemoteE2E-(UUID().uuidString)", isDirectory: true)
@@ -164,10 +268,14 @@ final class RemoteApprovalHTTPServerTests: XCTestCase {
 
         let stateURL = temporaryDirectory.appendingPathComponent("devices.json")
         let auditURL = temporaryDirectory.appendingPathComponent("audit.jsonl")
+        let configurationURL = temporaryDirectory.appendingPathComponent("hub-configuration.json")
         let deviceStore = RemoteApprovalDeviceStore(stateURL: stateURL)
+        let configurationStore = PersonalHubConfigurationStore(stateURL: configurationURL)
+        let personalHub = PersonalHubService(configurationStore: configurationStore)
         let service = RemoteApprovalService(
             deviceStore: deviceStore,
             coordinator: RemoteApprovalCoordinator(auditURL: auditURL),
+            personalHub: personalHub,
             localPortOverride: 0,
             enabledOverride: true,
             tailscaleConfigurator: { _, _ in "https://codeisland-e2e.invalid" }
@@ -185,6 +293,10 @@ final class RemoteApprovalHTTPServerTests: XCTestCase {
         XCTAssertTrue(
             root.response.value(forHTTPHeaderField: "Content-Security-Policy")?.contains("frame-ancestors 'none'") == true
         )
+        let webApp = try XCTUnwrap(String(data: root.data, encoding: .utf8))
+        XCTAssertTrue(webApp.contains("id=\"hubConfig\""))
+        XCTAssertTrue(webApp.contains("setModeRack"))
+        XCTAssertTrue(webApp.contains("setDashboard"))
 
         let unauthenticated = try await send(port: port, method: "GET", path: "/api/hub")
         XCTAssertEqual(unauthenticated.response.statusCode, 401)
@@ -222,6 +334,81 @@ final class RemoteApprovalHTTPServerTests: XCTestCase {
             XCTAssertEqual(snapshot.resolvedMode, mode)
             XCTAssertEqual(snapshot.modules.map(\.id), PersonalHubCatalog.modules(for: mode))
         }
+
+        let configuredWorkRack: [PersonalHubModuleID] = [.reminders, .calendar, .downloads]
+        let rackIntent = PersonalHubActionIntent(
+            moduleID: .quickToggles,
+            actionID: "setModeRack",
+            value: PersonalHubConfigurationMutation(
+                mode: .work,
+                modules: configuredWorkRack
+            ).encodedActionValue()
+        )
+        let preparedRack = try decode(
+            PersonalHubPreparedAction.self,
+            from: try await send(
+                port: port,
+                method: "POST",
+                path: "/api/hub/actions/prepare",
+                bearer: pair.deviceToken,
+                body: try encode(PersonalHubPrepareActionRequest(intent: rackIntent))
+            ).data
+        )
+        let savedRack = try await send(
+            port: port,
+            method: "POST",
+            path: "/api/hub/actions/execute",
+            bearer: pair.deviceToken,
+            body: try encode(PersonalHubExecuteActionRequest(
+                intent: rackIntent,
+                actionToken: preparedRack.actionToken
+            ))
+        )
+        XCTAssertEqual(savedRack.response.statusCode, 200)
+
+        let dashboardIntent = PersonalHubActionIntent(
+            moduleID: .quickToggles,
+            actionID: "setDashboard",
+            value: PersonalHubConfigurationMutation(dashboardEnabled: false).encodedActionValue()
+        )
+        let preparedDashboard = try decode(
+            PersonalHubPreparedAction.self,
+            from: try await send(
+                port: port,
+                method: "POST",
+                path: "/api/hub/actions/prepare",
+                bearer: pair.deviceToken,
+                body: try encode(PersonalHubPrepareActionRequest(intent: dashboardIntent))
+            ).data
+        )
+        let savedDashboard = try await send(
+            port: port,
+            method: "POST",
+            path: "/api/hub/actions/execute",
+            bearer: pair.deviceToken,
+            body: try encode(PersonalHubExecuteActionRequest(
+                intent: dashboardIntent,
+                actionToken: preparedDashboard.actionToken
+            ))
+        )
+        XCTAssertEqual(savedDashboard.response.statusCode, 200)
+
+        let configuredSnapshotResult = try await send(
+            port: port,
+            method: "POST",
+            path: "/api/hub/snapshot",
+            bearer: pair.deviceToken,
+            body: try encode(PersonalHubSnapshotRequest(requestedMode: .work))
+        )
+        let configuredSnapshot = try decode(PersonalHubSnapshot.self, from: configuredSnapshotResult.data)
+        XCTAssertEqual(configuredSnapshot.modules.map(\.id), configuredWorkRack)
+        XCTAssertEqual(configuredSnapshot.configuration?.rack(for: .work), configuredWorkRack)
+        XCTAssertEqual(configuredSnapshot.configuration?.dashboardEnabled, false)
+        XCTAssertNotNil(configuredSnapshot.dayProgress)
+
+        let reloadedConfiguration = PersonalHubConfigurationStore(stateURL: configurationURL).configuration
+        XCTAssertEqual(reloadedConfiguration.rack(for: .work), configuredWorkRack)
+        XCTAssertEqual(reloadedConfiguration.dashboardEnabled, false)
 
         let event = try makePermissionRequestEvent(sessionID: "remote-e2e", toolName: "Bash")
         let permissionResponse = Task<Data, Never> {
@@ -373,6 +560,21 @@ final class RemoteApprovalHTTPServerTests: XCTestCase {
         XCTAssertEqual(registered.response.statusCode, 200)
         XCTAssertEqual(deviceStore.devices.first?.pushToken, pushToken)
         XCTAssertEqual(deviceStore.devices.first?.pushEnvironment, "production")
+
+        let rotatedPushToken = String(repeating: "b", count: 64)
+        let rotated = try await send(
+            port: port,
+            method: "POST",
+            path: "/api/push-token",
+            bearer: pair.deviceToken,
+            body: try encode(RemotePushRegistrationRequest(
+                token: rotatedPushToken,
+                environment: "development"
+            ))
+        )
+        XCTAssertEqual(rotated.response.statusCode, 200)
+        XCTAssertEqual(deviceStore.devices.first?.pushToken, rotatedPushToken)
+        XCTAssertEqual(deviceStore.devices.first?.pushEnvironment, "development")
 
         let audit = try String(contentsOf: auditURL, encoding: .utf8)
         XCTAssertTrue(audit.contains("\"event\":\"pair\""))

@@ -120,6 +120,22 @@ final class GlancesModelTests: XCTestCase {
         }
     }
 
+    func testRecurringCalendarInstancesReceiveStableDistinctIDs() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "America/Los_Angeles"))
+        let first = try XCTUnwrap(calendar.date(from: DateComponents(
+            year: 2026, month: 7, day: 20, hour: 9
+        )))
+        let second = try XCTUnwrap(calendar.date(byAdding: .weekOfYear, value: 1, to: first))
+
+        let firstID = GlancesModel.eventInstanceID(eventIdentifier: "recurring-series", start: first)
+        let repeatedID = GlancesModel.eventInstanceID(eventIdentifier: "recurring-series", start: first)
+        let secondID = GlancesModel.eventInstanceID(eventIdentifier: "recurring-series", start: second)
+
+        XCTAssertEqual(firstID, repeatedID)
+        XCTAssertNotEqual(firstID, secondID)
+    }
+
     func testGeocodingURLExtractsZIPFromNaturalLocationInput() throws {
         let url = try XCTUnwrap(GlancesModel.geocodingURL(for: "San Francisco 94107"))
         let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
