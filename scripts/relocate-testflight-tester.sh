@@ -58,11 +58,12 @@ if [[ -z "$remove_app_id" ]]; then
 fi
 
 testers="$(asc_request GET /v1/betaTesters "" \
-    "filter[email]=$TESTER_EMAIL" "fields[betaTesters]=email,state" "limit=200")"
+    "filter[email]=$TESTER_EMAIL" "filter[apps]=$add_app_id" \
+    "fields[betaTesters]=email,state" "limit=200")"
 tester_email_lower="$(printf '%s' "$TESTER_EMAIL" | tr '[:upper:]' '[:lower:]')"
 tester_id="$(printf '%s' "$testers" | jq -r --arg email "$tester_email_lower" \
     '.data[] | select((.attributes.email // "" | ascii_downcase) == $email) | .id' | head -n 1)"
-[[ -n "$tester_id" ]] || { echo "::error::No TestFlight tester found for $TESTER_EMAIL"; exit 1; }
+[[ -n "$tester_id" ]] || { echo "::error::No $add_app_name TestFlight tester found for $TESTER_EMAIL"; exit 1; }
 
 add_groups="$(asc_request GET "/v1/apps/$add_app_id/betaGroups" "" \
     "fields[betaGroups]=name,isInternalGroup,hasAccessToAllBuilds" "limit=200")"

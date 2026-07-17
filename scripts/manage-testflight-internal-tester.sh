@@ -191,6 +191,7 @@ fi
 
 testers_response="$(asc_request GET /v1/betaTesters "" \
     "filter[email]=$TESTER_EMAIL" \
+    "filter[apps]=$app_id" \
     "fields[betaTesters]=email,firstName,lastName,state" \
     "limit=200")"
 tester_email_lower="$(printf '%s' "$TESTER_EMAIL" | tr '[:upper:]' '[:lower:]')"
