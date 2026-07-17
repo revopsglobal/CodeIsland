@@ -18,25 +18,25 @@ enum CompanionStatus: String, Codable, Hashable {
 
     var label: String {
         switch self {
-        case .idle: return "空闲"
-        case .processing: return "处理中"
-        case .running: return "运行中"
-        case .waitingApproval: return "等待批准"
-        case .waitingQuestion: return "等待回答"
+        case .idle: return "Idle"
+        case .processing: return "Processing"
+        case .running: return "Running"
+        case .waitingApproval: return "Waiting for approval"
+        case .waitingQuestion: return "Waiting for answer"
         }
     }
 
     var shortLabel: String {
         switch self {
-        case .idle: return "空闲"
-        case .processing: return "处理"
-        case .running: return "运行"
-        case .waitingApproval: return "批准"
-        case .waitingQuestion: return "问题"
+        case .idle: return "Idle"
+        case .processing: return "Processing"
+        case .running: return "Running"
+        case .waitingApproval: return "Approve"
+        case .waitingQuestion: return "Question"
         }
     }
 
-    /// 与 Mac notch 一致的展示优先级：审批 > 提问 > 运行 > 处理 > 空闲。
+    /// Display priority matching the Mac notch: approval > question > running > processing > idle.
     var priority: Int {
         switch self {
         case .waitingApproval: return 5
@@ -65,8 +65,8 @@ enum CompanionMessageRole: String, Codable {
 
     var label: String {
         switch self {
-        case .user: return "你"
-        case .assistant: return "助手"
+        case .user: return "You"
+        case .assistant: return "Assistant"
         }
     }
 }
@@ -139,7 +139,7 @@ struct CompanionSessionPreview: Codable, Identifiable, Hashable {
     let toolName: String?
     let workspaceName: String?
     let message: String?
-    /// 该会话最近若干条消息（含角色），用于逐会话显示多轮转写。
+    /// The session's most recent messages (with roles), for showing multi-turn transcripts per session.
     let messages: [CompanionMessagePreview]
     let updatedAt: Date
 

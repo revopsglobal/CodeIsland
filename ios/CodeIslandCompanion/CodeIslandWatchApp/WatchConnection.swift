@@ -28,7 +28,7 @@ final class WatchConnection: NSObject, ObservableObject {
         super.init()
 
         guard WCSession.isSupported() else {
-            lastError = "这台设备不支持与 iPhone 同步"
+            lastError = "This device doesn't support syncing with iPhone"
             return
         }
 
@@ -62,7 +62,7 @@ final class WatchConnection: NSObject, ObservableObject {
         WKInterfaceDevice.current().play(.click)
 
         guard WCSession.default.isReachable else {
-            lastError = "iPhone 暂不可达"
+            lastError = "iPhone is unreachable"
             WKInterfaceDevice.current().play(.failure)
             return
         }
@@ -137,7 +137,7 @@ final class WatchConnection: NSObject, ObservableObject {
         lastNotificationSequence = next.sequence
 
         let content = UNMutableNotificationContent()
-        content.title = "\(CompanionDisplayText.source(next.source)) 需要处理"
+        content.title = "\(CompanionDisplayText.source(next.source)) needs attention"
         content.body = next.question?.question
             ?? CompanionDisplayText.message(next.messages.last?.text)
             ?? next.status.label
@@ -175,14 +175,14 @@ final class WatchConnection: NSObject, ObservableObject {
                 toolName: "AskUserQuestion",
                 workspaceName: "fengye",
                 messages: [
-                    CompanionMessagePreview(role: .user, text: "帮我写一篇长篇小说"),
-                    CompanionMessagePreview(role: .assistant, text: "我需要先确认小说类型和基调。")
+                    CompanionMessagePreview(role: .user, text: "Help me write a novel"),
+                    CompanionMessagePreview(role: .assistant, text: "First I need to confirm the novel's genre and tone.")
                 ],
                 pendingAction: .question,
                 question: CompanionQuestionPayload(
-                    header: "小说类型",
-                    question: "你想写什么类型的小说？",
-                    options: ["科幻", "悬疑推理", "都市现实", "奇幻冒险"],
+                    header: "Novel genre",
+                    question: "What genre of novel do you want to write?",
+                    options: ["Sci-fi", "Mystery", "Urban realism", "Fantasy adventure"],
                     descriptions: [],
                     index: 0,
                     total: 3,
@@ -200,9 +200,9 @@ final class WatchConnection: NSObject, ObservableObject {
                 toolName: "WebSearch",
                 workspaceName: "workspace",
                 messages: [
-                    CompanionMessagePreview(role: .user, text: "重点测试退到后台之后灵动岛和手表还能不能收到新消息"),
-                    CompanionMessagePreview(role: .assistant, text: "我会先用模拟器验证 UI 和本地同步路径，再把真机 BLE 后台唤醒列成单独验收项。"),
-                    CompanionMessagePreview(role: .assistant, text: "这是一条较长的 watch 动态内容，用来确认滚动页面不会被底部按钮或系统区域裁掉。")
+                    CompanionMessagePreview(role: .user, text: "Focus on testing whether the Dynamic Island and watch still receive new messages after going to the background"),
+                    CompanionMessagePreview(role: .assistant, text: "I'll first verify the UI and local sync path in the simulator, then list real-device BLE background wake as a separate acceptance item."),
+                    CompanionMessagePreview(role: .assistant, text: "This is a longer watch activity entry, used to confirm the scrolling page isn't clipped by the bottom button or system areas.")
                 ],
                 pendingAction: nil,
                 question: nil,

@@ -1,23 +1,23 @@
 import CoreGraphics
 
-/// 单条会话行的高度估算：身份行 + 最多 3 行消息 + 工作指示行 + 内边距。
-/// 用于按看板可用高度决定能完整容纳几条会话。
+/// Estimated height of one session row: identity row + up to 3 message lines + work-indicator row + padding.
+/// Used to decide how many sessions fit fully in the board's available height.
 let standbySessionRowStride: CGFloat = 100
 
-/// 看板标题区 + 顶部内边距的预留高度。
+/// Reserved height for the board's title area + top padding.
 let standbySessionBoardHeaderHeight: CGFloat = 44
 
-/// 单条会话消息固定最多显示的行数（iPad 上消息可展示 3 行）。
+/// Fixed max number of message lines shown per session (up to 3 lines on iPad).
 let standbyMaxMessageLines = 3
 
-/// 看板布局：能完整显示几条会话，以及每条消息的行数上限。
+/// Board layout: how many sessions can be shown in full, and the line limit per message.
 struct StandBySessionBoardLayout: Equatable {
     let visibleCount: Int
     let messageLineLimit: Int
 }
 
-/// 依据看板可用高度与会话总数，决定显示几条会话；消息统一最多 3 行。
-/// 放不下的会话由调用方显示「还有 N 个」（或分组模式滚动展示）。
+/// Based on the board's available height and total session count, decide how many sessions to show; messages are capped at 3 lines.
+/// Sessions that don't fit are shown by the caller as "N more" (or scrolled in grouped mode).
 func standbySessionBoardLayout(boardHeight: CGFloat, sessionCount: Int) -> StandBySessionBoardLayout {
     let usable = max(0, boardHeight - standbySessionBoardHeaderHeight)
     let maxRows = max(1, Int(usable / standbySessionRowStride))

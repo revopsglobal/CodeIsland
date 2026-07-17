@@ -395,7 +395,10 @@ extension AppState {
             return lhs.value.lastActivity > rhs.value.lastActivity
         }
 
-        return sorted.prefix(5).map { sessionId, session in
+        // Local-network payload (phone app foreground): publish up to 20 sessions so
+        // heavy multi-session users see all their work, not just the top 5. The BLE
+        // background summary stays capped lower for bandwidth. (#buddy-session-cap)
+        return sorted.prefix(20).map { sessionId, session in
             let messages = session.recentMessages.suffix(2).compactMap { message -> AppleCompanionMessagePreview? in
                 let text = Self.appleCompanionPreviewText(message.text)
                 guard !text.isEmpty else { return nil }

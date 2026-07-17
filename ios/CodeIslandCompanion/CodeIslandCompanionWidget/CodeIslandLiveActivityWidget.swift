@@ -95,7 +95,7 @@ private struct SingleSessionLockScreenActivityView: View {
                     .foregroundStyle(.white.opacity(0.82))
                     .lineLimit(2)
             } else {
-                Text("当前没有新的消息")
+                Text("No new messages")
                     .font(.system(size: 15, weight: .medium, design: .rounded))
                     .foregroundStyle(.white.opacity(0.55))
                     .lineLimit(1)
@@ -145,9 +145,9 @@ private struct MultiSessionLockScreenActivityView: View {
 
     private var sessionSummary: String {
         if state.activeSessionCount > 0 {
-            return "\(sessions.count) 个会话 · \(state.activeSessionCount) 个活跃"
+            return "\(sessions.count) sessions · \(state.activeSessionCount) active"
         }
-        return "\(sessions.count) 个会话同步中"
+        return "\(sessions.count) sessions syncing"
     }
 }
 
@@ -171,7 +171,7 @@ private struct CompactSessionCountPill: View {
     var body: some View {
         HStack(spacing: 5) {
             StatusDot(status: activeCount > 0 ? "running" : "idle", size: 7)
-            Text(activeCount > 0 ? "\(activeCount) 活跃" : "\(count) 会话")
+            Text(activeCount > 0 ? "\(activeCount) active" : "\(count) sessions")
                 .font(.system(size: 11, weight: .black, design: .rounded))
                 .foregroundStyle(.white)
                 .lineLimit(1)
@@ -287,14 +287,14 @@ private struct ExpandedSessionOverview: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                Text("\(sessions.count) 个会话")
+                Text("\(sessions.count) sessions")
                     .font(.caption2.weight(.black))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 7)
                     .padding(.vertical, 3)
                     .background(Color.white.opacity(0.12), in: Capsule())
                 if state.activeSessionCount > 0 {
-                    Text("\(state.activeSessionCount) 活跃")
+                    Text("\(state.activeSessionCount) active")
                         .font(.caption2.weight(.black))
                         .foregroundStyle(.green)
                         .padding(.horizontal, 7)
@@ -362,7 +362,7 @@ private struct CompactStatusView: View {
     var body: some View {
         HStack(spacing: 3) {
             StatusDot(status: state.status, size: 6)
-            Text(displaySessions(state).count > 1 ? "会话" : state.compactStatusLabel)
+            Text(displaySessions(state).count > 1 ? "Sessions" : state.compactStatusLabel)
                 .font(.system(size: 9, weight: .black, design: .rounded))
                 .foregroundStyle(.white)
                 .lineLimit(1)
@@ -403,7 +403,7 @@ private struct SessionCountPill: View {
     var body: some View {
         HStack(spacing: 6) {
             StatusDot(status: activeCount > 0 ? "running" : "idle", size: 8)
-            Text(activeCount > 0 ? "\(activeCount) 个活跃" : "\(count) 个会话")
+            Text(activeCount > 0 ? "\(activeCount) active" : "\(count) sessions")
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.white)
         }
@@ -534,10 +534,10 @@ private struct CompactChip: View {
 
 private func compactStatusText(_ state: CodeIslandActivityAttributes.ContentState) -> String {
     switch state.status {
-    case "waitingApproval": return "批"
-    case "waitingQuestion": return "问"
-    case "processing": return "跑"
-    case "running": return state.toolName?.prefix(1).uppercased() ?? "跑"
+    case "waitingApproval": return "Approve"
+    case "waitingQuestion": return "Ask"
+    case "processing": return "Run"
+    case "running": return state.toolName?.prefix(1).uppercased() ?? "Run"
     default: return ""
     }
 }

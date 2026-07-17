@@ -195,7 +195,7 @@ final class CompanionConnection: NSObject, ObservableObject {
         let age = now.timeIntervalSince(reference)
 
         if age >= Self.reconnectAfterSeconds {
-            lastError = "连接在线但长时间没有状态更新，正在重新连接 Mac"
+            lastError = "Connected but no status updates for a while; reconnecting to Mac"
             pendingReconnectPeer = connectedPeer
             session.disconnect()
             self.connectedPeer = nil
@@ -247,8 +247,8 @@ final class CompanionConnection: NSObject, ObservableObject {
 
     private static func mockState(named name: String, sequence: UInt64? = nil) -> CompanionStatePayload {
         let baseMessages = [
-            CompanionMessagePreview(role: .user, text: "帮我生成一篇长篇小说"),
-            CompanionMessagePreview(role: .assistant, text: "好的，我先确认一下类型和篇幅，再开始组织结构。")
+            CompanionMessagePreview(role: .user, text: "Help me write a novel"),
+            CompanionMessagePreview(role: .assistant, text: "Sure, let me confirm the genre and length first, then start organizing the structure.")
         ]
         let resolvedSequence = sequence ?? 1000
 
@@ -265,14 +265,14 @@ final class CompanionConnection: NSObject, ObservableObject {
                 messages: baseMessages,
                 pendingAction: .question,
                 question: CompanionQuestionPayload(
-                    header: "小说类型",
-                    question: "你想看什么类型的小说？",
-                    options: ["都市 / 现实", "科幻", "悬疑 / 推理", "奇幻 / 玄幻"],
+                    header: "Genre",
+                    question: "What genre of novel do you want to read?",
+                    options: ["Urban / Realistic", "Sci-Fi", "Suspense / Mystery", "Fantasy / Xianxia"],
                     descriptions: [
-                        "现代都市、职场情感、现实生活",
-                        "未来科技、AI、太空、时间旅行",
-                        "犯罪侦查、谜团解谜、心理悬疑",
-                        "魔法世界、修真、异世界冒险"
+                        "Modern city, workplace romance, everyday life",
+                        "Future tech, AI, space, time travel",
+                        "Crime investigation, puzzle-solving, psychological suspense",
+                        "Magic worlds, cultivation, other-world adventures"
                     ],
                     index: 1,
                     total: 4,
@@ -290,7 +290,7 @@ final class CompanionConnection: NSObject, ObservableObject {
                 toolName: nil,
                 workspaceName: "workspace",
                 messages: [
-                    CompanionMessagePreview(role: .user, text: "帮我生成一篇长篇小说"),
+                    CompanionMessagePreview(role: .user, text: "Help me write a novel"),
                     CompanionMessagePreview(role: .assistant, text: "[Request interrupted by user]")
                 ],
                 pendingAction: nil,
@@ -307,9 +307,9 @@ final class CompanionConnection: NSObject, ObservableObject {
                 toolName: "WebSearch",
                 workspaceName: "workspace",
                 messages: [
-                    CompanionMessagePreview(role: .user, text: "把 iPhone 端所有容易截断的状态都自己跑一遍"),
-                    CompanionMessagePreview(role: .assistant, text: "我会用模拟数据覆盖中断、提问、长文本和实时活动展示，重点检查中文化、滚动区域、最近动态字号以及按钮是否挤压。"),
-                    CompanionMessagePreview(role: .assistant, text: "这是一条故意很长的最近动态，用来确认 iPhone 竖屏里不会被卡片裁掉，也不会因为内部嵌套滚动导致内容看不全。")
+                    CompanionMessagePreview(role: .user, text: "Run through all the iPhone states prone to truncation yourself"),
+                    CompanionMessagePreview(role: .assistant, text: "I'll use mock data to cover interruptions, questions, long text, and the Live Activity display, focusing on localization, scroll regions, the recent-activity font size, and whether buttons get cramped."),
+                    CompanionMessagePreview(role: .assistant, text: "This is a deliberately long recent activity, used to confirm it won't get clipped by the card in iPhone portrait, and that nested internal scrolling won't cut off part of the content.")
                 ],
                 pendingAction: nil,
                 question: nil,
@@ -318,25 +318,25 @@ final class CompanionConnection: NSObject, ObservableObject {
         case "multi":
             let now = Date()
             let previews = [
-                CompanionSessionPreview(sessionId: "s1", source: "claude", status: .waitingQuestion, toolName: "AskUserQuestion", workspaceName: "code-island", message: "你想看什么类型的小说？", messages: [
-                    CompanionMessagePreview(role: .user, text: "帮我生成一篇长篇小说"),
-                    CompanionMessagePreview(role: .assistant, text: "好的，先确认**类型**和篇幅。你想看什么类型的小说？")
+                CompanionSessionPreview(sessionId: "s1", source: "claude", status: .waitingQuestion, toolName: "AskUserQuestion", workspaceName: "code-island", message: "What genre of novel do you want to read?", messages: [
+                    CompanionMessagePreview(role: .user, text: "Help me write a novel"),
+                    CompanionMessagePreview(role: .assistant, text: "Sure, let's confirm the **genre** and length first. What genre of novel do you want to read?")
                 ], updatedAt: now),
-                CompanionSessionPreview(sessionId: "s2", source: "codex", status: .processing, toolName: "WebSearch", workspaceName: "apple-companion", message: "正在检索资料", messages: [
-                    CompanionMessagePreview(role: .user, text: "查一下 SwiftUI `safeAreaInsets` 的用法"),
-                    CompanionMessagePreview(role: .assistant, text: "正在检索资料，稍等。")
+                CompanionSessionPreview(sessionId: "s2", source: "codex", status: .processing, toolName: "WebSearch", workspaceName: "apple-companion", message: "Searching for information", messages: [
+                    CompanionMessagePreview(role: .user, text: "Look up how to use SwiftUI `safeAreaInsets`"),
+                    CompanionMessagePreview(role: .assistant, text: "Searching for information, one moment.")
                 ], updatedAt: now),
-                CompanionSessionPreview(sessionId: "s3", source: "cursor", status: .running, toolName: "Edit", workspaceName: "ios", message: "正在修改 ContentView", messages: [
-                    CompanionMessagePreview(role: .user, text: "把会话卡改成 notch 风格"),
-                    CompanionMessagePreview(role: .assistant, text: "正在修改 `ContentView.swift`，对齐状态着色与多轮转写。")
+                CompanionSessionPreview(sessionId: "s3", source: "cursor", status: .running, toolName: "Edit", workspaceName: "ios", message: "Editing ContentView", messages: [
+                    CompanionMessagePreview(role: .user, text: "Make the session card notch-style"),
+                    CompanionMessagePreview(role: .assistant, text: "Editing `ContentView.swift`, aligning status coloring and multi-turn transcripts.")
                 ], updatedAt: now),
-                CompanionSessionPreview(sessionId: "s4", source: "gemini", status: .waitingApproval, toolName: "Bash", workspaceName: "scripts", message: "请求执行命令", messages: [
-                    CompanionMessagePreview(role: .assistant, text: "请求执行 `npm run build`，是否批准？")
+                CompanionSessionPreview(sessionId: "s4", source: "gemini", status: .waitingApproval, toolName: "Bash", workspaceName: "scripts", message: "Requesting to run a command", messages: [
+                    CompanionMessagePreview(role: .assistant, text: "Requesting to run `npm run build`. Approve?")
                 ], updatedAt: now),
                 CompanionSessionPreview(sessionId: "s5", source: "kimi", status: .idle, toolName: nil, workspaceName: "docs", message: nil, updatedAt: now),
-                CompanionSessionPreview(sessionId: "s6", source: "qwen", status: .processing, toolName: "Read", workspaceName: "server", message: "读取配置", messages: [
-                    CompanionMessagePreview(role: .user, text: "看下服务端配置"),
-                    CompanionMessagePreview(role: .assistant, text: "正在读取 `config.yaml`…")
+                CompanionSessionPreview(sessionId: "s6", source: "qwen", status: .processing, toolName: "Read", workspaceName: "server", message: "Reading config", messages: [
+                    CompanionMessagePreview(role: .user, text: "Check the server config"),
+                    CompanionMessagePreview(role: .assistant, text: "Reading `config.yaml`…")
                 ], updatedAt: now)
             ]
             return CompanionStatePayload(
@@ -348,9 +348,9 @@ final class CompanionConnection: NSObject, ObservableObject {
                 toolName: "AskUserQuestion",
                 workspaceName: "code-island",
                 messages: [
-                    CompanionMessagePreview(role: .user, text: "帮我把看板的会话卡做成和 notch 一致"),
-                    CompanionMessagePreview(role: .assistant, text: "好的，我会对齐**状态着色**、`#id`、time-ago 和 `$ thinking` 工作行。"),
-                    CompanionMessagePreview(role: .assistant, text: "已提交并推送，横屏 hero 现在显示主会话最近 3 条转写。")
+                    CompanionMessagePreview(role: .user, text: "Help me make the dashboard's session cards match the notch"),
+                    CompanionMessagePreview(role: .assistant, text: "Sure, I'll align the **status coloring**, `#id`, time-ago, and the `$ thinking` work row."),
+                    CompanionMessagePreview(role: .assistant, text: "Committed and pushed; the landscape hero now shows the main session's 3 most recent transcripts.")
                 ],
                 pendingAction: nil,
                 question: nil,

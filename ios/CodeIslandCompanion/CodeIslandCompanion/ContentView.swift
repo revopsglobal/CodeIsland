@@ -20,8 +20,8 @@ struct ContentView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            // 内容尊重安全区（不再忽略），元素自动避开状态栏 / 刘海 / Home 指示条；
-            // 背景由下方 .background 忽略安全区铺满整屏。
+            // Content respects the safe area (no longer ignored); elements automatically avoid the status bar / notch / Home indicator.
+            // The .background below ignores the safe area to fill the entire screen.
             ZStack(alignment: .top) {
                 if proxy.size.width > proxy.size.height, let state = connection.latestState {
                     StandByIsland(state: state, availableSize: proxy.size)
@@ -121,7 +121,7 @@ private struct PrimaryMessageView: View {
     var body: some View {
         let text = state.question?.question
             ?? CompanionDisplayText.message(state.messages.last?.text)
-            ?? "当前没有新的消息"
+            ?? "No new messages"
 
         MorphText(
             text: text,
@@ -173,10 +173,10 @@ private struct QuestionOptionsView: View {
 
     var body: some View {
         if question.options.isEmpty {
-            // 纯文本题：直接输入并提交
+            // Free-text question: type and submit directly
             VStack(spacing: 8) {
-                answerField(placeholder: "输入你的回答")
-                submitButton(title: "提交回答", enabled: !trimmed.isEmpty) {
+                answerField(placeholder: "Type your answer")
+                submitButton(title: "Submit answer", enabled: !trimmed.isEmpty) {
                     connection.sendAnswer(trimmed)
                 }
             }
@@ -187,9 +187,9 @@ private struct QuestionOptionsView: View {
                 }
                 otherToggleRow
                 if showOther {
-                    answerField(placeholder: "其他（请输入）")
+                    answerField(placeholder: "Other (type here)")
                 }
-                submitButton(title: "提交所选", enabled: canSubmitMulti) {
+                submitButton(title: "Submit selection", enabled: canSubmitMulti) {
                     connection.sendAnswer(multiAnswer)
                 }
             }
@@ -201,8 +201,8 @@ private struct QuestionOptionsView: View {
                 otherToggleRow
                 if showOther {
                     VStack(spacing: 8) {
-                        answerField(placeholder: "其他（请输入）")
-                        submitButton(title: "提交", enabled: !trimmed.isEmpty) {
+                        answerField(placeholder: "Other (type here)")
+                        submitButton(title: "Submit", enabled: !trimmed.isEmpty) {
                             connection.sendAnswer(trimmed)
                         }
                     }
@@ -219,7 +219,7 @@ private struct QuestionOptionsView: View {
         !selected.isEmpty || (showOther && !trimmed.isEmpty)
     }
 
-    // 多选答案与 Mac 端 notch 一致：所选项标签按下标排序后用 ", " 拼接，"其他" 文本追加在末尾。
+    // Multi-select answers match the Mac notch: selected option labels are sorted by index and joined with ", ", then the "Other" text is appended at the end.
     private var multiAnswer: String {
         var parts = selected.sorted().compactMap { question.options.indices.contains($0) ? question.options[$0] : nil }
         if showOther && !trimmed.isEmpty {
@@ -286,7 +286,7 @@ private struct QuestionOptionsView: View {
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(accent)
                     .frame(width: 24, alignment: .leading)
-                Text("其他…")
+                Text("Other…")
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(.ciForeground.opacity(0.7))
                 Spacer(minLength: 0)
@@ -334,14 +334,14 @@ private struct DiscoveryFill: View {
             DividerLine()
                 .padding(.top, 2)
 
-            Text("保持 iPhone 与 Mac 在同一网络，CodeIsland 会持续同步当前状态。")
+            Text("Keep iPhone and Mac on the same network and CodeIsland will keep the current status in sync.")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.ciForeground.opacity(0.42))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 18)
 
             IslandButton(
-                title: "进入演示模式",
+                title: "Enter demo mode",
                 icon: "play.rectangle.fill",
                 tint: Color(red: 0.25, green: 0.76, blue: 1.0),
                 accessibilityIdentifier: "companion.enterDemoMode"
@@ -391,7 +391,7 @@ private struct CompactIslandBar: View {
                     .background(Color.ciForeground.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(connection.browsing ? "停止搜索 Mac" : "搜索 Mac")
+            .accessibilityLabel(connection.browsing ? "Stop searching for Mac" : "Search for Mac")
             .accessibilityIdentifier("companion.search.toggle")
 
             AppearanceMenu()
@@ -420,7 +420,7 @@ private struct CompactIslandBar: View {
         if let peer = connection.connectedPeer {
             return peer.displayName
         }
-        return connection.browsing ? "搜索中" : "离线"
+        return connection.browsing ? "Searching" : "Offline"
     }
 }
 
@@ -442,7 +442,7 @@ private struct LiveIslandCard: View {
                         text: CompanionDisplayText.subtitle(
                             workspaceName: state.workspaceName,
                             toolName: state.toolName,
-                            fallback: "Mac 已连接"
+                            fallback: "Mac connected"
                         ),
                         font: .system(size: 12, weight: .medium),
                         color: .ciForeground.opacity(0.58)
@@ -486,11 +486,11 @@ private struct LiveIslandCard: View {
         .background(IslandShellShape().fill(Color.ciSurface))
         .overlay(IslandShellShape().stroke(pendingTint ?? Color.ciForeground.opacity(0.08), lineWidth: pendingTint == nil ? 1 : 1.5))
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("CodeIsland 状态")
+        .accessibilityLabel("CodeIsland status")
         .accessibilityIdentifier("companion.statusCard")
     }
 
-    // 待处理时给卡片描边与光晕：审批=橙、提问=蓝。
+    // When pending, outline and glow the card: approval = orange, question = blue.
     private var pendingTint: Color? {
         switch state.pendingAction {
         case .approval: return .orange
@@ -553,7 +553,7 @@ private struct DiscoveryIsland: View {
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 3) {
                     MorphText(
-                        text: connection.connectedPeer == nil ? "等待 Mac" : "已连接 Mac",
+                        text: connection.connectedPeer == nil ? "Waiting for Mac" : "Mac connected",
                         font: .system(size: 15, weight: .bold, design: .rounded),
                         color: .ciForeground
                     )
@@ -581,7 +581,7 @@ private struct DiscoveryIsland: View {
                     HStack(spacing: 10) {
                         ProgressView()
                             .tint(.green)
-                        Text(connection.browsing ? "正在搜索附近的 CodeIsland" : "搜索已停止")
+                        Text(connection.browsing ? "Searching for nearby CodeIsland" : "Search stopped")
                             .font(.system(size: 14, weight: .medium))
                             .foregroundStyle(.ciForeground.opacity(0.72))
                         Spacer()
@@ -626,9 +626,9 @@ private struct DiscoveryIsland: View {
             return peer.displayName
         }
         if connection.discoveredPeers.isEmpty {
-            return connection.browsing ? "广播握手中" : "点右上角继续搜索"
+            return connection.browsing ? "Broadcasting handshake" : "Tap the top-right to keep searching"
         }
-        return "发现 \(connection.discoveredPeers.count) 台设备"
+        return "Found \(connection.discoveredPeers.count) devices"
     }
 }
 
@@ -642,7 +642,7 @@ private struct CommandRow: View {
             if connection.isDemoMode {
                 HStack(spacing: 8) {
                     IslandButton(
-                        title: "切换演示状态",
+                        title: "Cycle demo state",
                         icon: "arrow.triangle.2.circlepath",
                         tint: Color(red: 0.25, green: 0.76, blue: 1.0),
                         accessibilityIdentifier: "companion.demo.nextState"
@@ -650,7 +650,7 @@ private struct CommandRow: View {
                         connection.cycleDemoState()
                     }
                     IslandButton(
-                        title: "退出演示",
+                        title: "Exit demo",
                         icon: "xmark",
                         tint: .red,
                         accessibilityIdentifier: "companion.demo.exit"
@@ -663,7 +663,7 @@ private struct CommandRow: View {
             if state.pendingAction == .question {
                 HStack(spacing: 8) {
                     IslandButton(
-                        title: "在 Mac 回答",
+                        title: "Answer on Mac",
                         icon: "arrow.up.forward.app.fill",
                         tint: Color(red: 0.35, green: 0.85, blue: 0.45),
                         accessibilityIdentifier: "companion.command.focus"
@@ -671,7 +671,7 @@ private struct CommandRow: View {
                         connection.send(.focus)
                     }
                     IslandButton(
-                        title: "跳过",
+                        title: "Skip",
                         icon: "forward.fill",
                         tint: .orange,
                         accessibilityIdentifier: "companion.command.skip"
@@ -685,7 +685,7 @@ private struct CommandRow: View {
             } else {
                 HStack(spacing: 8) {
                     IslandButton(
-                        title: "打开 Mac 会话",
+                        title: "Open Mac session",
                         icon: "arrow.up.forward.app.fill",
                         tint: Color(red: 0.35, green: 0.85, blue: 0.45),
                         accessibilityIdentifier: "companion.command.focus"
@@ -694,7 +694,7 @@ private struct CommandRow: View {
                     }
 
                     IslandButton(
-                        title: liveActivity.isRunning ? "更新实时活动" : "开启实时活动",
+                        title: liveActivity.isRunning ? "Update Live Activity" : "Start Live Activity",
                         icon: liveActivity.isRunning ? "arrow.clockwise" : "bolt.horizontal.fill",
                         tint: Color(red: 0.25, green: 0.76, blue: 1.0),
                         accessibilityIdentifier: "companion.liveActivity.primaryButton"
@@ -705,10 +705,10 @@ private struct CommandRow: View {
 
                 if state.pendingAction == .approval {
                     HStack(spacing: 8) {
-                        IslandButton(title: "批准", icon: "checkmark", tint: .orange, accessibilityIdentifier: "companion.command.approve") {
+                        IslandButton(title: "Approve", icon: "checkmark", tint: .orange, accessibilityIdentifier: "companion.command.approve") {
                             connection.send(.approveCurrentPermission)
                         }
-                        IslandButton(title: "拒绝", icon: "xmark", tint: .red, accessibilityIdentifier: "companion.command.deny") {
+                        IslandButton(title: "Deny", icon: "xmark", tint: .red, accessibilityIdentifier: "companion.command.deny") {
                             connection.send(.denyCurrentPermission)
                         }
                     }
@@ -736,7 +736,7 @@ private struct LiveActivityInlineButton: View {
             }
         } label: {
             Label(
-                liveActivity.isRunning ? "停止实时活动" : "同步到实时活动",
+                liveActivity.isRunning ? "Stop Live Activity" : "Sync to Live Activity",
                 systemImage: liveActivity.isRunning ? "stop.circle.fill" : "bolt.horizontal.fill"
             )
             .font(.caption.weight(.semibold))
@@ -754,7 +754,7 @@ private struct MessageStrip: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                    Text("最近动态")
+                    Text("Recent activity")
                     .font(.system(size: 13, weight: .bold, design: .monospaced))
                     .foregroundStyle(.ciForeground.opacity(0.45))
                     .textCase(.uppercase)
@@ -766,7 +766,7 @@ private struct MessageStrip: View {
             if messages.isEmpty {
                 HStack(spacing: 8) {
                     PulseDot(status: .idle)
-                    Text("等待下一条同步消息")
+                    Text("Waiting for the next synced message")
                         .font(.system(size: 16, weight: .medium))
                         .foregroundStyle(.ciForeground.opacity(0.5))
                     Spacer(minLength: 0)
@@ -803,8 +803,8 @@ private struct MessageStrip: View {
     }
 }
 
-// 横屏 hero 的主会话多轮转写，对齐 notch ChatMessageRow（$ 助手 / > 用户）。
-// iPhone（横向紧凑）显示最近 1 条，iPad 显示最近 3 条。
+// Landscape hero multi-turn transcript for the primary session, aligned with the notch ChatMessageRow ($ assistant / > user).
+// iPhone (compact landscape) shows the latest 1, iPad shows the latest 3.
 private struct HeroTranscript: View {
     let messages: [CompanionMessagePreview]
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -863,7 +863,7 @@ private struct StandByIsland: View {
                             color: .ciForeground
                         )
                         MorphText(
-                            text: sessions.count > 1 ? "\(sessions.count) 个会话 · \(activeCount) 个活跃" : state.status.label,
+                            text: sessions.count > 1 ? "\(sessions.count) sessions · \(activeCount) active" : state.status.label,
                             font: .system(size: 22, weight: .semibold, design: .rounded),
                             color: activeCount > 0 ? .green : statusColor(state.status)
                         )
@@ -875,11 +875,11 @@ private struct StandByIsland: View {
                 }
 
                 if !state.messages.isEmpty {
-                    // 主会话多轮转写（对齐 notch：$ 助手 / > 用户）
+                    // Primary-session multi-turn transcript (aligned with the notch: $ assistant / > user)
                     HeroTranscript(messages: state.messages)
                 } else {
                     MorphText(
-                        text: CompanionDisplayText.workspace(state.workspaceName) ?? "CodeIsland 已连接",
+                        text: CompanionDisplayText.workspace(state.workspaceName) ?? "CodeIsland connected",
                         font: .system(size: 24, weight: .medium, design: .rounded),
                         color: .ciForeground.opacity(0.82),
                         lineLimit: 4
@@ -938,9 +938,9 @@ private enum StandByGrouping: CaseIterable {
 
     var label: String {
         switch self {
-        case .none: return "全部"
-        case .status: return "按状态"
-        case .cli: return "按 CLI"
+        case .none: return "All"
+        case .status: return "By status"
+        case .cli: return "By CLI"
         }
     }
 
@@ -990,7 +990,7 @@ private struct StandBySessionBoard: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            Text("会话")
+            Text("Sessions")
                 .font(.system(size: 18, weight: .black, design: .rounded))
                 .foregroundStyle(.ciForeground)
             StandByCountBadge(count: sessions.count, activeCount: activeCount)
@@ -1016,7 +1016,7 @@ private struct StandBySessionBoard: View {
     private var groupedSessions: [StandByGroup] {
         switch grouping {
         case .none:
-            return [StandByGroup(id: "全部", items: sessions)]
+            return [StandByGroup(id: "All", items: sessions)]
         case .status:
             let order: [CompanionStatus] = [.waitingApproval, .waitingQuestion, .running, .processing, .idle]
             return order.compactMap { status in
@@ -1030,8 +1030,8 @@ private struct StandBySessionBoard: View {
     }
 }
 
-// 会话卡内的多轮转写（紧凑版），$ 助手 / > 用户，含 markdown。
-// iPhone（横向紧凑）每卡只显示最近 1 条，iPad 显示最近 3 条。
+// Multi-turn transcript inside the session card (compact version), $ assistant / > user, with markdown.
+// iPhone (compact landscape) shows only the latest 1 per card, iPad shows the latest 3.
 private struct SessionTranscript: View {
     let messages: [CompanionMessagePreview]
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -1072,7 +1072,7 @@ private struct StandBySessionRow: View {
                 .frame(width: 36)
 
             VStack(alignment: .leading, spacing: 4) {
-                // 身份行：项目名（最左、按状态着色）+ #短id … 右侧 time-ago + 工具徽标
+                // Identity row: project name (far left, colored by status) + #shortId … time-ago + tool badge on the right
                 HStack(spacing: 6) {
                     Text(sessionName)
                         .font(.system(size: 15, weight: .black, design: .rounded))
@@ -1099,7 +1099,7 @@ private struct StandBySessionRow: View {
                     .fixedSize()
                 }
 
-                // 多轮转写（每会话最近几条，$ 助手 / > 用户）；旧 Mac 无此数据时回退单条。
+                // Multi-turn transcript (the latest few per session, $ assistant / > user); falls back to a single message when an older Mac lacks this data.
                 if !session.messages.isEmpty {
                     SessionTranscript(messages: session.messages)
                 } else if let message = CompanionDisplayText.message(session.message) {
@@ -1110,7 +1110,7 @@ private struct StandBySessionRow: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                // 工作指示行：$ 工具 / $ thinking（对齐 notch SessionCard 底部）
+                // Work indicator row: $ tool / $ thinking (aligned with the bottom of the notch SessionCard)
                 if session.status != .idle {
                     HStack(spacing: 4) {
                         Text("$")
@@ -1136,7 +1136,7 @@ private struct StandBySessionRow: View {
         .accessibilityIdentifier("companion.standby.sessionRow")
     }
 
-    // 名称按状态着色，对齐 notch SessionCard：运行/处理=绿，待办=橙，空闲=白。
+    // Name colored by status, aligned with the notch SessionCard: running/processing = green, pending = orange, idle = white.
     private var statusNameColor: Color {
         switch session.status {
         case .processing, .running: return Color(red: 0.3, green: 0.85, blue: 0.4)
@@ -1145,20 +1145,20 @@ private struct StandBySessionRow: View {
         }
     }
 
-    // 短会话 id（去掉连字符取末 4 位），对齐 notch 的 #id。
+    // Short session id (strip hyphens, take the last 4), aligned with the notch #id.
     private var shortSessionId: String? {
         guard let id = session.sessionId else { return nil }
         let clean = id.replacingOccurrences(of: "-", with: "")
         return clean.isEmpty ? nil : String(clean.suffix(4))
     }
 
-    // 会话名称：项目/工作区名优先，缺省回退来源（对齐 notch 以项目名为标题）。
+    // Session name: prefer the project/workspace name, fall back to the source (aligned with the notch, which uses the project name as the title).
     private var sessionName: String {
         CompanionDisplayText.workspace(session.workspaceName)
             ?? (session.source.isEmpty ? "CODEISLAND" : session.source.uppercased())
     }
 
-    // 待处理状态高亮：审批=橙、提问=蓝；其余不高亮。
+    // Pending-state highlight: approval = orange, question = blue; nothing else is highlighted.
     private var highlightTint: Color? {
         switch session.status {
         case .waitingApproval: return .orange
@@ -1168,7 +1168,7 @@ private struct StandBySessionRow: View {
     }
 }
 
-// 小标签胶囊，对齐 notch SessionCard 的 SessionTag。
+// Small tag capsule, aligned with the notch SessionCard's SessionTag.
 private struct SessionTag: View {
     let text: String
     var color: Color = .ciForeground.opacity(0.7)
@@ -1188,7 +1188,7 @@ private struct SessionTag: View {
     }
 }
 
-// 「思考中」标签：一束高光沿文字横向循环扫过（巡逻扫光）。
+// "Thinking" label: a band of highlight sweeps horizontally across the text on a loop (patrol sweep).
 private struct ThinkingLabel: View {
     var text: String = "thinking"
     private let font = Font.system(size: 12, weight: .medium, design: .monospaced)
@@ -1221,7 +1221,7 @@ private struct ThinkingLabel: View {
     }
 }
 
-// 相对时间，对齐 notch timeAgo 格式。
+// Relative time, aligned with the notch timeAgo format.
 private func standbyTimeAgo(_ date: Date) -> String {
     let seconds = Int(-date.timeIntervalSinceNow)
     if seconds < 60 { return "<1m" }
@@ -1235,7 +1235,7 @@ private struct StandByCountBadge: View {
     let activeCount: Int
 
     var body: some View {
-        Text(activeCount > 0 ? "\(activeCount) 活跃" : "\(count) 总计")
+        Text(activeCount > 0 ? "\(activeCount) active" : "\(count) total")
             .font(.system(size: 12, weight: .black, design: .rounded))
             .foregroundStyle(activeCount > 0 ? .green : .ciForeground.opacity(0.64))
             .padding(.horizontal, 9)
@@ -1258,7 +1258,7 @@ private func standbySessions(for state: CompanionStatePayload) -> [CompanionSess
             )
         ]
     }
-    // 待处理项自动聚焦：按状态优先级（审批>提问>运行>处理>空闲）排序，同级按最近更新。
+    // Pending items auto-focus: sorted by status priority (approval > question > running > processing > idle), ties broken by most recent update.
     return state.sessions.sorted { lhs, rhs in
         if lhs.status.priority != rhs.status.priority {
             return lhs.status.priority > rhs.status.priority
@@ -1267,13 +1267,13 @@ private func standbySessions(for state: CompanionStatePayload) -> [CompanionSess
     }
 }
 
-// 外观切换菜单：跟随系统 / 浅色 / 深色。
+// Appearance switcher menu: follow system / light / dark.
 private struct AppearanceMenu: View {
     @AppStorage(appAppearanceStorageKey) private var appearanceRaw = AppAppearance.system.rawValue
 
     var body: some View {
         Menu {
-            Picker("外观", selection: $appearanceRaw) {
+            Picker("Appearance", selection: $appearanceRaw) {
                 ForEach(AppAppearance.allCases) { mode in
                     Label(mode.label, systemImage: mode.icon).tag(mode.rawValue)
                 }
@@ -1286,7 +1286,7 @@ private struct AppearanceMenu: View {
                 .background(Color.ciForeground.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("外观")
+        .accessibilityLabel("Appearance")
         .accessibilityIdentifier("companion.appearance.menu")
     }
 }
@@ -1325,8 +1325,8 @@ private struct MorphText: View {
             .animation(CodeIslandMotion.micro, value: blur)
             .onChange(of: text) { _, newText in
                 guard newText != displayed else { return }
-                // 流式增量（前缀增长/回退）直接更新，不做模糊变形，
-                // 避免逐字更新时持续闪烁。仅对“整段换内容”才做变形过渡。
+                // Streaming increments (prefix growing/shrinking) update directly, with no blur morph,
+                // to avoid constant flicker during per-character updates. Only a full content swap gets the morph transition.
                 if newText.hasPrefix(displayed) || displayed.hasPrefix(newText) {
                     generation += 1
                     displayed = newText
@@ -1428,7 +1428,7 @@ private struct ConnectionDot: View {
         PulseDot(status: active ? .running : (browsing ? .processing : .idle))
         .frame(width: 30, height: 30)
         .background(Color.ciForeground.opacity(0.08), in: Capsule())
-        .accessibilityLabel(active ? "Mac 已连接" : (browsing ? "正在搜索 Mac" : "Mac 未连接"))
+        .accessibilityLabel(active ? "Mac connected" : (browsing ? "Searching for Mac" : "Mac not connected"))
     }
 }
 
@@ -1533,9 +1533,9 @@ private struct LiveActivityDiagnosticStrip: View {
             Button {
                 liveActivity.stopAll()
             } label: {
-                Label("清理已有实时活动后重试", systemImage: "trash")
+                Label("Clear existing Live Activities and retry", systemImage: "trash")
                     .font(.caption.weight(.bold))
-                    // 这张通知卡固定为深蓝底（两个主题一致），内部文字保持浅色以保证对比。
+                    // This notice card is fixed to a deep-blue background (consistent across both themes); its text stays light to preserve contrast.
                     .foregroundStyle(.white.opacity(0.82))
                     .frame(maxWidth: .infinity, minHeight: 34)
                     .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -1584,7 +1584,7 @@ private func statusColor(_ status: CompanionStatus) -> Color {
         .environmentObject(LiveActivityController())
 }
 
-// MARK: - 外观偏好（跟随系统 / 浅色 / 深色）
+// MARK: - Appearance preference (follow system / light / dark)
 
 enum AppAppearance: String, CaseIterable, Identifiable {
     case system, light, dark
@@ -1593,9 +1593,9 @@ enum AppAppearance: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .system: return "跟随系统"
-        case .light: return "浅色"
-        case .dark: return "深色"
+        case .system: return "Follow system"
+        case .light: return "Light"
+        case .dark: return "Dark"
         }
     }
 
@@ -1607,7 +1607,7 @@ enum AppAppearance: String, CaseIterable, Identifiable {
         }
     }
 
-    /// 传给 `.preferredColorScheme`；nil 表示跟随系统。
+    /// Passed to `.preferredColorScheme`; nil means follow the system.
     var colorScheme: ColorScheme? {
         switch self {
         case .system: return nil
@@ -1617,34 +1617,34 @@ enum AppAppearance: String, CaseIterable, Identifiable {
     }
 }
 
-/// AppStorage 键，App 与各视图共用。
+/// AppStorage key, shared by the App and all views.
 let appAppearanceStorageKey = "appAppearance"
 
-// MARK: - 自适应主题色
+// MARK: - Adaptive theme colors
 //
-// 用 dynamic UIColor 按 light/dark 自动解析，视图侧无需注入环境，
-// 颜色随 `.preferredColorScheme` 决定的有效外观自动切换。
-// 深色保持原有「灵动岛」纯黑观感；浅色为暖白护眼米色。
+// Uses a dynamic UIColor that resolves light/dark automatically, so views don't need to inject the environment;
+// colors switch automatically with the effective appearance decided by `.preferredColorScheme`.
+// Dark keeps the original "Dynamic Island" pure-black look; light is a warm, eye-friendly off-white beige.
 //
-// 定义在 `ShapeStyle where Self == Color` 上：点语法在 `.foregroundStyle(.ciX)`
-// / `.fill(.ciX)` 等 ShapeStyle 位置以及纯 `Color` 位置（`color: .ciX`）都能解析。
+// Defined on `ShapeStyle where Self == Color`: dot syntax resolves in ShapeStyle positions like `.foregroundStyle(.ciX)`
+// / `.fill(.ciX)` and in plain `Color` positions (`color: .ciX`).
 
 private enum CITheme {
-    /// 应用背景：深色近黑 / 浅色暖米白。
+    /// App background: near-black in dark / warm off-white in light.
     static let background = UIColor { trait in
         trait.userInterfaceStyle == .dark
             ? UIColor(red: 0.015, green: 0.016, blue: 0.018, alpha: 1)
             : UIColor(red: 0.945, green: 0.925, blue: 0.880, alpha: 1)
     }
 
-    /// 卡片 / 胶囊表面：深色纯黑 / 浅色暖白（略亮于背景，使卡片浮起）。
+    /// Card / capsule surface: pure black in dark / warm white in light (slightly brighter than the background so cards lift off it).
     static let surface = UIColor { trait in
         trait.userInterfaceStyle == .dark
             ? UIColor(red: 0, green: 0, blue: 0, alpha: 1)
             : UIColor(red: 0.995, green: 0.985, blue: 0.960, alpha: 1)
     }
 
-    /// 主前景（文字 / 图标 / 描边与浅填充的基色）：深色白 / 浅色暖深棕。
+    /// Primary foreground (base color for text / icons / strokes and light fills): white in dark / warm dark brown in light.
     static let foreground = UIColor { trait in
         trait.userInterfaceStyle == .dark
             ? UIColor(white: 1, alpha: 1)
@@ -1655,6 +1655,6 @@ private enum CITheme {
 extension ShapeStyle where Self == Color {
     static var ciBackground: Color { Color(CITheme.background) }
     static var ciSurface: Color { Color(CITheme.surface) }
-    /// 替换原先的 `.white` 与 `.white.opacity(x)`，透明度沿用不变。
+    /// Replaces the former `.white` and `.white.opacity(x)`; opacity carries over unchanged.
     static var ciForeground: Color { Color(CITheme.foreground) }
 }
