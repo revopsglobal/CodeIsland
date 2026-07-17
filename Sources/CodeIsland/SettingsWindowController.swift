@@ -5,6 +5,7 @@ import SwiftUI
 class SettingsWindowController {
     static let shared = SettingsWindowController()
     private var window: NSWindow?
+    private var hostingController: NSHostingController<SettingsView>?
     weak var appState: AppState?
 
     private var closeObserver: NSObjectProtocol?
@@ -23,16 +24,14 @@ class SettingsWindowController {
         NSApp.applicationIconImage = Self.bundleAppIcon()
 
         if let window = window {
-            if let hostingView = window.contentView as? NSHostingView<SettingsView> {
-                hostingView.rootView = SettingsView(appState: appState, initialPage: page)
-            }
+            hostingController?.rootView = SettingsView(appState: appState, initialPage: page)
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
         }
 
         let settingsView = SettingsView(appState: appState, initialPage: page)
-        let hostingView = NSHostingView(rootView: settingsView)
+        let hostingController = NSHostingController(rootView: settingsView)
 
         let screen = NSScreen.main ?? NSScreen.screens.first
         let screenW = screen?.frame.width ?? 1440
@@ -49,7 +48,11 @@ class SettingsWindowController {
         window.titleVisibility = .visible
         window.title = L10n.shared["settings_title"]
         window.backgroundColor = .windowBackgroundColor
-        window.contentView = hostingView
+        // Let NSHostingController own the content view and its layout lifecycle.
+        // Assigning a bare NSHostingView here can leave its frame at zero on a
+        // menu-bar app's first regular window, producing a toolbar with a blank
+        // content area and no usable permission controls.
+        window.contentViewController = hostingController
         window.contentMinSize = NSSize(width: min(560, screenW * 0.4), height: min(420, screenH * 0.4))
         window.toolbar = nil
         window.center()
@@ -66,6 +69,7 @@ class SettingsWindowController {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.window = nil
+                self?.hostingController = nil
                 self?.clearCloseObserver()
                 DispatchQueue.main.async {
                     NSApp.setActivationPolicy(.accessory)
@@ -73,6 +77,7 @@ class SettingsWindowController {
             }
         }
 
+        self.hostingController = hostingController
         self.window = window
     }
 
