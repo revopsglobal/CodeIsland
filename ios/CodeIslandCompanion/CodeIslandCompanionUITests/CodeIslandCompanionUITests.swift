@@ -103,6 +103,33 @@ final class CodeIslandCompanionUITests: XCTestCase {
     }
 
     @MainActor
+    func testCalendarMonthNavigatesAndKeepsSelectedDaySurface() throws {
+        let app = launchHubApp(mode: "home")
+        XCTAssertTrue(app.otherElements["hub.surface"].waitForExistence(timeout: 8))
+
+        let month = findHubElement("hub.calendar.month", in: app)
+        XCTAssertTrue(month.exists)
+        let title = app.staticTexts["hub.calendar.monthTitle"].firstMatch
+        XCTAssertTrue(title.waitForExistence(timeout: 4))
+        let initialTitle = title.label
+
+        let next = app.buttons["hub.calendar.next"].firstMatch
+        XCTAssertTrue(next.waitForExistence(timeout: 4))
+        next.tap()
+
+        let changed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label != %@", initialTitle),
+            object: title
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [changed], timeout: 5), .completed)
+
+        let today = app.buttons["hub.calendar.today"].firstMatch
+        XCTAssertTrue(today.waitForExistence(timeout: 4))
+        today.tap()
+        XCTAssertTrue(app.otherElements["hub.calendar.selectedEvents"].waitForExistence(timeout: 5))
+    }
+
+    @MainActor
     func testTaskCreationRequiresReviewAndExplicitExecution() throws {
         let app = launchHubApp(mode: "work")
         XCTAssertTrue(app.otherElements["hub.surface"].waitForExistence(timeout: 8))

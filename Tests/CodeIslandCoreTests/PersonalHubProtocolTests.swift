@@ -155,6 +155,84 @@ final class PersonalHubProtocolTests: XCTestCase {
         )
     }
 
+    func testCalendarMonthBuildsSixLocalWeeksWithAdjacentDaysAndCounts() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "America/Los_Angeles"))
+        calendar.firstWeekday = 1
+
+        let reference = try XCTUnwrap(calendar.date(from: DateComponents(
+            year: 2026, month: 4, day: 15, hour: 12
+        )))
+        let selected = try XCTUnwrap(calendar.date(from: DateComponents(
+            year: 2026, month: 4, day: 1, hour: 18
+        )))
+        let maySecond = try XCTUnwrap(calendar.date(from: DateComponents(
+            year: 2026, month: 5, day: 2, hour: 9
+        )))
+
+        let month = PersonalHubCalendarMonth.make(
+            referenceDate: reference,
+            selectedDate: selected,
+            eventDates: [selected, selected.addingTimeInterval(3_600), maySecond],
+            now: reference,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(month.days.count, 42)
+        XCTAssertEqual(calendar.dateComponents([.year, .month, .day], from: month.days[0].date),
+                       DateComponents(year: 2026, month: 3, day: 29))
+        XCTAssertEqual(calendar.dateComponents([.year, .month, .day], from: month.days[41].date),
+                       DateComponents(year: 2026, month: 5, day: 9))
+        XCTAssertFalse(month.days[0].isInDisplayedMonth)
+        XCTAssertTrue(month.days[3].isInDisplayedMonth)
+        XCTAssertEqual(month.days.first(where: { calendar.isDate($0.date, inSameDayAs: selected) })?.eventCount, 2)
+        XCTAssertEqual(month.days.first(where: { calendar.isDate($0.date, inSameDayAs: maySecond) })?.eventCount, 1)
+        XCTAssertTrue(month.days.first(where: { calendar.isDate($0.date, inSameDayAs: reference) })?.isToday == true)
+        XCTAssertTrue(calendar.isDate(month.selectedDate, inSameDayAs: selected))
+    }
+
+    func testCalendarMonthFallsBackToDisplayedMonthWhenSelectionIsOutsideGrid() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "America/Los_Angeles"))
+        calendar.firstWeekday = 1
+        let reference = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 4, day: 15)))
+        let outside = try XCTUnwrap(calendar.date(from: DateComponents(year: 2027, month: 1, day: 1)))
+
+        let month = PersonalHubCalendarMonth.make(
+            referenceDate: reference,
+            selectedDate: outside,
+            eventDates: [],
+            now: reference,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(calendar.component(.day, from: month.selectedDate), 1)
+        XCTAssertEqual(calendar.component(.month, from: month.selectedDate), 4)
+        XCTAssertEqual(month.days.reduce(0) { $0 + $1.eventCount }, 0)
+    }
+
+    func testCalendarSnapshotRequestRoundTripsMonthSelectionAndDecodesLegacyPayload() throws {
+        let request = PersonalHubSnapshotRequest(
+            requestedMode: .work,
+            calendarReferenceDate: Date(timeIntervalSince1970: 1_800_000_000),
+            calendarSelectedDate: Date(timeIntervalSince1970: 1_800_086_400)
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        XCTAssertEqual(try decoder.decode(PersonalHubSnapshotRequest.self, from: encoder.encode(request)), request)
+
+        let legacy = try decoder.decode(
+            PersonalHubSnapshotRequest.self,
+            from: Data(#"{"requestedMode":"home"}"#.utf8)
+        )
+        XCTAssertEqual(legacy.requestedMode, .home)
+        XCTAssertNil(legacy.calendarReferenceDate)
+        XCTAssertNil(legacy.calendarSelectedDate)
+    }
+
     func testReminderDraftSupportsStructuredAndLegacyValues() throws {
         let draft = PersonalHubReminderDraft(
             title: "Finish the deck",

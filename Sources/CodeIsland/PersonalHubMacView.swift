@@ -13,6 +13,8 @@ struct PersonalHubMacView: View {
     @State private var preparedAction: PersonalHubPreparedAction?
     @State private var actionMessage: String?
     @State private var showingRackEditor = false
+    @State private var calendarReferenceDate = Date()
+    @State private var calendarSelectedDate = Date()
 
     private let service = PersonalHubService.shared
     private let accent = Color(red: 1.0, green: 0.69, blue: 0.0)
@@ -81,7 +83,8 @@ struct PersonalHubMacView: View {
                             MacHubModuleCard(
                                 module: module,
                                 prepare: prepare,
-                                addText: addText
+                                addText: addText,
+                                selectCalendarDate: selectCalendarDate
                             )
                         }
                     }
@@ -159,7 +162,18 @@ struct PersonalHubMacView: View {
     }
 
     private func refresh() {
-        snapshot = service.snapshot(appState: appState, requestedMode: requestedMode)
+        snapshot = service.snapshot(
+            appState: appState,
+            requestedMode: requestedMode,
+            calendarReferenceDate: calendarReferenceDate,
+            calendarSelectedDate: calendarSelectedDate
+        )
+    }
+
+    private func selectCalendarDate(referenceDate: Date, selectedDate: Date) {
+        calendarReferenceDate = referenceDate
+        calendarSelectedDate = selectedDate
+        refresh()
     }
 
     private func saveRack(mode: PersonalHubMode, modules: [PersonalHubModuleID]) {
@@ -430,6 +444,7 @@ private struct MacHubModuleCard: View {
     let module: PersonalHubModuleSnapshot
     let prepare: (PersonalHubModuleID, PersonalHubAction, String?, String?) -> Void
     let addText: (PersonalHubModuleID, String, String) -> Void
+    let selectCalendarDate: (Date, Date) -> Void
 
     @State private var showsTaskComposer = false
     @State private var taskTitle = ""
@@ -530,27 +545,25 @@ private struct MacHubModuleCard: View {
                 }
             }
 
-            ForEach(module.items) { item in
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text(item.title)
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.72))
-                            .lineLimit(1)
-                        Spacer()
-                        if let subtitle = item.subtitle {
-                            Text(subtitle)
-                                .font(.system(size: 8, weight: .medium))
-                                .foregroundStyle(.white.opacity(0.3))
-                        }
-                    }
-                    if let progress = item.progress {
-                        ProgressView(value: progress).tint(.orange)
-                    }
-                    actionRow(item.actions, itemID: item.id, itemDetail: item.detail)
+            if let month = module.calendarMonth {
+                MacCalendarMonthView(month: month, onSelection: selectCalendarDate)
+                Text(month.selectedEvents.isEmpty ? "NO EVENTS" : "SELECTED DAY")
+                    .font(.system(size: 7, weight: .black, design: .monospaced))
+                    .tracking(0.7)
+                    .foregroundStyle(.white.opacity(0.28))
+                ForEach(month.selectedEvents) { item in
+                    itemCard(item)
                 }
-                .padding(6)
-                .background(Color.black.opacity(0.24), in: RoundedRectangle(cornerRadius: 6))
+                if !module.items.isEmpty {
+                    Text("UPCOMING")
+                        .font(.system(size: 7, weight: .black, design: .monospaced))
+                        .tracking(0.7)
+                        .foregroundStyle(.white.opacity(0.28))
+                }
+            }
+
+            ForEach(module.calendarMonth == nil ? module.items : Array(module.items.prefix(6))) { item in
+                itemCard(item)
             }
 
             actionRow(module.actions, itemID: nil, itemDetail: nil)
@@ -563,6 +576,30 @@ private struct MacHubModuleCard: View {
                 selectedReminderCalendarID = reminderLists.first?.id ?? ""
             }
         }
+    }
+
+    private func itemCard(_ item: PersonalHubItem) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(item.title)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.72))
+                    .lineLimit(1)
+                Spacer()
+                if let subtitle = item.subtitle {
+                    Text(subtitle)
+                        .font(.system(size: 8, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.3))
+                        .lineLimit(1)
+                }
+            }
+            if let progress = item.progress {
+                ProgressView(value: progress).tint(.orange)
+            }
+            actionRow(item.actions, itemID: item.id, itemDetail: item.detail)
+        }
+        .padding(6)
+        .background(Color.black.opacity(0.24), in: RoundedRectangle(cornerRadius: 6))
     }
 
     @ViewBuilder
@@ -642,6 +679,95 @@ private struct MacHubModuleCard: View {
             guard item.id.hasPrefix("list:"), let id = item.detail else { return nil }
             return .init(id: id, title: item.title)
         }
+    }
+}
+
+struct MacCalendarMonthView: View {
+    let month: PersonalHubCalendarMonth
+    let onSelection: (Date, Date) -> Void
+
+    private let calendar = Calendar.current
+    private let accent = Color(red: 1.0, green: 0.69, blue: 0.0)
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 3), count: 7)
+
+    var body: some View {
+        VStack(spacing: 5) {
+            HStack(spacing: 5) {
+                Button { moveMonth(-1) } label: {
+                    Image(systemName: "chevron.left")
+                }
+                .help("Previous month")
+                Spacer()
+                Text(month.displayedMonth.formatted(.dateTime.month(.wide).year()))
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.82))
+                Spacer()
+                Button("Today") { onSelection(Date(), Date()) }
+                    .font(.system(size: 8, weight: .bold))
+                    .help("Show today")
+                Button { moveMonth(1) } label: {
+                    Image(systemName: "chevron.right")
+                }
+                .help("Next month")
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(accent)
+
+            LazyVGrid(columns: columns, spacing: 3) {
+                ForEach(weekdaySymbols, id: \.self) { symbol in
+                    Text(symbol.uppercased())
+                        .font(.system(size: 7, weight: .black, design: .monospaced))
+                        .foregroundStyle(.white.opacity(0.26))
+                        .frame(maxWidth: .infinity)
+                }
+                ForEach(month.days) { day in
+                    Button {
+                        onSelection(month.displayedMonth, day.date)
+                    } label: {
+                        VStack(spacing: 1) {
+                            Text("\(calendar.component(.day, from: day.date))")
+                                .font(.system(size: 9, weight: isSelected(day) ? .bold : .medium, design: .rounded))
+                            HStack(spacing: 1) {
+                                ForEach(0..<min(day.eventCount, 3), id: \.self) { _ in
+                                    Circle().frame(width: 2, height: 2)
+                                }
+                            }
+                            .frame(height: 3)
+                        }
+                        .foregroundStyle(day.isInDisplayedMonth ? .white.opacity(0.82) : .white.opacity(0.2))
+                        .frame(maxWidth: .infinity, minHeight: 25)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(isSelected(day) ? accent.opacity(0.26) : Color.clear)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .stroke(day.isToday ? accent.opacity(0.9) : Color.clear, lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(day.date.formatted(date: .complete, time: .omitted))
+                    .accessibilityValue(day.eventCount == 1 ? "1 event" : "\(day.eventCount) events")
+                }
+            }
+        }
+        .padding(7)
+        .background(Color.black.opacity(0.28), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private var weekdaySymbols: [String] {
+        let symbols = calendar.veryShortStandaloneWeekdaySymbols
+        let offset = max(0, min(symbols.count - 1, calendar.firstWeekday - 1))
+        return Array(symbols[offset...] + symbols[..<offset])
+    }
+
+    private func isSelected(_ day: PersonalHubCalendarDay) -> Bool {
+        calendar.isDate(day.date, inSameDayAs: month.selectedDate)
+    }
+
+    private func moveMonth(_ offset: Int) {
+        guard let reference = calendar.date(byAdding: .month, value: offset, to: month.displayedMonth) else { return }
+        onSelection(reference, reference)
     }
 }
 

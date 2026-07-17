@@ -28,6 +28,8 @@ final class RemoteApprovalClient: ObservableObject {
     @Published private(set) var busyRequestIDs: Set<String> = []
     @Published private(set) var highlightedApprovalID: String?
     @Published private(set) var hubSnapshot: PersonalHubSnapshot?
+    private var calendarReferenceDate: Date?
+    private var calendarSelectedDate: Date?
     @Published private(set) var hubError: String?
     @Published private(set) var hubActionInFlight = false
     @Published private(set) var hubActionMessage: String?
@@ -313,7 +315,11 @@ final class RemoteApprovalClient: ObservableObject {
     func refreshHub() async {
 #if DEBUG
         if usesMockHub {
-            hubSnapshot = Self.mockHubSnapshot(requestedMode: selectedMode)
+            hubSnapshot = Self.mockHubSnapshot(
+                requestedMode: selectedMode,
+                calendarReferenceDate: calendarReferenceDate,
+                calendarSelectedDate: calendarSelectedDate
+            )
             hubError = nil
             return
         }
@@ -331,7 +337,11 @@ final class RemoteApprovalClient: ObservableObject {
             request.httpMethod = "POST"
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try Self.encoder.encode(
-                PersonalHubSnapshotRequest(requestedMode: selectedMode)
+                PersonalHubSnapshotRequest(
+                    requestedMode: selectedMode,
+                    calendarReferenceDate: calendarReferenceDate,
+                    calendarSelectedDate: calendarSelectedDate
+                )
             )
             let snapshot: PersonalHubSnapshot = try await perform(request, authenticated: true)
             hubSnapshot = snapshot
@@ -341,6 +351,12 @@ final class RemoteApprovalClient: ObservableObject {
         } catch {
             hubError = error.localizedDescription
         }
+    }
+
+    func refreshCalendar(referenceDate: Date, selectedDate: Date) async {
+        calendarReferenceDate = referenceDate
+        calendarSelectedDate = selectedDate
+        await refreshHub()
     }
 
     func prepareHubAction(_ intent: PersonalHubActionIntent) async {
@@ -582,19 +598,33 @@ final class RemoteApprovalClient: ObservableObject {
         return PersonalHubMode(rawValue: arguments[index + 1].lowercased())
     }
 
-    private static func mockHubSnapshot(requestedMode: PersonalHubMode) -> PersonalHubSnapshot {
+    private static func mockHubSnapshot(
+        requestedMode: PersonalHubMode,
+        calendarReferenceDate: Date? = nil,
+        calendarSelectedDate: Date? = nil
+    ) -> PersonalHubSnapshot {
         let resolvedMode: PersonalHubMode = requestedMode == .auto ? .home : requestedMode
         return PersonalHubSnapshot(
             serverName: "CodeIsland UI Test Mac",
             requestedMode: requestedMode,
             resolvedMode: resolvedMode,
-            modules: PersonalHubCatalog.modules(for: resolvedMode).map(mockHubModule),
+            modules: PersonalHubCatalog.modules(for: resolvedMode).map {
+                mockHubModule(
+                    $0,
+                    calendarReferenceDate: calendarReferenceDate,
+                    calendarSelectedDate: calendarSelectedDate
+                )
+            },
             configuration: .default,
             dayProgress: 0.5
         )
     }
 
-    private static func mockHubModule(_ id: PersonalHubModuleID) -> PersonalHubModuleSnapshot {
+    private static func mockHubModule(
+        _ id: PersonalHubModuleID,
+        calendarReferenceDate: Date? = nil,
+        calendarSelectedDate: Date? = nil
+    ) -> PersonalHubModuleSnapshot {
         let ready = PersonalHubAvailability.ready
         switch id {
         case .nowPlaying:
@@ -648,23 +678,33 @@ final class RemoteApprovalClient: ObservableObject {
                 end: start.addingTimeInterval(1_800),
                 joinURL: URL(string: "https://meet.google.com/test-room")
             )
+            let eventItem = PersonalHubItem(
+                id: "event:design-review",
+                title: "Design review",
+                subtitle: "Today at 2:00 PM",
+                date: start,
+                actions: [
+                    .init(id: "join", label: "Join", deepLink: draft.joinURL),
+                    .init(id: "edit", label: "Edit", targetID: "event:design-review", value: draft.encodedActionValue()),
+                    .init(id: "delete", label: "Delete", role: .destructive, targetID: "event:design-review"),
+                ]
+            )
+            let month = PersonalHubCalendarMonth.make(
+                referenceDate: calendarReferenceDate ?? Date(),
+                selectedDate: calendarSelectedDate ?? calendarReferenceDate ?? Date(),
+                eventDates: [start],
+                selectedEvents: Calendar.current.isDate(
+                    calendarSelectedDate ?? calendarReferenceDate ?? Date(),
+                    inSameDayAs: start
+                ) ? [eventItem] : []
+            )
             return .init(
                 id: id,
                 availability: ready,
                 summary: "3 upcoming events",
-                items: [
-                    .init(
-                        id: "event:design-review",
-                        title: "Design review",
-                        subtitle: "Today at 2:00 PM",
-                        actions: [
-                            .init(id: "join", label: "Join", deepLink: draft.joinURL),
-                            .init(id: "edit", label: "Edit", targetID: "event:design-review", value: draft.encodedActionValue()),
-                            .init(id: "delete", label: "Delete", role: .destructive, targetID: "event:design-review"),
-                        ]
-                    )
-                ],
-                actions: [.init(id: "add", label: "Add event", symbol: "plus")]
+                items: [eventItem],
+                actions: [.init(id: "add", label: "Add event", symbol: "plus")],
+                calendarMonth: month
             )
         case .reminders:
             let task = PersonalHubReminderDraft(

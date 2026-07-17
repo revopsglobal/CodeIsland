@@ -56,6 +56,8 @@ final class PersonalHubService {
     func snapshot(
         appState: AppState,
         requestedMode: PersonalHubMode,
+        calendarReferenceDate: Date? = nil,
+        calendarSelectedDate: Date? = nil,
         serverName: String = Host.current().localizedName ?? "CodeIsland Mac"
     ) -> PersonalHubSnapshot {
         glances.refresh()
@@ -79,7 +81,14 @@ final class PersonalHubService {
             serverName: serverName,
             requestedMode: requestedMode,
             resolvedMode: resolvedMode,
-            modules: moduleIDs.map { moduleSnapshot(id: $0, appState: appState) },
+            modules: moduleIDs.map {
+                moduleSnapshot(
+                    id: $0,
+                    appState: appState,
+                    calendarReferenceDate: calendarReferenceDate,
+                    calendarSelectedDate: calendarSelectedDate
+                )
+            },
             configuration: configuration,
             dayProgress: PersonalHubConfiguration.dayProgress()
         )
@@ -866,7 +875,9 @@ final class PersonalHubService {
 
     private func moduleSnapshot(
         id: PersonalHubModuleID,
-        appState: AppState
+        appState: AppState,
+        calendarReferenceDate: Date?,
+        calendarSelectedDate: Date?
     ) -> PersonalHubModuleSnapshot {
         switch id {
         case .nowPlaying:
@@ -1077,61 +1088,27 @@ final class PersonalHubService {
                 )
             }
             let events = glances.upcomingEvents
+            let referenceDate = calendarReferenceDate ?? Date()
+            let selectedDate = calendarSelectedDate ?? referenceDate
+            let monthInfo = glances.calendarMonth(
+                referenceDate: referenceDate,
+                selectedDate: selectedDate
+            )
+            let selectedItems = monthInfo.selectedEvents.map(calendarItem)
+            let calendarMonth = PersonalHubCalendarMonth(
+                displayedMonth: monthInfo.month.displayedMonth,
+                selectedDate: monthInfo.month.selectedDate,
+                days: monthInfo.month.days,
+                selectedEvents: selectedItems
+            )
             return .init(
                 id: id,
                 availability: .ready,
                 summary: events.isEmpty ? "No events in the next two weeks" : "\(events.count) upcoming",
-                detail: "Two-week agenda from the Mac's calendars",
-                items: events.map { event in
-                    var actions: [PersonalHubAction] = []
-                    if let joinURL = event.joinURL {
-                        actions.append(.init(
-                            id: "join",
-                            label: "Join here",
-                            symbol: "video.fill",
-                            role: .primary,
-                            targetID: event.id,
-                            deepLink: joinURL
-                        ))
-                        actions.append(.init(
-                            id: "openOnMac",
-                            label: "Open on Mac",
-                            symbol: "macbook",
-                            targetID: event.id
-                        ))
-                    }
-                    if event.isEditable {
-                        let draft = PersonalHubCalendarDraft(
-                            title: event.title,
-                            start: event.start,
-                            end: event.end,
-                            joinURL: event.joinURL,
-                            notes: event.notes
-                        )
-                        actions.append(.init(
-                            id: "edit",
-                            label: "Edit",
-                            symbol: "square.and.pencil",
-                            targetID: event.id,
-                            value: draft.encodedActionValue()
-                        ))
-                        actions.append(.init(
-                            id: "delete",
-                            label: "Delete",
-                            symbol: "trash",
-                            role: .destructive,
-                            targetID: event.id
-                        ))
-                    }
-                    return .init(
-                        id: event.id,
-                        title: event.title,
-                        subtitle: "\(Self.eventTime(event)) · \(event.calendarTitle)",
-                        symbol: "calendar",
-                        actions: actions
-                    )
-                },
-                actions: [.init(id: "add", label: "Add event", symbol: "plus", role: .primary)]
+                detail: "Month and two-week agenda from the Mac's calendars",
+                items: events.map(calendarItem),
+                actions: [.init(id: "add", label: "Add event", symbol: "plus", role: .primary)],
+                calendarMonth: calendarMonth
             )
 
         case .reminders:
@@ -1618,6 +1595,57 @@ final class PersonalHubService {
                 summary: "\(definition.title) is not implemented yet"
             )
         }
+    }
+
+    private func calendarItem(_ event: GlancesModel.EventInfo) -> PersonalHubItem {
+        var actions: [PersonalHubAction] = []
+        if let joinURL = event.joinURL {
+            actions.append(.init(
+                id: "join",
+                label: "Join here",
+                symbol: "video.fill",
+                role: .primary,
+                targetID: event.sourceID,
+                deepLink: joinURL
+            ))
+            actions.append(.init(
+                id: "openOnMac",
+                label: "Open on Mac",
+                symbol: "macbook",
+                targetID: event.sourceID
+            ))
+        }
+        if event.isEditable {
+            let draft = PersonalHubCalendarDraft(
+                title: event.title,
+                start: event.start,
+                end: event.end,
+                joinURL: event.joinURL,
+                notes: event.notes
+            )
+            actions.append(.init(
+                id: "edit",
+                label: "Edit",
+                symbol: "square.and.pencil",
+                targetID: event.sourceID,
+                value: draft.encodedActionValue()
+            ))
+            actions.append(.init(
+                id: "delete",
+                label: "Delete",
+                symbol: "trash",
+                role: .destructive,
+                targetID: event.sourceID
+            ))
+        }
+        return .init(
+            id: event.id,
+            title: event.title,
+            subtitle: "\(Self.eventTime(event)) · \(event.calendarTitle)",
+            symbol: "calendar",
+            date: event.start,
+            actions: actions
+        )
     }
 
     private static func agentAttentionLabel(_ status: AgentStatus) -> String {

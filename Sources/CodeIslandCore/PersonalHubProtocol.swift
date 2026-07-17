@@ -438,6 +438,9 @@ public struct PersonalHubItem: Codable, Equatable, Identifiable, Sendable {
     public let detail: String?
     public let symbol: String?
     public let progress: Double?
+    /// Optional semantic date used by calendar-style clients. Existing module
+    /// items remain date-free and legacy payloads decode this as nil.
+    public let date: Date?
     public let actions: [PersonalHubAction]
 
     public init(
@@ -447,6 +450,7 @@ public struct PersonalHubItem: Codable, Equatable, Identifiable, Sendable {
         detail: String? = nil,
         symbol: String? = nil,
         progress: Double? = nil,
+        date: Date? = nil,
         actions: [PersonalHubAction] = []
     ) {
         self.id = id
@@ -455,7 +459,102 @@ public struct PersonalHubItem: Codable, Equatable, Identifiable, Sendable {
         self.detail = detail
         self.symbol = symbol
         self.progress = progress
+        self.date = date
         self.actions = actions
+    }
+}
+
+public struct PersonalHubCalendarDay: Codable, Equatable, Identifiable, Sendable {
+    public let id: String
+    public let date: Date
+    public let isInDisplayedMonth: Bool
+    public let isToday: Bool
+    public let eventCount: Int
+
+    public init(
+        id: String,
+        date: Date,
+        isInDisplayedMonth: Bool,
+        isToday: Bool,
+        eventCount: Int
+    ) {
+        self.id = id
+        self.date = date
+        self.isInDisplayedMonth = isInDisplayedMonth
+        self.isToday = isToday
+        self.eventCount = eventCount
+    }
+}
+
+/// A fixed six-week month grid generated in the Mac's local Calendar. Dates
+/// are semantic values; each client formats them for presentation without
+/// reconstructing month boundaries in a potentially different time zone.
+public struct PersonalHubCalendarMonth: Codable, Equatable, Sendable {
+    public let displayedMonth: Date
+    public let selectedDate: Date
+    public let days: [PersonalHubCalendarDay]
+    public let selectedEvents: [PersonalHubItem]
+
+    public init(
+        displayedMonth: Date,
+        selectedDate: Date,
+        days: [PersonalHubCalendarDay],
+        selectedEvents: [PersonalHubItem] = []
+    ) {
+        self.displayedMonth = displayedMonth
+        self.selectedDate = selectedDate
+        self.days = days
+        self.selectedEvents = selectedEvents
+    }
+
+    public static func make(
+        referenceDate: Date,
+        selectedDate: Date,
+        eventDates: [Date],
+        selectedEvents: [PersonalHubItem] = [],
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> Self {
+        let monthStart = calendar.dateInterval(of: .month, for: referenceDate)?.start
+            ?? calendar.startOfDay(for: referenceDate)
+        let weekday = calendar.component(.weekday, from: monthStart)
+        let leadingDays = (weekday - calendar.firstWeekday + 7) % 7
+        let gridStart = calendar.date(byAdding: .day, value: -leadingDays, to: monthStart)
+            ?? monthStart
+        let gridEnd = calendar.date(byAdding: .day, value: 42, to: gridStart)
+            ?? gridStart.addingTimeInterval(42 * 86_400)
+        let requestedSelection = calendar.startOfDay(for: selectedDate)
+        let normalizedSelection = (requestedSelection >= gridStart && requestedSelection < gridEnd)
+            ? requestedSelection
+            : monthStart
+
+        var eventCounts: [Date: Int] = [:]
+        for date in eventDates {
+            eventCounts[calendar.startOfDay(for: date), default: 0] += 1
+        }
+
+        let displayedComponents = calendar.dateComponents([.era, .year, .month], from: monthStart)
+        let days = (0..<42).compactMap { offset -> PersonalHubCalendarDay? in
+            guard let date = calendar.date(byAdding: .day, value: offset, to: gridStart) else { return nil }
+            let start = calendar.startOfDay(for: date)
+            let components = calendar.dateComponents([.era, .year, .month, .day], from: start)
+            let identifier = String(format: "%04d-%02d-%02d", components.year ?? 0, components.month ?? 0, components.day ?? 0)
+            let monthComponents = calendar.dateComponents([.era, .year, .month], from: start)
+            return PersonalHubCalendarDay(
+                id: identifier,
+                date: start,
+                isInDisplayedMonth: monthComponents == displayedComponents,
+                isToday: calendar.isDate(start, inSameDayAs: now),
+                eventCount: eventCounts[start, default: 0]
+            )
+        }
+
+        return .init(
+            displayedMonth: monthStart,
+            selectedDate: normalizedSelection,
+            days: days,
+            selectedEvents: selectedEvents
+        )
     }
 }
 
@@ -466,6 +565,7 @@ public struct PersonalHubModuleSnapshot: Codable, Equatable, Identifiable, Senda
     public let detail: String?
     public let items: [PersonalHubItem]
     public let actions: [PersonalHubAction]
+    public let calendarMonth: PersonalHubCalendarMonth?
 
     public init(
         id: PersonalHubModuleID,
@@ -473,7 +573,8 @@ public struct PersonalHubModuleSnapshot: Codable, Equatable, Identifiable, Senda
         summary: String,
         detail: String? = nil,
         items: [PersonalHubItem] = [],
-        actions: [PersonalHubAction] = []
+        actions: [PersonalHubAction] = [],
+        calendarMonth: PersonalHubCalendarMonth? = nil
     ) {
         self.id = id
         self.availability = availability
@@ -481,6 +582,7 @@ public struct PersonalHubModuleSnapshot: Codable, Equatable, Identifiable, Senda
         self.detail = detail
         self.items = items
         self.actions = actions
+        self.calendarMonth = calendarMonth
     }
 }
 
@@ -517,9 +619,17 @@ public struct PersonalHubSnapshot: Codable, Equatable, Sendable {
 
 public struct PersonalHubSnapshotRequest: Codable, Equatable, Sendable {
     public let requestedMode: PersonalHubMode
+    public let calendarReferenceDate: Date?
+    public let calendarSelectedDate: Date?
 
-    public init(requestedMode: PersonalHubMode) {
+    public init(
+        requestedMode: PersonalHubMode,
+        calendarReferenceDate: Date? = nil,
+        calendarSelectedDate: Date? = nil
+    ) {
         self.requestedMode = requestedMode
+        self.calendarReferenceDate = calendarReferenceDate
+        self.calendarSelectedDate = calendarSelectedDate
     }
 }
 

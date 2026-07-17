@@ -473,11 +473,41 @@ private struct PersonalHubModuleCard: View {
                 composer
             }
 
+            if let month = module.calendarMonth {
+                BuddyCalendarMonthView(month: month)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(month.selectedEvents.isEmpty ? "NO EVENTS" : "SELECTED DAY")
+                        .font(.system(size: 9, weight: .black, design: .monospaced))
+                        .tracking(1.1)
+                        .foregroundStyle(HubTheme.foreground.opacity(0.32))
+                    if !month.selectedEvents.isEmpty {
+                        LazyVStack(spacing: 0) {
+                            ForEach(month.selectedEvents) { item in
+                                PersonalHubItemRow(moduleID: module.id, item: item)
+                                if item.id != month.selectedEvents.last?.id {
+                                    Divider().overlay(Color.white.opacity(0.06))
+                                }
+                            }
+                        }
+                        .background(Color.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 9))
+                    }
+                }
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("hub.calendar.selectedEvents")
+            }
+
             if !module.items.isEmpty {
+                if module.calendarMonth != nil {
+                    Text("UPCOMING")
+                        .font(.system(size: 9, weight: .black, design: .monospaced))
+                        .tracking(1.1)
+                        .foregroundStyle(HubTheme.foreground.opacity(0.32))
+                }
                 LazyVStack(spacing: 0) {
-                    ForEach(module.items) { item in
+                    ForEach(module.calendarMonth == nil ? module.items : Array(module.items.prefix(6))) { item in
                         PersonalHubItemRow(moduleID: module.id, item: item)
-                        if item.id != module.items.last?.id {
+                        if item.id != (module.calendarMonth == nil ? module.items.last?.id : module.items.prefix(6).last?.id) {
                             Divider().overlay(Color.white.opacity(0.06))
                         }
                     }
@@ -719,6 +749,127 @@ private struct PersonalHubModuleCard: View {
             guard item.id.hasPrefix("list:"), let id = item.detail else { return nil }
             return ReminderListChoice(id: id, title: item.title)
         }
+    }
+}
+
+private struct BuddyCalendarMonthView: View {
+    let month: PersonalHubCalendarMonth
+
+    @EnvironmentObject private var client: RemoteApprovalClient
+    private let calendar = Calendar.current
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 7)
+
+    var body: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                navigationButton("chevron.left", label: "Previous month", identifier: "previous") {
+                    moveMonth(-1)
+                }
+                Spacer(minLength: 0)
+                Text(month.displayedMonth.formatted(.dateTime.month(.wide).year()))
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundStyle(HubTheme.foreground.opacity(0.9))
+                    .accessibilityIdentifier("hub.calendar.monthTitle")
+                Spacer(minLength: 0)
+                Button("Today") {
+                    Task { await client.refreshCalendar(referenceDate: Date(), selectedDate: Date()) }
+                }
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(HubTheme.accent)
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("hub.calendar.today")
+                navigationButton("chevron.right", label: "Next month", identifier: "next") {
+                    moveMonth(1)
+                }
+            }
+
+            LazyVGrid(columns: columns, spacing: 4) {
+                ForEach(weekdaySymbols, id: \.self) { symbol in
+                    Text(symbol.uppercased())
+                        .font(.system(size: 8, weight: .black, design: .monospaced))
+                        .foregroundStyle(HubTheme.foreground.opacity(0.28))
+                        .frame(maxWidth: .infinity)
+                }
+                ForEach(month.days) { day in
+                    Button {
+                        Task {
+                            await client.refreshCalendar(
+                                referenceDate: month.displayedMonth,
+                                selectedDate: day.date
+                            )
+                        }
+                    } label: {
+                        VStack(spacing: 2) {
+                            Text("\(calendar.component(.day, from: day.date))")
+                                .font(.system(size: 11, weight: isSelected(day) ? .bold : .medium, design: .rounded))
+                            HStack(spacing: 1.5) {
+                                ForEach(0..<min(day.eventCount, 3), id: \.self) { _ in
+                                    Circle().frame(width: 2.5, height: 2.5)
+                                }
+                            }
+                            .frame(height: 3)
+                        }
+                        .foregroundStyle(day.isInDisplayedMonth
+                            ? HubTheme.foreground.opacity(0.86)
+                            : HubTheme.foreground.opacity(0.22))
+                        .frame(maxWidth: .infinity, minHeight: 34)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(isSelected(day) ? HubTheme.accent.opacity(0.24) : Color.clear)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(day.isToday ? HubTheme.accent.opacity(0.92) : Color.clear, lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("hub.calendar.day.\(day.id)")
+                    .accessibilityLabel(day.date.formatted(date: .complete, time: .omitted))
+                    .accessibilityValue(day.eventCount == 1 ? "1 event" : "\(day.eventCount) events")
+                }
+            }
+        }
+        .padding(9)
+        .background(Color.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.white.opacity(0.075), lineWidth: 1)
+        )
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("hub.calendar.month")
+    }
+
+    private func navigationButton(
+        _ symbol: String,
+        label: String,
+        identifier: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 11, weight: .bold))
+                .frame(width: 30, height: 30)
+                .background(Color.white.opacity(0.055), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(HubTheme.accent)
+        .accessibilityLabel(label)
+        .accessibilityIdentifier("hub.calendar.\(identifier)")
+    }
+
+    private var weekdaySymbols: [String] {
+        let symbols = calendar.veryShortStandaloneWeekdaySymbols
+        let offset = max(0, min(symbols.count - 1, calendar.firstWeekday - 1))
+        return Array(symbols[offset...] + symbols[..<offset])
+    }
+
+    private func isSelected(_ day: PersonalHubCalendarDay) -> Bool {
+        calendar.isDate(day.date, inSameDayAs: month.selectedDate)
+    }
+
+    private func moveMonth(_ offset: Int) {
+        guard let reference = calendar.date(byAdding: .month, value: offset, to: month.displayedMonth) else { return }
+        Task { await client.refreshCalendar(referenceDate: reference, selectedDate: reference) }
     }
 }
 

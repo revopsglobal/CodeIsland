@@ -91,6 +91,18 @@ enum RemoteApprovalWebApp {
         .hub-config-actions { display:flex; flex-wrap:wrap; gap:7px; margin-top:10px; }
         .hub-config-actions button { min-height:36px; padding:0 11px; border-radius:9px; font-size:11px; }
         .rack-summary { margin-top:7px; color:#aeb8b0; font-size:11px; line-height:1.45; }
+        .calendar-month { margin-top:10px; padding:10px; border-radius:13px; background:#070a08; box-shadow:inset 0 0 0 1px #ffffff12; }
+        .calendar-head { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+        .calendar-title { flex:1; text-align:center; font-size:13px; font-weight:760; letter-spacing:-.01em; }
+        .calendar-nav { min-height:30px; padding:0 9px; border-radius:999px; background:#1b241e; color:var(--amber); font-size:11px; box-shadow:inset 0 0 0 1px #344037; }
+        .calendar-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:4px; }
+        .calendar-weekday { color:#667268; text-align:center; font:800 9px ui-monospace,SFMono-Regular,Menlo,monospace; }
+        .calendar-day { position:relative; min-height:34px; padding:3px; border-radius:9px; background:transparent; color:#dce3dd; font-size:11px; box-shadow:none; }
+        .calendar-day.adjacent { color:#59635b; }
+        .calendar-day.selected { background:#ffb3472e; box-shadow:inset 0 0 0 1px #ffb34766; }
+        .calendar-day.today { box-shadow:inset 0 0 0 1px var(--amber); }
+        .calendar-count { display:block; width:4px; height:4px; margin:2px auto 0; border-radius:50%; background:var(--amber); box-shadow:0 0 7px #ffb34799; }
+        .calendar-selected { margin-top:8px; }
         progress { width:100%; height:5px; margin-top:7px; accent-color:var(--amber); }
         .hidden { display:none !important; }
         #error { color:#ff9da0; font-size:13px; margin-top:10px; white-space:pre-wrap; }
@@ -143,6 +155,8 @@ enum RemoteApprovalWebApp {
         const modeKey = 'codeisland.hub.mode.v1';
         let deviceToken = localStorage.getItem(tokenKey) || '';
         let selectedMode = localStorage.getItem(modeKey) || 'auto';
+        var calendarReferenceDate = null;
+        var calendarSelectedDate = null;
         let busy = new Set();
         let lastHubSnapshot = { value: null };
         const pair = document.getElementById('pair');
@@ -270,10 +284,50 @@ enum RemoteApprovalWebApp {
           renderHubConfiguration(snapshot);
           hub.innerHTML=(snapshot.modules||[]).map(module=>`<article class="module">
             <div class="module-head"><div><div class="module-title">${escapeHTML(moduleNames[module.id]||module.id)}</div><div class="module-summary">${escapeHTML(module.summary||'')}</div></div><div class="availability">${escapeHTML(module.availability)}</div></div>
-            ${(module.items||[]).map(item=>`<div class="hub-item"><div class="hub-item-title">${escapeHTML(item.title)}</div>${item.subtitle?`<div class="hub-item-subtitle">${escapeHTML(item.subtitle)}</div>`:''}${item.progress!==null&&item.progress!==undefined?`<progress value="${Number(item.progress)}" max="1"></progress>`:''}${renderHubActions(module.id,item.actions||[],item.id,item.detail||'')}</div>`).join('')}
+            ${renderCalendarMonth(module)}
+            ${(module.calendarMonth?(module.items||[]).slice(0,6):(module.items||[])).map(item=>renderHubItem(module.id,item)).join('')}
             ${renderHubActions(module.id,module.actions||[],null,'')}
           </article>`).join('');
           hub.querySelectorAll('[data-hub-action]').forEach(button=>button.addEventListener('click',()=>runHubAction(button.dataset.module,button.dataset.action,button.dataset.target||null,button.dataset.deeplink||null,button.dataset.payload||'',button.dataset.value||'')));
+          hub.querySelectorAll('[data-calendar-nav]').forEach(button=>button.addEventListener('click',()=>navigateCalendar(button.dataset.calendarNav)));
+          hub.querySelectorAll('[data-calendar-date]').forEach(button=>button.addEventListener('click',()=>selectCalendarDate(button.dataset.calendarDate)));
+        }
+
+        function renderHubItem(moduleID,item) {
+          return `<div class="hub-item"><div class="hub-item-title">${escapeHTML(item.title)}</div>${item.subtitle?`<div class="hub-item-subtitle">${escapeHTML(item.subtitle)}</div>`:''}${item.progress!==null&&item.progress!==undefined?`<progress value="${Number(item.progress)}" max="1"></progress>`:''}${renderHubActions(moduleID,item.actions||[],item.id,item.detail||'')}</div>`;
+        }
+
+        function renderCalendarMonth(module) {
+          const month=module.calendarMonth; if(!month) return '';
+          const title=new Intl.DateTimeFormat(undefined,{month:'long',year:'numeric'}).format(new Date(month.displayedMonth));
+          const selectedDay=new Date(month.selectedDate).toDateString();
+          const weekdays=['S','M','T','W','T','F','S'];
+          const days=(month.days||[]).map(day=>{
+            const date=new Date(day.date); const selected=date.toDateString()===selectedDay;
+            const classes=['calendar-day',day.isInDisplayedMonth?'':'adjacent',selected?'selected':'',day.isToday?'today':''].filter(Boolean).join(' ');
+            return `<button class="${classes}" data-calendar-date="${escapeHTML(day.date)}" aria-label="${escapeHTML(date.toLocaleDateString(undefined,{dateStyle:'full'}))}, ${Number(day.eventCount)||0} events">${date.getDate()}${day.eventCount?'<span class="calendar-count"></span>':''}</button>`;
+          }).join('');
+          const selectedEvents=(month.selectedEvents||[]).map(item=>renderHubItem(module.id,item)).join('');
+          return `<div class="calendar-month"><div class="calendar-head"><button class="calendar-nav" data-calendar-nav="previous" aria-label="Previous month">‹</button><button class="calendar-nav" data-calendar-nav="today">Today</button><div class="calendar-title">${escapeHTML(title)}</div><button class="calendar-nav" data-calendar-nav="next" aria-label="Next month">›</button></div><div class="calendar-grid">${weekdays.map(day=>`<div class="calendar-weekday">${day}</div>`).join('')}${days}</div><div class="calendar-selected">${selectedEvents||'<div class="hub-item-subtitle">No events on the selected day</div>'}</div></div>`;
+        }
+
+        async function navigateCalendar(direction) {
+          if(direction==='today') {
+            const now=new Date(); calendarReferenceDate=now.toISOString(); calendarSelectedDate=now.toISOString();
+          } else {
+            const calendarModule=(lastHubSnapshot.value?.modules||[]).find(module=>module.id==='calendar');
+            const displayed=new Date(calendarModule?.calendarMonth?.displayedMonth||Date.now());
+            const next=new Date(displayed.getFullYear(),displayed.getMonth()+(direction==='next'?1:-1),1,12);
+            calendarReferenceDate=next.toISOString(); calendarSelectedDate=next.toISOString();
+          }
+          await refreshHub();
+        }
+
+        async function selectCalendarDate(value) {
+          const calendarModule=(lastHubSnapshot.value?.modules||[]).find(module=>module.id==='calendar');
+          calendarReferenceDate=calendarModule?.calendarMonth?.displayedMonth||value;
+          calendarSelectedDate=value;
+          await refreshHub();
         }
 
         function renderHubConfiguration(snapshot) {
@@ -426,7 +480,7 @@ enum RemoteApprovalWebApp {
         }
 
         async function refreshHub() {
-          const response=await fetch('/api/hub/snapshot',{method:'POST',headers:{...authHeaders(),'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify({requestedMode:selectedMode})});
+          const response=await fetch('/api/hub/snapshot',{method:'POST',headers:{...authHeaders(),'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify({requestedMode:selectedMode,calendarReferenceDate,calendarSelectedDate})});
           if(response.status===401) throw new Error('unauthorized');
           const body=await response.json(); if(!response.ok) throw new Error(body.error||'Hub unavailable');
           renderHub(body);

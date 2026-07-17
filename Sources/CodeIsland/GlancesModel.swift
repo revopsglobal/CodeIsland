@@ -18,6 +18,7 @@ final class GlancesModel: NSObject, ObservableObject {
 
     struct EventInfo: Equatable {
         let id: String
+        let sourceID: String
         let title: String
         let start: Date
         let end: Date
@@ -35,6 +36,11 @@ final class GlancesModel: NSObject, ObservableObject {
         let calendarTitle: String
         let isCompleted: Bool
         let completionDate: Date?
+    }
+
+    struct CalendarMonthInfo: Equatable {
+        let month: PersonalHubCalendarMonth
+        let selectedEvents: [EventInfo]
     }
 
     struct ReminderCalendarInfo: Identifiable, Equatable {
@@ -202,9 +208,10 @@ final class GlancesModel: NSObject, ObservableObject {
     }
 
     private static func eventInfo(_ event: EKEvent) -> EventInfo? {
-        guard let id = event.eventIdentifier else { return nil }
+        guard let sourceID = event.eventIdentifier else { return nil }
         return EventInfo(
-            id: id,
+            id: eventInstanceID(eventIdentifier: sourceID, start: event.startDate),
+            sourceID: sourceID,
             title: event.title ?? "Untitled event",
             start: event.startDate,
             end: event.endDate,
@@ -214,6 +221,79 @@ final class GlancesModel: NSObject, ObservableObject {
             calendarTitle: event.calendar.title,
             isEditable: event.calendar.allowsContentModifications
         )
+    }
+
+    nonisolated static func eventInstanceID(eventIdentifier: String, start: Date) -> String {
+        "\(eventIdentifier)#\(Int64((start.timeIntervalSinceReferenceDate * 1_000).rounded()))"
+    }
+
+    func calendarMonth(
+        referenceDate: Date,
+        selectedDate: Date,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> CalendarMonthInfo {
+        let emptyMonth = PersonalHubCalendarMonth.make(
+            referenceDate: referenceDate,
+            selectedDate: selectedDate,
+            eventDates: [],
+            now: now,
+            calendar: calendar
+        )
+        guard calendarAuthorized,
+              let gridStart = emptyMonth.days.first?.date,
+              let gridEnd = calendar.date(byAdding: .day, value: 42, to: gridStart)
+        else {
+            return CalendarMonthInfo(month: emptyMonth, selectedEvents: [])
+        }
+
+        let calendars = eventStore.calendars(for: .event)
+        let predicate = eventStore.predicateForEvents(
+            withStart: gridStart,
+            end: gridEnd,
+            calendars: calendars
+        )
+        let events = eventStore.events(matching: predicate)
+            .filter { $0.endDate > gridStart && $0.startDate < gridEnd }
+            .sorted { lhs, rhs in
+                if lhs.startDate != rhs.startDate { return lhs.startDate < rhs.startDate }
+                return (lhs.title ?? "") < (rhs.title ?? "")
+            }
+        let eventDates = events.flatMap {
+            Self.occupiedDates(for: $0, gridStart: gridStart, gridEnd: gridEnd, calendar: calendar)
+        }
+        let month = PersonalHubCalendarMonth.make(
+            referenceDate: referenceDate,
+            selectedDate: selectedDate,
+            eventDates: eventDates,
+            now: now,
+            calendar: calendar
+        )
+        let selectedStart = calendar.startOfDay(for: month.selectedDate)
+        let selectedEnd = calendar.date(byAdding: .day, value: 1, to: selectedStart)
+            ?? selectedStart.addingTimeInterval(86_400)
+        let selectedEvents = events
+            .filter { $0.endDate > selectedStart && $0.startDate < selectedEnd }
+            .compactMap(Self.eventInfo)
+
+        return CalendarMonthInfo(month: month, selectedEvents: selectedEvents)
+    }
+
+    nonisolated private static func occupiedDates(
+        for event: EKEvent,
+        gridStart: Date,
+        gridEnd: Date,
+        calendar: Calendar
+    ) -> [Date] {
+        var cursor = max(calendar.startOfDay(for: event.startDate), gridStart)
+        let eventEnd = min(event.endDate, gridEnd)
+        var dates: [Date] = []
+        while cursor < eventEnd, dates.count < 42 {
+            dates.append(cursor)
+            guard let next = calendar.date(byAdding: .day, value: 1, to: cursor), next > cursor else { break }
+            cursor = next
+        }
+        return dates
     }
 
     @discardableResult

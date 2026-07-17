@@ -296,7 +296,9 @@ final class RemoteApprovalService: ObservableObject {
             }
             let snapshot = personalHub.snapshot(
                 appState: appState,
-                requestedMode: snapshotRequest.requestedMode
+                requestedMode: snapshotRequest.requestedMode,
+                calendarReferenceDate: snapshotRequest.calendarReferenceDate,
+                calendarSelectedDate: snapshotRequest.calendarSelectedDate
             )
             return .json(status: 200, encodable: snapshot)
         }
