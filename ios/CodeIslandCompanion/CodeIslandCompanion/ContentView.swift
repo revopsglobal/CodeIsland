@@ -1876,7 +1876,7 @@ private struct PulseDot: View {
 
     @ViewBuilder
     var body: some View {
-        if reduceMotion {
+        if !CompanionMotionPolicy.shouldPulse(status: status, reduceMotion: reduceMotion) {
             Circle()
                 .fill(statusColor(status))
                 .frame(width: 8, height: 8)
@@ -1905,6 +1905,19 @@ private struct PulseDot: View {
             return 1 + CGFloat((sin(phase * 4.2) + 1) * 0.28)
         case .waitingApproval, .waitingQuestion:
             return 1 + CGFloat((sin(phase * 7.0) + 1) * 0.42)
+        }
+    }
+}
+
+enum CompanionMotionPolicy {
+    static func shouldPulse(status: CompanionStatus, reduceMotion: Bool) -> Bool {
+        guard !reduceMotion else { return false }
+
+        switch status {
+        case .waitingApproval, .waitingQuestion:
+            return true
+        case .idle, .processing, .running:
+            return false
         }
     }
 }

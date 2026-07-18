@@ -2,6 +2,26 @@ import XCTest
 @testable import CodeIslandCompanion
 
 final class LiveActivityPrivacyTests: XCTestCase {
+    func testBackgroundRefreshKeepsAnEstablishedConnectionStable() {
+        XCTAssertEqual(
+            RemoteApprovalClient.refreshStartState(hasCompletedSnapshot: false),
+            .connecting
+        )
+        XCTAssertNil(
+            RemoteApprovalClient.refreshStartState(hasCompletedSnapshot: true),
+            "A routine poll must not replace stable content with a transient connecting state"
+        )
+    }
+
+    func testStatusPulseIsReservedForActionRequiredStates() {
+        XCTAssertFalse(CompanionMotionPolicy.shouldPulse(status: .idle, reduceMotion: false))
+        XCTAssertFalse(CompanionMotionPolicy.shouldPulse(status: .processing, reduceMotion: false))
+        XCTAssertFalse(CompanionMotionPolicy.shouldPulse(status: .running, reduceMotion: false))
+        XCTAssertTrue(CompanionMotionPolicy.shouldPulse(status: .waitingApproval, reduceMotion: false))
+        XCTAssertTrue(CompanionMotionPolicy.shouldPulse(status: .waitingQuestion, reduceMotion: false))
+        XCTAssertFalse(CompanionMotionPolicy.shouldPulse(status: .waitingApproval, reduceMotion: true))
+    }
+
     func testLockScreenStateRedactsPromptTranscriptAndWorkspace() throws {
         let payload = CompanionStatePayload(
             version: 1,
