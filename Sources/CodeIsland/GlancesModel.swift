@@ -227,6 +227,10 @@ final class GlancesModel: NSObject, ObservableObject {
         "\(eventIdentifier)#\(Int64((start.timeIntervalSinceReferenceDate * 1_000).rounded()))"
     }
 
+    nonisolated static func event(forSourceID sourceID: String, in events: [EventInfo]) -> EventInfo? {
+        events.first { $0.sourceID == sourceID }
+    }
+
     func calendarMonth(
         referenceDate: Date,
         selectedDate: Date,

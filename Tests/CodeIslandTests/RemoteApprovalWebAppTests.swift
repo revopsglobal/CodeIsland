@@ -42,6 +42,16 @@ final class RemoteApprovalWebAppTests: XCTestCase {
         XCTAssertTrue(html.contains("${visibleDetail}"))
     }
 
+    func testActionMetadataUsesAttributeEscaping() {
+        let html = RemoteApprovalWebApp.html
+
+        XCTAssertTrue(html.contains("function escapeAttribute(value='')"))
+        XCTAssertTrue(html.contains(#"data-value="${escapeAttribute(action.value||'')}""#))
+        XCTAssertTrue(html.contains(#"data-token="${escapeAttribute(item.actionToken)}""#))
+        XCTAssertTrue(html.contains(#"value="${escapeAttribute(option)}""#))
+        XCTAssertFalse(html.contains(#"data-value="${escapeHTML(action.value||'')}""#))
+    }
+
     func testFallbackBrandMatchesNativeApp() {
         XCTAssertTrue(RemoteApprovalWebApp.html.contains("<title>CodeIsland</title>"))
         XCTAssertTrue(RemoteApprovalWebApp.html.contains("Your Mac, when it needs you"))

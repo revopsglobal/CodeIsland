@@ -295,6 +295,9 @@ enum RemoteApprovalWebApp {
           noticeTimer.value=setTimeout(()=>notice.classList.add('hidden'),5000);
         }
         function escapeHTML(value='') { const e=document.createElement('div'); e.textContent=value; return e.innerHTML; }
+        function escapeAttribute(value='') {
+          return String(value).replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll("'",'&#39;').replaceAll('<','&lt;').replaceAll('>','&gt;');
+        }
         function relativeTime(value) {
           const seconds=Math.max(0,Math.round((Date.now()-new Date(value).getTime())/1000));
           if(seconds<60) return `${seconds}s ago`; if(seconds<3600) return `${Math.floor(seconds/60)}m ago`; return `${Math.floor(seconds/3600)}h ago`;
@@ -338,8 +341,8 @@ enum RemoteApprovalWebApp {
             <div class="meta"><span class="chip">${escapeHTML(item.workspace||'Session')}</span><span class="chip">#${escapeHTML(item.sessionId.slice(-8))}</span></div>
             ${item.detail?`<div class="detail">${escapeHTML(item.detail)}</div>`:''}
             <div class="actions">
-              <button class="deny" ${busy.has(item.id)?'disabled':''} data-id="${escapeHTML(item.id)}" data-token="${escapeHTML(item.actionToken)}" data-decision="deny">Deny</button>
-              <button class="approve" ${busy.has(item.id)?'disabled':''} data-id="${escapeHTML(item.id)}" data-token="${escapeHTML(item.actionToken)}" data-decision="approve">Approve once</button>
+              <button class="deny" ${busy.has(item.id)?'disabled':''} data-id="${escapeAttribute(item.id)}" data-token="${escapeAttribute(item.actionToken)}" data-decision="deny">Deny</button>
+              <button class="approve" ${busy.has(item.id)?'disabled':''} data-id="${escapeAttribute(item.id)}" data-token="${escapeAttribute(item.actionToken)}" data-decision="approve">Approve once</button>
             </div>
           </article>`).join('');
           approvals.querySelectorAll('button[data-decision]').forEach(button=>button.addEventListener('click',()=>decide(button.dataset.id,button.dataset.token,button.dataset.decision)));
@@ -349,16 +352,16 @@ enum RemoteApprovalWebApp {
 
         function renderQuestions(items) {
           lastQuestions=items;
-          questions.innerHTML=items.map(item=>`<article class="card approval" data-question-id="${escapeHTML(item.id)}">
+          questions.innerHTML=items.map(item=>`<article class="card approval" data-question-id="${escapeAttribute(item.id)}">
             <div class="eyebrow">${escapeHTML(item.source)} · QUESTION · ${relativeTime(item.createdAt)}</div>
             ${item.requiresLocalResponse
               ? `<div class="tool">Sensitive question waiting on Mac</div><div class="muted">Its text and choices are intentionally never sent to this device.</div>`
               : (item.prompts||[]).map((prompt,promptIndex)=>`<div class="question-prompt" data-prompt-index="${promptIndex}">
                   ${prompt.header?`<div class="eyebrow">${escapeHTML(prompt.header)}</div>`:''}
                   <div class="tool">${escapeHTML(prompt.question)}</div>
-                  ${(prompt.options||[]).map(option=>`<label class="hub-item"><input class="question-option" type="${prompt.allowsMultipleSelection?'checkbox':'radio'}" name="question-${escapeHTML(item.id)}-${promptIndex}" value="${escapeHTML(option)}"> ${escapeHTML(option)}</label>`).join('')}
+                  ${(prompt.options||[]).map(option=>`<label class="hub-item"><input class="question-option" type="${prompt.allowsMultipleSelection?'checkbox':'radio'}" name="question-${escapeAttribute(item.id)}-${promptIndex}" value="${escapeAttribute(option)}"> ${escapeHTML(option)}</label>`).join('')}
                   <input class="question-custom" placeholder="${prompt.options&&prompt.options.length?'Or type a custom answer':'Type your answer'}">
-                </div>`).join('') + `<div class="actions" style="grid-template-columns:1fr"><button class="approve question-send" data-id="${escapeHTML(item.id)}" data-token="${escapeHTML(item.actionToken||'')}">Send answer</button></div>`}
+                </div>`).join('') + `<div class="actions" style="grid-template-columns:1fr"><button class="approve question-send" data-id="${escapeAttribute(item.id)}" data-token="${escapeAttribute(item.actionToken||'')}">Send answer</button></div>`}
           </article>`).join('');
           questions.querySelectorAll('button.question-send').forEach(button=>button.addEventListener('click',()=>answerQuestion(button)));
           questionTitle.classList.toggle('hidden',items.length===0);
@@ -422,8 +425,8 @@ enum RemoteApprovalWebApp {
           const position=Number(item.mediaPosition); const duration=Number(item.mediaDuration);
           const visibleDetail=moduleID==='claude'&&item.detail?`<div class="hub-item-detail">${escapeHTML(item.detail)}</div>`:'';
           const seek=Number.isFinite(position)&&Number.isFinite(duration)&&duration>0
-            ? `<input class="media-seek" type="range" min="0" max="${duration}" step="0.1" value="${Math.min(Math.max(position,0),duration)}" data-media-seek="1" data-target="${escapeHTML(item.id)}" aria-label="Playback position"><div class="media-times"><span data-media-current>${playbackTime(position)}</span><span>${playbackTime(duration)}</span></div>`:'';
-          return `<div class="hub-item"><div class="media-item-head">${artwork?`<img class="media-art" src="${escapeHTML(artwork)}" alt="">`:''}<div class="media-copy"><div class="hub-item-title">${escapeHTML(item.title)}</div>${item.subtitle?`<div class="hub-item-subtitle">${escapeHTML(item.subtitle)}</div>`:''}</div></div>${visibleDetail}${item.progress!==null&&item.progress!==undefined?`<progress value="${Number(item.progress)}" max="1"></progress>`:''}${seek}${renderHubActions(moduleID,item.actions||[],item.id,item.detail||'')}</div>`;
+            ? `<input class="media-seek" type="range" min="0" max="${duration}" step="0.1" value="${Math.min(Math.max(position,0),duration)}" data-media-seek="1" data-target="${escapeAttribute(item.id)}" aria-label="Playback position"><div class="media-times"><span data-media-current>${playbackTime(position)}</span><span>${playbackTime(duration)}</span></div>`:'';
+          return `<div class="hub-item"><div class="media-item-head">${artwork?`<img class="media-art" src="${escapeAttribute(artwork)}" alt="">`:''}<div class="media-copy"><div class="hub-item-title">${escapeHTML(item.title)}</div>${item.subtitle?`<div class="hub-item-subtitle">${escapeHTML(item.subtitle)}</div>`:''}</div></div>${visibleDetail}${item.progress!==null&&item.progress!==undefined?`<progress value="${Number(item.progress)}" max="1"></progress>`:''}${seek}${renderHubActions(moduleID,item.actions||[],item.id,item.detail||'')}</div>`;
         }
 
         function playbackTime(seconds) {
@@ -489,7 +492,7 @@ enum RemoteApprovalWebApp {
           const days=(month.days||[]).map(day=>{
             const date=new Date(day.date); const selected=date.toDateString()===selectedDay;
             const classes=['calendar-day',day.isInDisplayedMonth?'':'adjacent',selected?'selected':'',day.isToday?'today':''].filter(Boolean).join(' ');
-            return `<button class="${classes}" data-calendar-date="${escapeHTML(day.date)}" aria-label="${escapeHTML(date.toLocaleDateString(undefined,{dateStyle:'full'}))}, ${Number(day.eventCount)||0} events">${date.getDate()}${day.eventCount?'<span class="calendar-count"></span>':''}</button>`;
+            return `<button class="${classes}" data-calendar-date="${escapeAttribute(day.date)}" aria-label="${escapeAttribute(date.toLocaleDateString(undefined,{dateStyle:'full'}))}, ${Number(day.eventCount)||0} events">${date.getDate()}${day.eventCount?'<span class="calendar-count"></span>':''}</button>`;
           }).join('');
           const selectedEvents=(month.selectedEvents||[]).map(item=>renderHubItem(module.id,item)).join('');
           return `<div class="calendar-month"><div class="calendar-head"><button class="calendar-nav" data-calendar-nav="previous" aria-label="Previous month">‹</button><button class="calendar-nav" data-calendar-nav="today">Today</button><div class="calendar-title">${escapeHTML(title)}</div><button class="calendar-nav" data-calendar-nav="next" aria-label="Next month">›</button></div><div class="calendar-grid">${weekdays.map(day=>`<div class="calendar-weekday">${day}</div>`).join('')}${days}</div><div class="calendar-selected">${selectedEvents||'<div class="hub-item-subtitle">No events on the selected day</div>'}</div></div>`;
@@ -543,7 +546,7 @@ enum RemoteApprovalWebApp {
 
         function renderHubActions(moduleID,actions,targetID,payload) {
           if(!actions.length) return '';
-          return `<div class="hub-actions">${actions.map(action=>`<button class="hub-action ${action.role==='primary'?'primary':''}" data-hub-action="1" data-module="${escapeHTML(moduleID)}" data-action="${escapeHTML(action.id)}" data-target="${escapeHTML(action.targetID||targetID||'')}" data-deeplink="${escapeHTML(action.deepLink||'')}" data-payload="${escapeHTML(payload)}" data-value="${escapeHTML(action.value||'')}">${escapeHTML(action.label)}</button>`).join('')}</div>`;
+          return `<div class="hub-actions">${actions.map(action=>`<button class="hub-action ${action.role==='primary'?'primary':''}" data-hub-action="1" data-module="${escapeAttribute(moduleID)}" data-action="${escapeAttribute(action.id)}" data-target="${escapeAttribute(action.targetID||targetID||'')}" data-deeplink="${escapeAttribute(action.deepLink||'')}" data-payload="${escapeAttribute(payload)}" data-value="${escapeAttribute(action.value||'')}">${escapeHTML(action.label)}</button>`).join('')}</div>`;
         }
 
         function stopClaudeSpeech(message='Voice stopped.') {
