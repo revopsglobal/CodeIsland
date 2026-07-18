@@ -468,7 +468,7 @@ final class PersonalHubService {
 
         case (.calendar, "openOnMac"):
             guard let targetID = intent.targetID,
-                  let event = glances.upcomingEvents.first(where: { $0.id == targetID }),
+                  let event = GlancesModel.event(forSourceID: targetID, in: glances.upcomingEvents),
                   let joinURL = event.joinURL
             else { return .failure(.invalid("Meeting link is no longer available")) }
             NSWorkspace.shared.open(joinURL)
@@ -841,14 +841,14 @@ final class PersonalHubService {
 
         case (.calendar, "delete"):
             guard let targetID = intent.targetID,
-                  let event = glances.upcomingEvents.first(where: { $0.id == targetID })
+                  let event = GlancesModel.event(forSourceID: targetID, in: glances.upcomingEvents)
             else { return .failure(.invalid("Event is no longer available")) }
             guard event.isEditable else { return .failure(.invalid("This calendar is read-only")) }
             return .success("Delete event “\(event.title)”")
 
         case (.calendar, "edit"):
             guard let targetID = intent.targetID,
-                  let event = glances.upcomingEvents.first(where: { $0.id == targetID }),
+                  let event = GlancesModel.event(forSourceID: targetID, in: glances.upcomingEvents),
                   event.isEditable else { return .failure(.invalid("Event is no longer editable")) }
             guard let draft = PersonalHubCalendarDraft.decodeActionValue(intent.value) else {
                 return .failure(.invalid("Enter an event title and time"))
@@ -864,7 +864,7 @@ final class PersonalHubService {
 
         case (.calendar, "openOnMac"):
             guard let targetID = intent.targetID,
-                  let event = glances.upcomingEvents.first(where: { $0.id == targetID }),
+                  let event = GlancesModel.event(forSourceID: targetID, in: glances.upcomingEvents),
                   event.joinURL != nil
             else { return .failure(.invalid("Meeting link is no longer available")) }
             return .success("Open “\(event.title)” on the Mac")

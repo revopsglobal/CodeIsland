@@ -136,6 +136,24 @@ final class GlancesModelTests: XCTestCase {
         XCTAssertNotEqual(firstID, secondID)
     }
 
+    func testCalendarActionsResolveEventKitSourceIdentifier() {
+        let event = GlancesModel.EventInfo(
+            id: "event-123#456",
+            sourceID: "event-123",
+            title: "CodeIsland acceptance",
+            start: Date(timeIntervalSince1970: 1_000),
+            end: Date(timeIntervalSince1970: 2_000),
+            joinURL: nil,
+            notes: nil,
+            isAllDay: false,
+            calendarTitle: "Calendar",
+            isEditable: true
+        )
+
+        XCTAssertEqual(GlancesModel.event(forSourceID: "event-123", in: [event]), event)
+        XCTAssertNil(GlancesModel.event(forSourceID: event.id, in: [event]))
+    }
+
     func testGeocodingURLExtractsZIPFromNaturalLocationInput() throws {
         let url = try XCTUnwrap(GlancesModel.geocodingURL(for: "San Francisco 94107"))
         let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
