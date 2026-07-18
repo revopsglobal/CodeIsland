@@ -1941,6 +1941,12 @@ private struct BuddyPage: View {
                                 .font(.caption2)
                                 .foregroundStyle(receipt.activitiesEnabled ? Color.secondary : Color.orange)
                             }
+                            if let version = device.clientVersion,
+                               let build = device.clientBuild {
+                                Text("Buddy \(version) (\(build))")
+                                    .font(.caption2.monospaced())
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
                 }

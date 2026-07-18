@@ -141,20 +141,70 @@ final class CodeIslandCompanionUITests: XCTestCase {
         ]
         app.launch()
 
+        XCTAssertTrue(app.staticTexts["CodeIsland"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.buttons["companion.presence.menu"].exists)
         let now = app.buttons["companion.destination.now"]
         let sessions = app.buttons["companion.destination.sessions"]
-        let tools = app.buttons["companion.tools"]
-        XCTAssertTrue(now.waitForExistence(timeout: 8))
+        let capture = app.buttons["companion.capture"]
+        let more = app.buttons["companion.more"]
+        XCTAssertTrue(now.exists)
         XCTAssertTrue(sessions.exists)
-        XCTAssertTrue(tools.exists)
+        XCTAssertTrue(capture.exists)
+        XCTAssertTrue(more.exists)
         XCTAssertGreaterThanOrEqual(now.frame.height, 44)
-        XCTAssertGreaterThanOrEqual(tools.frame.height, 44)
+        XCTAssertGreaterThanOrEqual(capture.frame.height, 44)
+        XCTAssertGreaterThanOrEqual(more.frame.height, 44)
         XCTAssertTrue(app.otherElements["companion.now.overview"].exists)
         XCTAssertFalse(app.otherElements["hub.surface"].exists)
 
-        tools.tap()
+        more.tap()
         XCTAssertTrue(app.otherElements["hub.surface"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.otherElements["companion.tools.sheet"].exists)
+        XCTAssertTrue(
+            app.descendants(matching: .any)
+                .matching(identifier: "companion.more.sheet").firstMatch.exists
+        )
+    }
+
+    @MainActor
+    func testApprovalAttentionStageKeepsExactActionsProminent() throws {
+        let app = launchAttentionApp("approval")
+
+        XCTAssertTrue(app.staticTexts["Approval needed"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Run release build"].exists)
+
+        let deny = app.buttons["Deny"]
+        let approve = app.buttons["Approve once"]
+        XCTAssertTrue(deny.exists)
+        XCTAssertTrue(approve.exists)
+        XCTAssertGreaterThanOrEqual(deny.frame.height, 44)
+        XCTAssertGreaterThanOrEqual(approve.frame.height, 44)
+    }
+
+    @MainActor
+    func testQuestionAttentionStageUsesNativeSelectionAndSubmit() throws {
+        let app = launchAttentionApp("question")
+
+        XCTAssertTrue(app.staticTexts["Decision needed"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Ship the signed build tonight?"].exists)
+        let option = app.buttons["Ship tonight"]
+        XCTAssertTrue(option.exists)
+        option.tap()
+
+        let submit = app.buttons["Send answer"]
+        XCTAssertTrue(submit.exists)
+        XCTAssertTrue(submit.isEnabled)
+        XCTAssertGreaterThanOrEqual(submit.frame.height, 44)
+    }
+
+    @MainActor
+    func testMultipleAttentionItemsDoNotRotateAutomatically() throws {
+        let app = launchAttentionApp("multiple")
+
+        XCTAssertTrue(app.staticTexts["Run release build"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.buttons["1 of 2"].exists)
+        sleep(5)
+        XCTAssertTrue(app.staticTexts["Run release build"].exists)
+        XCTAssertFalse(app.staticTexts["Ship the signed build tonight?"].exists)
     }
 
     @MainActor
@@ -285,7 +335,7 @@ final class CodeIslandCompanionUITests: XCTestCase {
         let app = launchHubApp(mode: "work")
         XCTAssertTrue(app.otherElements["hub.surface"].waitForExistence(timeout: 8))
 
-        let edit = app.buttons["Edit WORK rack"].firstMatch
+        let edit = app.buttons["hub.rack.edit"].firstMatch
         XCTAssertTrue(edit.waitForExistence(timeout: 4))
         edit.tap()
 
@@ -378,7 +428,7 @@ final class CodeIslandCompanionUITests: XCTestCase {
         composer.tap()
         composer.typeText("Add finish the deck to my tasks")
 
-        let review = app.buttons["Review"].firstMatch
+        let review = app.buttons["hub.claude.review"].firstMatch
         XCTAssertTrue(review.waitForExistence(timeout: 4))
         review.tap()
 
@@ -510,11 +560,24 @@ final class CodeIslandCompanionUITests: XCTestCase {
         app.launch()
         let hub = app.otherElements["hub.surface"].firstMatch
         if !hub.waitForExistence(timeout: 2) {
-            let tools = app.buttons["companion.tools"]
-            if tools.waitForExistence(timeout: 4) {
-                tools.tap()
+            let more = app.buttons["companion.more"]
+            if more.waitForExistence(timeout: 4) {
+                more.tap()
             }
         }
+        return app
+    }
+
+    @MainActor
+    private func launchAttentionApp(_ kind: String) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-CodeIslandCompanionMockState", "idle",
+            "-CodeIslandCompanionMockHub",
+            "-CodeIslandCompanionMockHubMode", "code",
+            "-CodeIslandCompanionMockAttention", kind,
+        ]
+        app.launch()
         return app
     }
 

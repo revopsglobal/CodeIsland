@@ -394,19 +394,25 @@ public struct RemotePushRegistrationRequest: Codable, Equatable, Sendable {
     public let liveActivityPushToStartToken: String?
     public let liveActivityUpdateTokens: [String: String]?
     public let liveActivityReceipts: [RemoteLiveActivityReceipt]?
+    public let clientVersion: String?
+    public let clientBuild: String?
 
     public init(
         token: String? = nil,
         environment: String,
         liveActivityPushToStartToken: String? = nil,
         liveActivityUpdateTokens: [String: String]? = nil,
-        liveActivityReceipts: [RemoteLiveActivityReceipt]? = nil
+        liveActivityReceipts: [RemoteLiveActivityReceipt]? = nil,
+        clientVersion: String? = nil,
+        clientBuild: String? = nil
     ) {
         self.token = token
         self.environment = environment
         self.liveActivityPushToStartToken = liveActivityPushToStartToken
         self.liveActivityUpdateTokens = liveActivityUpdateTokens
         self.liveActivityReceipts = liveActivityReceipts
+        self.clientVersion = clientVersion
+        self.clientBuild = clientBuild
     }
 }
 

@@ -5,10 +5,10 @@ import Speech
 import UniformTypeIdentifiers
 
 enum HubTheme {
-    static let accent = Color(red: 1.0, green: 0.69, blue: 0.0)
-    static let foreground = Color.white
-    static let surface = Color.white.opacity(0.055)
-    static let border = Color.white.opacity(0.09)
+    static let accent = Color.orange
+    static let foreground = Color.ciForeground
+    static let surface = Color.ciSurface
+    static let border = Color.ciForeground.opacity(0.08)
 }
 
 typealias BuddyQuickJotDestination = PersonalHubQuickJotDestination
@@ -27,21 +27,21 @@ struct PersonalHubSessionsSurface: View {
     @EnvironmentObject private var client: RemoteApprovalClient
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(spacing: 12) {
                 Image(systemName: "terminal.fill")
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.title3.weight(.semibold))
                     .foregroundStyle(HubTheme.accent)
-                    .frame(width: 30, height: 30)
-                    .background(HubTheme.accent.opacity(0.13), in: RoundedRectangle(cornerRadius: 9))
+                    .frame(width: 44, height: 44)
+                    .background(HubTheme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 3) {
                     Text("Sessions")
-                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                        .font(.title2.weight(.bold))
                         .foregroundStyle(HubTheme.foreground)
                     Text(client.sessionsModule?.summary ?? client.connectionDetail)
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
-                        .foregroundStyle(HubTheme.foreground.opacity(0.46))
+                        .font(.subheadline)
+                        .foregroundStyle(HubTheme.foreground.opacity(0.52))
                         .lineLimit(2)
                 }
 
@@ -64,11 +64,12 @@ struct PersonalHubSessionsSurface: View {
                         ForEach(module.items) { item in
                             PersonalHubItemRow(moduleID: .agents, item: item)
                             if item.id != module.items.last?.id {
-                                Divider().overlay(Color.white.opacity(0.06))
+                                Divider().overlay(HubTheme.foreground.opacity(0.07))
                             }
                         }
                     }
-                    .background(Color.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 10))
+                    .padding(.horizontal, 4)
+                    .background(HubTheme.foreground.opacity(0.035), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 }
 
                 Button {
@@ -95,9 +96,10 @@ struct PersonalHubSessionsSurface: View {
                 .frame(maxWidth: .infinity, minHeight: 70, alignment: .leading)
             }
         }
-        .padding(14)
-        .background(Color.black.opacity(0.86), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(HubTheme.border, lineWidth: 1))
+        .padding(20)
+        .background(HubTheme.surface, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).stroke(HubTheme.border, lineWidth: 0.5))
+        .shadow(color: Color.black.opacity(0.06), radius: 20, y: 8)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("companion.remote.sessions")
         .task {
@@ -120,24 +122,20 @@ struct PersonalHubSurface: View {
     @State private var pendingQuickJot: (BuddyQuickJotDestination, String)?
 
     var body: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 14) {
             modeStrip
             connectionStrip
             quickJotStrip
 
             if let snapshot = client.hubSnapshot {
                 HStack(spacing: 8) {
-                    Text(snapshot.resolvedMode.displayTitle)
-                        .font(.system(size: 11, weight: .black, design: .monospaced))
+                    Text("\(snapshot.resolvedMode.displayTitle) tools")
+                        .font(.subheadline.weight(.semibold))
                         .foregroundStyle(HubTheme.accent)
-                    Text(snapshot.serverName)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(HubTheme.foreground.opacity(0.48))
-                        .lineLimit(1)
                     Spacer(minLength: 0)
-                    Text(snapshot.generatedAt, style: .time)
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
-                        .foregroundStyle(HubTheme.foreground.opacity(0.34))
+                    Text("Updated \(snapshot.generatedAt, style: .time)")
+                        .font(.caption)
+                        .foregroundStyle(HubTheme.foreground.opacity(0.42))
                     Button {
                         toggleDashboard(snapshot)
                     } label: {
@@ -210,12 +208,8 @@ struct PersonalHubSurface: View {
             }
 
         }
-        .padding(10)
-        .background(Color.black.opacity(0.86), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(HubTheme.border, lineWidth: 1)
-        )
+        .padding(.horizontal, 2)
+        .padding(.bottom, 12)
         .task { await client.refreshHub() }
         .sheet(item: $client.preparedAction) { prepared in
             PersonalHubConfirmationSheet(prepared: prepared)
@@ -255,7 +249,7 @@ struct PersonalHubSurface: View {
                     client.quickJotDestination = destination
                 } label: {
                     Label("New \(destination.title)", systemImage: destination.symbol)
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.callout.weight(.semibold))
                         .frame(maxWidth: .infinity, minHeight: 44)
                 }
                 .buttonStyle(HubSecondaryButtonStyle())
@@ -270,11 +264,11 @@ struct PersonalHubSurface: View {
                 .fill(client.state == .connected ? Color.green : Color.orange)
                 .frame(width: 7, height: 7)
             VStack(alignment: .leading, spacing: 1) {
-                Text(client.state.label.uppercased())
-                    .font(.system(size: 9, weight: .black, design: .monospaced))
+                Text(client.state.label)
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(client.state == .connected ? Color.green : Color.orange)
-                Text(client.connectionDetail)
-                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                Text(client.serverName ?? "Your paired Mac")
+                    .font(.caption)
                     .foregroundStyle(HubTheme.foreground.opacity(0.42))
                     .lineLimit(1)
             }
@@ -343,14 +337,14 @@ struct PersonalHubSurface: View {
                     }
                 } label: {
                     Text(mode.displayTitle)
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .font(.subheadline.weight(.semibold))
                         .foregroundStyle(
                             client.selectedMode == mode ? Color.black : HubTheme.foreground.opacity(0.58)
                         )
                         .frame(maxWidth: .infinity, minHeight: 44)
                         .background(
                             client.selectedMode == mode ? HubTheme.accent : HubTheme.surface,
-                            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            in: Capsule()
                         )
                 }
                 .buttonStyle(.plain)
@@ -631,7 +625,7 @@ private struct PersonalHubModuleCard: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(8)
-                .background(Color.black.opacity(0.16), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .background(HubTheme.foreground.opacity(0.035), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
 
             if showsComposer {
@@ -651,11 +645,11 @@ private struct PersonalHubModuleCard: View {
                             ForEach(month.selectedEvents) { item in
                                 PersonalHubItemRow(moduleID: module.id, item: item)
                                 if item.id != month.selectedEvents.last?.id {
-                                    Divider().overlay(Color.white.opacity(0.06))
+                                    Divider().overlay(HubTheme.foreground.opacity(0.07))
                                 }
                             }
                         }
-                        .background(Color.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 9))
+                        .background(HubTheme.foreground.opacity(0.035), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                     }
                 }
                 .accessibilityElement(children: .contain)
@@ -673,11 +667,11 @@ private struct PersonalHubModuleCard: View {
                     ForEach(module.calendarMonth == nil ? module.items : Array(module.items.prefix(6))) { item in
                         PersonalHubItemRow(moduleID: module.id, item: item)
                         if item.id != (module.calendarMonth == nil ? module.items.last?.id : module.items.prefix(6).last?.id) {
-                            Divider().overlay(Color.white.opacity(0.06))
+                            Divider().overlay(HubTheme.foreground.opacity(0.07))
                         }
                     }
                 }
-                .background(Color.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 9))
+                .background(HubTheme.foreground.opacity(0.035), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
 
             if !module.actions.isEmpty {
@@ -708,12 +702,13 @@ private struct PersonalHubModuleCard: View {
                 }
             }
         }
-        .padding(11)
-        .background(HubTheme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .padding(16)
+        .background(HubTheme.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(isHighlighted ? HubTheme.accent : HubTheme.border, lineWidth: isHighlighted ? 2 : 1)
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(isHighlighted ? HubTheme.accent : HubTheme.border, lineWidth: isHighlighted ? 1.5 : 0.5)
         )
+        .shadow(color: Color.black.opacity(0.045), radius: 16, y: 6)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("hub.module.\(module.id.rawValue)")
         .accessibilityValue(isHighlighted ? "Opened from link" : "")
@@ -834,7 +829,7 @@ private struct PersonalHubModuleCard: View {
                     .foregroundStyle(HubTheme.foreground)
                     .frame(minHeight: 110)
                     .padding(7)
-                    .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+                    .background(HubTheme.foreground.opacity(0.055), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 reviewButton(
                     actionID: "set",
                     value: composerText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -885,7 +880,7 @@ private struct PersonalHubModuleCard: View {
                         }
                     }
                     .padding(3)
-                    .background(Color.black.opacity(0.24), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .background(HubTheme.foreground.opacity(0.055), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
 
                     Spacer(minLength: 0)
 
@@ -895,7 +890,7 @@ private struct PersonalHubModuleCard: View {
                             .foregroundStyle(speech.isRecording ? HubTheme.accent : HubTheme.foreground.opacity(0.7))
                             .padding(.horizontal, 10)
                             .frame(minHeight: 44)
-                            .background(Color.white.opacity(0.06), in: Capsule())
+                            .background(HubTheme.foreground.opacity(0.055), in: Capsule())
                             .contentShape(Capsule())
                             .onLongPressGesture(
                                 minimumDuration: 0,
@@ -951,7 +946,7 @@ private struct PersonalHubModuleCard: View {
                                 .foregroundStyle(context.wasTruncated ? HubTheme.accent : HubTheme.foreground.opacity(0.7))
                                 .padding(.horizontal, 9)
                                 .frame(minHeight: 30)
-                                .background(Color.white.opacity(0.065), in: Capsule())
+                                .background(HubTheme.foreground.opacity(0.06), in: Capsule())
                             }
                         }
                     }
@@ -999,7 +994,7 @@ private struct PersonalHubModuleCard: View {
             .foregroundStyle(HubTheme.foreground)
             .padding(.horizontal, 10)
             .frame(minHeight: 44)
-            .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+            .background(HubTheme.foreground.opacity(0.055), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .accessibilityIdentifier("hub.\(module.id.rawValue).composer")
     }
 
@@ -1021,6 +1016,7 @@ private struct PersonalHubModuleCard: View {
         }
         .buttonStyle(HubPrimaryButtonStyle())
         .disabled((requiresText && composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) || value == nil)
+        .accessibilityIdentifier("hub.\(module.id.rawValue).review")
     }
 
     private var calendarActionValue: String? {
@@ -1071,10 +1067,10 @@ private struct BuddyCalendarMonthView: View {
             monthGrid
         }
         .padding(9)
-        .background(Color.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(HubTheme.foreground.opacity(0.035), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.white.opacity(0.075), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(HubTheme.border, lineWidth: 0.5)
         )
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("hub.calendar.month")
@@ -1879,7 +1875,7 @@ private struct HubPrimaryButtonStyle: ButtonStyle {
             .foregroundStyle(.black)
             .padding(.horizontal, 12)
             .frame(minHeight: 44)
-            .background(HubTheme.accent.opacity(configuration.isPressed ? 0.72 : 1), in: RoundedRectangle(cornerRadius: 8))
+            .background(HubTheme.accent.opacity(configuration.isPressed ? 0.72 : 1), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
     }
 }
@@ -1888,7 +1884,7 @@ private struct HubSecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .foregroundStyle(HubTheme.foreground.opacity(configuration.isPressed ? 0.55 : 0.74))
-            .background(Color.white.opacity(configuration.isPressed ? 0.1 : 0.06), in: RoundedRectangle(cornerRadius: 8))
+            .background(HubTheme.foreground.opacity(configuration.isPressed ? 0.1 : 0.055), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
     }
 }
@@ -1902,8 +1898,8 @@ private struct HubCompactButtonStyle: ButtonStyle {
             .padding(.horizontal, 9)
             .frame(minHeight: 44)
             .background(
-                primary ? HubTheme.accent : Color.white.opacity(0.06),
-                in: RoundedRectangle(cornerRadius: 7)
+                primary ? HubTheme.accent : HubTheme.foreground.opacity(0.055),
+                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
             )
             .opacity(configuration.isPressed ? 0.72 : 1)
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
@@ -1913,10 +1909,10 @@ private struct HubCompactButtonStyle: ButtonStyle {
 private extension PersonalHubMode {
     var displayTitle: String {
         switch self {
-        case .auto: return "AUTO"
-        case .home: return "HOME"
-        case .work: return "WORK"
-        case .code: return "CODE"
+        case .auto: return "Auto"
+        case .home: return "Home"
+        case .work: return "Work"
+        case .code: return "Code"
         }
     }
 }

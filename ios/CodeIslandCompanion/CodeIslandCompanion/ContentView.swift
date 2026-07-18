@@ -46,7 +46,7 @@ struct ContentView: View {
                         }
                     }
                 } else {
-                    PortraitIslandView(topPadding: 40)
+                    CompanionCommandCenterView(topPadding: 40)
                         .environmentObject(connection)
                         .environmentObject(liveActivity)
                         .environmentObject(remoteApprovals)
@@ -85,9 +85,6 @@ struct ContentView: View {
                 guard liveActivity.isRunning, let state = connection.latestState else { return }
                 liveActivity.startOrUpdate(with: state)
             }
-            .animation(reduceMotion ? nil : CodeIslandMotion.open, value: connection.connectedPeer)
-            .animation(reduceMotion ? nil : CodeIslandMotion.pop, value: connection.latestState?.status)
-            .animation(reduceMotion ? nil : CodeIslandMotion.micro, value: connection.browsing)
             .animation(reduceMotion ? nil : CodeIslandMotion.open, value: remoteApprovals.hubActionMessage)
         }
         .background(Color.ciBackground.ignoresSafeArea())
@@ -268,6 +265,41 @@ private struct PortraitIslandView: View {
             .environmentObject(liveActivity)
             .id(Self.pendingAnchor)
             .transition(.blurFade.combined(with: .scale(scale: 0.98, anchor: .top)))
+    }
+}
+
+/// One coherent session destination for both connection paths. Nearby/Bluetooth
+/// state owns the live controls and transcript; the paired Tailscale service owns
+/// the authenticated session roster. Showing both prevents remote pairing from
+/// hiding Live Activity, focus, approval, and recent-session controls.
+struct CompanionSessionsSurface: View {
+    @EnvironmentObject private var connection: CompanionConnection
+    @EnvironmentObject private var liveActivity: LiveActivityController
+    @EnvironmentObject private var remoteApprovals: RemoteApprovalClient
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            if let state = connection.latestState {
+                LiveIslandCard(state: state)
+                    .environmentObject(connection)
+                    .environmentObject(liveActivity)
+
+                if let personalStatus = state.personalStatus, !personalStatus.isEmpty {
+                    PersonalStatusStrip(status: personalStatus)
+                }
+
+                MessageStrip(messages: state.messages)
+            } else if !remoteApprovals.hasPairingCredential {
+                DiscoveryIsland()
+                    .environmentObject(connection)
+            }
+
+            if remoteApprovals.hasPairingCredential {
+                PersonalHubSessionsSurface()
+                    .environmentObject(remoteApprovals)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 }
 
@@ -2199,25 +2231,25 @@ let appAppearanceStorageKey = "appAppearance"
 // / `.fill(.ciX)` and in plain `Color` positions (`color: .ciX`).
 
 private enum CITheme {
-    /// App background: near-black in dark / warm off-white in light.
+    /// App background: soft charcoal in dark / restrained warm neutral in light.
     static let background = UIColor { trait in
         trait.userInterfaceStyle == .dark
-            ? UIColor(red: 0.015, green: 0.016, blue: 0.018, alpha: 1)
-            : UIColor(red: 0.945, green: 0.925, blue: 0.880, alpha: 1)
+            ? UIColor(red: 0.028, green: 0.028, blue: 0.030, alpha: 1)
+            : UIColor(red: 0.958, green: 0.952, blue: 0.942, alpha: 1)
     }
 
-    /// Card / capsule surface: pure black in dark / warm white in light (slightly brighter than the background so cards lift off it).
+    /// Raised content surface with subtle warmth and no pure black/white extremes.
     static let surface = UIColor { trait in
         trait.userInterfaceStyle == .dark
-            ? UIColor(red: 0, green: 0, blue: 0, alpha: 1)
-            : UIColor(red: 0.995, green: 0.985, blue: 0.960, alpha: 1)
+            ? UIColor(red: 0.055, green: 0.055, blue: 0.060, alpha: 1)
+            : UIColor(red: 0.989, green: 0.985, blue: 0.978, alpha: 1)
     }
 
-    /// Primary foreground (base color for text / icons / strokes and light fills): white in dark / warm dark brown in light.
+    /// Primary foreground: soft white in dark / warm graphite in light.
     static let foreground = UIColor { trait in
         trait.userInterfaceStyle == .dark
-            ? UIColor(white: 1, alpha: 1)
-            : UIColor(red: 0.16, green: 0.13, blue: 0.10, alpha: 1)
+            ? UIColor(white: 0.97, alpha: 1)
+            : UIColor(red: 0.115, green: 0.105, blue: 0.095, alpha: 1)
     }
 }
 

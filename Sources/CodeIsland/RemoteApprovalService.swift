@@ -547,13 +547,27 @@ final class RemoteApprovalService: ObservableObject {
         let receipts = registration.liveActivityReceipts ?? []
         let tokens = [registration.token, registration.liveActivityPushToStartToken].compactMap { $0 }
             + Array(updateTokens.values)
-        guard !tokens.isEmpty || !receipts.isEmpty,
+        let hasClientMetadata = registration.clientVersion != nil || registration.clientBuild != nil
+        if hasClientMetadata {
+            guard let version = registration.clientVersion,
+                  let build = registration.clientBuild,
+                  validClientMetadata(version, maximumLength: 40),
+                  validClientMetadata(build, maximumLength: 64)
+            else { return false }
+        }
+        guard !tokens.isEmpty || !receipts.isEmpty || hasClientMetadata,
               tokens.allSatisfy({ $0.count >= 32 && $0.allSatisfy(\.isHexDigit) }),
               registration.liveActivityUpdateTokens?.keys.allSatisfy({ !$0.isEmpty && $0.count <= 200 }) ?? true,
               receipts.count <= 16,
               receipts.allSatisfy(\.isStructurallyValid)
         else { return false }
         return registration.environment == "production" || registration.environment == "development"
+    }
+
+    private static func validClientMetadata(_ value: String, maximumLength: Int) -> Bool {
+        guard !value.isEmpty, value.count <= maximumLength else { return false }
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: ".-_+"))
+        return value.unicodeScalars.allSatisfy(allowed.contains)
     }
 
     private func authenticate(_ request: RemoteHTTPRequest) -> RemoteApprovalDevice? {
@@ -581,6 +595,8 @@ struct RemoteApprovalDevice: Codable, Equatable, Identifiable {
     var liveActivityUpdateTokens: [String: String]?
     var lastLiveActivityReceipt: RemoteLiveActivityReceipt?
     var recentLiveActivityReceiptIDs: [String]?
+    var clientVersion: String?
+    var clientBuild: String?
 }
 
 @MainActor
@@ -641,7 +657,9 @@ final class RemoteApprovalDeviceStore {
             liveActivityPushToStartToken: nil,
             liveActivityUpdateTokens: nil,
             lastLiveActivityReceipt: nil,
-            recentLiveActivityReceiptIDs: nil
+            recentLiveActivityReceiptIDs: nil,
+            clientVersion: nil,
+            clientBuild: nil
         )
         devices.append(device)
         save()
@@ -679,6 +697,11 @@ final class RemoteApprovalDeviceStore {
         }
         if let token = registration.liveActivityPushToStartToken {
             devices[index].liveActivityPushToStartToken = token.lowercased()
+        }
+        if let version = registration.clientVersion,
+           let build = registration.clientBuild {
+            devices[index].clientVersion = version
+            devices[index].clientBuild = build
         }
         if let updates = registration.liveActivityUpdateTokens, !updates.isEmpty {
             var merged = devices[index].liveActivityUpdateTokens ?? [:]
