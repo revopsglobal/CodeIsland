@@ -76,10 +76,11 @@ capture() {
   xcrun simctl ui "$UDID" appearance "$appearance"
   xcrun simctl terminate "$UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true
   xcrun simctl launch "$UDID" "$BUNDLE_ID" "$@" >/dev/null
-  # Simulator launch crossfades can outlast the app's own first frame.
-  # Give the system transition time to settle so the receipt is not a
-  # partially faded status bar or presence header.
-  sleep 6
+  # Simulator launch crossfades can outlast the app's own first frame,
+  # especially when the attention card changes the content footprint.
+  # Wait for the system composition to settle so the receipt never captures
+  # a partially faded status bar or presence header.
+  sleep 20
   xcrun simctl io "$UDID" screenshot "$screenshot"
   printf 'Companion UI smoke screenshot (%s): %s\n' "$name" "$screenshot"
 }

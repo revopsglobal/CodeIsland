@@ -115,6 +115,325 @@ struct PersonalHubSessionsSurface: View {
     }
 }
 
+/// Compact navigation root for the complete personal tool catalog. The former
+/// surface rendered every full module in one feed, making equal-weight cards
+/// compete with each other. This directory keeps the rack scannable and opens
+/// one existing module renderer at a time without changing its action safety.
+struct PersonalHubDirectorySurface: View {
+    let dismiss: () -> Void
+
+    @EnvironmentObject private var client: RemoteApprovalClient
+    @State private var path = NavigationPath()
+    @State private var showingRackEditor = false
+    @State private var pendingRack: (PersonalHubMode, [PersonalHubModuleID])?
+    @State private var pendingQuickJot: (BuddyQuickJotDestination, String)?
+    @State private var openedHighlightID: PersonalHubModuleID?
+
+    var body: some View {
+        NavigationStack(path: $path) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    modePicker
+
+                    if let snapshot = client.hubSnapshot {
+                        contextHeader(snapshot)
+                        moduleDirectory(snapshot)
+                    } else if client.state == .unpaired {
+                        emptyState(
+                            symbol: "iphone.and.arrow.forward",
+                            title: "Connect your Mac",
+                            detail: "Pair once to use your private tools from iPhone."
+                        )
+                    } else if let error = client.hubError {
+                        emptyState(
+                            symbol: "wifi.exclamationmark",
+                            title: "Tools unavailable",
+                            detail: error,
+                            showsRetry: true
+                        )
+                    } else {
+                        emptyState(
+                            symbol: "arrow.triangle.2.circlepath",
+                            title: "Loading tools",
+                            detail: "Fetching the selected workspace from your Mac."
+                        )
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+                .padding(.bottom, 32)
+            }
+            .accessibilityIdentifier("hub.surface")
+            .background(Color.ciBackground.ignoresSafeArea())
+            .navigationTitle("Tools")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    if client.hubSnapshot?.configuration != nil {
+                        Button("Edit") { showingRackEditor = true }
+                            .accessibilityIdentifier("hub.rack.edit")
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done", action: dismiss)
+                }
+            }
+            .navigationDestination(for: PersonalHubModuleID.self) { moduleID in
+                moduleDestination(moduleID)
+            }
+            .refreshable { await client.refreshHub() }
+        }
+        .task {
+            await client.refreshHub()
+            openHighlightedModuleIfNeeded()
+        }
+        .onChange(of: client.highlightedHubModuleID) { _, _ in
+            openHighlightedModuleIfNeeded()
+        }
+        .onChange(of: client.hubSnapshot?.generatedAt) { _, _ in
+            openHighlightedModuleIfNeeded()
+        }
+        .sheet(item: $client.preparedAction) { prepared in
+            PersonalHubConfirmationSheet(prepared: prepared)
+                .environmentObject(client)
+                .presentationDetents([.height(260)])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showingRackEditor, onDismiss: preparePendingRack) {
+            if let snapshot = client.hubSnapshot,
+               let configuration = snapshot.configuration {
+                PersonalHubModeRackEditor(
+                    mode: snapshot.resolvedMode,
+                    modules: configuration.rack(for: snapshot.resolvedMode)
+                ) { modules in
+                    pendingRack = (snapshot.resolvedMode, modules)
+                    showingRackEditor = false
+                }
+            }
+        }
+        .sheet(item: $client.quickJotDestination, onDismiss: {
+            preparePendingQuickJot()
+            client.clearQuickJotSeed()
+        }) { destination in
+            BuddyQuickJotSheet(
+                destination: destination,
+                initialText: client.quickJotSeedText ?? ""
+            ) { text in
+                pendingQuickJot = (destination, text)
+                client.quickJotDestination = nil
+            }
+        }
+    }
+
+    private var modePicker: some View {
+        Picker("Workspace", selection: $client.selectedMode) {
+            ForEach(PersonalHubMode.allCases) { mode in
+                Text(mode.displayTitle).tag(mode)
+            }
+        }
+        .pickerStyle(.segmented)
+        .accessibilityIdentifier("hub.mode.picker")
+    }
+
+    private func contextHeader(_ snapshot: PersonalHubSnapshot) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("\(snapshot.resolvedMode.displayTitle) tools")
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(HubTheme.foreground)
+                Text(client.serverName ?? snapshot.serverName)
+                    .font(.subheadline)
+                    .foregroundStyle(HubTheme.foreground.opacity(0.5))
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            Label(client.state == .connected ? "Connected" : client.state.label,
+                  systemImage: client.state == .connected ? "checkmark.circle.fill" : "wifi.exclamationmark")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(client.state == .connected ? Color.green : Color.orange)
+                .labelStyle(.titleAndIcon)
+        }
+    }
+
+    private func moduleDirectory(_ snapshot: PersonalHubSnapshot) -> some View {
+        LazyVStack(spacing: 0) {
+            ForEach(Array(snapshot.modules.enumerated()), id: \.element.id) { index, module in
+                Button {
+                    path.append(module.id)
+                } label: {
+                    moduleRow(module)
+                }
+                .buttonStyle(.plain)
+                .accessibilityValue(
+                    client.highlightedHubModuleID == module.id ? "Opened from link" : ""
+                )
+                .accessibilityIdentifier("hub.module.\(module.id.rawValue)")
+
+                if index < snapshot.modules.count - 1 {
+                    Divider()
+                        .padding(.leading, 62)
+                        .overlay(HubTheme.foreground.opacity(0.07))
+                }
+            }
+        }
+        .background(HubTheme.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(HubTheme.border, lineWidth: 0.5)
+        )
+    }
+
+    private func moduleRow(_ module: PersonalHubModuleSnapshot) -> some View {
+        let definition = PersonalHubCatalog.definition(for: module.id)
+        return HStack(spacing: 14) {
+            Image(systemName: definition.symbol)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(HubTheme.accent)
+                .frame(width: 38, height: 38)
+                .background(HubTheme.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(definition.title)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(HubTheme.foreground)
+                Text(module.summary)
+                    .font(.subheadline)
+                    .foregroundStyle(HubTheme.foreground.opacity(0.48))
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            availabilitySymbol(module.availability)
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(HubTheme.foreground.opacity(0.24))
+        }
+        .padding(.horizontal, 14)
+        .frame(minHeight: 68)
+        .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    private func availabilitySymbol(_ availability: PersonalHubAvailability) -> some View {
+        switch availability {
+        case .ready:
+            EmptyView()
+        case .partial:
+            Image(systemName: "circle.lefthalf.filled")
+                .foregroundStyle(Color.orange)
+                .accessibilityLabel("Partially available")
+        case .loading:
+            ProgressView().controlSize(.small)
+        case .permissionRequired:
+            Image(systemName: "lock.trianglebadge.exclamationmark")
+                .foregroundStyle(Color.orange)
+                .accessibilityLabel("Permission required")
+        case .offline:
+            Image(systemName: "wifi.slash")
+                .foregroundStyle(.secondary)
+                .accessibilityLabel("Offline")
+        case .unavailable:
+            Image(systemName: "minus.circle")
+                .foregroundStyle(.secondary)
+                .accessibilityLabel("Unavailable")
+        }
+    }
+
+    @ViewBuilder
+    private func moduleDestination(_ moduleID: PersonalHubModuleID) -> some View {
+        ScrollView {
+            if let module = client.hubSnapshot?.modules.first(where: { $0.id == moduleID }) {
+                PersonalHubModuleCard(
+                    module: module,
+                    isHighlighted: client.highlightedHubModuleID == moduleID
+                )
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+            } else {
+                emptyState(
+                    symbol: "arrow.triangle.2.circlepath",
+                    title: "Loading module",
+                    detail: "Refreshing \(PersonalHubCatalog.definition(for: moduleID).title)."
+                )
+                .padding(20)
+            }
+        }
+        .background(Color.ciBackground.ignoresSafeArea())
+        .navigationTitle(PersonalHubCatalog.definition(for: moduleID).title)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func emptyState(
+        symbol: String,
+        title: String,
+        detail: String,
+        showsRetry: Bool = false
+    ) -> some View {
+        VStack(spacing: 10) {
+            Image(systemName: symbol)
+                .font(.system(size: 25, weight: .medium))
+                .foregroundStyle(HubTheme.accent)
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(HubTheme.foreground)
+            Text(detail)
+                .font(.subheadline)
+                .foregroundStyle(HubTheme.foreground.opacity(0.5))
+                .multilineTextAlignment(.center)
+            if showsRetry {
+                Button("Retry") { Task { await client.refreshHub() } }
+                    .buttonStyle(.borderedProminent)
+                    .tint(HubTheme.accent)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 44)
+    }
+
+    private func openHighlightedModuleIfNeeded() {
+        guard let moduleID = client.highlightedHubModuleID,
+              moduleID != openedHighlightID,
+              client.hubSnapshot?.modules.contains(where: { $0.id == moduleID }) == true
+        else { return }
+        openedHighlightID = moduleID
+        path = NavigationPath()
+        path.append(moduleID)
+    }
+
+    private func preparePendingRack() {
+        guard let (mode, modules) = pendingRack else { return }
+        pendingRack = nil
+        let mutation = PersonalHubConfigurationMutation(mode: mode, modules: modules)
+        Task {
+            await client.prepareHubAction(.init(
+                moduleID: .quickToggles,
+                actionID: "setModeRack",
+                value: mutation.encodedActionValue()
+            ))
+        }
+    }
+
+    private func preparePendingQuickJot() {
+        guard let (destination, text) = pendingQuickJot else { return }
+        pendingQuickJot = nil
+        let intent: PersonalHubActionIntent
+        switch destination {
+        case .task:
+            intent = .init(
+                moduleID: .reminders,
+                actionID: "add",
+                value: PersonalHubReminderDraft(title: text).encodedActionValue()
+            )
+        case .note:
+            intent = .init(moduleID: .notes, actionID: "add", value: text)
+        }
+        Task { await client.prepareHubAction(intent) }
+    }
+}
+
 struct PersonalHubSurface: View {
     @EnvironmentObject private var client: RemoteApprovalClient
     @State private var showingRackEditor = false

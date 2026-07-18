@@ -276,10 +276,41 @@ struct CompanionSessionsSurface: View {
     @EnvironmentObject private var connection: CompanionConnection
     @EnvironmentObject private var liveActivity: LiveActivityController
     @EnvironmentObject private var remoteApprovals: RemoteApprovalClient
+    @State private var showsNearbyControls = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            if let state = connection.latestState {
+            if remoteApprovals.hasPairingCredential {
+                PersonalHubSessionsSurface()
+                    .environmentObject(remoteApprovals)
+
+                if let state = connection.latestState {
+                    DisclosureGroup("Nearby session controls", isExpanded: $showsNearbyControls) {
+                        VStack(alignment: .leading, spacing: 14) {
+                            LiveIslandCard(state: state)
+                                .environmentObject(connection)
+                                .environmentObject(liveActivity)
+
+                            if let personalStatus = state.personalStatus, !personalStatus.isEmpty {
+                                PersonalStatusStrip(status: personalStatus)
+                            }
+
+                            MessageStrip(messages: state.messages)
+                        }
+                        .padding(.top, 12)
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.ciForeground.opacity(0.62))
+                    .padding(.horizontal, 4)
+                    .accessibilityIdentifier("companion.sessions.nearbyControls")
+                    .onAppear {
+                        showsNearbyControls = state.pendingAction != nil || state.question != nil
+                    }
+                    .onChange(of: state.pendingAction) { _, pendingAction in
+                        if pendingAction != nil { showsNearbyControls = true }
+                    }
+                }
+            } else if let state = connection.latestState {
                 LiveIslandCard(state: state)
                     .environmentObject(connection)
                     .environmentObject(liveActivity)
@@ -289,14 +320,9 @@ struct CompanionSessionsSurface: View {
                 }
 
                 MessageStrip(messages: state.messages)
-            } else if !remoteApprovals.hasPairingCredential {
+            } else {
                 DiscoveryIsland()
                     .environmentObject(connection)
-            }
-
-            if remoteApprovals.hasPairingCredential {
-                PersonalHubSessionsSurface()
-                    .environmentObject(remoteApprovals)
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -2225,31 +2251,32 @@ let appAppearanceStorageKey = "appAppearance"
 //
 // Uses a dynamic UIColor that resolves light/dark automatically, so views don't need to inject the environment;
 // colors switch automatically with the effective appearance decided by `.preferredColorScheme`.
-// Dark keeps the original "Dynamic Island" pure-black look; light is a warm, eye-friendly off-white beige.
+// Both appearances use a neutral Apple-like base. Signal color belongs to the
+// current action, not the page background.
 //
 // Defined on `ShapeStyle where Self == Color`: dot syntax resolves in ShapeStyle positions like `.foregroundStyle(.ciX)`
 // / `.fill(.ciX)` and in plain `Color` positions (`color: .ciX`).
 
 private enum CITheme {
-    /// App background: soft charcoal in dark / restrained warm neutral in light.
+    /// App background: soft charcoal in dark / neutral grouped gray in light.
     static let background = UIColor { trait in
         trait.userInterfaceStyle == .dark
-            ? UIColor(red: 0.028, green: 0.028, blue: 0.030, alpha: 1)
-            : UIColor(red: 0.958, green: 0.952, blue: 0.942, alpha: 1)
+            ? UIColor(red: 0.026, green: 0.026, blue: 0.032, alpha: 1)
+            : UIColor(red: 0.965, green: 0.965, blue: 0.974, alpha: 1)
     }
 
-    /// Raised content surface with subtle warmth and no pure black/white extremes.
+    /// Raised content surface with a restrained neutral separation.
     static let surface = UIColor { trait in
         trait.userInterfaceStyle == .dark
-            ? UIColor(red: 0.055, green: 0.055, blue: 0.060, alpha: 1)
-            : UIColor(red: 0.989, green: 0.985, blue: 0.978, alpha: 1)
+            ? UIColor(red: 0.072, green: 0.072, blue: 0.082, alpha: 1)
+            : UIColor(white: 1.0, alpha: 1)
     }
 
-    /// Primary foreground: soft white in dark / warm graphite in light.
+    /// Primary foreground: soft white in dark / neutral graphite in light.
     static let foreground = UIColor { trait in
         trait.userInterfaceStyle == .dark
             ? UIColor(white: 0.97, alpha: 1)
-            : UIColor(red: 0.115, green: 0.105, blue: 0.095, alpha: 1)
+            : UIColor(red: 0.09, green: 0.09, blue: 0.105, alpha: 1)
     }
 }
 
