@@ -90,8 +90,11 @@ This section supersedes older build/pairing statements later in the document.
   The exact 19-test remote-security selection passed locally; its first CI
   attempt stopped transiently with signal 5 immediately after one passing
   test, and the clean rerun of the same workflow passed every gate and packaged
-  the DMG. Post-install visual reinspection of the two provider fixes is still
-  pending because macOS locked before that check.
+  the DMG. Post-install visual reinspection subsequently passed: Spotify's real
+  `Sound of Horns` view rendered `1:27 2:21` instead of `2350:00`; only MacBook
+  Air Speakers and MacBook Air Microphone carried the output/input default
+  labels. The same 1.0.43 Code rack rendered five authenticated sessions,
+  `3 running · no decisions waiting`, and no discovery/loading substitution.
 - The previous installed build exposed one more truthful-state defect: Sessions could
   show nearby `Waiting for Mac` despite an authenticated Tailscale connection.
   PR #31 fetches the Code session rack independently and uses
