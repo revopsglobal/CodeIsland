@@ -34,6 +34,23 @@ final class RemoteAttentionLifecycleTests: XCTestCase {
         XCTAssertNil(registration.liveActivityPushToStartToken)
         XCTAssertNil(registration.liveActivityUpdateTokens)
         XCTAssertNil(registration.liveActivityReceipts)
+        XCTAssertNil(registration.clientVersion)
+        XCTAssertNil(registration.clientBuild)
+    }
+
+    func testClientBuildRegistrationRoundTripsWithoutPushTokens() throws {
+        let registration = RemotePushRegistrationRequest(
+            environment: "production",
+            clientVersion: "1.0.0",
+            clientBuild: "20260718075059"
+        )
+
+        let data = try JSONEncoder().encode(registration)
+        let decoded = try JSONDecoder().decode(RemotePushRegistrationRequest.self, from: data)
+
+        XCTAssertEqual(decoded.clientVersion, "1.0.0")
+        XCTAssertEqual(decoded.clientBuild, "20260718075059")
+        XCTAssertNil(decoded.token)
     }
 
     func testLiveActivityReceiptIsBoundedAndContainsNoPrivateContent() throws {

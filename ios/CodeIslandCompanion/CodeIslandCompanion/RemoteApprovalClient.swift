@@ -68,6 +68,7 @@ final class RemoteApprovalClient: ObservableObject {
     private var deviceToken: String?
     private var pollTask: Task<Void, Never>?
     private var isActive = true
+    private var clientMetadataRegisteredThisLaunch = false
     private var notificationObservers: [NSObjectProtocol] = []
     var onSnapshotReceived: ((RemoteApprovalSnapshot) -> Void)?
 
@@ -645,7 +646,13 @@ final class RemoteApprovalClient: ObservableObject {
             forKey: LiveActivityTokenMailbox.updateTokensKey
         ) as? [String: String]
         let receipts = LiveActivityTokenMailbox.pendingReceipts()
-        guard pushToken != nil || pushToStartToken != nil || updateTokens?.isEmpty == false || !receipts.isEmpty
+        let clientVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        let clientBuild = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+        let shouldRegisterClientMetadata = !clientMetadataRegisteredThisLaunch
+            && clientVersion?.isEmpty == false
+            && clientBuild?.isEmpty == false
+        guard pushToken != nil || pushToStartToken != nil || updateTokens?.isEmpty == false
+                || !receipts.isEmpty || shouldRegisterClientMetadata
         else { return }
         do {
             var request = URLRequest(url: url)
@@ -662,10 +669,15 @@ final class RemoteApprovalClient: ObservableObject {
                     environment: environment,
                     liveActivityPushToStartToken: pushToStartToken,
                     liveActivityUpdateTokens: updateTokens,
-                    liveActivityReceipts: Array(receipts.prefix(16))
+                    liveActivityReceipts: Array(receipts.prefix(16)),
+                    clientVersion: clientVersion,
+                    clientBuild: clientBuild
                 )
             )
             let _: RegistrationResponse = try await perform(request, authenticated: true)
+            if clientVersion?.isEmpty == false, clientBuild?.isEmpty == false {
+                clientMetadataRegisteredThisLaunch = true
+            }
             if UserDefaults.standard.string(forKey: Self.pendingPushTokenKey) == pushToken {
                 UserDefaults.standard.removeObject(forKey: Self.pendingPushTokenKey)
             }

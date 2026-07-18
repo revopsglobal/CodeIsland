@@ -588,6 +588,36 @@ final class RemoteApprovalHTTPServerTests: XCTestCase {
         )
         XCTAssertEqual(actionReplay.response.statusCode, 403)
 
+        let buildRegistered = try await send(
+            port: port,
+            method: "POST",
+            path: "/api/push-token",
+            bearer: pair.deviceToken,
+            body: try encode(RemotePushRegistrationRequest(
+                environment: "production",
+                clientVersion: "1.0.0",
+                clientBuild: "20260718075059"
+            ))
+        )
+        XCTAssertEqual(buildRegistered.response.statusCode, 200)
+        XCTAssertEqual(deviceStore.devices.first?.clientVersion, "1.0.0")
+        XCTAssertEqual(deviceStore.devices.first?.clientBuild, "20260718075059")
+        let reloadedDeviceStore = RemoteApprovalDeviceStore(stateURL: stateURL)
+        XCTAssertEqual(reloadedDeviceStore.devices.first?.clientVersion, "1.0.0")
+        XCTAssertEqual(reloadedDeviceStore.devices.first?.clientBuild, "20260718075059")
+
+        let incompleteBuildRegistration = try await send(
+            port: port,
+            method: "POST",
+            path: "/api/push-token",
+            bearer: pair.deviceToken,
+            body: try encode(RemotePushRegistrationRequest(
+                environment: "production",
+                clientVersion: "1.0.0"
+            ))
+        )
+        XCTAssertEqual(incompleteBuildRegistration.response.statusCode, 400)
+
         let pushToken = String(repeating: "a", count: 64)
         let registered = try await send(
             port: port,
