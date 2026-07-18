@@ -50,7 +50,9 @@ struct CompanionCommandCenterView: View {
                 case .now:
                     nowContent
                 case .sessions:
-                    PersonalHubSessionsSurface()
+                    CompanionSessionsSurface()
+                        .environmentObject(connection)
+                        .environmentObject(liveActivity)
                         .environmentObject(remoteApprovals)
                         .transition(.opacity)
                 }

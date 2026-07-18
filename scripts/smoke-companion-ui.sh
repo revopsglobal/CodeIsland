@@ -90,6 +90,13 @@ COMMON_ARGS=(
   -CodeIslandCompanionMockHubMode code
 )
 
+# The first launch after installing a new simulator build can spend several
+# seconds registering extensions and restoring the scene. Warm it once so the
+# first acceptance image has the same settled conditions as every later state.
+xcrun simctl launch "$UDID" "$BUNDLE_ID" "${COMMON_ARGS[@]}" >/dev/null
+sleep 4
+xcrun simctl terminate "$UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true
+
 capture now-light light "${COMMON_ARGS[@]}"
 capture approval-light light "${COMMON_ARGS[@]}" -CodeIslandCompanionMockAttention approval
 capture question-light light "${COMMON_ARGS[@]}" -CodeIslandCompanionMockAttention question

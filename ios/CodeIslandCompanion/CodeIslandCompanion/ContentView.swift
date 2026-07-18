@@ -268,6 +268,41 @@ private struct PortraitIslandView: View {
     }
 }
 
+/// One coherent session destination for both connection paths. Nearby/Bluetooth
+/// state owns the live controls and transcript; the paired Tailscale service owns
+/// the authenticated session roster. Showing both prevents remote pairing from
+/// hiding Live Activity, focus, approval, and recent-session controls.
+struct CompanionSessionsSurface: View {
+    @EnvironmentObject private var connection: CompanionConnection
+    @EnvironmentObject private var liveActivity: LiveActivityController
+    @EnvironmentObject private var remoteApprovals: RemoteApprovalClient
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            if let state = connection.latestState {
+                LiveIslandCard(state: state)
+                    .environmentObject(connection)
+                    .environmentObject(liveActivity)
+
+                if let personalStatus = state.personalStatus, !personalStatus.isEmpty {
+                    PersonalStatusStrip(status: personalStatus)
+                }
+
+                MessageStrip(messages: state.messages)
+            } else if !remoteApprovals.hasPairingCredential {
+                DiscoveryIsland()
+                    .environmentObject(connection)
+            }
+
+            if remoteApprovals.hasPairingCredential {
+                PersonalHubSessionsSurface()
+                    .environmentObject(remoteApprovals)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+}
+
 private struct CompanionPrimaryNavigation: View {
     @Binding var destination: CompanionPrimaryDestination
     let attentionCount: Int

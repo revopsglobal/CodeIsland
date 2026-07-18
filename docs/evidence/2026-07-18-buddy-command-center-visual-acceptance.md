@@ -9,8 +9,9 @@ iPhone; TestFlight delivery and physical-device acceptance remain separate.
 - **Now** is the attention surface. It shows one approval or question at a
   time, keeps that selection stable across routine refreshes, and exposes the
   rest through an explicit queue menu.
-- **Sessions** is a focused authenticated Tailscale session board, not a second
-  dashboard and not a nearby-Bluetooth discovery substitute.
+- **Sessions** unifies the live nearby session controls and transcript with the
+  authenticated Tailscale session roster. Pairing remotely never hides focus,
+  approval, recent activity, or Live Activity controls.
 - **Capture** is the single entry point for a new task or note.
 - **More** contains the configurable Home, Work, and Code tool racks. The old
   Hub/Glances terminology is no longer part of the primary navigation.
@@ -32,8 +33,9 @@ scripts/smoke-companion-ui.sh
 The runner discovers an available custom-named iPhone Simulator, locates an
 installed Xcode when `xcode-select` still points at Command Line Tools, builds
 the current source, installs the correct bundle
-`com.revopsglobal.codeisland.buddy`, waits for the system launch transition to
-settle, and writes these native-resolution screenshots under `.build/`:
+`com.revopsglobal.codeisland.buddy`, warms the first installed launch, waits for
+each system launch transition to settle, and writes these native-resolution
+screenshots under `.build/`:
 
 - `companion-ui-now-light.png`
 - `companion-ui-approval-light.png`
@@ -71,6 +73,17 @@ eight renders successfully. Visual inspection confirmed:
   Code racks.
 - Tool-rack result bundle:
   `/tmp/codeisland-hub-dd/Logs/Test/Test-CodeIslandCompanion-2026.07.18_02-35-42--0700.xcresult`.
+- Six restored session/action regressions passed together: question controls,
+  long transcript scrolling, idle controls, Live Activity resolution, rack
+  review, and Claude Do review. Result bundle:
+  `/tmp/CodeIsland-buddy-six-20260718-025701.xcresult`.
+- The authenticated Sessions accessibility contract passed after removing a
+  redundant parent grouping that hid the child section from VoiceOver and UI
+  automation. Result bundle:
+  `/tmp/CodeIsland-buddy-sessions-fix-20260718-030901.xcresult`.
+- Complete native scheme: **39 passed, 0 failed, 0 skipped** in one run on the
+  iPhone 16 / iOS 26.5 Simulator. Result bundle:
+  `/tmp/CodeIsland-buddy-full3-20260718-030951.xcresult`.
 
 ## Remaining delivery boundary
 

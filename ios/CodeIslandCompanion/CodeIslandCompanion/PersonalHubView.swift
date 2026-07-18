@@ -1016,6 +1016,7 @@ private struct PersonalHubModuleCard: View {
         }
         .buttonStyle(HubPrimaryButtonStyle())
         .disabled((requiresText && composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) || value == nil)
+        .accessibilityIdentifier("hub.\(module.id.rawValue).review")
     }
 
     private var calendarActionValue: String? {

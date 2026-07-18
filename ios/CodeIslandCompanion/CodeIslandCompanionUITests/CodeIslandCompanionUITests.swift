@@ -335,7 +335,7 @@ final class CodeIslandCompanionUITests: XCTestCase {
         let app = launchHubApp(mode: "work")
         XCTAssertTrue(app.otherElements["hub.surface"].waitForExistence(timeout: 8))
 
-        let edit = app.buttons["Edit WORK rack"].firstMatch
+        let edit = app.buttons["hub.rack.edit"].firstMatch
         XCTAssertTrue(edit.waitForExistence(timeout: 4))
         edit.tap()
 
@@ -428,7 +428,7 @@ final class CodeIslandCompanionUITests: XCTestCase {
         composer.tap()
         composer.typeText("Add finish the deck to my tasks")
 
-        let review = app.buttons["Review"].firstMatch
+        let review = app.buttons["hub.claude.review"].firstMatch
         XCTAssertTrue(review.waitForExistence(timeout: 4))
         review.tap()
 
