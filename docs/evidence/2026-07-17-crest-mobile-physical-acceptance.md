@@ -3,6 +3,51 @@
 This receipt separates automated, signed-delivery, and physical-device proof.
 It must not be read as blanket acceptance of every Crest/mobile module.
 
+## Final signed receipt follow-up
+
+PR #39 merged the Live Activity lifecycle-receipt implementation as
+`7005f79d3359245d4dfb10564664a97a79112527`. The first signed macOS workflow
+exposed a repeatable Xcode 26 signal-6 abort at an `AppState` deallocation test
+boundary even though the exact 19-test selection passed locally. PR #40 fixed
+that compiler/runtime compatibility issue and merged as
+`1e031a3d896fa8b380ddc237fe418b88d2453635`.
+
+Fresh signed macOS run `29637137521` built `1.0.44` from that exact merge,
+passed the previously crashing Xcode 26 security selection (19/19), personal
+utilities, iPhone model tests, the iPhone Simulator build, ARM64 checks, the
+Calendar entitlement check, and strict nested signature verification. Artifact
+`8427492349` is installed at `/Applications/CodeIsland.app`; the preserved DMG
+is `/Users/gregharned/Downloads/CodeIsland-1.0.44-run-29637137521/CodeIsland.dmg`
+with SHA-256
+`05fe1c31510127b4e08e0039abf28306b58c3ee689dbfb6245031dd375acd31b`.
+Independent mounted-image and installed-app verification passed with Team
+`44JG2Y95CH`, CDHash `d89fdc0f680007853a581065c6f63cb25694272c`,
+and ARM64 app/helper binaries. The previous 1.0.43 app is preserved at
+`/Users/gregharned/Downloads/CodeIsland-app-backups/CodeIsland-1.0.43-pre-1.0.44.app`.
+Local and Tailscale `/health` both returned `running: true` after replacement.
+
+TestFlight run `29636436339` uploaded `1.0.0 (20260718075059)` from PR #39's
+merge. Apple reported `VALID`, audience `APP_STORE_ELIGIBLE`, and all-build
+access for `CodeIsland Internal`. Delivery UUID:
+`c21248f4-2b48-4b47-b41c-e4e7952798a2`; signed IPA artifact `8427328057`;
+tester receipt artifact `8427248381`. Independent IPA inspection passed strict
+signature verification and confirmed production APNs, time-sensitive
+notifications, Team `44JG2Y95CH`, and bundle
+`com.revopsglobal.codeisland.buddy`. The downloaded IPA is
+`/Users/gregharned/Downloads/CodeIsland-TestFlight-20260718075059-run-29636436339/CodeIslandCompanion.ipa`,
+SHA-256 `776660d000305d1816116590d6b1a667fa60cd84b27306ae8e2e0fad4297f413`.
+The tester receipt records `gregharned@gmail.com` as `ready`.
+
+After the 1.0.44 host restart, the existing physical-iPhone pairing, production
+APNs token, and ActivityKit push-to-start token remained intact. The phone
+authenticated again at `2026-07-18T08:21:37Z` and `08:24:30Z`. A harmless
+question probe returned `Continue`, but no new lifecycle receipt or per-activity
+update token reached the Mac. iPhone Mirroring simultaneously reported
+`iPhone in Use`, so the physical surface could not be inspected. Therefore the
+new TestFlight build is delivered and available, but its physical installation
+and visible Live Activity/Dynamic Island lifecycle remain unproven; do not infer
+them from the heartbeat or answer alone.
+
 ## Automated Live Activity receipt follow-up
 
 The current follow-up adds an authenticated, privacy-preserving lifecycle
@@ -34,10 +79,11 @@ Fresh automated proof from this source:
   `/tmp/CodeIsland-live-activity-fallback-20260718-0044.xcresult`.
 - Graphify refreshed successfully: 4,677 nodes, 12,204 edges, 53 communities.
 
-This is automated protocol, UI, and Simulator proof. A replacement signed Mac
-and TestFlight build must still be distributed and installed before the Mac can
-receive a receipt from Greg's physical iPhone. Until that happens, visible
-Live Activity/Dynamic Island creation and remote end remain unproven.
+This is automated protocol, UI, and Simulator proof. The replacement signed Mac
+is installed and the replacement TestFlight build is Apple-valid and available,
+but a physical install of that iPhone build has not been confirmed. Until the
+phone emits the new lifecycle receipt, visible Live Activity/Dynamic Island
+creation and remote end remain unproven.
 
 ## Physical proof completed
 
