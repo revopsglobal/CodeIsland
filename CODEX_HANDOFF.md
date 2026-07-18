@@ -24,15 +24,21 @@ statement below. Older sections remain as an evidence history.
   `8429103078`; downloaded IPA SHA-256
   `b79dd62bae8b98794e60be7195a93f04ac7a50aa737a88f142fcb6ee98b2f54c`.
   The tester receipt still records `gregharned@gmail.com` as `ready`.
-- PR #45 advanced the Mac internal version to `1.0.46`; run `29642806156`
-  produced artifact `8429166028`. The downloaded DMG SHA-256 is
-  `8aed32462b85d426ad9bedf5ec2913641a93e9b386bd53f65121ba810dc01ce0`.
+- PR #48 advanced the Mac internal version to `1.0.47` and keeps the Mac awake
+  whenever the private remote service is running; run `29643405438` produced
+  artifact `8429339117`. The downloaded DMG SHA-256 is
+  `4b7a893db6512cfeaa36bcf75884a017b6f5e2e0261f194c4e65da8980e1b519`.
   Mounted-image and installed-app strict signature verification passed for the
   ARM64 app under Team `44JG2Y95CH` with the Calendar entitlement.
-  `/Applications/CodeIsland.app` is now `1.0.46`, running from the installed
+  `/Applications/CodeIsland.app` is now `1.0.47`, running from the installed
   path, and both loopback and Tailscale `/health` return HTTP 200 with
-  `running: true`. The prior `1.0.45` app is preserved at
-  `/Users/gregharned/Library/Application Support/CodeIsland/Install Backups/20260718T114050Z/CodeIsland.app`.
+  `running: true`. Live `pmset` output attributes a
+  `PreventUserIdleSystemSleep` assertion to CodeIsland PID `67615` with reason
+  `CodeIsland remote access is enabled`; the Mac was on AC power with its lid
+  open. The prior `1.0.46` app is preserved at
+  `/Users/gregharned/Library/Application Support/CodeIsland/Install Backups/20260718T120149Z/CodeIsland.app`.
+- PR #49 adds the remote-availability regression to the signed release workflow;
+  current `main` is `2f6456bb1f16d8118b975f982ba6469e6b80647d`.
 - PR #46 merged the exact current delivery receipt as
   `53c420047d3e75159ae9da040e17e476d3beb229`.
 - Physical acceptance is still open. The paired iPhone record has production
@@ -42,7 +48,7 @@ statement below. Older sections remain as an evidence history.
   proven installed or opened. The Mac is locked, so iPhone Mirroring cannot be
   operated until Greg manually unlocks the Mac.
 - `scripts/report-physical-acceptance.sh` now produces a sanitized delivery and
-  pairing report. Against the current runtime it passes every Mac/signature/
+  pairing report. Against the current `1.0.47` runtime it passes every Mac/signature/
   health gate and fails only `physicalBuildConfirmed`; strict mode exits `2`
   until the exact iPhone version/build registers. Its Bats coverage verifies
   both the passing and absent-client cases and proves raw push tokens are never
