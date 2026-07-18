@@ -19,6 +19,100 @@ extension PersonalHubQuickJotDestination: Identifiable {
     var symbol: String { self == .task ? "checklist" : "note.text" }
 }
 
+/// A focused, authenticated session board for the primary Sessions tab.
+/// It deliberately fetches the Code rack independently from the selected
+/// Home/Work/Code tool mode so Tailscale sessions never degrade into nearby
+/// Bluetooth discovery copy.
+struct PersonalHubSessionsSurface: View {
+    @EnvironmentObject private var client: RemoteApprovalClient
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Image(systemName: "terminal.fill")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(HubTheme.accent)
+                    .frame(width: 30, height: 30)
+                    .background(HubTheme.accent.opacity(0.13), in: RoundedRectangle(cornerRadius: 9))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Sessions")
+                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                        .foregroundStyle(HubTheme.foreground)
+                    Text(client.sessionsModule?.summary ?? client.connectionDetail)
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .foregroundStyle(HubTheme.foreground.opacity(0.46))
+                        .lineLimit(2)
+                }
+
+                Spacer(minLength: 8)
+
+                Circle()
+                    .fill(client.state == .connected ? Color.green : Color.orange)
+                    .frame(width: 8, height: 8)
+                    .accessibilityLabel(client.state.label)
+            }
+
+            if let module = client.sessionsModule {
+                if module.items.isEmpty {
+                    Label("No active sessions", systemImage: "checkmark.circle.fill")
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .foregroundStyle(HubTheme.foreground.opacity(0.68))
+                        .frame(maxWidth: .infinity, minHeight: 70, alignment: .leading)
+                } else {
+                    LazyVStack(spacing: 0) {
+                        ForEach(module.items) { item in
+                            PersonalHubItemRow(moduleID: .agents, item: item)
+                            if item.id != module.items.last?.id {
+                                Divider().overlay(Color.white.opacity(0.06))
+                            }
+                        }
+                    }
+                    .background(Color.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 10))
+                }
+
+                Button {
+                    Task { await client.refreshSessions() }
+                } label: {
+                    Label("Refresh sessions", systemImage: "arrow.clockwise")
+                        .font(.system(size: 11, weight: .bold))
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(HubSecondaryButtonStyle())
+                .accessibilityIdentifier("companion.remote.sessions.refresh")
+            } else if let error = client.sessionsError {
+                Label(error, systemImage: "wifi.exclamationmark")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.orange)
+                    .frame(maxWidth: .infinity, minHeight: 70, alignment: .leading)
+            } else {
+                HStack(spacing: 10) {
+                    ProgressView().tint(HubTheme.accent)
+                    Text("Loading sessions from your Mac")
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundStyle(HubTheme.foreground.opacity(0.66))
+                }
+                .frame(maxWidth: .infinity, minHeight: 70, alignment: .leading)
+            }
+        }
+        .padding(14)
+        .background(Color.black.opacity(0.86), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(HubTheme.border, lineWidth: 1))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("companion.remote.sessions")
+        .task {
+            while !Task.isCancelled {
+                await client.refreshSessions()
+                do {
+                    try await Task.sleep(for: .seconds(15))
+                } catch {
+                    break
+                }
+            }
+        }
+    }
+}
+
 struct PersonalHubSurface: View {
     @EnvironmentObject private var client: RemoteApprovalClient
     @State private var showingRackEditor = false

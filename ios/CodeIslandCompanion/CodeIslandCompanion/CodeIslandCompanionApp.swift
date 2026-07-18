@@ -20,7 +20,7 @@ struct CodeIslandCompanionApp: App {
         remoteApprovals.onSnapshotReceived = { [weak liveActivity] snapshot in
             guard let state = CompanionStatePayload(remoteApprovalSnapshot: snapshot) else { return }
             Task { @MainActor in
-                liveActivity?.updateIfRunning(with: state)
+                liveActivity?.syncAttention(with: state)
             }
         }
 #if DEBUG

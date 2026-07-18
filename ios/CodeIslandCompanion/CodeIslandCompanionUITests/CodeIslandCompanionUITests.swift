@@ -157,6 +157,25 @@ final class CodeIslandCompanionUITests: XCTestCase {
     }
 
     @MainActor
+    func testSessionsUsesAuthenticatedTailscaleInsteadOfNearbyDiscovery() throws {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-CodeIslandCompanionMockHub",
+            "-CodeIslandCompanionMockHubMode", "code",
+        ]
+        app.launch()
+
+        let sessions = app.buttons["companion.destination.sessions"]
+        XCTAssertTrue(sessions.waitForExistence(timeout: 8))
+        sessions.tap()
+
+        XCTAssertTrue(app.otherElements["companion.remote.sessions"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["CodeIsland UI Test Mac"].exists)
+        XCTAssertFalse(app.staticTexts["Waiting for Mac"].exists)
+        XCTAssertFalse(app.otherElements["companion.discoveryCard"].exists)
+    }
+
+    @MainActor
     func testLandscapeMultiSessionShowsBoard() throws {
         let app = launchApp(mockState: "multi")
         XCUIDevice.shared.orientation = .landscapeLeft

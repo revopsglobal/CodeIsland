@@ -410,7 +410,7 @@ final class RemoteApprovalService: ObservableObject {
 
         if request.method == "POST", request.path == "/api/push-token" {
             guard let registration = request.decode(RemotePushRegistrationRequest.self),
-                  registration.token.count >= 32
+                  Self.validPushRegistration(registration)
             else {
                 return .json(status: 400, object: ["error": "invalid push token"])
             }
@@ -534,6 +534,17 @@ final class RemoteApprovalService: ObservableObject {
         )
     }
 
+    private static func validPushRegistration(_ registration: RemotePushRegistrationRequest) -> Bool {
+        let updateTokens = registration.liveActivityUpdateTokens ?? [:]
+        let tokens = [registration.token, registration.liveActivityPushToStartToken].compactMap { $0 }
+            + Array(updateTokens.values)
+        guard !tokens.isEmpty,
+              tokens.allSatisfy({ $0.count >= 32 && $0.allSatisfy(\.isHexDigit) }),
+              registration.liveActivityUpdateTokens?.keys.allSatisfy({ !$0.isEmpty && $0.count <= 200 }) ?? true
+        else { return false }
+        return registration.environment == "production" || registration.environment == "development"
+    }
+
     private func authenticate(_ request: RemoteHTTPRequest) -> RemoteApprovalDevice? {
         guard let authorization = request.headers["authorization"],
               authorization.lowercased().hasPrefix("bearer ")
@@ -555,6 +566,8 @@ struct RemoteApprovalDevice: Codable, Equatable, Identifiable {
     var lastSeenAt: Date
     var pushToken: String?
     var pushEnvironment: String?
+    var liveActivityPushToStartToken: String?
+    var liveActivityUpdateTokens: [String: String]?
 }
 
 @MainActor
@@ -611,7 +624,9 @@ final class RemoteApprovalDeviceStore {
             pairedAt: Date(),
             lastSeenAt: Date(),
             pushToken: nil,
-            pushEnvironment: nil
+            pushEnvironment: nil,
+            liveActivityPushToStartToken: nil,
+            liveActivityUpdateTokens: nil
         )
         devices.append(device)
         save()
@@ -640,7 +655,24 @@ final class RemoteApprovalDeviceStore {
 
     func registerPushToken(_ registration: RemotePushRegistrationRequest, deviceID: String) {
         guard let index = devices.firstIndex(where: { $0.id == deviceID }) else { return }
-        devices[index].pushToken = registration.token.lowercased()
+        if let token = registration.token {
+            devices[index].pushToken = token.lowercased()
+        }
+        if let token = registration.liveActivityPushToStartToken {
+            devices[index].liveActivityPushToStartToken = token.lowercased()
+        }
+        if let updates = registration.liveActivityUpdateTokens, !updates.isEmpty {
+            var merged = devices[index].liveActivityUpdateTokens ?? [:]
+            for (requestID, token) in updates {
+                merged[requestID] = token.lowercased()
+            }
+            if merged.count > 128 {
+                for key in merged.keys.sorted().prefix(merged.count - 128) {
+                    merged.removeValue(forKey: key)
+                }
+            }
+            devices[index].liveActivityUpdateTokens = merged
+        }
         devices[index].pushEnvironment = registration.environment.lowercased()
         devices[index].lastSeenAt = Date()
         save()
