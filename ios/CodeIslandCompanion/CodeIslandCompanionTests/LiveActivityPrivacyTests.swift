@@ -2,6 +2,37 @@ import XCTest
 @testable import CodeIslandCompanion
 
 final class LiveActivityPrivacyTests: XCTestCase {
+    func testCompactConnectionPrefersAuthenticatedTailscaleOverNearbySearch() {
+        let presentation = CompanionConnectionPresentation.resolve(
+            localActivitySubtitle: nil,
+            localPeerName: nil,
+            localBrowsing: true,
+            remoteState: .connected,
+            remoteServerName: "Greg's MacBook Air"
+        )
+
+        XCTAssertEqual(presentation.subtitle, "Greg's MacBook Air")
+        XCTAssertTrue(presentation.isActive)
+        XCTAssertFalse(
+            presentation.isBrowsing,
+            "Nearby discovery must not make an authenticated Tailscale connection look like it is still searching"
+        )
+    }
+
+    func testCompactConnectionFallsBackToNearbyDiscoveryWhenRemoteIsUnpaired() {
+        let presentation = CompanionConnectionPresentation.resolve(
+            localActivitySubtitle: nil,
+            localPeerName: nil,
+            localBrowsing: true,
+            remoteState: .unpaired,
+            remoteServerName: nil
+        )
+
+        XCTAssertEqual(presentation.subtitle, "Searching nearby")
+        XCTAssertFalse(presentation.isActive)
+        XCTAssertTrue(presentation.isBrowsing)
+    }
+
     func testBackgroundRefreshKeepsAnEstablishedConnectionStable() {
         XCTAssertEqual(
             RemoteApprovalClient.refreshStartState(hasCompletedSnapshot: false),
