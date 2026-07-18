@@ -298,7 +298,8 @@ final class RemoteApprovalService: ObservableObject {
                 pendingCount: appState.permissionQueue.count,
                 serverName: Host.current().localizedName ?? "CodeIsland Mac",
                 hostVersion: AppVersion.current,
-                launchAtLoginStatus: SettingsManager.shared.launchAtLoginStatusDescription
+                launchAtLoginStatus: SettingsManager.shared.launchAtLoginStatusDescription,
+                launchAtLoginError: SettingsManager.shared.lastLaunchAtLoginError
             )
             return .json(status: 200, encodable: status)
         case ("POST", "/api/pair"):

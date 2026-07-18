@@ -545,6 +545,10 @@ private struct GeneralPage: View {
                     )
                     .font(.caption)
                     .foregroundStyle(.orange)
+                } else if let error = SettingsManager.shared.lastLaunchAtLoginError {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.red)
                 }
                 Toggle(l10n["allow_horizontal_drag"], isOn: $allowHorizontalDrag)
                     .onChange(of: allowHorizontalDrag) { _, enabled in

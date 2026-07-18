@@ -422,6 +422,7 @@ public struct RemoteServiceStatus: Codable, Equatable, Sendable {
     public let serverName: String
     public let hostVersion: String?
     public let launchAtLoginStatus: String?
+    public let launchAtLoginError: String?
     public let version: Int
 
     public init(
@@ -430,6 +431,7 @@ public struct RemoteServiceStatus: Codable, Equatable, Sendable {
         serverName: String,
         hostVersion: String? = nil,
         launchAtLoginStatus: String? = nil,
+        launchAtLoginError: String? = nil,
         version: Int = 1
     ) {
         self.running = running
@@ -437,6 +439,7 @@ public struct RemoteServiceStatus: Codable, Equatable, Sendable {
         self.serverName = serverName
         self.hostVersion = hostVersion
         self.launchAtLoginStatus = launchAtLoginStatus
+        self.launchAtLoginError = launchAtLoginError
         self.version = version
     }
 }

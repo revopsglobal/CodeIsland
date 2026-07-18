@@ -4,7 +4,7 @@ import ServiceManagement
 
 enum AppVersion {
     /// Update this each release. Used as fallback when Info.plist is unavailable (debug builds).
-    static let fallback = "1.0.48"
+    static let fallback = "1.0.49"
 
     static var current: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? fallback
@@ -244,6 +244,7 @@ class SettingsManager {
     private static let log = Logger(subsystem: "com.codeisland", category: "Settings")
 
     private let defaults = UserDefaults.standard
+    private(set) var lastLaunchAtLoginError: String?
 
     private init() {
         defaults.register(defaults: [
@@ -332,15 +333,18 @@ class SettingsManager {
             // the remote-access bootstrap retry a requested registration after
             // a transient failure while permanently respecting an explicit opt-out.
             defaults.set(newValue, forKey: SettingsKey.launchAtLogin)
+            lastLaunchAtLoginError = nil
             do {
                 if newValue {
                     switch SMAppService.mainApp.status {
-                    case .notRegistered:
+                    case .notRegistered, .notFound:
+                        // macOS can report .notFound for an otherwise valid,
+                        // installed main app before its first registration.
+                        // Attempt registration so ServiceManagement can either
+                        // resolve it or return an actionable error.
                         try SMAppService.mainApp.register()
                     case .enabled, .requiresApproval:
                         break
-                    case .notFound:
-                        Self.log.error("Launch at login could not be enabled because the main app service was not found")
                     @unknown default:
                         break
                     }
@@ -348,7 +352,9 @@ class SettingsManager {
                     try SMAppService.mainApp.unregister()
                 }
             } catch {
-                Self.log.error("Launch at login update failed: \(error.localizedDescription, privacy: .public)")
+                let message = error.localizedDescription
+                lastLaunchAtLoginError = message
+                Self.log.error("Launch at login update failed: \(message, privacy: .public)")
             }
         }
     }
@@ -378,20 +384,20 @@ class SettingsManager {
     @discardableResult
     func ensureLaunchAtLoginForRemoteAccess() -> Bool {
         let explicitPreference = defaults.object(forKey: SettingsKey.launchAtLogin) as? Bool
-        let serviceIsNotRegistered: Bool
+        let serviceNeedsRegistration: Bool
         switch SMAppService.mainApp.status {
-        case .notRegistered:
-            serviceIsNotRegistered = true
-        case .enabled, .requiresApproval, .notFound:
-            serviceIsNotRegistered = false
+        case .notRegistered, .notFound:
+            serviceNeedsRegistration = true
+        case .enabled, .requiresApproval:
+            serviceNeedsRegistration = false
         @unknown default:
-            serviceIsNotRegistered = false
+            serviceNeedsRegistration = false
         }
 
         guard Self.shouldAttemptAutomaticLaunchAtLoginRegistration(
             remoteAccessEnabled: defaults.bool(forKey: SettingsKey.remoteApprovalsEnabled),
             explicitPreference: explicitPreference,
-            serviceIsNotRegistered: serviceIsNotRegistered
+            serviceNeedsRegistration: serviceNeedsRegistration
         ) else {
             return false
         }
@@ -403,9 +409,9 @@ class SettingsManager {
     static func shouldAttemptAutomaticLaunchAtLoginRegistration(
         remoteAccessEnabled: Bool,
         explicitPreference: Bool?,
-        serviceIsNotRegistered: Bool
+        serviceNeedsRegistration: Bool
     ) -> Bool {
-        remoteAccessEnabled && explicitPreference != false && serviceIsNotRegistered
+        remoteAccessEnabled && explicitPreference != false && serviceNeedsRegistration
     }
 
     var displayChoice: String {

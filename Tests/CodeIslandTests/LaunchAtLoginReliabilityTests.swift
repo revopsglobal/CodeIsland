@@ -8,7 +8,20 @@ final class LaunchAtLoginReliabilityTests: XCTestCase {
             SettingsManager.shouldAttemptAutomaticLaunchAtLoginRegistration(
                 remoteAccessEnabled: true,
                 explicitPreference: nil,
-                serviceIsNotRegistered: true
+                serviceNeedsRegistration: true
+            )
+        )
+    }
+
+    func testNotFoundServiceStillAttemptsRegistration() {
+        // Both ServiceManagement's .notRegistered and .notFound states map to
+        // this candidate flag; the latter must be attempted to surface the
+        // framework's actionable registration error.
+        XCTAssertTrue(
+            SettingsManager.shouldAttemptAutomaticLaunchAtLoginRegistration(
+                remoteAccessEnabled: true,
+                explicitPreference: nil,
+                serviceNeedsRegistration: true
             )
         )
     }
@@ -18,7 +31,7 @@ final class LaunchAtLoginReliabilityTests: XCTestCase {
             SettingsManager.shouldAttemptAutomaticLaunchAtLoginRegistration(
                 remoteAccessEnabled: true,
                 explicitPreference: false,
-                serviceIsNotRegistered: true
+                serviceNeedsRegistration: true
             )
         )
     }
@@ -28,7 +41,7 @@ final class LaunchAtLoginReliabilityTests: XCTestCase {
             SettingsManager.shouldAttemptAutomaticLaunchAtLoginRegistration(
                 remoteAccessEnabled: true,
                 explicitPreference: true,
-                serviceIsNotRegistered: true
+                serviceNeedsRegistration: true
             )
         )
     }
@@ -38,7 +51,7 @@ final class LaunchAtLoginReliabilityTests: XCTestCase {
             SettingsManager.shouldAttemptAutomaticLaunchAtLoginRegistration(
                 remoteAccessEnabled: false,
                 explicitPreference: nil,
-                serviceIsNotRegistered: true
+                serviceNeedsRegistration: true
             )
         )
     }
@@ -48,7 +61,7 @@ final class LaunchAtLoginReliabilityTests: XCTestCase {
             SettingsManager.shouldAttemptAutomaticLaunchAtLoginRegistration(
                 remoteAccessEnabled: true,
                 explicitPreference: nil,
-                serviceIsNotRegistered: false
+                serviceNeedsRegistration: false
             )
         )
     }
