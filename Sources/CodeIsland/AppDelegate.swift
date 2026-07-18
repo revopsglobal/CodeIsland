@@ -36,7 +36,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         hookServer?.start()
         // Private away-from-Mac approval path. The HTTP listener binds only to
         // loopback; Tailscale Serve supplies tailnet-only HTTPS on the outside.
-        _ = SettingsManager.shared
+        let settings = SettingsManager.shared
+        if settings.ensureLaunchAtLoginForRemoteAccess() {
+            Self.log.info("Launch at login configured for remote access reliability")
+        }
         RemoteApprovalService.shared.start(appState: appState)
         RemoteManager.shared.onDisconnect = { [weak appState] hostId in
             appState?.removeRemoteSessions(hostId: hostId)

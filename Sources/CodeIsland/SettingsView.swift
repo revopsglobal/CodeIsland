@@ -535,6 +535,17 @@ private struct GeneralPage: View {
                     .onChange(of: launchAtLogin) { _, v in
                         SettingsManager.shared.launchAtLogin = v
                     }
+                Text("Keeps private iPhone access available after you sign in. An explicit opt-out is always respected.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if SettingsManager.shared.launchAtLoginRequiresApproval {
+                    Label(
+                        "Approval required in System Settings → General → Login Items.",
+                        systemImage: "exclamationmark.triangle.fill"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                }
                 Toggle(l10n["allow_horizontal_drag"], isOn: $allowHorizontalDrag)
                     .onChange(of: allowHorizontalDrag) { _, enabled in
                         if !enabled {
