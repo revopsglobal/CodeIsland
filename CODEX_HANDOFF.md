@@ -3,6 +3,47 @@
 Last updated: 2026-07-17. This supersedes the original v1.0.30 / no-local-Xcode
 handoff.
 
+## Final signed lifecycle-receipt delta
+
+This section supersedes the signed-build/source statements below.
+
+- PR #39 merged the authenticated Live Activity lifecycle receipt and local
+  ActivityKit fallback as `7005f79d3359245d4dfb10564664a97a79112527`.
+  Complete local proof passed: 481 Mac app tests with two intentional skips,
+  220 core tests, 8 iPhone logic tests, 25 iPhone UI tests, and the focused
+  unsigned-ActivityKit fallback/lifecycle run.
+- The first signed Mac workflow found an Xcode 26-only signal-6 abort at the
+  `AppState` deallocation boundary. PR #40 replaced `isolated deinit` with a
+  main-actor cleanup resource holder and merged as
+  `1e031a3d896fa8b380ddc237fe418b88d2453635`. Fresh signed run `29637137521`
+  passed the exact formerly crashing 19-test selection and every packaging
+  gate.
+- macOS `1.0.44` is installed at `/Applications/CodeIsland.app` from run
+  `29637137521`, artifact `8427492349`. DMG:
+  `/Users/gregharned/Downloads/CodeIsland-1.0.44-run-29637137521/CodeIsland.dmg`;
+  SHA-256
+  `05fe1c31510127b4e08e0039abf28306b58c3ee689dbfb6245031dd375acd31b`.
+  Mounted-image and installed-app strict verification passed with Team
+  `44JG2Y95CH`, CDHash `d89fdc0f680007853a581065c6f63cb25694272c`,
+  ARM64 app/helper binaries, and the Calendar entitlement. Local and Tailscale
+  health both returned `running: true`. The previous app is backed up at
+  `/Users/gregharned/Downloads/CodeIsland-app-backups/CodeIsland-1.0.43-pre-1.0.44.app`.
+- TestFlight `1.0.0 (20260718075059)` from run `29636436339` is Apple `VALID`,
+  `APP_STORE_ELIGIBLE`, and available to the all-builds `CodeIsland Internal`
+  group. Delivery `c21248f4-2b48-4b47-b41c-e4e7952798a2`; IPA artifact
+  `8427328057`; tester receipt `8427248381`; tester
+  `gregharned@gmail.com` is `ready`. Downloaded IPA:
+  `/Users/gregharned/Downloads/CodeIsland-TestFlight-20260718075059-run-29636436339/CodeIslandCompanion.ipa`;
+  SHA-256 `776660d000305d1816116590d6b1a667fa60cd84b27306ae8e2e0fad4297f413`.
+- Pairing survived the Mac replacement. The physical iPhone authenticated at
+  `2026-07-18T08:21:37Z` and `08:24:30Z` with its production APNs and
+  push-to-start tokens still present. It did not emit a lifecycle receipt or a
+  per-activity update token. iPhone Mirroring reported `iPhone in Use`, so do
+  not call the new TestFlight binary physically installed or the Dynamic Island
+  visually accepted yet. The only remaining install step is for Greg to tap
+  **Update** for build `20260718075059` in TestFlight; then rerun one pending /
+  resolved attention probe and require the Mac receipt before closing that gate.
+
 ## Latest physical and delivery delta
 
 This section supersedes older build/pairing statements later in the document.
