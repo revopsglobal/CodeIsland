@@ -3,6 +3,71 @@
 This receipt separates automated, signed-delivery, and physical-device proof.
 It must not be read as blanket acceptance of every Crest/mobile module.
 
+## Final 1.0.52 host, current TestFlight, and authenticated web acceptance
+
+PR #58 fixed two failures discovered against the real paired web service:
+JSON-backed action values were escaped for text rather than quoted HTML
+attributes, so Calendar Edit received only `{`; Calendar validation also
+compared EventKit source identifiers against recurring-instance display IDs.
+It merged as `5f616bd6926894389d4309aa0e2e3c0f4a2e7e07`. PR #59 then kept a
+terminal Live Activity receipt authoritative for a request when a delayed
+pending/start receipt arrives. It merged as
+`4449955791a91ac17c16f9a9c58e6452778a5a8d`.
+
+Final local verification passed `493` CodeIsland app tests with two intentional
+opt-in render-harness skips, `223` CodeIslandCore tests, the focused receipt
+ordering regression, and the production ARM64 build. Graphify refreshed to
+4,759 nodes, 12,420 edges, and 52 communities.
+
+Signed run `29658378890` built macOS `1.0.52` from final merge `4449955`.
+Artifact `8433603147` has SHA-256
+`60945033ddbfe84507c2dfb4c0436c97617c77131318ac2fbb53dbc1c898e02c`.
+Mounted-image and installed-app strict signature verification passed under Team
+`44JG2Y95CH`; the installed ARM64 app has CDHash
+`c890f8c2fc11bcec9819019365f778ead3862dc4`. The replaced `1.0.51` bundle
+is preserved at
+`/Users/gregharned/Library/Application Support/CodeIsland/Install Backups/20260718T195025Z/CodeIsland.app`.
+`/Applications/CodeIsland.app` now reports `1.0.52`, PID `44925`.
+Loopback and private Tailscale health both return HTTP 200 with
+`running: true`, `hostVersion: 1.0.52`, `pendingCount: 0`, and Launch at Login
+enabled.
+
+The physical iPhone is now confirmed on TestFlight `1.0.0
+(20260718183055)`, not merely distributed. Device
+`afba2915-b0a3-456f-a5f2-265bf7e8a64a` registered that exact build with a
+production APNs token and ActivityKit push-to-start token. Strict
+`scripts/report-physical-acceptance.sh` passed every Mac, signature, health,
+delivery, and physical-build gate against final host `1.0.52`. A physical
+Claude Ask rendered its returned answer body, and two settled observations over
+nine seconds stayed identical, closing the four-second foreground-flash check
+on the current build.
+
+The final post-install ActivityKit probe used request
+`93aa1d8a-2527-4fd1-bb14-b362cf203852`. The current iPhone build authenticated
+to host `1.0.52`, reported one active question, then reported resolved and
+dismissed with zero active activities. The persisted summary remained
+`dismissed`; no request remained pending. This physically verifies the final
+host/iPhone push-to-start and cleanup path. Direct compact/expanded Dynamic
+Island or Lock Screen artwork and a per-activity update token remain unproven.
+
+The private web client paired over the Tailscale HTTPS endpoint and rendered
+real Home, Work, and Code racks. A confirmed System refresh completed. It
+downloaded `ob1-hero-2026-07-18.mp4`; source and received file were both
+1,401,875 bytes with exact SHA-256
+`7195bd5c9ad10c43760f135dafdb68b3686034f6e0caacd241c48f283a471664`.
+Calendar then passed add, edit, one-click Join, and delete against the real Mac
+store. The edited event persisted, Join navigated to the exact trusted URL
+`https://meet.google.com/code-isla-nde`, and both temporary acceptance event
+instances were deleted. The refreshed Calendar returned to `40 upcoming` and
+contains no `delete me` test data.
+
+This closes authenticated Tailscale web actions and file handoff from a real
+headless browser client. It is not a physical-iPhone browser result. A
+cellular-only iPhone/Tailscale action still requires a physical Wi-Fi toggle;
+iPhone Mirroring cannot perform that check while the Mac/phone surface is
+locked. It remains a separate gate rather than being inferred from browser
+automation against the private Tailscale endpoint.
+
 ## Mac 1.0.50 and replacement TestFlight follow-up
 
 PR #56 merged the physical Claude Ask response correction as

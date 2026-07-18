@@ -3,6 +3,40 @@
 Last updated: 2026-07-18. This supersedes the original v1.0.30 / no-local-Xcode
 handoff.
 
+## Final 1.0.52 acceptance delta
+
+This is the current source, installed-runtime, iPhone, and private-web truth.
+
+- PR #58 merged web action-attribute escaping and EventKit Calendar target
+  resolution as `5f616bd6926894389d4309aa0e2e3c0f4a2e7e07`. PR #59 merged terminal
+  Live Activity summary ordering as
+  `4449955791a91ac17c16f9a9c58e6452778a5a8d`.
+- Local proof is green: 493 CodeIsland app tests with two intentional opt-in
+  skips, 223 core tests, the production ARM64 build, and Graphify update.
+- `/Applications/CodeIsland.app` is signed `1.0.52`, PID `44925`, Team
+  `44JG2Y95CH`, CDHash `c890f8c2fc11bcec9819019365f778ead3862dc4`.
+  Source run `29658378890`; artifact `8433603147`; DMG SHA-256
+  `60945033ddbfe84507c2dfb4c0436c97617c77131318ac2fbb53dbc1c898e02c`.
+  Loopback and Tailscale health both return HTTP 200 with zero pending work and
+  Launch at Login enabled.
+- The physical iPhone runs TestFlight `1.0.0 (20260718183055)`. Strict
+  physical acceptance passes against host `1.0.52`; production APNs and
+  ActivityKit push-to-start tokens are present. Physical Claude Ask rendered
+  its answer and the current build stayed visually stable over nine seconds.
+- Final ActivityKit request `93aa1d8a-2527-4fd1-bb14-b362cf203852` reached one
+  active question, then resolved and dismissed with zero active activities.
+  The fixed persisted summary remains terminal and nothing is pending.
+- Authenticated private web acceptance from a live headless browser client
+  passed real mode racks, confirmed System refresh, exact-byte Downloads
+  handoff, and Calendar add/edit/trusted Join/delete. Download SHA-256:
+  `7195bd5c9ad10c43760f135dafdb68b3686034f6e0caacd241c48f283a471664`.
+  Calendar is restored to `40 upcoming`; no temporary `delete me` data remains.
+- Do not claim a physical-iPhone browser pass, the cellular-only gate, or direct
+  Dynamic Island/Lock Screen artwork yet. iPhone Mirroring is unavailable
+  while the Mac/phone surface is locked, and no per-activity update token has
+  registered. Those are the exact remaining physical checks; they are not
+  implementation gaps.
+
 ## Premium command-center delivery delta
 
 This section supersedes every older build, installed-runtime, and current-head
