@@ -191,8 +191,16 @@ final class CodeIslandCompanionUITests: XCTestCase {
         option.tap()
 
         let submit = app.buttons["Send answer"]
-        XCTAssertTrue(submit.exists)
-        XCTAssertTrue(submit.isEnabled)
+        XCTAssertTrue(submit.waitForExistence(timeout: 4))
+        let enabled = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "enabled == true"),
+            object: submit
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [enabled], timeout: 4),
+            .completed,
+            "Selecting an answer must enable submission after SwiftUI commits the selection"
+        )
         XCTAssertGreaterThanOrEqual(submit.frame.height, 44)
     }
 

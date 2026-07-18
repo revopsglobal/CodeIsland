@@ -80,6 +80,21 @@ final class LiveActivityPrivacyTests: XCTestCase {
         )
     }
 
+    @MainActor
+    func testLiveActivityUpdateTokenMailboxDeduplicatesTheSameToken() throws {
+        UserDefaults.standard.removeObject(forKey: LiveActivityTokenMailbox.updateTokensKey)
+        defer { UserDefaults.standard.removeObject(forKey: LiveActivityTokenMailbox.updateTokensKey) }
+
+        XCTAssertTrue(LiveActivityTokenMailbox.storeUpdateToken(Data([0x01, 0x02]), requestID: "request-id"))
+        XCTAssertFalse(LiveActivityTokenMailbox.storeUpdateToken(Data([0x01, 0x02]), requestID: "request-id"))
+        XCTAssertTrue(LiveActivityTokenMailbox.storeUpdateToken(Data([0x03, 0x04]), requestID: "request-id"))
+
+        let tokens = try XCTUnwrap(
+            UserDefaults.standard.dictionary(forKey: LiveActivityTokenMailbox.updateTokensKey) as? [String: String]
+        )
+        XCTAssertEqual(tokens, ["request-id": "0304"])
+    }
+
     func testLockScreenStateRedactsPromptTranscriptAndWorkspace() throws {
         let payload = CompanionStatePayload(
             version: 1,
