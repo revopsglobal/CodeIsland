@@ -63,8 +63,13 @@ This section supersedes older build/pairing statements later in the document.
   iPhone subsequently authenticated at `2026-07-18T06:14:00Z` and registered
   the new ActivityKit push-to-start token; because that registration path
   exists only in PR #31, this is physical install/open proof for this build.
-  Sessions rendering, background delivery, and Dynamic Island visibility are
-  still separate locked-screen acceptance gates.
+  A later background acceptance probe produced authenticated detail-refresh
+  heartbeats at `2026-07-18T06:23:23Z` for pending attention and
+  `2026-07-18T06:25:17Z` after the unanswered probe was cancelled/resolved.
+  Those exact push-correlated wakeups prove physical background APNs
+  delivery and resolved refresh. Sessions rendering and Dynamic Island
+  visibility are still separate locked-screen acceptance gates; no per-activity
+  update token was registered, so do not infer Live Activity creation.
 - The TestFlight workflow now gives Apple 60 minutes to index a normal upload
   and preserves the signed IPA artifact even when the processing check fails.
 - Live unlocked inspection of Mac `1.0.41` exposed two provider-truth defects:
@@ -94,12 +99,13 @@ This section supersedes older build/pairing statements later in the document.
   push-to-start/update tokens, remotely starts a privacy-redacted Live Activity
   only for approvals/questions, and remotely ends it on resolution. Replacement
   signed Mac and iPhone builds are installed together, authenticated pairing is
-  preserved, and production push-to-start registration is physically proven.
+  preserved, production push-to-start registration is physically proven, and
+  a pending/resolved background APNs round trip woke the paired client twice.
   The locked iPhone still prevents visual Sessions and Live Activity acceptance.
 - Exact physical proof and the still-open matrix are recorded in
   `docs/evidence/2026-07-17-crest-mobile-physical-acceptance.md`. Remaining
-  gates are physical replay rejection, background push/Live Activity/Dynamic
-  Island, cellular/Tailscale with Wi-Fi off, and the remaining real TCC-backed
+  gates are physical replay rejection, Live Activity/Dynamic Island, cellular/
+  Tailscale with Wi-Fi off, and the remaining real TCC-backed
   Calendar/Reminders/weather/Join plus module/accessory workflows.
 
 ## Current outcome
