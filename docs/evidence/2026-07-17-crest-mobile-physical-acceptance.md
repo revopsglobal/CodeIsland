@@ -42,22 +42,30 @@ It must not be read as blanket acceptance of every Crest/mobile module.
   proves the installed Mac identity now has working Calendar access and that the
   authenticated iPhone read path works. Calendar mutation, recurrence, and
   one-click Join remain unproven.
-- **Replacement host installed:** `/Applications/CodeIsland.app` `1.0.41` is
-  installed from run `29632458432`, source
-  `61310ee2d20c651221ee6ef9a3ef823bb7bb0558`, artifact `8425985562`.
+- **Final replacement host installed:** `/Applications/CodeIsland.app` `1.0.43` is
+  installed from run `29633277978`, source
+  `265cc544d20a7144c3cfe1cd340a2f10748ab267`, artifact `8426279211`.
   The downloaded DMG SHA-256 is
-  `8d33b2c721ec0a13be3878f3e46d54d1ffaf7d61bec730db21b208882a542ecb`.
+  `e0369fbfd51c939b6b8e8e8afe7fa91a447e64a825b638a9885ec3c40a219b20`.
   Mounted-image and installed-app strict signature verification passed; the
   ARM64 app is signed by Team `44JG2Y95CH` with CDHash
-  `3922e9616d0ec54d7a590331325ab254197d29e2`. Local and Tailscale `/health`
+  `78ef64fc758f0bebed52066a88eaf80c9bbad9dd`. Local and Tailscale `/health`
   both returned `running: true`, server `Greg’s MacBook Air`. The paired
   physical-iPhone record and its production APNs token survived the update.
-- **Replacement host data surfaces:** the installed 1.0.41 app rendered four
+- **Unlocked host data surfaces:** before the final replacement, installed
+  1.0.41 rendered four
   current authenticated coding sessions without the previous discovery card,
   Greg's real Calendar (`40 upcoming`), the selected Grocery Reminders list,
   12 recent Downloads, 18 Shelf items, and manual-ZIP weather
   (`61° Clear · Ridgefield, Washington`). This is physical Mac read proof, not
-  iPhone acceptance of the replacement build.
+  iPhone acceptance of the replacement build. That live inspection also found
+  an incorrect Spotify duration unit and multiple false default-audio labels.
+  PR #33 (`bca730bd9ac47f7ab9cb6e5a4352b6fab15f2d9b`) normalized Spotify
+  milliseconds to seconds; PR #34
+  (`265cc544d20a7144c3cfe1cd340a2f10748ab267`) reads the real input/output
+  default keys. Both focused regressions and the full 480-app/219-core suites
+  passed. Signed 1.0.43 contains both fixes, but macOS locked before their
+  post-install visual reinspection.
 
 ## Final replacement TestFlight delivery
 
@@ -100,7 +108,7 @@ Apple's indexing is slow.
 
 Verification on the current follow-up source:
 
-- `CodeIslandTests`: 479 passed, 2 intentional skips, 0 failures on the clean rerun.
+- `CodeIslandTests`: 480 passed, 2 intentional skips, 0 failures on the clean rerun.
 - `CodeIslandCoreTests`: 219 passed, 0 failures.
 - production Swift build: passed.
 - complete iPhone scheme: 7 unit tests and 25 UI tests passed, 0 failures.
