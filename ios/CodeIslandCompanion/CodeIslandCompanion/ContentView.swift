@@ -720,8 +720,57 @@ private struct DiscoveryFill: View {
     }
 }
 
+struct CompanionConnectionPresentation: Equatable {
+    let subtitle: String
+    let isActive: Bool
+    let isBrowsing: Bool
+
+    static func resolve(
+        localActivitySubtitle: String?,
+        localPeerName: String?,
+        localBrowsing: Bool,
+        remoteState: RemoteApprovalClient.ConnectionState,
+        remoteServerName: String?
+    ) -> CompanionConnectionPresentation {
+        let localActivitySubtitle = localActivitySubtitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let localPeerName = localPeerName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let remoteServerName = remoteServerName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isRemoteConnected = remoteState == .connected
+        let isActive = localPeerName?.isEmpty == false || isRemoteConnected
+
+        let subtitle: String
+        if let localActivitySubtitle, !localActivitySubtitle.isEmpty {
+            subtitle = localActivitySubtitle
+        } else if let localPeerName, !localPeerName.isEmpty {
+            subtitle = localPeerName
+        } else {
+            switch remoteState {
+            case .connected:
+                if let remoteServerName, !remoteServerName.isEmpty {
+                    subtitle = remoteServerName
+                } else {
+                    subtitle = "Mac connected"
+                }
+            case .connecting:
+                subtitle = "Connecting to Mac"
+            case .offline:
+                subtitle = "Mac offline"
+            case .unpaired:
+                subtitle = localBrowsing ? "Searching nearby" : "Offline"
+            }
+        }
+
+        return CompanionConnectionPresentation(
+            subtitle: subtitle,
+            isActive: isActive,
+            isBrowsing: localBrowsing && !isActive
+        )
+    }
+}
+
 private struct CompactIslandBar: View {
     @EnvironmentObject private var connection: CompanionConnection
+    @EnvironmentObject private var remoteApprovals: RemoteApprovalClient
 
     var body: some View {
         HStack(spacing: 8) {
@@ -745,7 +794,7 @@ private struct CompactIslandBar: View {
 
             Spacer()
 
-            ConnectionDot(active: connection.connectedPeer != nil, browsing: connection.browsing)
+            ConnectionDot(active: presentation.isActive, browsing: presentation.isBrowsing)
 
             Button {
                 connection.browsing ? connection.stop() : connection.start()
@@ -770,10 +819,24 @@ private struct CompactIslandBar: View {
     }
 
     private var compactStatus: CompanionStatus {
-        connection.latestState?.status ?? (connection.browsing ? .processing : .idle)
+        connection.latestState?.status ?? (presentation.isBrowsing ? .processing : .idle)
     }
 
     private var compactSubtitle: String {
+        presentation.subtitle
+    }
+
+    private var presentation: CompanionConnectionPresentation {
+        CompanionConnectionPresentation.resolve(
+            localActivitySubtitle: localActivitySubtitle,
+            localPeerName: connection.connectedPeer?.displayName,
+            localBrowsing: connection.browsing,
+            remoteState: remoteApprovals.state,
+            remoteServerName: remoteApprovals.serverName
+        )
+    }
+
+    private var localActivitySubtitle: String? {
         if let state = connection.latestState {
             if let toolName = state.toolName, !toolName.isEmpty {
                 return CompanionDisplayText.tool(toolName) ?? toolName
@@ -783,10 +846,7 @@ private struct CompactIslandBar: View {
             }
             return state.status.label
         }
-        if let peer = connection.connectedPeer {
-            return peer.displayName
-        }
-        return connection.browsing ? "Searching" : "Offline"
+        return nil
     }
 }
 

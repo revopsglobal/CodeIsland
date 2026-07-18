@@ -146,6 +146,17 @@ final class CodeIslandCompanionUITests: XCTestCase {
     }
 
     @MainActor
+    func testAuthenticatedTailscaleConnectionDoesNotLookLikeNearbySearch() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-CodeIslandCompanionMockHub"]
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["CodeIsland UI Test Mac"].waitForExistence(timeout: 8))
+        XCTAssertFalse(app.staticTexts["Searching"].exists)
+        XCTAssertFalse(app.staticTexts["Searching nearby"].exists)
+    }
+
+    @MainActor
     func testLandscapeMultiSessionShowsBoard() throws {
         let app = launchApp(mockState: "multi")
         XCUIDevice.shared.orientation = .landscapeLeft
