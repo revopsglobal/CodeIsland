@@ -1011,6 +1011,13 @@ final class PersonalHubDataModel: ObservableObject {
         let lyrics = parts.count > 6
             ? parts[6].trimmingCharacters(in: .whitespacesAndNewlines)
             : ""
+        let providerDuration = parts.count > 5 ? Double(parts[5]) : nil
+        // Spotify's AppleScript dictionary reports track duration in
+        // milliseconds while player position is in seconds. Normalize at the
+        // provider boundary so every renderer and seek action shares seconds.
+        let duration = appName == "Spotify"
+            ? providerDuration.map { $0 / 1_000 }
+            : providerDuration
         return .init(
             appName: appName,
             title: parts[1],
@@ -1018,7 +1025,7 @@ final class PersonalHubDataModel: ObservableObject {
             album: parts[3],
             isPlaying: parts[0].localizedCaseInsensitiveContains("playing"),
             position: parts.count > 4 ? Double(parts[4]) : nil,
-            duration: parts.count > 5 ? Double(parts[5]) : nil,
+            duration: duration,
             lyrics: lyrics.isEmpty ? nil : lyrics,
             queue: queue,
             artworkJPEG: artworkJPEG

@@ -99,6 +99,18 @@ final class PersonalHubDataModelTests: XCTestCase {
         XCTAssertEqual(media.queue, queue)
     }
 
+    func testSpotifyDurationIsNormalizedFromMilliseconds() throws {
+        let separator = String(UnicodeScalar(31))
+        let media = try XCTUnwrap(PersonalHubDataModel.parseNowPlayingOutput(
+            ["playing", "Sound of Horns", "R.A.P. Ferreira", "Sound of Horns", "87.5", "141000", ""]
+                .joined(separator: separator),
+            appName: "Spotify"
+        ))
+
+        XCTAssertEqual(media.position, 87.5)
+        XCTAssertEqual(media.duration, 141)
+    }
+
     func testNowPlayingArtworkIsBoundedAndNormalizedToJPEG() throws {
         let onePixelPNG = try XCTUnwrap(Data(base64Encoded:
             "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
