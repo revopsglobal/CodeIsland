@@ -53,6 +53,15 @@ final class LiveActivityPrivacyTests: XCTestCase {
         XCTAssertFalse(CompanionMotionPolicy.shouldPulse(status: .waitingApproval, reduceMotion: true))
     }
 
+    @MainActor
+    func testRemoteAttentionAutoStartsOnlyForActionRequiredStates() {
+        XCTAssertTrue(LiveActivityController.shouldAutoStart(for: .waitingApproval))
+        XCTAssertTrue(LiveActivityController.shouldAutoStart(for: .waitingQuestion))
+        XCTAssertFalse(LiveActivityController.shouldAutoStart(for: .processing))
+        XCTAssertFalse(LiveActivityController.shouldAutoStart(for: .running))
+        XCTAssertFalse(LiveActivityController.shouldAutoStart(for: .idle))
+    }
+
     func testLockScreenStateRedactsPromptTranscriptAndWorkspace() throws {
         let payload = CompanionStatePayload(
             version: 1,

@@ -22,7 +22,11 @@ final class APNSNotificationSender: ObservableObject {
         state: RemoteAttentionState,
         devices: [RemoteApprovalDevice]
     ) {
-        let targets = devices.filter { $0.pushToken?.isEmpty == false }
+        let targets = devices.filter { device in
+            device.pushToken?.isEmpty == false
+                || (state == .pending && device.liveActivityPushToStartToken?.isEmpty == false)
+                || (state != .pending && device.liveActivityUpdateTokens?[requestID]?.isEmpty == false)
+        }
         guard !targets.isEmpty else { return }
         guard let configuration = configuration() else { return }
         let issuedAt = Date()
@@ -38,14 +42,68 @@ final class APNSNotificationSender: ObservableObject {
             do {
                 let jwt = try authorizationToken(configuration: configuration)
                 for device in targets {
-                    guard let token = device.pushToken else { continue }
-                    try await send(
-                        envelope: envelope,
-                        token: token,
-                        environment: device.pushEnvironment ?? "production",
-                        configuration: configuration,
-                        jwt: jwt
-                    )
+                    let environment = device.pushEnvironment ?? "production"
+                    let pushToken = device.pushToken.flatMap { $0.isEmpty ? nil : $0 }
+                    let pushToStartToken = device.liveActivityPushToStartToken.flatMap { $0.isEmpty ? nil : $0 }
+                    let updateToken = device.liveActivityUpdateTokens?[requestID].flatMap { $0.isEmpty ? nil : $0 }
+
+                    if state == .pending, let token = pushToStartToken {
+                        do {
+                            try await sendLiveActivity(
+                                payload: APNSNotificationPayloadBuilder.liveActivityStartData(for: envelope),
+                                token: token,
+                                environment: environment,
+                                configuration: configuration,
+                                jwt: jwt,
+                                priority: "10",
+                                expiration: envelope.expiresAt
+                            )
+                        } catch {
+                            guard let fallbackToken = pushToken else { throw error }
+                            log.warning("Live Activity start failed; using the private notification fallback")
+                            try await send(
+                                envelope: envelope,
+                                token: fallbackToken,
+                                environment: environment,
+                                configuration: configuration,
+                                jwt: jwt
+                            )
+                        }
+                    } else if APNSNotificationPayloadBuilder.usesVisibleNotificationFallback(
+                        for: envelope,
+                        hasPushToStartToken: false
+                    ) {
+                        if let token = pushToken {
+                            try await send(
+                                envelope: envelope,
+                                token: token,
+                                environment: environment,
+                                configuration: configuration,
+                                jwt: jwt
+                            )
+                        }
+                    } else {
+                        if let token = pushToken {
+                            try await send(
+                                envelope: envelope,
+                                token: token,
+                                environment: environment,
+                                configuration: configuration,
+                                jwt: jwt
+                            )
+                        }
+                        if let token = updateToken {
+                            try await sendLiveActivity(
+                                payload: APNSNotificationPayloadBuilder.liveActivityEndData(for: envelope),
+                                token: token,
+                                environment: environment,
+                                configuration: configuration,
+                                jwt: jwt,
+                                priority: "5",
+                                expiration: envelope.expiresAt
+                            )
+                        }
+                    }
                 }
                 lastDeliveryAt = Date()
                 lastError = nil
@@ -167,9 +225,50 @@ final class APNSNotificationSender: ObservableObject {
             throw PushError.rejected(status: http.statusCode, reason: reason)
         }
     }
+
+    private func sendLiveActivity(
+        payload: Data,
+        token: String,
+        environment: String,
+        configuration: Configuration,
+        jwt: String,
+        priority: String,
+        expiration: Date
+    ) async throws {
+        let host = environment == "development"
+            ? "api.sandbox.push.apple.com"
+            : "api.push.apple.com"
+        guard let url = URL(string: "https://\(host)/3/device/\(token)") else {
+            throw PushError.invalidResponse
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("bearer \(jwt)", forHTTPHeaderField: "authorization")
+        request.setValue("\(configuration.topic).push-type.liveactivity", forHTTPHeaderField: "apns-topic")
+        request.setValue("liveactivity", forHTTPHeaderField: "apns-push-type")
+        request.setValue(priority, forHTTPHeaderField: "apns-priority")
+        request.setValue(String(Int(expiration.timeIntervalSince1970)), forHTTPHeaderField: "apns-expiration")
+        request.setValue("application/json", forHTTPHeaderField: "content-type")
+        request.httpBody = payload
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw PushError.invalidResponse }
+        guard (200..<300).contains(http.statusCode) else {
+            let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            let reason = object?["reason"] as? String ?? String(data: data, encoding: .utf8) ?? "unknown"
+            throw PushError.rejected(status: http.statusCode, reason: reason)
+        }
+    }
 }
 
 enum APNSNotificationPayloadBuilder {
+    static func usesVisibleNotificationFallback(
+        for envelope: RemoteAttentionPushEnvelope,
+        hasPushToStartToken: Bool
+    ) -> Bool {
+        envelope.state == .pending && !hasPushToStartToken
+    }
+
     static func data(for envelope: RemoteAttentionPushEnvelope) throws -> Data {
         var object = envelope.payloadFields
         if envelope.state == .pending {
@@ -203,6 +302,92 @@ enum APNSNotificationPayloadBuilder {
 
     static func priority(for envelope: RemoteAttentionPushEnvelope) -> String {
         envelope.state == .pending ? "10" : "5"
+    }
+
+    static func liveActivityStartData(for envelope: RemoteAttentionPushEnvelope) throws -> Data {
+        let noun = envelope.kind == .approval ? "approval" : "answer"
+        let aps: [String: Any] = [
+            "timestamp": Int(envelope.issuedAt.timeIntervalSince1970),
+            "event": "start",
+            "attributes-type": "CodeIslandActivityAttributes",
+            "attributes": ["sessionId": envelope.requestID],
+            "content-state": try liveActivityContentState(for: envelope, status: pendingStatus(for: envelope.kind)),
+            "input-push-token": 1,
+            "stale-date": Int(envelope.expiresAt.timeIntervalSince1970),
+            "relevance-score": 1.0,
+            "alert": [
+                "title": "CodeIsland needs your \(noun)",
+                "body": "Open Buddy to review it privately.",
+                "sound": "default",
+            ],
+        ]
+        return try JSONSerialization.data(withJSONObject: ["aps": aps], options: [.sortedKeys])
+    }
+
+    static func liveActivityEndData(for envelope: RemoteAttentionPushEnvelope) throws -> Data {
+        let aps: [String: Any] = [
+            "timestamp": Int(envelope.issuedAt.timeIntervalSince1970),
+            "event": "end",
+            "dismissal-date": Int(envelope.issuedAt.timeIntervalSince1970),
+            "content-state": try liveActivityContentState(for: envelope, status: "idle"),
+        ]
+        return try JSONSerialization.data(withJSONObject: ["aps": aps], options: [.sortedKeys])
+    }
+
+    private struct LiveActivitySession: Encodable {
+        let sessionId: String?
+        let source: String
+        let status: String
+        let message: String?
+        let updatedAt: Date
+    }
+
+    private struct LiveActivityContent: Encodable {
+        let sequence: UInt64
+        let source: String
+        let status: String
+        let message: String?
+        let pendingAction: String?
+        let sessions: [LiveActivitySession]
+        let updatedAt: Date
+    }
+
+    private static func liveActivityContentState(
+        for envelope: RemoteAttentionPushEnvelope,
+        status: String
+    ) throws -> [String: Any] {
+        let isPending = envelope.state == .pending
+        let message: String? = isPending
+            ? (envelope.kind == .approval
+                ? "Approval waiting · open Buddy privately"
+                : "Answer waiting · open Buddy privately")
+            : "No action waiting"
+        let content = LiveActivityContent(
+            sequence: UInt64(max(0, envelope.issuedAt.timeIntervalSince1970 * 1_000)),
+            source: "codeisland",
+            status: status,
+            message: message,
+            pendingAction: isPending ? envelope.kind.rawValue : nil,
+            sessions: isPending ? [
+                LiveActivitySession(
+                    sessionId: envelope.requestID,
+                    source: "codeisland",
+                    status: status,
+                    message: message,
+                    updatedAt: envelope.issuedAt
+                )
+            ] : [],
+            updatedAt: envelope.issuedAt
+        )
+        let encoded = try JSONEncoder().encode(content)
+        guard let object = try JSONSerialization.jsonObject(with: encoded) as? [String: Any] else {
+            throw CocoaError(.coderInvalidValue)
+        }
+        return object
+    }
+
+    private static func pendingStatus(for kind: RemoteAttentionKind) -> String {
+        kind == .approval ? "waitingApproval" : "waitingQuestion"
     }
 }
 

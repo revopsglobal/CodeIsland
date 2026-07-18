@@ -30,6 +30,8 @@ final class RemoteApprovalClient: ObservableObject {
     @Published private(set) var highlightedQuestionID: String?
     @Published private(set) var highlightedHubModuleID: PersonalHubModuleID?
     @Published private(set) var hubSnapshot: PersonalHubSnapshot?
+    @Published private(set) var sessionsModule: PersonalHubModuleSnapshot?
+    @Published private(set) var sessionsError: String?
     private var calendarReferenceDate: Date?
     private var calendarSelectedDate: Date?
     @Published private(set) var hubError: String?
@@ -107,6 +109,7 @@ final class RemoteApprovalClient: ObservableObject {
             serverName = "CodeIsland UI Test Mac"
             lastUpdatedAt = Date()
             hubSnapshot = Self.mockHubSnapshot(requestedMode: selectedMode)
+            sessionsModule = Self.mockHubModule(.agents)
             if let url = Self.mockDeepLinkFromLaunchArguments() {
                 openDeepLink(url)
             }
@@ -119,6 +122,13 @@ final class RemoteApprovalClient: ObservableObject {
 
         notificationObservers.append(NotificationCenter.default.addObserver(
             forName: .codeIslandPushTokenAvailable,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in await self?.registerPendingPushToken() }
+        })
+        notificationObservers.append(NotificationCenter.default.addObserver(
+            forName: .codeIslandLiveActivityTokenAvailable,
             object: nil,
             queue: .main
         ) { [weak self] _ in
@@ -265,6 +275,8 @@ final class RemoteApprovalClient: ObservableObject {
         questions = []
         serverName = nil
         hubSnapshot = nil
+        sessionsModule = nil
+        sessionsError = nil
         hubError = nil
         preparedAction = nil
         state = .unpaired
@@ -407,6 +419,42 @@ final class RemoteApprovalClient: ObservableObject {
         }
     }
 
+    /// The Sessions destination is transport-independent. Fetch the Code rack's
+    /// agent snapshot directly so choosing Home or Work never falls back to the
+    /// nearby Bluetooth discovery UI while Tailscale is authenticated.
+    func refreshSessions() async {
+#if DEBUG
+        if usesMockHub {
+            sessionsModule = Self.mockHubModule(.agents)
+            sessionsError = nil
+            return
+        }
+#endif
+        guard deviceToken != nil else {
+            sessionsModule = nil
+            return
+        }
+        guard let url = endpoint("/api/hub/snapshot") else {
+            sessionsError = "Enter a valid Tailscale HTTPS URL"
+            return
+        }
+        do {
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try Self.encoder.encode(
+                PersonalHubSnapshotRequest(requestedMode: .code)
+            )
+            let snapshot: PersonalHubSnapshot = try await perform(request, authenticated: true)
+            sessionsModule = snapshot.modules.first(where: { $0.id == .agents })
+            sessionsError = sessionsModule == nil ? "The Mac did not return session status" : nil
+        } catch RemoteClientError.unauthorized {
+            unpair()
+        } catch {
+            sessionsError = error.localizedDescription
+        }
+    }
+
     func refreshCalendar(referenceDate: Date, selectedDate: Date) async {
         calendarReferenceDate = referenceDate
         calendarSelectedDate = selectedDate
@@ -460,6 +508,9 @@ final class RemoteApprovalClient: ObservableObject {
         switch route {
         case .pendingApproval(let id):
             highlightedApprovalID = id ?? approvals.first?.id
+            Task { await refresh() }
+        case .pendingQuestion(let id):
+            highlightedQuestionID = id ?? questions.first?.id
             Task { await refresh() }
         case .module(let module):
             highlightedHubModuleID = module
@@ -578,10 +629,15 @@ final class RemoteApprovalClient: ObservableObject {
 #if DEBUG
         if usesMockHub { return }
 #endif
-        guard deviceToken != nil,
-              let pushToken = UserDefaults.standard.string(forKey: Self.pendingPushTokenKey),
-              let url = endpoint("/api/push-token")
-        else { return }
+        guard deviceToken != nil, let url = endpoint("/api/push-token") else { return }
+        let pushToken = UserDefaults.standard.string(forKey: Self.pendingPushTokenKey)
+        let pushToStartToken = UserDefaults.standard.string(
+            forKey: LiveActivityTokenMailbox.pushToStartTokenKey
+        )
+        let updateTokens = UserDefaults.standard.dictionary(
+            forKey: LiveActivityTokenMailbox.updateTokensKey
+        ) as? [String: String]
+        guard pushToken != nil || pushToStartToken != nil || updateTokens?.isEmpty == false else { return }
         do {
             var request = URLRequest(url: url)
             request.httpMethod = "POST"
@@ -592,10 +648,24 @@ final class RemoteApprovalClient: ObservableObject {
             let environment = "production"
 #endif
             request.httpBody = try Self.encoder.encode(
-                RemotePushRegistrationRequest(token: pushToken, environment: environment)
+                RemotePushRegistrationRequest(
+                    token: pushToken,
+                    environment: environment,
+                    liveActivityPushToStartToken: pushToStartToken,
+                    liveActivityUpdateTokens: updateTokens
+                )
             )
             let _: RegistrationResponse = try await perform(request, authenticated: true)
-            UserDefaults.standard.removeObject(forKey: Self.pendingPushTokenKey)
+            if UserDefaults.standard.string(forKey: Self.pendingPushTokenKey) == pushToken {
+                UserDefaults.standard.removeObject(forKey: Self.pendingPushTokenKey)
+            }
+            if UserDefaults.standard.string(forKey: LiveActivityTokenMailbox.pushToStartTokenKey) == pushToStartToken {
+                UserDefaults.standard.removeObject(forKey: LiveActivityTokenMailbox.pushToStartTokenKey)
+            }
+            if let updateTokens,
+               UserDefaults.standard.dictionary(forKey: LiveActivityTokenMailbox.updateTokensKey) as? [String: String] == updateTokens {
+                UserDefaults.standard.removeObject(forKey: LiveActivityTokenMailbox.updateTokensKey)
+            }
         } catch {
             // Keep the token queued; foreground polling still works and registration
             // retries on the next launch / APNs callback.
@@ -1009,5 +1079,6 @@ final class RemoteApprovalClient: ObservableObject {
 
 extension Notification.Name {
     static let codeIslandPushTokenAvailable = Notification.Name("codeisland.push-token-available")
+    static let codeIslandLiveActivityTokenAvailable = Notification.Name("codeisland.live-activity-token-available")
     static let codeIslandRemoteAttentionChanged = Notification.Name("codeisland.remote-attention-changed")
 }

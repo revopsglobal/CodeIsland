@@ -861,6 +861,7 @@ public enum PersonalHubQuickJotDestination: String, Codable, CaseIterable, Senda
 
 public enum PersonalHubDeepLink: Equatable, Sendable {
     case pendingApproval(id: String?)
+    case pendingQuestion(id: String?)
     case module(PersonalHubModuleID)
     case quickJot(destination: PersonalHubQuickJotDestination, text: String?)
 
@@ -873,6 +874,9 @@ public enum PersonalHubDeepLink: Equatable, Sendable {
         case "approval", "approvals":
             let rawID = path.first
             self = .pendingApproval(id: rawID == "pending" ? nil : rawID)
+        case "question", "questions":
+            let rawID = path.first
+            self = .pendingQuestion(id: rawID == "pending" ? nil : rawID)
         case "hub":
             guard let raw = path.first, let module = PersonalHubModuleID(rawValue: raw) else { return nil }
             self = .module(module)
@@ -894,6 +898,9 @@ public enum PersonalHubDeepLink: Equatable, Sendable {
         switch self {
         case .pendingApproval(let id):
             components.host = "approvals"
+            components.path = "/\(id ?? "pending")"
+        case .pendingQuestion(let id):
+            components.host = "questions"
             components.path = "/\(id ?? "pending")"
         case .module(let module):
             components.host = "hub"

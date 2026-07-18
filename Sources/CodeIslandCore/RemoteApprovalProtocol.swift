@@ -312,12 +312,21 @@ public struct RemoteDecisionResponse: Codable, Equatable, Sendable {
 }
 
 public struct RemotePushRegistrationRequest: Codable, Equatable, Sendable {
-    public let token: String
+    public let token: String?
     public let environment: String
+    public let liveActivityPushToStartToken: String?
+    public let liveActivityUpdateTokens: [String: String]?
 
-    public init(token: String, environment: String) {
+    public init(
+        token: String? = nil,
+        environment: String,
+        liveActivityPushToStartToken: String? = nil,
+        liveActivityUpdateTokens: [String: String]? = nil
+    ) {
         self.token = token
         self.environment = environment
+        self.liveActivityPushToStartToken = liveActivityPushToStartToken
+        self.liveActivityUpdateTokens = liveActivityUpdateTokens
     }
 }
 

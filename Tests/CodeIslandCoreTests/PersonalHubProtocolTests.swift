@@ -26,6 +26,8 @@ final class PersonalHubProtocolTests: XCTestCase {
         let routes: [PersonalHubDeepLink] = [
             .pendingApproval(id: nil),
             .pendingApproval(id: "approval-123"),
+            .pendingQuestion(id: nil),
+            .pendingQuestion(id: "question-123"),
             .module(.calendar),
             .module(.reminders),
             .quickJot(destination: .task, text: "Call bank & review"),

@@ -19,31 +19,52 @@ This section supersedes older build/pairing statements later in the document.
 - The physical iPhone has produced three real audited approval decisions. The
   latest is request `e4e3b760-3eef-43e4-b671-93e483a9981c`, `approve`,
   `resolved`, written at `2026-07-18T03:18:13Z` from device `iPhone`.
+- A real physical question is also proven. Request
+  `820a59cc-62da-44ba-9cbc-457c89af5e1e` appeared on the iPhone, `Continue` was
+  selected and explicitly confirmed, the blocked bridge resumed with the exact
+  answer, and the host wrote `question-answer` / `resolved` at
+  `2026-07-18T04:47:24Z`.
+- The physical **New Task** path created a temporary Reminder, Apple's Mac
+  Reminders app showed it in the real Grocery list, and the item was cleaned up
+  and confirmed absent. Buddy's Calendar also returned Greg's real July data,
+  selected-day events, and `40 upcoming`. Those prove a Reminders add and
+  Calendar read—not their full CRUD matrices.
 - PR #30 merged at `7f311899a97410b7f69727f39a4c8b0e1ad019c6`.
   It makes the compact Buddy header show the authenticated Tailscale Mac name
   instead of misleading `Searching` text while nearby discovery runs. Signed
   TestFlight build `1.0.0 (20260718041048)` uploaded from this exact SHA in run
   `29630108653`; Apple delivery
   `a1fa24b9-1bec-4656-b3b6-8641ede8c854` reported upload success. The initial
-  20-minute visibility check timed out while Apple indexed the build; recovery
-  run `29630740348` performs verification only and does not duplicate the IPA.
-  Do not call the label physically accepted until this build is visible,
-  installed, and checked on Greg's iPhone.
-- Fresh verification on PR #30 source: 477 Mac app tests passed with two
-  intentional skips; 218 core tests passed; the production Swift build passed;
-  and the full iPhone scheme passed 6 unit plus 24 UI tests with zero failures.
+  20-minute visibility check timed out while Apple indexed the build. Recovery
+  run `29630740348` did not duplicate the IPA and found the build at
+  `2026-07-18T05:14:12Z`: `VALID`, `APP_STORE_ELIGIBLE`, and available to the
+  all-builds `CodeIsland Internal` group. Do not call the label physically
+  accepted until the final replacement build is installed and checked on
+  Greg's iPhone.
+- Fresh verification on the current follow-up source: 479 Mac app tests passed
+  with two intentional skips on the clean rerun; 219 core tests passed; the
+  production Swift build passed; and the full iPhone scheme passed 7 unit plus
+  25 UI tests with zero failures.
   Result bundle:
-  `~/Library/Developer/Xcode/DerivedData/CodeIslandCompanion-abkbncwynakyihgwigzxamfbugzs/Logs/Test/Test-CodeIslandCompanion-2026.07.17_21-02-54--0700.xcresult`.
+  `/tmp/CodeIsland-final-full-20260717-2223.xcresult`.
 - The installed host is now `/Applications/CodeIsland.app` `1.0.40`, signed by
   Team `44JG2Y95CH`, and its real listener answers `/health` with
   `running: true`. The 1.0.40 DMG came from run `29621743481`, source
   `4041ea71d95e18556a6b125d333b2006a31821d0`, artifact `8422488531`.
 - The TestFlight workflow now gives Apple 60 minutes to index a normal upload
   and preserves the signed IPA artifact even when the processing check fails.
+- The installed build exposed one more truthful-state defect: Sessions could
+  show nearby `Waiting for Mac` despite an authenticated Tailscale connection.
+  The follow-up branch now fetches the Code session rack independently and uses
+  nearby discovery only when unpaired. It also registers ActivityKit
+  push-to-start/update tokens, remotely starts a privacy-redacted Live Activity
+  only for approvals/questions, and remotely ends it on resolution. Replacement
+  signed Mac and iPhone builds plus physical acceptance are still required
+  before calling either behavior live.
 - Exact physical proof and the still-open matrix are recorded in
   `docs/evidence/2026-07-17-crest-mobile-physical-acceptance.md`. Remaining
-  gates are a real question/replay, background push/Live Activity/Dynamic
-  Island, cellular/Tailscale with Wi-Fi off, and Greg's real TCC-backed
+  gates are physical replay rejection, background push/Live Activity/Dynamic
+  Island, cellular/Tailscale with Wi-Fi off, and the remaining real TCC-backed
   Calendar/Reminders/weather/Join plus module/accessory workflows.
 
 ## Current outcome
@@ -183,17 +204,17 @@ physical phone. Do not turn implementation presence into a live claim.
 
 ## Verification already green
 
-- Full current-head target-isolated Swift run: 477 app tests with two intentional skips and
-  zero failures, plus 218 core tests with zero failures.
+- Full current-head target-isolated Swift run: 479 app tests with two intentional skips and
+  zero failures on the clean rerun, plus 219 core tests with zero failures.
 - Release Mac build passed. Existing Swift 6 migration/deprecation warnings are
   non-fatal and should be retired separately.
-- Complete native companion scheme: 6 unit tests plus 24 UI tests, zero
+- Complete native companion scheme: 7 unit tests plus 25 UI tests, zero
   failures on Simulator `OB1 Widget Proof iPhone 16`, iOS 26.5.
   Result bundle:
-  `~/Library/Developer/Xcode/DerivedData/CodeIslandCompanion-abkbncwynakyihgwigzxamfbugzs/Logs/Test/Test-CodeIslandCompanion-2026.07.17_21-02-54--0700.xcresult`.
+  `/tmp/CodeIsland-final-full-20260717-2223.xcresult`.
 - A first aggregate run found an XCTest accessibility-shape assumption in the
   hub module helper. The focused Home/Work/Code matrix passed after the helper
-  was hardened, followed by the clean 24-test aggregate. This is not being
+  was hardened, followed by the clean 25-test UI aggregate. This is not being
   hidden as a product failure or mislabeled as physical-device proof.
 - Real-loopback lifecycle E2E proves pairing, bearer auth, all modes, approvals,
   questions, exact action confirmation, altered-intent/replay rejection, audit

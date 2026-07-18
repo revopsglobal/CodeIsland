@@ -162,7 +162,11 @@ private struct PortraitIslandView: View {
                             }
 
                         case .sessions:
-                            if let state = connection.latestState {
+                            if remoteApprovals.hasPairingCredential {
+                                PersonalHubSessionsSurface()
+                                    .environmentObject(remoteApprovals)
+                                    .transition(.blurFade.combined(with: .move(edge: .top)))
+                            } else if let state = connection.latestState {
                                 sessionCard(state)
 
                                 if let personalStatus = state.personalStatus, !personalStatus.isEmpty {
@@ -181,7 +185,7 @@ private struct PortraitIslandView: View {
                         }
 
                         if let error = connection.lastError,
-                           destination == .sessions || !remoteApprovals.hasPairingCredential {
+                           !remoteApprovals.hasPairingCredential {
                             DiagnosticStrip(message: error)
                                 .transition(.blurFade.combined(with: .move(edge: .top)))
                         }

@@ -8,6 +8,7 @@ struct CodeIslandLiveActivityWidget: Widget {
             LockScreenActivityView(state: context.state)
                 .activityBackgroundTint(Color(red: 0.04, green: 0.05, blue: 0.07))
                 .activitySystemActionForegroundColor(.white)
+                .widgetURL(activityAttentionURL(attributes: context.attributes, state: context.state))
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
@@ -27,8 +28,21 @@ struct CodeIslandLiveActivityWidget: Widget {
                 MinimalMascotBadge(state: context.state)
             }
             .keylineTint(statusColor(context.state.status))
+            .widgetURL(activityAttentionURL(attributes: context.attributes, state: context.state))
         }
     }
+}
+
+private func activityAttentionURL(
+    attributes: CodeIslandActivityAttributes,
+    state: CodeIslandActivityAttributes.ContentState
+) -> URL? {
+    guard state.pendingAction == "approval" || state.pendingAction == "question" else { return nil }
+    var components = URLComponents()
+    components.scheme = "codeisland"
+    components.host = state.pendingAction == "question" ? "questions" : "approvals"
+    components.path = "/\(attributes.sessionId ?? state.sessions.first?.sessionId ?? "pending")"
+    return components.url
 }
 
 private struct MinimalMascotBadge: View {

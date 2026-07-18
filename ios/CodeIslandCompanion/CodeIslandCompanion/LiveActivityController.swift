@@ -14,6 +14,9 @@ final class LiveActivityController: ObservableObject {
     private var lastContentState: CodeIslandActivityAttributes.ContentState?
     private var lifecycleCursor: LiveActivityLifecycleCursor?
     private var activityStateTask: Task<Void, Never>?
+    private var activityPushTokenTask: Task<Void, Never>?
+    private var activityDiscoveryTask: Task<Void, Never>?
+    private var pushToStartTokenTask: Task<Void, Never>?
 
     var isRunning: Bool {
         activity != nil
@@ -21,9 +24,14 @@ final class LiveActivityController: ObservableObject {
 
     deinit {
         activityStateTask?.cancel()
+        activityPushTokenTask?.cancel()
+        activityDiscoveryTask?.cancel()
+        pushToStartTokenTask?.cancel()
     }
 
     init() {
+        observeRemoteStartTokens()
+        observeActivitiesStartedByPush()
         Task {
             await migrateLiveActivityLayoutIfNeeded()
             recoverExistingActivity()
@@ -39,6 +47,21 @@ final class LiveActivityController: ObservableObject {
             guard activity != nil || shouldRecreate else { return }
             await apply(payload, createIfNeeded: shouldRecreate, allowIdleCreation: false)
         }
+    }
+
+    /// Remote attention should appear on the Lock Screen and Dynamic Island
+    /// without requiring Buddy to already be open. Non-actionable snapshots
+    /// only update or end an activity that is already running.
+    func syncAttention(with payload: CompanionStatePayload) {
+        if Self.shouldAutoStart(for: payload.status) {
+            startOrUpdate(with: payload)
+        } else {
+            updateIfRunning(with: payload)
+        }
+    }
+
+    static func shouldAutoStart(for status: CompanionStatus) -> Bool {
+        status == .waitingApproval || status == .waitingQuestion
     }
 
     func startOrUpdate(with payload: CompanionStatePayload) {
@@ -85,6 +108,7 @@ final class LiveActivityController: ObservableObject {
             updatedAt: existing.content.state.updatedAt
         )
         observeState(of: existing)
+        observePushToken(of: existing)
     }
 
     private func recoverExistingActivity(endingDuplicates: Bool) async {
@@ -105,6 +129,7 @@ final class LiveActivityController: ObservableObject {
                 updatedAt: existing.content.state.updatedAt
             )
             observeState(of: existing)
+            observePushToken(of: existing)
         }
 
         guard endingDuplicates else { return }
@@ -187,10 +212,11 @@ final class LiveActivityController: ObservableObject {
                 staleDate: Date().addingTimeInterval(90),
                 relevanceScore: relevanceScore(for: payload.status)
             )
-            let existing = try Activity.request(attributes: attributes, content: content)
+            let existing = try Activity.request(attributes: attributes, content: content, pushType: .token)
             activity = existing
             activityID = existing.id
             observeState(of: existing)
+            observePushToken(of: existing)
             lastError = nil
             existingActivityCount = Activity<CodeIslandActivityAttributes>.activities.count
         } catch {
@@ -222,6 +248,59 @@ final class LiveActivityController: ObservableObject {
         }
     }
 
+    private func observeRemoteStartTokens() {
+        guard #available(iOS 17.2, *) else { return }
+        pushToStartTokenTask = Task { [weak self] in
+            if let token = Activity<CodeIslandActivityAttributes>.pushToStartToken {
+                self?.publishPushToStartToken(token)
+            }
+            for await token in Activity<CodeIslandActivityAttributes>.pushToStartTokenUpdates {
+                guard !Task.isCancelled else { return }
+                self?.publishPushToStartToken(token)
+            }
+        }
+    }
+
+    private func observeActivitiesStartedByPush() {
+        activityDiscoveryTask = Task { [weak self] in
+            for await discovered in Activity<CodeIslandActivityAttributes>.activityUpdates {
+                guard !Task.isCancelled, let self else { return }
+                await self.recoverExistingActivity(endingDuplicates: true)
+                guard let requestID = discovered.attributes.sessionId,
+                      let kind = RemoteAttentionKind(rawValue: discovered.content.state.pendingAction ?? "")
+                else { continue }
+                NotificationCenter.default.post(
+                    name: .codeIslandRemoteAttentionChanged,
+                    object: nil,
+                    userInfo: [
+                        "kind": kind.rawValue,
+                        "state": RemoteAttentionState.pending.rawValue,
+                        "requestId": requestID,
+                    ]
+                )
+            }
+        }
+    }
+
+    private func observePushToken(of activity: Activity<CodeIslandActivityAttributes>) {
+        activityPushTokenTask?.cancel()
+        guard let requestID = activity.attributes.sessionId, !requestID.isEmpty else { return }
+        if let token = activity.pushToken {
+            LiveActivityTokenMailbox.storeUpdateToken(token, requestID: requestID)
+        }
+        activityPushTokenTask = Task {
+            for await token in activity.pushTokenUpdates {
+                guard !Task.isCancelled else { return }
+                LiveActivityTokenMailbox.storeUpdateToken(token, requestID: requestID)
+            }
+        }
+    }
+
+    @available(iOS 17.2, *)
+    private func publishPushToStartToken(_ token: Data) {
+        LiveActivityTokenMailbox.storePushToStartToken(token)
+    }
+
     private func clearActivity(id: String?, resetCursor: Bool = false) {
         guard activityID == nil || activityID == id else { return }
         activity = nil
@@ -231,6 +310,8 @@ final class LiveActivityController: ObservableObject {
         existingActivityCount = Activity<CodeIslandActivityAttributes>.activities.count
         activityStateTask?.cancel()
         activityStateTask = nil
+        activityPushTokenTask?.cancel()
+        activityPushTokenTask = nil
     }
 
     private func relevanceScore(for status: CompanionStatus) -> Double {
@@ -246,5 +327,28 @@ final class LiveActivityController: ObservableObject {
 
     private static func hasActiveContent(_ payload: CompanionStatePayload) -> Bool {
         payload.status != .idle || payload.sessions.contains(where: { $0.status != .idle })
+    }
+}
+
+enum LiveActivityTokenMailbox {
+    static let pushToStartTokenKey = "codeisland.remote.liveActivity.pushToStartToken"
+    static let updateTokensKey = "codeisland.remote.liveActivity.updateTokens"
+
+    static func storePushToStartToken(_ token: Data) {
+        UserDefaults.standard.set(token.hexString, forKey: pushToStartTokenKey)
+        NotificationCenter.default.post(name: .codeIslandLiveActivityTokenAvailable, object: nil)
+    }
+
+    static func storeUpdateToken(_ token: Data, requestID: String) {
+        var tokens = UserDefaults.standard.dictionary(forKey: updateTokensKey) as? [String: String] ?? [:]
+        tokens[requestID] = token.hexString
+        UserDefaults.standard.set(tokens, forKey: updateTokensKey)
+        NotificationCenter.default.post(name: .codeIslandLiveActivityTokenAvailable, object: nil)
+    }
+}
+
+private extension Data {
+    var hexString: String {
+        map { String(format: "%02x", $0) }.joined()
     }
 }

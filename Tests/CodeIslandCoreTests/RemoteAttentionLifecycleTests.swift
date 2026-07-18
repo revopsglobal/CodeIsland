@@ -25,6 +25,16 @@ final class RemoteAttentionLifecycleTests: XCTestCase {
         XCTAssertNil(decodedFields["actionToken"])
     }
 
+    func testLegacyNotificationTokenRegistrationStillDecodes() throws {
+        let data = Data(#"{"token":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","environment":"production"}"#.utf8)
+        let registration = try JSONDecoder().decode(RemotePushRegistrationRequest.self, from: data)
+
+        XCTAssertEqual(registration.token, String(repeating: "a", count: 64))
+        XCTAssertEqual(registration.environment, "production")
+        XCTAssertNil(registration.liveActivityPushToStartToken)
+        XCTAssertNil(registration.liveActivityUpdateTokens)
+    }
+
     func testPendingPushExpiresAndResolvedPushSuppressesOlderReplay() {
         let now = Date(timeIntervalSince1970: 1_800_000_100)
         let pending = RemoteAttentionPushEnvelope(
