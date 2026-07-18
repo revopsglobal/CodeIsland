@@ -952,8 +952,8 @@ final class PersonalHubDataModel: ObservableObject {
                 name: name,
                 isInput: input > 0,
                 isOutput: output > 0,
-                isDefaultInput: item["coreaudio_input_source"] as? String == "spaudio_default",
-                isDefaultOutput: item["coreaudio_output_source"] as? String == "spaudio_default"
+                isDefaultInput: item["coreaudio_default_audio_input_device"] as? String == "spaudio_yes",
+                isDefaultOutput: item["coreaudio_default_audio_output_device"] as? String == "spaudio_yes"
             )
         }.sorted { lhs, rhs in
             if lhs.isDefaultOutput != rhs.isDefaultOutput { return lhs.isDefaultOutput }
