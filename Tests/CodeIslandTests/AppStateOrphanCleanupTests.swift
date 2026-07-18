@@ -6,6 +6,16 @@ import XCTest
 /// we attached (i.e. their terminal closed) count as orphans.
 final class AppStateOrphanCleanupTests: XCTestCase {
 
+    func testAppStateCanDeallocateWhenLastReleaseOccursOffMainActor() async {
+        let retained = await MainActor.run {
+            Unmanaged.passRetained(AppState())
+        }
+
+        await Task.detached {
+            retained.release()
+        }.value
+    }
+
     func testLaunchdManagedDaemonIsNeverAnOrphan() {
         // Hermes gateway: ppid was already 1 when the monitor attached.
         XCTAssertFalse(AppState.isReparentedOrphan(currentParentPid: 1, attachParentPid: 1))

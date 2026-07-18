@@ -632,10 +632,68 @@ final class RemoteApprovalHTTPServerTests: XCTestCase {
         XCTAssertEqual(deviceStore.devices.first?.liveActivityPushToStartToken, pushToStartToken)
         XCTAssertEqual(deviceStore.devices.first?.liveActivityUpdateTokens?["request-id"], activityUpdateToken)
 
+        let receipt = RemoteLiveActivityReceipt(
+            eventId: "receipt-event-id",
+            source: .activityStarted,
+            requestId: "request-id",
+            kind: .approval,
+            state: .pending,
+            activityState: .active,
+            observedAt: Date(timeIntervalSince1970: 1_800_000_000),
+            activitiesEnabled: true,
+            activeActivityCount: 1,
+            activeRequestIds: ["request-id"]
+        )
+        let receiptRegistered = try await send(
+            port: port,
+            method: "POST",
+            path: "/api/push-token",
+            bearer: pair.deviceToken,
+            body: try encode(RemotePushRegistrationRequest(
+                environment: "production",
+                liveActivityReceipts: [receipt]
+            ))
+        )
+        XCTAssertEqual(receiptRegistered.response.statusCode, 200)
+        XCTAssertEqual(deviceStore.devices.first?.lastLiveActivityReceipt, receipt)
+
+        let duplicateReceipt = try await send(
+            port: port,
+            method: "POST",
+            path: "/api/push-token",
+            bearer: pair.deviceToken,
+            body: try encode(RemotePushRegistrationRequest(
+                environment: "production",
+                liveActivityReceipts: [receipt]
+            ))
+        )
+        XCTAssertEqual(duplicateReceipt.response.statusCode, 200)
+        XCTAssertEqual(deviceStore.devices.first?.recentLiveActivityReceiptIDs, [receipt.eventId])
+
+        let invalidReceipt = RemoteLiveActivityReceipt(
+            source: .snapshot,
+            activitiesEnabled: true,
+            activeActivityCount: 0,
+            activeRequestIds: ["impossible-active-request"]
+        )
+        let rejectedReceipt = try await send(
+            port: port,
+            method: "POST",
+            path: "/api/push-token",
+            bearer: pair.deviceToken,
+            body: try encode(RemotePushRegistrationRequest(
+                environment: "production",
+                liveActivityReceipts: [invalidReceipt]
+            ))
+        )
+        XCTAssertEqual(rejectedReceipt.response.statusCode, 400)
+
         let audit = try String(contentsOf: auditURL, encoding: .utf8)
         XCTAssertTrue(audit.contains("\"event\":\"pair\""))
         XCTAssertTrue(audit.contains("\"event\":\"decision\""))
         XCTAssertTrue(audit.contains("\"outcome\":\"resolved\""))
+        XCTAssertEqual(audit.components(separatedBy: "\"receiptEventID\":\"receipt-event-id\"").count - 1, 1)
+        XCTAssertTrue(audit.contains("\"activeActivityCount\":1"))
     }
 
     private func waitForPort(_ service: RemoteApprovalService) async throws -> UInt16 {

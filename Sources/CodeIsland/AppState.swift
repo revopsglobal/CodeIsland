@@ -2878,19 +2878,17 @@ final class AppState {
         for key in Array(processMonitors.keys) { stopMonitor(key) }
     }
 
-    deinit {
-        MainActor.assumeIsolated {
-            cleanupTimer?.invalidate()
-            saveTimer?.invalidate()
-            if let stream = fsEventStream {
-                FSEventStreamStop(stream)
-                FSEventStreamInvalidate(stream)
-                FSEventStreamRelease(stream)
-            }
-            discoveryScanTask?.cancel()
-            for (_, monitor) in processMonitors {
-                monitor.source.cancel()
-            }
+    isolated deinit {
+        cleanupTimer?.invalidate()
+        saveTimer?.invalidate()
+        if let stream = fsEventStream {
+            FSEventStreamStop(stream)
+            FSEventStreamInvalidate(stream)
+            FSEventStreamRelease(stream)
+        }
+        discoveryScanTask?.cancel()
+        for (_, monitor) in processMonitors {
+            monitor.source.cancel()
         }
     }
 

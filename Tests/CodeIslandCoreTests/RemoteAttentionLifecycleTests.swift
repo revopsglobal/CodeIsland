@@ -33,6 +33,47 @@ final class RemoteAttentionLifecycleTests: XCTestCase {
         XCTAssertEqual(registration.environment, "production")
         XCTAssertNil(registration.liveActivityPushToStartToken)
         XCTAssertNil(registration.liveActivityUpdateTokens)
+        XCTAssertNil(registration.liveActivityReceipts)
+    }
+
+    func testLiveActivityReceiptIsBoundedAndContainsNoPrivateContent() throws {
+        let receipt = RemoteLiveActivityReceipt(
+            eventId: "receipt-1",
+            source: .activityStarted,
+            requestId: "opaque-request-7",
+            kind: .question,
+            state: .pending,
+            activityState: .active,
+            observedAt: Date(timeIntervalSince1970: 1_800_000_000),
+            activitiesEnabled: true,
+            activeActivityCount: 1,
+            activeRequestIds: ["opaque-request-7"]
+        )
+
+        XCTAssertTrue(receipt.isStructurallyValid)
+        let text = try XCTUnwrap(String(data: JSONEncoder().encode(receipt), encoding: .utf8))
+        XCTAssertFalse(text.contains("prompt"))
+        XCTAssertFalse(text.contains("workspace"))
+        XCTAssertFalse(text.contains("actionToken"))
+        XCTAssertFalse(text.contains("pushToken"))
+
+        XCTAssertFalse(RemoteLiveActivityReceipt(
+            eventId: "receipt-2",
+            source: .notification,
+            requestId: nil,
+            kind: .approval,
+            state: .pending,
+            activitiesEnabled: true,
+            activeActivityCount: 0,
+            activeRequestIds: []
+        ).isStructurallyValid)
+        XCTAssertFalse(RemoteLiveActivityReceipt(
+            eventId: "receipt-3",
+            source: .snapshot,
+            activitiesEnabled: true,
+            activeActivityCount: 0,
+            activeRequestIds: ["request-without-an-activity"]
+        ).isStructurallyValid)
     }
 
     func testPendingPushExpiresAndResolvedPushSuppressesOlderReplay() {

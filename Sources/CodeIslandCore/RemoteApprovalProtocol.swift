@@ -311,22 +311,102 @@ public struct RemoteDecisionResponse: Codable, Equatable, Sendable {
     }
 }
 
+/// An authenticated, privacy-preserving observation of the iPhone's remote
+/// attention lifecycle. Receipts deliberately contain no prompt, workspace,
+/// command, transcript, action token, or APNs token.
+public struct RemoteLiveActivityReceipt: Codable, Equatable, Sendable {
+    public enum Source: String, Codable, Equatable, Sendable {
+        case notification
+        case activityStarted
+        case activityStateChanged
+        case snapshot
+    }
+
+    public enum ActivityState: String, Codable, Equatable, Sendable {
+        case pending
+        case active
+        case stale
+        case ended
+        case dismissed
+    }
+
+    public let eventId: String
+    public let source: Source
+    public let requestId: String?
+    public let kind: RemoteAttentionKind?
+    public let state: RemoteAttentionState?
+    public let activityState: ActivityState?
+    public let observedAt: Date
+    public let activitiesEnabled: Bool
+    public let activeActivityCount: Int
+    public let activeRequestIds: [String]
+
+    public init(
+        eventId: String = UUID().uuidString.lowercased(),
+        source: Source,
+        requestId: String? = nil,
+        kind: RemoteAttentionKind? = nil,
+        state: RemoteAttentionState? = nil,
+        activityState: ActivityState? = nil,
+        observedAt: Date = Date(),
+        activitiesEnabled: Bool,
+        activeActivityCount: Int,
+        activeRequestIds: [String]
+    ) {
+        self.eventId = eventId
+        self.source = source
+        self.requestId = requestId
+        self.kind = kind
+        self.state = state
+        self.activityState = activityState
+        self.observedAt = observedAt
+        self.activitiesEnabled = activitiesEnabled
+        self.activeActivityCount = activeActivityCount
+        self.activeRequestIds = activeRequestIds
+    }
+
+    public var isStructurallyValid: Bool {
+        guard !eventId.isEmpty, eventId.count <= 100,
+              requestId.map({ !$0.isEmpty && $0.count <= 200 }) ?? true,
+              activeActivityCount >= 0, activeActivityCount <= 32,
+              activeRequestIds.count <= 32,
+              activeRequestIds.allSatisfy({ !$0.isEmpty && $0.count <= 200 }),
+              Set(activeRequestIds).count == activeRequestIds.count,
+              activeActivityCount >= activeRequestIds.count
+        else { return false }
+
+        switch source {
+        case .notification:
+            return requestId != nil && kind != nil && state != nil
+        case .activityStarted:
+            return requestId != nil && kind != nil && state == .pending && activityState == .active
+        case .activityStateChanged:
+            return requestId != nil && activityState != nil
+        case .snapshot:
+            return true
+        }
+    }
+}
+
 public struct RemotePushRegistrationRequest: Codable, Equatable, Sendable {
     public let token: String?
     public let environment: String
     public let liveActivityPushToStartToken: String?
     public let liveActivityUpdateTokens: [String: String]?
+    public let liveActivityReceipts: [RemoteLiveActivityReceipt]?
 
     public init(
         token: String? = nil,
         environment: String,
         liveActivityPushToStartToken: String? = nil,
-        liveActivityUpdateTokens: [String: String]? = nil
+        liveActivityUpdateTokens: [String: String]? = nil,
+        liveActivityReceipts: [RemoteLiveActivityReceipt]? = nil
     ) {
         self.token = token
         self.environment = environment
         self.liveActivityPushToStartToken = liveActivityPushToStartToken
         self.liveActivityUpdateTokens = liveActivityUpdateTokens
+        self.liveActivityReceipts = liveActivityReceipts
     }
 }
 
