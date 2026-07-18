@@ -73,6 +73,13 @@ final class RemoteApprovalClient: ObservableObject {
         deviceToken != nil
     }
 
+    /// A foreground poll should only present the blocking connection state
+    /// before the first authenticated snapshot. Once content has loaded, keep
+    /// that stable presentation in place while subsequent polls run.
+    nonisolated static func refreshStartState(hasCompletedSnapshot: Bool) -> ConnectionState? {
+        hasCompletedSnapshot ? nil : .connecting
+    }
+
     init() {
 #if DEBUG
         usesMockHub = ProcessInfo.processInfo.arguments.contains("-CodeIslandCompanionMockHub")
@@ -327,7 +334,11 @@ final class RemoteApprovalClient: ObservableObject {
             state = .offline("Enter a valid Tailscale HTTPS URL")
             return
         }
-        if approvals.isEmpty { state = .connecting }
+        if let refreshStartState = Self.refreshStartState(
+            hasCompletedSnapshot: lastUpdatedAt != nil
+        ) {
+            state = refreshStartState
+        }
         do {
             var request = URLRequest(url: url)
             request.httpMethod = "GET"
