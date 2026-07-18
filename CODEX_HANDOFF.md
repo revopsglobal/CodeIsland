@@ -1,7 +1,52 @@
 # CodeIsland — current cold handoff
 
-Last updated: 2026-07-17. This supersedes the original v1.0.30 / no-local-Xcode
+Last updated: 2026-07-18. This supersedes the original v1.0.30 / no-local-Xcode
 handoff.
+
+## Premium command-center delivery delta
+
+This section supersedes every older build, installed-runtime, and current-head
+statement below. Older sections remain as an evidence history.
+
+- PR #44 merged the premium attention-first Mac and iPhone command center as
+  `8c072442fbe1ee44e5c2db133f920cea534ae83d`. The redesign removes the beige
+  stacked-card feed, suppresses generic timeline content when an exact decision
+  needs attention, opens one Tools module at a time, and reserves motion for
+  meaningful state transitions.
+- The final native iPhone suite passed 39 of 39 tests with no failures, skips,
+  or runtime warnings. Result bundle:
+  `/tmp/CodeIsland-premium-full-final-20260718-0415.xcresult`. Eight settled
+  light/dark visual states passed the reproducible smoke harness. Mac/Core tests
+  and the release Swift build also passed.
+- TestFlight `1.0.0 (20260718112841)` from run `29642614681` is Apple `VALID`,
+  `APP_STORE_ELIGIBLE`, and available to the all-builds `CodeIsland Internal`
+  group. Delivery UUID `ec60c2ab-002b-4884-818f-3f24bd9e2370`; IPA artifact
+  `8429103078`; downloaded IPA SHA-256
+  `b79dd62bae8b98794e60be7195a93f04ac7a50aa737a88f142fcb6ee98b2f54c`.
+  The tester receipt still records `gregharned@gmail.com` as `ready`.
+- PR #45 advanced the Mac internal version to `1.0.46`; run `29642806156`
+  produced artifact `8429166028`. The downloaded DMG SHA-256 is
+  `8aed32462b85d426ad9bedf5ec2913641a93e9b386bd53f65121ba810dc01ce0`.
+  Mounted-image and installed-app strict signature verification passed for the
+  ARM64 app under Team `44JG2Y95CH` with the Calendar entitlement.
+  `/Applications/CodeIsland.app` is now `1.0.46`, running from the installed
+  path, and both loopback and Tailscale `/health` return HTTP 200 with
+  `running: true`. The prior `1.0.45` app is preserved at
+  `/Users/gregharned/Library/Application Support/CodeIsland/Install Backups/20260718T114050Z/CodeIsland.app`.
+- PR #46 merged the exact current delivery receipt as
+  `53c420047d3e75159ae9da040e17e476d3beb229`.
+- Physical acceptance is still open. The paired iPhone record has production
+  APNs and ActivityKit push-to-start tokens, but `clientVersion` and
+  `clientBuild` remain absent and its last authenticated lifecycle receipt is
+  from `2026-07-18T10:40:31Z`. Therefore build `20260718112841` is not yet
+  proven installed or opened. The Mac is locked, so iPhone Mirroring cannot be
+  operated until Greg manually unlocks the Mac.
+- `scripts/report-physical-acceptance.sh` now produces a sanitized delivery and
+  pairing report. Against the current runtime it passes every Mac/signature/
+  health gate and fails only `physicalBuildConfirmed`; strict mode exits `2`
+  until the exact iPhone version/build registers. Its Bats coverage verifies
+  both the passing and absent-client cases and proves raw push tokens are never
+  printed.
 
 ## Final signed lifecycle-receipt delta
 

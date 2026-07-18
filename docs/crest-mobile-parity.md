@@ -13,6 +13,25 @@ Sources used for the baseline:
 - <https://crestnotch.app/#modes>
 - <https://crestnotch.app/changelog>
 
+## Current premium delivery delta — 2026-07-18
+
+This delta supersedes older build numbers in the historical receipt sections
+below.
+
+- Premium source: PR #44, merge
+  `8c072442fbe1ee44e5c2db133f920cea534ae83d`.
+- Installed Mac: `1.0.46`, run `29642806156`, artifact `8429166028`, ARM64,
+  strict signatures valid under Team `44JG2Y95CH`; loopback and Tailscale
+  `/health` both return HTTP 200 with `running: true`.
+- Current internal TestFlight: `1.0.0 (20260718112841)`, run `29642614681`,
+  Apple `VALID`, group `CodeIsland Internal`, tester state `ready`.
+- Native premium suite: 39 passed, 0 failed, 0 skipped, 0 runtime warnings;
+  result bundle `/tmp/CodeIsland-premium-full-final-20260718-0415.xcresult`.
+- Physical boundary: the paired-device store still has no `clientVersion` or
+  `clientBuild`, so the current TestFlight build is not proven installed or
+  opened. Physical premium UI, Live Activity/Dynamic Island, Calendar/Reminders
+  mutation, Join, and cellular/Tailscale acceptance remain open.
+
 ## Acceptance states
 
 - **Ready**: implementation and focused tests exist on that platform.
@@ -34,7 +53,7 @@ Sources used for the baseline:
 | Weather | Physical ZIP fallback proven during the unlocked 1.0.41 run: `61° Clear · Ridgefield, Washington`; Location Services mode remains unverified | Ready implementation: mirrored remote weather and refresh | Physical location-mode, remote refresh, and offline-state runtime tests |
 | Notifications | Partial by deliberate platform boundary: CodeIsland action-required alerts are prioritized, deduped, redacted, and separated; macOS exposes no public cross-app Notification Center history API, so CodeIsland does not read private databases or request Full Disk Access | Physical replacement-build proof: production APNs and ActivityKit push-to-start tokens reached the paired Mac; pending and resolved background pushes each woke the client for authenticated refresh at `06:23:23Z` and `06:25:17Z`. No update token or unlocked visual proof was captured | Prove visible Live Activity/Dynamic Island, per-activity update/end, and stale-push behavior |
 | Claude co-pilot/voice/proposals | Ready implementation: read-only Ask and reviewed Do through authenticated local Claude Code with tools disabled, push-to-talk/continuous speech, visible listening state, bounded user-selected/drop file context, and best-effort screen-share-hidden strip with honest disclosure | Ready implementation: Ask/Do, speech recognition, proposal review, exact confirmation, and deep-linked task/note preparation | Run real Ask and multi-action Do, Mac voice/file context, and physical-iPhone dictation/task creation |
-| AI Coding sessions/approvals/questions | Physical final-build proof: installed 1.0.43 rendered five authenticated sessions, `3 running · no decisions waiting`, with no discovery/loading substitution; decisions-first attention, questions, approvals, exact-confirmation actions, and audited continuation remain implemented | Physical partial on final build `20260718053347`: authenticated heartbeat plus production APNs and ActivityKit push-to-start registration prove install/open and pairing; a pending/resolved background APNs probe woke authenticated refresh twice. Three earlier real approval decisions and one audited question answer remain proven; replacement Sessions rendering, Live Activity, replay, and cellular use still need final physical proof | Unlock the iPhone surface, verify authenticated Sessions and stability, then run replay plus Live Activity and cellular/Tailscale action tests away from the Mac |
+| AI Coding sessions/approvals/questions | Prior physical proof: 1.0.43 rendered five authenticated sessions, `3 running · no decisions waiting`, with no discovery/loading substitution. Premium 1.0.46 is installed and healthy but cannot be visually accepted while the Mac is locked | Prior physical builds proved pairing, background APNs wakeups, three approval decisions, and one audited question answer. Premium build `20260718112841` is Apple-valid but not yet proven installed/opened because paired client version/build metadata remain absent | Unlock the Mac, install/open the exact TestFlight build through iPhone Mirroring, verify authenticated Sessions and stability, then run replay plus Live Activity and cellular/Tailscale action tests away from the Mac |
 | GitHub pull requests and CI | Ready: authenticated `gh` PR list/status/deep links | Ready: mirrored list/status/deep links | Runtime refresh/open test from iPhone |
 | Audio device switcher | Physical read proof on 1.0.43: only MacBook Air Microphone and MacBook Air Speakers carry the respective default flags; the remaining real and virtual devices no longer show false defaults. Switching, mute, and exact 0–100 output volume remain physically unverified | Unverified: mirrored device actions, ±10, and native/web volume editor | Run physical device switch, volume update, and expected failure states |
 | Bluetooth devices/connect/disconnect | Unverified: connected/remembered devices, battery, connect/disconnect | Unverified: mirrored devices and confirmed remote actions | Physical accessory connect/disconnect tests |
@@ -48,7 +67,7 @@ Sources used for the baseline:
 | Media-key HUD and Crest ambient polish | Ready supported implementation: short-lived notch HUD for CodeIsland media/volume/brightness actions, bounded artwork, progress, thermal/Reduce Motion-aware ambient bars | Ready useful mirror: artwork/progress and exact host controls; no need to mimic a Mac bezel HUD | Capture multi-display/full-screen evidence; macOS has no public API for intercepting all hardware brightness-key events |
 | Custom dashboard/day-progress surface | Ready implementation: one shared saved dashboard toggle, per-mode rack configuration, and local-day progress header | Ready implementation: same configuration and day progress with native editing | Verify saved state and day rollover on the physical pair |
 | Private web fallback | Ready automated implementation: responsive authenticated Home/Work/Code, approvals, questions, opaque push registration, exact actions, file transfer, retry/offline state, and replay protection | Ready as an iPhone browser fallback; physical Tailscale browser use is unverified | Physical Tailscale browser module/action/file round trip |
-| TestFlight distribution | Ready: signed archive/upload pipeline, source plus compiled App Intent metadata validation, internal group, 60-minute Apple indexing window, and always-preserved IPA artifact | Physical partial: final build `1.0.0 (20260718053347)` is installed/opened, paired, and registered production APNs plus ActivityKit push-to-start tokens. Apple reports it `VALID` and available to `CodeIsland Internal` | Visually confirm connected Sessions and stability, then prove background push/Live Activity on Greg's iPhone |
+| TestFlight distribution | Ready: signed archive/upload pipeline, source plus compiled App Intent metadata validation, internal group, 60-minute Apple indexing window, and always-preserved IPA artifact | Current build `1.0.0 (20260718112841)` is Apple `VALID` and available to `CodeIsland Internal`; tester state is `ready`. Its install/open on the physical iPhone is not yet proven | Install/open the exact build through TestFlight, require paired `clientVersion = 1.0.0` and `clientBuild = 20260718112841`, then visually confirm connected Sessions, stability, background push, and Live Activity |
 
 ## Behavior-level completion adjudication
 
@@ -216,6 +235,19 @@ This run is partially complete. CI cannot finish the remaining items because
 they require Greg's physical iPhone, biometric/permission taps, real
 accessories, and real Calendar/Reminders data. Exact completed proof is in
 `docs/evidence/2026-07-17-crest-mobile-physical-acceptance.md`.
+
+Run the non-secret status probe before and after the physical pass. It verifies
+the installed Mac/signature/health and reports only booleans for stored push
+tokens, never the tokens themselves. Strict mode exits `2` until the exact
+physical build has registered with the Mac:
+
+```bash
+EXPECTED_MAC_VERSION=1.0.46 \
+EXPECTED_CLIENT_VERSION=1.0.0 \
+EXPECTED_CLIENT_BUILD=20260718112841 \
+STRICT=1 \
+scripts/report-physical-acceptance.sh
+```
 
 1. On iPhone, open Apple's **TestFlight** app while signed in as
    `gregharned@gmail.com`, refresh, and install the newest **CodeIsland Buddy**
