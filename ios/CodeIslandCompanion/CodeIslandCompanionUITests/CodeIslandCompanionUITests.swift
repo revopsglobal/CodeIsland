@@ -141,20 +141,28 @@ final class CodeIslandCompanionUITests: XCTestCase {
         ]
         app.launch()
 
+        XCTAssertTrue(app.staticTexts["CodeIsland"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.buttons["companion.presence.menu"].exists)
         let now = app.buttons["companion.destination.now"]
         let sessions = app.buttons["companion.destination.sessions"]
-        let tools = app.buttons["companion.tools"]
-        XCTAssertTrue(now.waitForExistence(timeout: 8))
+        let capture = app.buttons["companion.capture"]
+        let more = app.buttons["companion.more"]
+        XCTAssertTrue(now.exists)
         XCTAssertTrue(sessions.exists)
-        XCTAssertTrue(tools.exists)
+        XCTAssertTrue(capture.exists)
+        XCTAssertTrue(more.exists)
         XCTAssertGreaterThanOrEqual(now.frame.height, 44)
-        XCTAssertGreaterThanOrEqual(tools.frame.height, 44)
+        XCTAssertGreaterThanOrEqual(capture.frame.height, 44)
+        XCTAssertGreaterThanOrEqual(more.frame.height, 44)
         XCTAssertTrue(app.otherElements["companion.now.overview"].exists)
         XCTAssertFalse(app.otherElements["hub.surface"].exists)
 
-        tools.tap()
+        more.tap()
         XCTAssertTrue(app.otherElements["hub.surface"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.otherElements["companion.tools.sheet"].exists)
+        XCTAssertTrue(
+            app.descendants(matching: .any)
+                .matching(identifier: "companion.more.sheet").firstMatch.exists
+        )
     }
 
     @MainActor
@@ -510,9 +518,9 @@ final class CodeIslandCompanionUITests: XCTestCase {
         app.launch()
         let hub = app.otherElements["hub.surface"].firstMatch
         if !hub.waitForExistence(timeout: 2) {
-            let tools = app.buttons["companion.tools"]
-            if tools.waitForExistence(timeout: 4) {
-                tools.tap()
+            let more = app.buttons["companion.more"]
+            if more.waitForExistence(timeout: 4) {
+                more.tap()
             }
         }
         return app

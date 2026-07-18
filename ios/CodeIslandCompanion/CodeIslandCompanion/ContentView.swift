@@ -46,7 +46,7 @@ struct ContentView: View {
                         }
                     }
                 } else {
-                    PortraitIslandView(topPadding: 40)
+                    CompanionCommandCenterView(topPadding: 40)
                         .environmentObject(connection)
                         .environmentObject(liveActivity)
                         .environmentObject(remoteApprovals)
@@ -2196,25 +2196,25 @@ let appAppearanceStorageKey = "appAppearance"
 // / `.fill(.ciX)` and in plain `Color` positions (`color: .ciX`).
 
 private enum CITheme {
-    /// App background: near-black in dark / warm off-white in light.
+    /// App background: soft charcoal in dark / restrained warm neutral in light.
     static let background = UIColor { trait in
         trait.userInterfaceStyle == .dark
-            ? UIColor(red: 0.015, green: 0.016, blue: 0.018, alpha: 1)
-            : UIColor(red: 0.945, green: 0.925, blue: 0.880, alpha: 1)
+            ? UIColor(red: 0.028, green: 0.028, blue: 0.030, alpha: 1)
+            : UIColor(red: 0.958, green: 0.952, blue: 0.942, alpha: 1)
     }
 
-    /// Card / capsule surface: pure black in dark / warm white in light (slightly brighter than the background so cards lift off it).
+    /// Raised content surface with subtle warmth and no pure black/white extremes.
     static let surface = UIColor { trait in
         trait.userInterfaceStyle == .dark
-            ? UIColor(red: 0, green: 0, blue: 0, alpha: 1)
-            : UIColor(red: 0.995, green: 0.985, blue: 0.960, alpha: 1)
+            ? UIColor(red: 0.055, green: 0.055, blue: 0.060, alpha: 1)
+            : UIColor(red: 0.989, green: 0.985, blue: 0.978, alpha: 1)
     }
 
-    /// Primary foreground (base color for text / icons / strokes and light fills): white in dark / warm dark brown in light.
+    /// Primary foreground: soft white in dark / warm graphite in light.
     static let foreground = UIColor { trait in
         trait.userInterfaceStyle == .dark
-            ? UIColor(white: 1, alpha: 1)
-            : UIColor(red: 0.16, green: 0.13, blue: 0.10, alpha: 1)
+            ? UIColor(white: 0.97, alpha: 1)
+            : UIColor(red: 0.115, green: 0.105, blue: 0.095, alpha: 1)
     }
 }
 
