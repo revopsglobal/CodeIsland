@@ -127,6 +127,17 @@ struct CompanionCommandCenterView: View {
             if remoteApprovals.highlightedHubModuleID != nil {
                 presentedSheet = .more
             }
+#if DEBUG
+            let arguments = ProcessInfo.processInfo.arguments
+            if let index = arguments.firstIndex(of: "-CodeIslandCompanionMockDestination"),
+               arguments.indices.contains(index + 1),
+               arguments[index + 1].lowercased() == "sessions" {
+                destination = .sessions
+            }
+            if arguments.contains("-CodeIslandCompanionMockMore") {
+                presentedSheet = .more
+            }
+#endif
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("companion.commandCenter")
