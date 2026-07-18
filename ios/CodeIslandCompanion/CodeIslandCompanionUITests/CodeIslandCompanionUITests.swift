@@ -406,6 +406,19 @@ final class CodeIslandCompanionUITests: XCTestCase {
     }
 
     @MainActor
+    func testClaudeAskResponseBodyIsVisible() throws {
+        let app = launchHubApp(mode: "code")
+        XCTAssertTrue(hubSurface(in: app).waitForExistence(timeout: 8))
+
+        openHubModule("claude", in: app)
+
+        XCTAssertTrue(
+            app.staticTexts["CodeIsland 1.0.49 is running on your Mac."].waitForExistence(timeout: 4),
+            "Claude Ask must render the answer body, not only echo the original question"
+        )
+    }
+
+    @MainActor
     func testClaudeDoProposalRequiresReviewAndExplicitExecution() throws {
         let app = launchHubApp(mode: "code")
         XCTAssertTrue(hubSurface(in: app).waitForExistence(timeout: 8))

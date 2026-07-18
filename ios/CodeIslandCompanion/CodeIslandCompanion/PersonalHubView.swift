@@ -1765,6 +1765,18 @@ private struct PersonalHubItemRow: View {
                 Spacer(minLength: 4)
             }
 
+            if moduleID == .claude,
+               let detail = item.detail?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !detail.isEmpty {
+                Text(detail)
+                    .font(.system(size: 12, weight: .regular, design: .rounded))
+                    .foregroundStyle(HubTheme.foreground.opacity(0.78))
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+                    .accessibilityIdentifier("hub.item.detail.\(moduleID.rawValue).\(item.id)")
+            }
+
             if let progress = item.progress {
                 ProgressView(value: progress).tint(HubTheme.accent)
             }
