@@ -20,8 +20,33 @@ struct ProcessIdentity: Equatable {
 }
 
 @MainActor
+private final class AppStateCleanupResources {
+    var cleanupTimer: Timer?
+    var saveTimer: Timer?
+    var fsEventStream: FSEventStreamRef?
+    var discoveryScanTask: Task<Void, Never>?
+    var processMonitors: [String: (source: DispatchSourceProcess, process: ProcessIdentity, attachParentPid: pid_t?)] = [:]
+
+    func cleanUp() {
+        cleanupTimer?.invalidate()
+        saveTimer?.invalidate()
+        if let fsEventStream {
+            FSEventStreamStop(fsEventStream)
+            FSEventStreamInvalidate(fsEventStream)
+            FSEventStreamRelease(fsEventStream)
+        }
+        discoveryScanTask?.cancel()
+        for (_, monitor) in processMonitors {
+            monitor.source.cancel()
+        }
+    }
+}
+
+@MainActor
 @Observable
 final class AppState {
+    private let cleanupResources = AppStateCleanupResources()
+
     /// Snapshot of a hook event accepted by HookServer, kept for diagnostics
     /// export (#103). Stored in a fixed-size ring so we can attach the recent
     /// hook stream to bug reports without pulling in full payloads.
@@ -138,7 +163,10 @@ final class AppState {
     }
 
     private var maxHistory: Int { SettingsManager.shared.maxToolHistory }
-    private var cleanupTimer: Timer?
+    private var cleanupTimer: Timer? {
+        get { cleanupResources.cleanupTimer }
+        set { cleanupResources.cleanupTimer = newValue }
+    }
     private var autoCollapseTask: Task<Void, Never>?
     private var completionQueue: [String] = []
     /// Mouse must enter the panel before auto-collapse is allowed (prevents instant dismiss)
@@ -149,12 +177,24 @@ final class AppState {
     /// attached. Processes that already had ppid <= 1 at attach time are launchd-managed
     /// daemons (e.g. a Hermes gateway with KeepAlive=true), NOT orphans of a closed
     /// terminal — they must never be terminated by orphan cleanup (#243).
-    private var processMonitors: [String: (source: DispatchSourceProcess, process: ProcessIdentity, attachParentPid: pid_t?)] = [:]
+    private var processMonitors: [String: (source: DispatchSourceProcess, process: ProcessIdentity, attachParentPid: pid_t?)] {
+        get { cleanupResources.processMonitors }
+        set { cleanupResources.processMonitors = newValue }
+    }
     private var exitingSessions: [String: ProcessIdentity] = [:]
-    private var saveTimer: Timer?
-    private var fsEventStream: FSEventStreamRef?
+    private var saveTimer: Timer? {
+        get { cleanupResources.saveTimer }
+        set { cleanupResources.saveTimer = newValue }
+    }
+    private var fsEventStream: FSEventStreamRef? {
+        get { cleanupResources.fsEventStream }
+        set { cleanupResources.fsEventStream = newValue }
+    }
     private var lastFSScanTime: Date = .distantPast
-    private var discoveryScanTask: Task<Void, Never>?
+    private var discoveryScanTask: Task<Void, Never>? {
+        get { cleanupResources.discoveryScanTask }
+        set { cleanupResources.discoveryScanTask = newValue }
+    }
     private var pendingDiscoveryRescan = false
     private var isShowingCompletion: Bool {
         if case .completionCard = surface { return true }
@@ -2878,17 +2918,13 @@ final class AppState {
         for key in Array(processMonitors.keys) { stopMonitor(key) }
     }
 
-    isolated deinit {
-        cleanupTimer?.invalidate()
-        saveTimer?.invalidate()
-        if let stream = fsEventStream {
-            FSEventStreamStop(stream)
-            FSEventStreamInvalidate(stream)
-            FSEventStreamRelease(stream)
-        }
-        discoveryScanTask?.cancel()
-        for (_, monitor) in processMonitors {
-            monitor.source.cancel()
+    deinit {
+        // Keep deinit nonisolated for Xcode 26: `isolated deinit` aborts when XCTest
+        // releases the last AppState reference off the main actor. The resource holder
+        // lets cleanup hop asynchronously without reading AppState's isolated storage.
+        let resources = cleanupResources
+        Task { @MainActor in
+            resources.cleanUp()
         }
     }
 
