@@ -58,6 +58,12 @@ statement below. Older sections remain as an evidence history.
   later `1 running`) and `no decisions waiting`. Calendar rendered Greg's real
   July store and `40 upcoming`; Work Tools rendered Tasks, Notes, Prompter,
   Camera, Shelf, Notifications, and Downloads from the paired Mac.
+- The current build also completed the Notes add path: it showed the reviewed
+  action, required a separate `Do it`, persisted the exact test note as revision
+  1, and refreshed it back to `No notes yet` after scoped cleanup. The host was
+  restarted as PID `31748`; local/Tailscale health, pairing, and strict physical
+  acceptance remained green. In-app note delete/edit/checklist/undo are still
+  distinct gates.
 - A real physical `AskUserQuestion` request
   `decbb81a-45a0-4edf-9e0c-eda2e6aef703` rendered one exact `Decision needed`
   card, selected and explicitly reviewed `Continue`, resumed the blocked hook

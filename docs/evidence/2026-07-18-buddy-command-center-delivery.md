@@ -108,6 +108,14 @@ Confirmed on the unlocked physical pair:
   accepted typed text; that acceptance draft was intentionally cancelled so it
   did not leave test data. The earlier physical add/store/cleanup receipt still
   proves the actual Reminders write path.
+- The current build completed the Notes add path: the iPhone entered
+  `CodeIIslandPhysicalNoteTestDeleteMe`, displayed the exact reviewed action,
+  required the separate `Do it` confirmation, and then rendered the stored note
+  as revision 1. The uniquely named test note was removed from the host's notes
+  store, CodeIsland was restarted as PID `31748`, both health endpoints returned
+  HTTP 200 with `pendingCount = 0`, strict physical acceptance still reported
+  `complete = true`, and the iPhone refreshed to `No notes yet`. This proves add
+  and cross-device visibility; in-app note delete remains a separate gate.
 
 The production attention lifecycle also passed on this exact build:
 
@@ -141,5 +149,6 @@ activity update token, so token-based remote update remains a separate gate.
 2. Repeat one approval away from local Wi-Fi over Tailscale/cellular. Changing
    Wi-Fi/VPN state is intentionally left for an explicit network-setting test.
 3. Run the remaining real-data mutation matrices: Calendar add/edit/delete,
-   recurrence, and Join; selected-list Reminders lifecycle; Notes conflict,
-   checklist, and undo; Shelf/Downloads transfer; and device-control modules.
+   recurrence, and Join; selected-list Reminders lifecycle; Notes in-app delete,
+   edit/conflict, checklist, and undo; Shelf/Downloads transfer; and
+   device-control modules.
