@@ -3,6 +3,57 @@
 This receipt separates automated, signed-delivery, and physical-device proof.
 It must not be read as blanket acceptance of every Crest/mobile module.
 
+## Mac 1.0.50 and replacement TestFlight follow-up
+
+PR #56 merged the physical Claude Ask response correction as
+`d4bcc82d1776ac0773e15b394d6dce8a0de9f64f`. The host already persisted the
+Claude answer in `PersonalHubItem.detail`, but the Mac, iPhone, and web item
+renderers omitted it and showed only the submitted question. The merged change
+renders the answer body on all three clients and adds native/web regression
+coverage.
+
+Fresh local verification passed `223` Mac/Core tests with zero failures, the
+complete current iPhone scheme with `29` tests and zero failures, and the
+production Swift build. The iPhone result bundle is
+`/tmp/CodeIsland-claude-answer-full-20260718-1120.xcresult`. The focused native
+test failed before the renderer change and passed after it; the web fallback
+test also passed.
+
+Signed macOS run `29655999688` built `1.0.50` from that exact merge. Artifact
+`8432926751` has SHA-256
+`b849fa04183e4d6c740e58e11aad20735044bd8b1291c78c4a16fca309a3a0e5`.
+Mounted-image and installed-app strict signature verification passed with Team
+`44JG2Y95CH`, Apple Development identity, ARM64 binaries, and installed CDHash
+`6ecb26f0d3676f6ba2f47c4a1f1e7403336c8188`. `/Applications/CodeIsland.app`
+now reports `1.0.50`; loopback and Tailscale health both return HTTP 200 with
+`running: true` and launch at login enabled.
+
+TestFlight run `29656000448` uploaded `1.0.0 (20260718183055)` from the same
+merge. Apple reports `VALID`, audience `APP_STORE_ELIGIBLE`, and all-build
+access for `CodeIsland Internal`; `gregharned@gmail.com` is `ready`. Delivery
+UUID `90778d66-464a-40a0-aca5-6f062eb82174`; signed IPA artifact
+`8432920506`; tester receipt artifact `8432881181`; independently downloaded
+IPA SHA-256
+`c546486b5fab88f51781cb94e937a054340ce7c9b067598890dd36ab1e831d48`.
+The app and widget signatures are valid and the app has production APNs. This
+is distribution proof, not physical installation proof: the paired device still
+reported build `20260718112841` at the time of this receipt.
+
+While macOS and iPhone Mirroring were locked, installed host `1.0.50` received
+a temporary, clearly labeled real hook-socket question. The physical iPhone
+authenticated at `2026-07-18T18:44:26Z` and reported one active ActivityKit
+question for request `4d23434e-fd78-4738-ae33-2b5708b227a9`. Cancelling the
+socket produced notification and state-change receipts, zero active activities,
+and a final heartbeat at `2026-07-18T18:44:46Z`; no action ran and nothing
+remained pending. This proves locked-host APNs wake, local ActivityKit start,
+and resolved cleanup on the existing phone build. A per-activity update token
+and directly visible Dynamic Island artwork remain unproven.
+
+The installed private Tailscale web root returned HTTP 200 and served the
+current Claude answer-body renderer with CSP, no-referrer, and frame-denial
+headers. An unauthenticated Code-rack request returned 401. Pairing and an
+authenticated mobile-browser action still require the unlocked physical pass.
+
 ## Final signed receipt follow-up
 
 PR #39 merged the Live Activity lifecycle-receipt implementation as

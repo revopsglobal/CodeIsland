@@ -20,13 +20,24 @@ below.
 
 - Premium source: PR #44, merge
   `8c072442fbe1ee44e5c2db133f920cea534ae83d`.
-- Installed Mac: `1.0.49`, run `29644344626`, artifact `8429617233`, ARM64,
-  strict signatures valid under Team `44JG2Y95CH`; loopback and Tailscale
-  `/health` both return HTTP 200 with `running: true`, `hostVersion: 1.0.49`,
+- Installed Mac: `1.0.50`, source merge
+  `d4bcc82d1776ac0773e15b394d6dce8a0de9f64f`, run `29655999688`, artifact
+  `8432926751`, DMG SHA-256
+  `b849fa04183e4d6c740e58e11aad20735044bd8b1291c78c4a16fca309a3a0e5`,
+  ARM64, and strict signatures valid under Team `44JG2Y95CH`. The installed
+  CDHash is `6ecb26f0d3676f6ba2f47c4a1f1e7403336c8188`; loopback and Tailscale
+  `/health` both return HTTP 200 with `running: true`, `hostVersion: 1.0.50`,
   and `launchAtLoginStatus: enabled`. CodeIsland owns a live
   `PreventUserIdleSystemSleep` assertion while remote access is enabled.
-- Current internal TestFlight: `1.0.0 (20260718112841)`, run `29642614681`,
-  Apple `VALID`, group `CodeIsland Internal`, tester state `ready`.
+- Current physical-iPhone TestFlight build: `1.0.0 (20260718112841)`. The
+  replacement `1.0.0 (20260718183055)` was generated from the same `d4bcc82`
+  merge by run `29656000448`; Apple reports `VALID`, group
+  `CodeIsland Internal` has all-build access, and tester
+  `gregharned@gmail.com` is `ready`. Signed IPA artifact `8432920506`, delivery
+  UUID `90778d66-464a-40a0-aca5-6f062eb82174`, IPA SHA-256
+  `c546486b5fab88f51781cb94e937a054340ce7c9b067598890dd36ab1e831d48`.
+  The replacement is distributed but is not classified as physically
+  installed until that exact build registers from Greg's iPhone.
 - Native premium suite: 39 passed, 0 failed, 0 skipped, 0 runtime warnings;
   result bundle `/tmp/CodeIsland-premium-full-final-20260718-0415.xcresult`.
 - Physical premium proof: TestFlight build `20260718112841` is installed and
@@ -41,6 +52,19 @@ below.
   active activities. iPhone Mirroring did not render the compact or expanded
   Dynamic Island artwork, and no per-activity update token registered, so those
   two visual/update claims remain open.
+- Locked-host follow-up on installed Mac `1.0.50`: while macOS and iPhone
+  Mirroring were locked, a temporary real hook-socket question caused the
+  physical build `20260718112841` to authenticate, report one active
+  ActivityKit question at `2026-07-18T18:44:26Z`, and return to zero active
+  activities after the socket was cancelled at `2026-07-18T18:44:46Z`.
+  Request `4d23434e-fd78-4738-ae33-2b5708b227a9` left no pending action. This
+  proves current locked-host APNs wake/start/resolution on the existing phone
+  build; it does not prove replacement-build installation or visible Dynamic
+  Island artwork.
+- The installed `1.0.50` private Tailscale web root returned HTTP 200 with the
+  current Claude answer-body renderer and required CSP, referrer, and frame
+  protections. An unauthenticated Code-rack request returned 401. Authenticated
+  mobile-browser actions remain a separate physical acceptance gate.
 
 ## Acceptance states
 
