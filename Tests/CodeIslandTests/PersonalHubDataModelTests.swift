@@ -42,8 +42,10 @@ final class PersonalHubDataModelTests: XCTestCase {
         {
           "SPAudioDataType": [{
             "_items": [
-              {"_name":"MacBook Speakers","coreaudio_device_output":2,"coreaudio_output_source":"spaudio_default"},
-              {"_name":"USB Mic","coreaudio_device_input":1,"coreaudio_input_source":"spaudio_default"}
+              {"_name":"MacBook Speakers","coreaudio_device_output":2,"coreaudio_output_source":"MacBook Speakers","coreaudio_default_audio_output_device":"spaudio_yes"},
+              {"_name":"HDMI","coreaudio_device_output":2,"coreaudio_output_source":"spaudio_default"},
+              {"_name":"USB Mic","coreaudio_device_input":1,"coreaudio_input_source":"USB Mic","coreaudio_default_audio_input_device":"spaudio_yes"},
+              {"_name":"BlackHole","coreaudio_device_input":2,"coreaudio_input_source":"spaudio_default"}
             ]
           }]
         }
@@ -51,9 +53,11 @@ final class PersonalHubDataModelTests: XCTestCase {
 
         let devices = PersonalHubDataModel.parseAudioDevices(data)
 
-        XCTAssertEqual(devices.count, 2)
+        XCTAssertEqual(devices.count, 4)
         XCTAssertTrue(try XCTUnwrap(devices.first(where: { $0.name == "MacBook Speakers" })).isDefaultOutput)
         XCTAssertTrue(try XCTUnwrap(devices.first(where: { $0.name == "USB Mic" })).isDefaultInput)
+        XCTAssertFalse(try XCTUnwrap(devices.first(where: { $0.name == "HDMI" })).isDefaultOutput)
+        XCTAssertFalse(try XCTUnwrap(devices.first(where: { $0.name == "BlackHole" })).isDefaultInput)
     }
 
     func testParsesGitHubPullRequests() throws {
