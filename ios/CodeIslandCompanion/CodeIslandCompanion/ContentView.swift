@@ -85,9 +85,6 @@ struct ContentView: View {
                 guard liveActivity.isRunning, let state = connection.latestState else { return }
                 liveActivity.startOrUpdate(with: state)
             }
-            .animation(reduceMotion ? nil : CodeIslandMotion.open, value: connection.connectedPeer)
-            .animation(reduceMotion ? nil : CodeIslandMotion.pop, value: connection.latestState?.status)
-            .animation(reduceMotion ? nil : CodeIslandMotion.micro, value: connection.browsing)
             .animation(reduceMotion ? nil : CodeIslandMotion.open, value: remoteApprovals.hubActionMessage)
         }
         .background(Color.ciBackground.ignoresSafeArea())

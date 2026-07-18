@@ -37,6 +37,7 @@
 		7C94AF24FE483E75AFB02FE4 /* CompanionAppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32BE6F03B699E8406163EBA2 /* CompanionAppDelegate.swift */; };
 		7F8B015A60EAD665A97191D6 /* QoderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5393F6AABCBEEDA6A832553 /* QoderView.swift */; };
 		8087A336412F9084936AF405 /* BuddyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83B07028BAA056A1DA7C7791 /* BuddyView.swift */; };
+		81B4DE0F0C16357E0804F68F /* CompanionCommandCenterModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61373D31C48663C8C29AF003 /* CompanionCommandCenterModel.swift */; };
 		892225EA1A62EA16B21E2E36 /* CompanionDisplayText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4708FC8D74184A554015C647 /* CompanionDisplayText.swift */; };
 		8DDDF81D31DDBF87F1470A97 /* KimiView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53EE587DE1B0740F9A5B0B19 /* KimiView.swift */; };
 		8E04B2E58164AA89E6D92AE6 /* LiveActivityLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F9D10CCE9485D7AE2F88931 /* LiveActivityLifecycle.swift */; };
@@ -62,6 +63,7 @@
 		CD4FAD4958AD915D8E759FFB /* OpenCodeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23F0ECA53BBAD64BA8C9771F /* OpenCodeView.swift */; };
 		D37C3157D91B8B67E80B095D /* WatchStateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCDD1EEEF11FA911FA8E42BF /* WatchStateStore.swift */; };
 		D47274A29745CA64E55F1C21 /* CodeIslandActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCA23CC7B351415E136CC947 /* CodeIslandActivityAttributes.swift */; };
+		D582784A60899FA99920FCAC /* CompanionCommandCenterModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEEBFB6E14D862A168D28F28 /* CompanionCommandCenterModelTests.swift */; };
 		D6346705BBF85F63A3C032D8 /* CodeIslandCompanionWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 014DEC37F3B34948F2B630E4 /* CodeIslandCompanionWidgetBundle.swift */; };
 		D91E181A929AA9ED8ABEE03E /* AppIntents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1D6BFE9B5287EE06D2FB3938 /* AppIntents.framework */; };
 		DEACE91A83CD52B2B6394CC9 /* DroidView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E1D4BD6D6F35284006F9354 /* DroidView.swift */; };
@@ -144,6 +146,7 @@
 		4FB2E261F2FE8B6CE0B5E67B /* LiveActivityPrivacyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityPrivacyTests.swift; sourceTree = "<group>"; };
 		53EE587DE1B0740F9A5B0B19 /* KimiView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KimiView.swift; sourceTree = "<group>"; };
 		5F8B728EC484A892286E9460 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		61373D31C48663C8C29AF003 /* CompanionCommandCenterModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionCommandCenterModel.swift; sourceTree = "<group>"; };
 		6516178F733B86DDF5CD26E0 /* CodeIslandCompanionUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = CodeIslandCompanionUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		683697BA44F284DC6FFD36DA /* StandByLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StandByLayoutTests.swift; sourceTree = "<group>"; };
 		6F9D10CCE9485D7AE2F88931 /* LiveActivityLifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityLifecycle.swift; sourceTree = "<group>"; };
@@ -180,6 +183,7 @@
 		F96CB90CA9C700A293F0F841 /* ClineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClineView.swift; sourceTree = "<group>"; };
 		F9F350CB2292BF84421D9BD4 /* CodeIslandActivityState+Payload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CodeIslandActivityState+Payload.swift"; sourceTree = "<group>"; };
 		FB1A12DC31BC8AC80FFB96D8 /* StepFunView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StepFunView.swift; sourceTree = "<group>"; };
+		FEEBFB6E14D862A168D28F28 /* CompanionCommandCenterModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionCommandCenterModelTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -239,6 +243,7 @@
 		6D21008F0646C13F20FD24E3 /* CodeIslandCompanionTests */ = {
 			isa = PBXGroup;
 			children = (
+				FEEBFB6E14D862A168D28F28 /* CompanionCommandCenterModelTests.swift */,
 				4FB2E261F2FE8B6CE0B5E67B /* LiveActivityPrivacyTests.swift */,
 			);
 			path = CodeIslandCompanionTests;
@@ -254,6 +259,7 @@
 				8843E069F081B15AE433EA8D /* CodeIslandCompanionApp.swift */,
 				32BE6F03B699E8406163EBA2 /* CompanionAppDelegate.swift */,
 				827D708763E7622166DF3F8B /* CompanionBluetoothCentral.swift */,
+				61373D31C48663C8C29AF003 /* CompanionCommandCenterModel.swift */,
 				E05B0003068A33631114C79F /* CompanionConnection.swift */,
 				D2A2C29C635BC87419FDED7F /* CompanionMascotView.swift */,
 				78474E5ED47A37C22FB49F33 /* CompanionModels.swift */,
@@ -483,6 +489,7 @@
 				1B9E327493AEBEDF3E0511C6 /* CodeIslandCompanionApp.swift in Sources */,
 				7C94AF24FE483E75AFB02FE4 /* CompanionAppDelegate.swift in Sources */,
 				F2A37C4EDA80546E6307A8D6 /* CompanionBluetoothCentral.swift in Sources */,
+				81B4DE0F0C16357E0804F68F /* CompanionCommandCenterModel.swift in Sources */,
 				C5A39883D2868CF21FDD3A15 /* CompanionConnection.swift in Sources */,
 				9F7CB1CDE599F3DF71E5738C /* CompanionDisplayText.swift in Sources */,
 				C1B00C9DC300515350E75603 /* CompanionMascotView.swift in Sources */,
@@ -554,6 +561,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D582784A60899FA99920FCAC /* CompanionCommandCenterModelTests.swift in Sources */,
 				AF04FA0B6B595450B609DCBA /* LiveActivityPrivacyTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
