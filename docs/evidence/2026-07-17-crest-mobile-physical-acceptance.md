@@ -64,8 +64,13 @@ It must not be read as blanket acceptance of every Crest/mobile module.
   milliseconds to seconds; PR #34
   (`265cc544d20a7144c3cfe1cd340a2f10748ab267`) reads the real input/output
   default keys. Both focused regressions and the full 480-app/219-core suites
-  passed. Signed 1.0.43 contains both fixes, but macOS locked before their
-  post-install visual reinspection.
+  passed. Signed 1.0.43 contains both fixes. After macOS unlocked, the installed
+  app rendered Spotify's real `Sound of Horns` track as `1:27 2:21` rather than
+  `2350:00`; only MacBook Air Speakers and MacBook Air Microphone were labeled
+  default output/input. The 1.0.43 Code rack also rendered five authenticated
+  sessions and `3 running · no decisions waiting`, with no discovery/loading
+  substitution. This closes the final Mac read/visual checks for PRs #31, #33,
+  and #34; audio switching and other mutations remain separate gates.
 
 ## Final replacement TestFlight delivery
 
