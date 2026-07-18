@@ -67,7 +67,10 @@ struct ContentView: View {
                         .transition(.move(edge: .top).combined(with: .opacity))
                         .onTapGesture { remoteApprovals.dismissHubActionMessage() }
                         .task(id: message) {
-                            try? await Task.sleep(for: .seconds(4))
+                            // Keep action receipts visible long enough to survive sheet
+                            // dismissal, VoiceOver focus changes, and slower devices. The
+                            // user can still dismiss immediately with a tap.
+                            try? await Task.sleep(for: .seconds(8))
                             guard remoteApprovals.hubActionMessage == message else { return }
                             remoteApprovals.dismissHubActionMessage()
                         }

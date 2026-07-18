@@ -135,6 +135,13 @@ final class RemoteApprovalClient: ObservableObject {
             Task { @MainActor in await self?.registerPendingPushToken() }
         })
         notificationObservers.append(NotificationCenter.default.addObserver(
+            forName: .codeIslandLiveActivityReceiptAvailable,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in await self?.registerPendingPushToken() }
+        })
+        notificationObservers.append(NotificationCenter.default.addObserver(
             forName: .codeIslandRemoteAttentionChanged,
             object: nil,
             queue: .main
@@ -637,7 +644,9 @@ final class RemoteApprovalClient: ObservableObject {
         let updateTokens = UserDefaults.standard.dictionary(
             forKey: LiveActivityTokenMailbox.updateTokensKey
         ) as? [String: String]
-        guard pushToken != nil || pushToStartToken != nil || updateTokens?.isEmpty == false else { return }
+        let receipts = LiveActivityTokenMailbox.pendingReceipts()
+        guard pushToken != nil || pushToStartToken != nil || updateTokens?.isEmpty == false || !receipts.isEmpty
+        else { return }
         do {
             var request = URLRequest(url: url)
             request.httpMethod = "POST"
@@ -652,7 +661,8 @@ final class RemoteApprovalClient: ObservableObject {
                     token: pushToken,
                     environment: environment,
                     liveActivityPushToStartToken: pushToStartToken,
-                    liveActivityUpdateTokens: updateTokens
+                    liveActivityUpdateTokens: updateTokens,
+                    liveActivityReceipts: Array(receipts.prefix(16))
                 )
             )
             let _: RegistrationResponse = try await perform(request, authenticated: true)
@@ -665,6 +675,13 @@ final class RemoteApprovalClient: ObservableObject {
             if let updateTokens,
                UserDefaults.standard.dictionary(forKey: LiveActivityTokenMailbox.updateTokensKey) as? [String: String] == updateTokens {
                 UserDefaults.standard.removeObject(forKey: LiveActivityTokenMailbox.updateTokensKey)
+            }
+            LiveActivityTokenMailbox.clearReceipts(
+                eventIDs: Set(receipts.prefix(16).map(\.eventId))
+            )
+            let remainingReceipts = LiveActivityTokenMailbox.pendingReceipts()
+            if !remainingReceipts.isEmpty, remainingReceipts.count < receipts.count {
+                await registerPendingPushToken()
             }
         } catch {
             // Keep the token queued; foreground polling still works and registration
@@ -1080,5 +1097,6 @@ final class RemoteApprovalClient: ObservableObject {
 extension Notification.Name {
     static let codeIslandPushTokenAvailable = Notification.Name("codeisland.push-token-available")
     static let codeIslandLiveActivityTokenAvailable = Notification.Name("codeisland.live-activity-token-available")
+    static let codeIslandLiveActivityReceiptAvailable = Notification.Name("codeisland.live-activity-receipt-available")
     static let codeIslandRemoteAttentionChanged = Notification.Name("codeisland.remote-attention-changed")
 }

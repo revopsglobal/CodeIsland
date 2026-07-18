@@ -53,12 +53,19 @@ final class CodeIslandCompanionUITests: XCTestCase {
 
         let inline = app.buttons["companion.liveActivity.inlineButton"]
         XCTAssertTrue(inline.waitForExistence(timeout: 8))
-        inline.tap()
+        if !inline.label.localizedCaseInsensitiveContains("Stop Live Activity") {
+            inline.tap()
+        }
         let running = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "label CONTAINS[c] %@", "Stop Live Activity"),
             object: inline
         )
-        XCTAssertEqual(XCTWaiter.wait(for: [running], timeout: 5), .completed)
+        let runningResult = XCTWaiter.wait(for: [running], timeout: 5)
+        XCTAssertEqual(
+            runningResult,
+            .completed,
+            "Expected a running Live Activity control, got label: \(inline.label)"
+        )
 
         app.terminate()
         app.launchArguments = [
@@ -88,7 +95,12 @@ final class CodeIslandCompanionUITests: XCTestCase {
             predicate: NSPredicate(format: "label CONTAINS[c] %@", "Start Live Activity"),
             object: primary
         )
-        XCTAssertEqual(XCTWaiter.wait(for: [ended], timeout: 5), .completed)
+        let endedResult = XCTWaiter.wait(for: [ended], timeout: 5)
+        XCTAssertEqual(
+            endedResult,
+            .completed,
+            "Expected the resolved request to end its Live Activity, got label: \(primary.label)"
+        )
     }
 
     @MainActor
@@ -263,7 +275,7 @@ final class CodeIslandCompanionUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Do it"].waitForExistence(timeout: 3))
         app.buttons["Do it"].tap()
 
-        let message = app.staticTexts["hub.action.message"].firstMatch
+        let message = findHubElement("hub.action.message", in: app)
         XCTAssertTrue(message.waitForExistence(timeout: 5))
         XCTAssertTrue(message.label.contains("Executed reminders.add"))
     }
@@ -286,7 +298,7 @@ final class CodeIslandCompanionUITests: XCTestCase {
         XCTAssertTrue(app.otherElements["hub.action.confirmation"].waitForExistence(timeout: 5))
         app.buttons["Do it"].tap()
 
-        let message = app.staticTexts["hub.action.message"].firstMatch
+        let message = findHubElement("hub.action.message", in: app)
         XCTAssertTrue(message.waitForExistence(timeout: 5))
         XCTAssertTrue(message.label.contains("Executed quickToggles.setModeRack"))
     }
@@ -310,7 +322,7 @@ final class CodeIslandCompanionUITests: XCTestCase {
         XCTAssertTrue(app.otherElements["hub.action.confirmation"].waitForExistence(timeout: 5))
         app.buttons["Do it"].tap()
 
-        let message = app.staticTexts["hub.action.message"].firstMatch
+        let message = findHubElement("hub.action.message", in: app)
         XCTAssertTrue(message.waitForExistence(timeout: 5))
         XCTAssertTrue(message.label.contains("Executed notes.add"))
     }
@@ -373,7 +385,7 @@ final class CodeIslandCompanionUITests: XCTestCase {
         XCTAssertTrue(app.otherElements["hub.action.confirmation"].waitForExistence(timeout: 5))
         app.buttons["Do it"].tap()
 
-        let message = app.staticTexts["hub.action.message"].firstMatch
+        let message = findHubElement("hub.action.message", in: app)
         XCTAssertTrue(message.waitForExistence(timeout: 5))
         XCTAssertTrue(message.label.contains("Executed claude.plan"))
     }

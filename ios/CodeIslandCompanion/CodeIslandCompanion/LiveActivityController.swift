@@ -35,6 +35,7 @@ final class LiveActivityController: ObservableObject {
         Task {
             await migrateLiveActivityLayoutIfNeeded()
             recoverExistingActivity()
+            LiveActivityTokenMailbox.storeSnapshot()
         }
     }
 
@@ -212,7 +213,24 @@ final class LiveActivityController: ObservableObject {
                 staleDate: Date().addingTimeInterval(90),
                 relevanceScore: relevanceScore(for: payload.status)
             )
-            let existing = try Activity.request(attributes: attributes, content: content, pushType: .token)
+            let existing: Activity<CodeIslandActivityAttributes>
+            do {
+                existing = try Activity.request(
+                    attributes: attributes,
+                    content: content,
+                    pushType: .token
+                )
+            } catch {
+                // Unsigned simulator and locally installed builds can omit the
+                // aps-environment entitlement. Preserve the local Lock Screen
+                // experience in that case; signed TestFlight builds still take
+                // the push-enabled path above and publish an update token.
+                existing = try Activity.request(
+                    attributes: attributes,
+                    content: content,
+                    pushType: nil
+                )
+            }
             activity = existing
             activityID = existing.id
             observeState(of: existing)
@@ -241,9 +259,18 @@ final class LiveActivityController: ObservableObject {
         activityStateTask?.cancel()
         activityStateTask = Task { [weak self] in
             for await state in activity.activityStateUpdates {
-                guard state == .ended || state == .dismissed else { continue }
-                self?.clearActivity(id: activity.id)
-                break
+                guard let receiptState = RemoteLiveActivityReceipt.ActivityState(state) else { continue }
+                LiveActivityTokenMailbox.storeReceipt(
+                    source: .activityStateChanged,
+                    requestID: activity.attributes.sessionId,
+                    kind: activity.content.state.pendingAction.flatMap(RemoteAttentionKind.init(rawValue:)),
+                    attentionState: nil,
+                    activityState: receiptState
+                )
+                if state == .ended || state == .dismissed {
+                    self?.clearActivity(id: activity.id)
+                    break
+                }
             }
         }
     }
@@ -269,6 +296,13 @@ final class LiveActivityController: ObservableObject {
                 guard let requestID = discovered.attributes.sessionId,
                       let kind = RemoteAttentionKind(rawValue: discovered.content.state.pendingAction ?? "")
                 else { continue }
+                LiveActivityTokenMailbox.storeReceipt(
+                    source: .activityStarted,
+                    requestID: requestID,
+                    kind: kind,
+                    attentionState: .pending,
+                    activityState: .active
+                )
                 NotificationCenter.default.post(
                     name: .codeIslandRemoteAttentionChanged,
                     object: nil,
@@ -333,6 +367,7 @@ final class LiveActivityController: ObservableObject {
 enum LiveActivityTokenMailbox {
     static let pushToStartTokenKey = "codeisland.remote.liveActivity.pushToStartToken"
     static let updateTokensKey = "codeisland.remote.liveActivity.updateTokens"
+    static let receiptsKey = "codeisland.remote.liveActivity.receipts.v1"
 
     static func storePushToStartToken(_ token: Data) {
         UserDefaults.standard.set(token.hexString, forKey: pushToStartTokenKey)
@@ -344,6 +379,78 @@ enum LiveActivityTokenMailbox {
         tokens[requestID] = token.hexString
         UserDefaults.standard.set(tokens, forKey: updateTokensKey)
         NotificationCenter.default.post(name: .codeIslandLiveActivityTokenAvailable, object: nil)
+    }
+
+    static func storeSnapshot() {
+        storeReceipt(
+            source: .snapshot,
+            requestID: nil,
+            kind: nil,
+            attentionState: nil,
+            activityState: nil
+        )
+    }
+
+    static func storeReceipt(
+        source: RemoteLiveActivityReceipt.Source,
+        requestID: String?,
+        kind: RemoteAttentionKind?,
+        attentionState: RemoteAttentionState?,
+        activityState: RemoteLiveActivityReceipt.ActivityState?
+    ) {
+        let activities = Activity<CodeIslandActivityAttributes>.activities
+        let activeRequestIDs = Array(Set(activities.compactMap(\.attributes.sessionId))).sorted()
+        let receipt = RemoteLiveActivityReceipt(
+            source: source,
+            requestId: requestID,
+            kind: kind,
+            state: attentionState,
+            activityState: activityState,
+            activitiesEnabled: ActivityAuthorizationInfo().areActivitiesEnabled,
+            activeActivityCount: activities.count,
+            activeRequestIds: activeRequestIDs
+        )
+        guard receipt.isStructurallyValid else { return }
+
+        var receipts = pendingReceipts()
+        guard !receipts.contains(where: { $0.eventId == receipt.eventId }) else { return }
+        receipts.append(receipt)
+        if receipts.count > 32 {
+            receipts = Array(receipts.suffix(32))
+        }
+        guard let data = try? JSONEncoder().encode(receipts) else { return }
+        UserDefaults.standard.set(data, forKey: receiptsKey)
+        NotificationCenter.default.post(name: .codeIslandLiveActivityReceiptAvailable, object: nil)
+    }
+
+    static func pendingReceipts() -> [RemoteLiveActivityReceipt] {
+        guard let data = UserDefaults.standard.data(forKey: receiptsKey),
+              let receipts = try? JSONDecoder().decode([RemoteLiveActivityReceipt].self, from: data)
+        else { return [] }
+        return receipts
+    }
+
+    static func clearReceipts(eventIDs: Set<String>) {
+        guard !eventIDs.isEmpty else { return }
+        let remaining = pendingReceipts().filter { !eventIDs.contains($0.eventId) }
+        if remaining.isEmpty {
+            UserDefaults.standard.removeObject(forKey: receiptsKey)
+        } else if let data = try? JSONEncoder().encode(remaining) {
+            UserDefaults.standard.set(data, forKey: receiptsKey)
+        }
+    }
+}
+
+private extension RemoteLiveActivityReceipt.ActivityState {
+    init?(_ state: ActivityState) {
+        switch state {
+        case .pending: self = .pending
+        case .active: self = .active
+        case .stale: self = .stale
+        case .ended: self = .ended
+        case .dismissed: self = .dismissed
+        @unknown default: return nil
+        }
     }
 }
 

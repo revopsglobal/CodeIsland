@@ -74,6 +74,13 @@ final class CompanionAppDelegate: NSObject, UIApplicationDelegate, UNUserNotific
             // Backward compatibility with the first internal Buddy build.
             guard let approvalID = fields["approvalId"] as? String, !approvalID.isEmpty else { return false }
             UserDefaults.standard.set(approvalID, forKey: Self.pendingApprovalIDKey)
+            LiveActivityTokenMailbox.storeReceipt(
+                source: .notification,
+                requestID: approvalID,
+                kind: .approval,
+                attentionState: .pending,
+                activityState: nil
+            )
             postAttention(kind: .approval, state: .pending, requestID: approvalID)
             return true
         }
@@ -105,6 +112,13 @@ final class CompanionAppDelegate: NSObject, UIApplicationDelegate, UNUserNotific
             }
         }
 
+        LiveActivityTokenMailbox.storeReceipt(
+            source: .notification,
+            requestID: envelope.requestID,
+            kind: envelope.kind,
+            attentionState: envelope.state,
+            activityState: nil
+        )
         postAttention(kind: envelope.kind, state: envelope.state, requestID: envelope.requestID)
         return true
     }

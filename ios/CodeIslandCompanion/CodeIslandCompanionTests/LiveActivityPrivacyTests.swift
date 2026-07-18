@@ -62,6 +62,24 @@ final class LiveActivityPrivacyTests: XCTestCase {
         XCTAssertFalse(LiveActivityController.shouldAutoStart(for: .idle))
     }
 
+    @MainActor
+    func testLiveActivityReceiptMailboxClearsOnlyAcknowledgedEvents() throws {
+        UserDefaults.standard.removeObject(forKey: LiveActivityTokenMailbox.receiptsKey)
+        defer { UserDefaults.standard.removeObject(forKey: LiveActivityTokenMailbox.receiptsKey) }
+
+        LiveActivityTokenMailbox.storeSnapshot()
+        LiveActivityTokenMailbox.storeSnapshot()
+        let receipts = LiveActivityTokenMailbox.pendingReceipts()
+        XCTAssertEqual(receipts.count, 2)
+        XCTAssertTrue(receipts.allSatisfy(\.isStructurallyValid))
+
+        LiveActivityTokenMailbox.clearReceipts(eventIDs: [receipts[0].eventId])
+        XCTAssertEqual(
+            LiveActivityTokenMailbox.pendingReceipts().map(\.eventId),
+            [receipts[1].eventId]
+        )
+    }
+
     func testLockScreenStateRedactsPromptTranscriptAndWorkspace() throws {
         let payload = CompanionStatePayload(
             version: 1,

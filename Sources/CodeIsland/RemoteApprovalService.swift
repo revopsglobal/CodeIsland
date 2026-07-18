@@ -414,7 +414,15 @@ final class RemoteApprovalService: ObservableObject {
             else {
                 return .json(status: 400, object: ["error": "invalid push token"])
             }
-            deviceStore.registerPushToken(registration, deviceID: authenticated.id)
+            let acceptedReceipts = deviceStore.registerPushToken(
+                registration,
+                deviceID: authenticated.id
+            )
+            coordinator.recordLiveActivityReceipts(
+                acceptedReceipts,
+                deviceID: authenticated.id,
+                deviceName: authenticated.name
+            )
             syncPublishedState()
             return .json(status: 200, object: ["registered": true])
         }
@@ -536,11 +544,14 @@ final class RemoteApprovalService: ObservableObject {
 
     private static func validPushRegistration(_ registration: RemotePushRegistrationRequest) -> Bool {
         let updateTokens = registration.liveActivityUpdateTokens ?? [:]
+        let receipts = registration.liveActivityReceipts ?? []
         let tokens = [registration.token, registration.liveActivityPushToStartToken].compactMap { $0 }
             + Array(updateTokens.values)
-        guard !tokens.isEmpty,
+        guard !tokens.isEmpty || !receipts.isEmpty,
               tokens.allSatisfy({ $0.count >= 32 && $0.allSatisfy(\.isHexDigit) }),
-              registration.liveActivityUpdateTokens?.keys.allSatisfy({ !$0.isEmpty && $0.count <= 200 }) ?? true
+              registration.liveActivityUpdateTokens?.keys.allSatisfy({ !$0.isEmpty && $0.count <= 200 }) ?? true,
+              receipts.count <= 16,
+              receipts.allSatisfy(\.isStructurallyValid)
         else { return false }
         return registration.environment == "production" || registration.environment == "development"
     }
@@ -568,6 +579,8 @@ struct RemoteApprovalDevice: Codable, Equatable, Identifiable {
     var pushEnvironment: String?
     var liveActivityPushToStartToken: String?
     var liveActivityUpdateTokens: [String: String]?
+    var lastLiveActivityReceipt: RemoteLiveActivityReceipt?
+    var recentLiveActivityReceiptIDs: [String]?
 }
 
 @MainActor
@@ -626,7 +639,9 @@ final class RemoteApprovalDeviceStore {
             pushToken: nil,
             pushEnvironment: nil,
             liveActivityPushToStartToken: nil,
-            liveActivityUpdateTokens: nil
+            liveActivityUpdateTokens: nil,
+            lastLiveActivityReceipt: nil,
+            recentLiveActivityReceiptIDs: nil
         )
         devices.append(device)
         save()
@@ -653,8 +668,12 @@ final class RemoteApprovalDeviceStore {
         return devices[index]
     }
 
-    func registerPushToken(_ registration: RemotePushRegistrationRequest, deviceID: String) {
-        guard let index = devices.firstIndex(where: { $0.id == deviceID }) else { return }
+    @discardableResult
+    func registerPushToken(
+        _ registration: RemotePushRegistrationRequest,
+        deviceID: String
+    ) -> [RemoteLiveActivityReceipt] {
+        guard let index = devices.firstIndex(where: { $0.id == deviceID }) else { return [] }
         if let token = registration.token {
             devices[index].pushToken = token.lowercased()
         }
@@ -673,9 +692,24 @@ final class RemoteApprovalDeviceStore {
             }
             devices[index].liveActivityUpdateTokens = merged
         }
+        var acceptedReceipts: [RemoteLiveActivityReceipt] = []
+        var receiptIDs = devices[index].recentLiveActivityReceiptIDs ?? []
+        var knownReceiptIDs = Set(receiptIDs)
+        for receipt in registration.liveActivityReceipts ?? [] where knownReceiptIDs.insert(receipt.eventId).inserted {
+            acceptedReceipts.append(receipt)
+            receiptIDs.append(receipt.eventId)
+            devices[index].lastLiveActivityReceipt = receipt
+        }
+        if receiptIDs.count > 128 {
+            receiptIDs = Array(receiptIDs.suffix(128))
+        }
+        if !receiptIDs.isEmpty {
+            devices[index].recentLiveActivityReceiptIDs = receiptIDs
+        }
         devices[index].pushEnvironment = registration.environment.lowercased()
         devices[index].lastSeenAt = Date()
         save()
+        return acceptedReceipts
     }
 
     func revoke(deviceID: String) {
@@ -752,6 +786,24 @@ final class RemoteApprovalCoordinator {
         let outcome: String
         let source: String?
         let tool: String?
+    }
+
+    private struct LiveActivityReceiptAuditEvent: Codable {
+        let timestamp: Date
+        let event: String
+        let receiptEventID: String
+        let requestID: String?
+        let deviceID: String
+        let deviceName: String
+        let outcome: String
+        let source: String
+        let attentionKind: String?
+        let attentionState: String?
+        let activityState: String?
+        let observedAt: Date
+        let activitiesEnabled: Bool
+        let activeActivityCount: Int
+        let activeRequestIDs: [String]
     }
 
     private var actionTokens = RemoteActionTokenVault()
@@ -971,7 +1023,33 @@ final class RemoteApprovalCoordinator {
         ))
     }
 
-    private func appendAudit(_ event: AuditEvent) {
+    func recordLiveActivityReceipts(
+        _ receipts: [RemoteLiveActivityReceipt],
+        deviceID: String,
+        deviceName: String
+    ) {
+        for receipt in receipts {
+            appendAudit(LiveActivityReceiptAuditEvent(
+                timestamp: Date(),
+                event: "live-activity-receipt",
+                receiptEventID: receipt.eventId,
+                requestID: receipt.requestId,
+                deviceID: deviceID,
+                deviceName: String(deviceName.prefix(80)),
+                outcome: "observed",
+                source: receipt.source.rawValue,
+                attentionKind: receipt.kind?.rawValue,
+                attentionState: receipt.state?.rawValue,
+                activityState: receipt.activityState?.rawValue,
+                observedAt: receipt.observedAt,
+                activitiesEnabled: receipt.activitiesEnabled,
+                activeActivityCount: receipt.activeActivityCount,
+                activeRequestIDs: receipt.activeRequestIds
+            ))
+        }
+    }
+
+    private func appendAudit<Event: Encodable>(_ event: Event) {
         guard var data = try? JSONEncoder.remoteApproval.encode(event) else { return }
         data.append(0x0A)
         let directory = auditURL.deletingLastPathComponent()

@@ -1917,19 +1917,30 @@ private struct BuddyPage: View {
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(remoteApprovals.pairedDevices) { device in
-                        HStack {
-                            Label(device.name, systemImage: device.pushToken == nil ? "iphone" : "bell.badge.fill")
-                                .lineLimit(1)
-                            Spacer()
-                            Text(device.lastSeenAt, style: .relative)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Button(role: .destructive) {
-                                remoteApprovals.revokeDevice(id: device.id)
-                            } label: {
-                                Image(systemName: "trash")
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Label(device.name, systemImage: device.pushToken == nil ? "iphone" : "bell.badge.fill")
+                                    .lineLimit(1)
+                                Spacer()
+                                Text(device.lastSeenAt, style: .relative)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Button(role: .destructive) {
+                                    remoteApprovals.revokeDevice(id: device.id)
+                                } label: {
+                                    Image(systemName: "trash")
+                                }
+                                .buttonStyle(.borderless)
                             }
-                            .buttonStyle(.borderless)
+                            if let receipt = device.lastLiveActivityReceipt {
+                                HStack(spacing: 5) {
+                                    Image(systemName: receipt.activitiesEnabled ? "livephoto" : "livephoto.slash")
+                                    Text(remoteActivityReceiptText(receipt))
+                                    Text(receipt.observedAt, style: .relative)
+                                }
+                                .font(.caption2)
+                                .foregroundStyle(receipt.activitiesEnabled ? Color.secondary : Color.orange)
+                            }
                         }
                     }
                 }
@@ -2038,6 +2049,13 @@ private struct BuddyPage: View {
     private func pairingExpiryText(at date: Date) -> String {
         let seconds = max(0, Int(remoteApprovals.pairingExpiresAt.timeIntervalSince(date)))
         return "Active for \(seconds / 60):\(String(format: "%02d", seconds % 60))"
+    }
+
+    private func remoteActivityReceiptText(_ receipt: RemoteLiveActivityReceipt) -> String {
+        guard receipt.activitiesEnabled else { return "Live Activities disabled ·" }
+        if receipt.activeActivityCount == 1 { return "1 Live Activity confirmed ·" }
+        if receipt.activeActivityCount > 1 { return "\(receipt.activeActivityCount) Live Activities confirmed ·" }
+        return "Live Activity lifecycle confirmed ·"
     }
 
     private func chooseAPNSPrivateKey() {

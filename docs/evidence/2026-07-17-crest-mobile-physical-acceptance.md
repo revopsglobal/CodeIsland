@@ -3,6 +3,42 @@
 This receipt separates automated, signed-delivery, and physical-device proof.
 It must not be read as blanket acceptance of every Crest/mobile module.
 
+## Automated Live Activity receipt follow-up
+
+The current follow-up adds an authenticated, privacy-preserving lifecycle
+receipt from Buddy to the paired Mac. Notification receipt, ActivityKit start,
+state change, and snapshot events are bounded and deduplicated; they contain
+opaque request/event IDs and lifecycle state, but no prompt, workspace,
+command, transcript, action token, or APNs token. The Mac persists the latest
+receipt on the paired-device record, appends each new event once to the audit
+log, and exposes a timestamped lifecycle status in Settings → Buddy.
+
+The same change makes local Live Activities degrade correctly when an unsigned
+Simulator/local build has no `aps-environment`: Buddy first requests a
+push-updatable activity and falls back to a local ActivityKit activity if that
+request is rejected. Signed TestFlight builds continue to use the push-enabled
+path. It also fixes an off-main `AppState` deallocation trap found during the
+full Mac run and keeps iPhone action receipts visible for eight seconds so a
+sheet dismissal or VoiceOver focus transition cannot hide the result.
+
+Fresh automated proof from this source:
+
+- `CodeIslandTests`: 481 executed, 2 intentional skips, 0 failures.
+- `CodeIslandCoreTests`: 220 executed, 0 failures.
+- native iPhone logic: 8/8 passed; result bundle
+  `/tmp/CodeIsland-ios-unit-final-20260718-0047.xcresult`.
+- native iPhone UI: 25/25 passed in 482.7 seconds; result bundle
+  `/tmp/CodeIsland-full-ui-final-20260718-0045.xcresult`.
+- focused unsigned-ActivityKit fallback and resolved-request lifecycle: passed;
+  result bundle
+  `/tmp/CodeIsland-live-activity-fallback-20260718-0044.xcresult`.
+- Graphify refreshed successfully: 4,677 nodes, 12,204 edges, 53 communities.
+
+This is automated protocol, UI, and Simulator proof. A replacement signed Mac
+and TestFlight build must still be distributed and installed before the Mac can
+receive a receipt from Greg's physical iPhone. Until that happens, visible
+Live Activity/Dynamic Island creation and remote end remain unproven.
+
 ## Physical proof completed
 
 - **Installed iPhone build:** CodeIsland Buddy `1.0.0 (20260718031753)` was
