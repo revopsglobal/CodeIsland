@@ -742,6 +742,13 @@ final class RemoteApprovalDeviceStore {
             ) {
                 devices[index].lastLiveActivityReceipt = receipt
             }
+            if let requestID = receipt.requestId,
+               Self.isTerminalLiveActivityReceipt(receipt) {
+                devices[index].liveActivityUpdateTokens?.removeValue(forKey: requestID)
+                if devices[index].liveActivityUpdateTokens?.isEmpty == true {
+                    devices[index].liveActivityUpdateTokens = nil
+                }
+            }
         }
         if receiptIDs.count > 128 {
             receiptIDs = Array(receiptIDs.suffix(128))

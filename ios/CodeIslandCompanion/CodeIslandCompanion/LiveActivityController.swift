@@ -15,6 +15,7 @@ final class LiveActivityController: ObservableObject {
     private var lifecycleCursor: LiveActivityLifecycleCursor?
     private var activityStateTask: Task<Void, Never>?
     private var activityPushTokenTask: Task<Void, Never>?
+    private var activityPushTokenPollingTask: Task<Void, Never>?
     private var activityDiscoveryTask: Task<Void, Never>?
     private var pushToStartTokenTask: Task<Void, Never>?
 
@@ -25,6 +26,7 @@ final class LiveActivityController: ObservableObject {
     deinit {
         activityStateTask?.cancel()
         activityPushTokenTask?.cancel()
+        activityPushTokenPollingTask?.cancel()
         activityDiscoveryTask?.cancel()
         pushToStartTokenTask?.cancel()
     }
@@ -318,16 +320,43 @@ final class LiveActivityController: ObservableObject {
 
     private func observePushToken(of activity: Activity<CodeIslandActivityAttributes>) {
         activityPushTokenTask?.cancel()
+        activityPushTokenPollingTask?.cancel()
         guard let requestID = activity.attributes.sessionId, !requestID.isEmpty else { return }
-        if let token = activity.pushToken {
-            LiveActivityTokenMailbox.storeUpdateToken(token, requestID: requestID)
-        }
+
+        let capturedInitialToken = capturePushToken(of: activity, requestID: requestID)
         activityPushTokenTask = Task {
             for await token in activity.pushTokenUpdates {
                 guard !Task.isCancelled else { return }
                 LiveActivityTokenMailbox.storeUpdateToken(token, requestID: requestID)
             }
         }
+
+        // ActivityKit documents pushTokenUpdates as the primary source, but
+        // remote push-to-start activities can expose pushToken slightly later
+        // without yielding the first value promptly on some OS releases. Keep
+        // the async listener above and add a bounded foreground/background-
+        // runtime retry so the Mac can still remotely update and end the exact
+        // activity. This task stops as soon as a token is available.
+        guard !capturedInitialToken else { return }
+        activityPushTokenPollingTask = Task {
+            for _ in 0..<30 {
+                guard !Task.isCancelled else { return }
+                if capturePushToken(of: activity, requestID: requestID) {
+                    return
+                }
+                try? await Task.sleep(for: .seconds(2))
+            }
+        }
+    }
+
+    @discardableResult
+    private func capturePushToken(
+        of activity: Activity<CodeIslandActivityAttributes>,
+        requestID: String
+    ) -> Bool {
+        guard let token = activity.pushToken else { return false }
+        LiveActivityTokenMailbox.storeUpdateToken(token, requestID: requestID)
+        return true
     }
 
     @available(iOS 17.2, *)
@@ -346,6 +375,8 @@ final class LiveActivityController: ObservableObject {
         activityStateTask = nil
         activityPushTokenTask?.cancel()
         activityPushTokenTask = nil
+        activityPushTokenPollingTask?.cancel()
+        activityPushTokenPollingTask = nil
     }
 
     private func relevanceScore(for status: CompanionStatus) -> Double {
@@ -374,11 +405,15 @@ enum LiveActivityTokenMailbox {
         NotificationCenter.default.post(name: .codeIslandLiveActivityTokenAvailable, object: nil)
     }
 
-    static func storeUpdateToken(_ token: Data, requestID: String) {
+    @discardableResult
+    static func storeUpdateToken(_ token: Data, requestID: String) -> Bool {
         var tokens = UserDefaults.standard.dictionary(forKey: updateTokensKey) as? [String: String] ?? [:]
-        tokens[requestID] = token.hexString
+        let value = token.hexString
+        guard tokens[requestID] != value else { return false }
+        tokens[requestID] = value
         UserDefaults.standard.set(tokens, forKey: updateTokensKey)
         NotificationCenter.default.post(name: .codeIslandLiveActivityTokenAvailable, object: nil)
+        return true
     }
 
     static func storeSnapshot() {

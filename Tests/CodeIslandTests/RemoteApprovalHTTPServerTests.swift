@@ -95,6 +95,44 @@ final class RemoteApprovalHTTPServerTests: XCTestCase {
         )
     }
 
+    func testTerminalLiveActivityReceiptPrunesItsUpdateToken() throws {
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CodeIslandReceiptTokenCleanup-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let store = RemoteApprovalDeviceStore(
+            stateURL: temporaryDirectory.appendingPathComponent("devices.json")
+        )
+        let pair = try XCTUnwrap(store.pair(.init(code: store.pairingCode, deviceName: "iPhone")))
+        _ = store.registerPushToken(
+            .init(
+                environment: "production",
+                liveActivityUpdateTokens: ["request-id": String(repeating: "d", count: 64)]
+            ),
+            deviceID: pair.deviceId
+        )
+        XCTAssertNotNil(store.devices.first?.liveActivityUpdateTokens?["request-id"])
+
+        let dismissed = RemoteLiveActivityReceipt(
+            eventId: "dismissed-receipt",
+            source: .activityStateChanged,
+            requestId: "request-id",
+            kind: .question,
+            activityState: .dismissed,
+            observedAt: Date(timeIntervalSince1970: 1_800_000_000),
+            activitiesEnabled: true,
+            activeActivityCount: 0,
+            activeRequestIds: []
+        )
+        _ = store.registerPushToken(
+            .init(environment: "production", liveActivityReceipts: [dismissed]),
+            deviceID: pair.deviceId
+        )
+
+        XCTAssertNil(store.devices.first?.liveActivityUpdateTokens)
+    }
+
     func testServerRetainsConnectionUntilResponseCompletes() async throws {
         let ready = expectation(description: "listener ready")
         var startupError: Error?
