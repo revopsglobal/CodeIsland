@@ -99,10 +99,12 @@ final class RemoteApprovalService: ObservableObject {
                     case .success:
                         self.running = true
                         self.lastError = nil
+                        self.refreshSleepActivity()
                         self.configureTailscaleServe()
                     case .failure(let error):
                         self.running = false
                         self.lastError = error.localizedDescription
+                        self.refreshSleepActivity()
                     }
                 }
             }
@@ -149,13 +151,12 @@ final class RemoteApprovalService: ObservableObject {
     }
 
     /// Called from AppState's single derived-state fanout after any queue change.
-    /// Pushes only newly observed permission IDs and holds a power assertion only
-    /// while a decision is actually waiting.
+    /// Pushes only newly observed permission IDs. Remote availability owns a
+    /// separate power assertion so the host is reachable before attention arrives.
     func stateDidChange() {
         guard let appState else { return }
         let currentIDs = Set(appState.permissionQueue.map(\.id))
         let currentQuestionIDs = Set(appState.questionQueue.map(\.id))
-        updateSleepActivity(hasPending: !currentIDs.isEmpty || !currentQuestionIDs.isEmpty)
 
         let newIDs = currentIDs.subtracting(lastPendingIDs)
         let resolvedIDs = lastPendingIDs.subtracting(currentIDs)
@@ -198,18 +199,29 @@ final class RemoteApprovalService: ObservableObject {
         }
     }
 
-    private func updateSleepActivity(hasPending: Bool) {
+    func refreshSleepActivity() {
         let preventSleep = UserDefaults.standard.object(forKey: SettingsKey.remoteApprovalPreventSleep) == nil
             ? SettingsDefaults.remoteApprovalPreventSleep
             : UserDefaults.standard.bool(forKey: SettingsKey.remoteApprovalPreventSleep)
-        if hasPending, preventSleep, sleepActivity == nil {
+        let shouldPreventSleep = Self.shouldPreventSystemSleep(
+            serviceRunning: running,
+            preferenceEnabled: preventSleep
+        )
+        if shouldPreventSleep, sleepActivity == nil {
             sleepActivity = ProcessInfo.processInfo.beginActivity(
                 options: [.idleSystemSleepDisabled, .userInitiated],
-                reason: "CodeIsland is waiting for a remote approval"
+                reason: "CodeIsland remote access is enabled"
             )
-        } else if (!hasPending || !preventSleep), sleepActivity != nil {
+        } else if !shouldPreventSleep, sleepActivity != nil {
             endSleepActivity()
         }
+    }
+
+    nonisolated static func shouldPreventSystemSleep(
+        serviceRunning: Bool,
+        preferenceEnabled: Bool
+    ) -> Bool {
+        serviceRunning && preferenceEnabled
     }
 
     private func endSleepActivity() {

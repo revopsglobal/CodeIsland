@@ -1951,7 +1951,14 @@ private struct BuddyPage: View {
                     }
                 }
 
-                Toggle("Keep this Mac awake while approval is waiting", isOn: $remotePreventSleep)
+                Toggle("Keep this Mac awake for remote access", isOn: $remotePreventSleep)
+                    .onChange(of: remotePreventSleep) { _, _ in
+                        remoteApprovals.refreshSleepActivity()
+                    }
+
+                Text("Keeps the host reachable while the lid is open. macOS may still sleep a MacBook with its lid closed outside supported clamshell mode.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
                 Button {
                     remoteApprovals.restart()
