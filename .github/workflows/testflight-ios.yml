@@ -200,6 +200,7 @@ jobs:
       TEAM_ID: 44JG2Y95CH
       APP_PROFILE_NAME: CodeIsland Buddy App Store
       WIDGET_PROFILE_NAME: CodeIsland Buddy Widget App Store
+      TESTFLIGHT_PROCESSING_TIMEOUT_MINUTES: 60
 
     steps:
       - name: Checkout
@@ -365,6 +366,7 @@ jobs:
         run: scripts/wait-for-testflight-build.sh
 
       - name: Upload signed IPA artifact
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: CodeIsland-Buddy-TestFlight-${{ env.BUILD_NUMBER }}

@@ -3,6 +3,49 @@
 Last updated: 2026-07-17. This supersedes the original v1.0.30 / no-local-Xcode
 handoff.
 
+## Latest physical and delivery delta
+
+This section supersedes older build/pairing statements later in the document.
+
+- PR #29 merged at `96c1a74bca0c851dcaf1ef91248cc9751c136816`.
+  It stops foreground polling from re-entering a loading state and reserves
+  pulse animation for actual approval/question attention. TestFlight
+  `1.0.0 (20260718031753)` from run `29628559171`, artifact `8424725763`, is
+  installed on Greg's physical iPhone. Four observations over approximately
+  15 seconds showed no recurrence of the four-second full-surface flash.
+- The iPhone paired at `2026-07-18T02:26:48Z` as device
+  `afba2915-b0a3-456f-a5f2-265bf7e8a64a`. The Mac has a production APNs token
+  for it and continued receiving authenticated heartbeats after the install.
+- The physical iPhone has produced three real audited approval decisions. The
+  latest is request `e4e3b760-3eef-43e4-b671-93e483a9981c`, `approve`,
+  `resolved`, written at `2026-07-18T03:18:13Z` from device `iPhone`.
+- PR #30 merged at `7f311899a97410b7f69727f39a4c8b0e1ad019c6`.
+  It makes the compact Buddy header show the authenticated Tailscale Mac name
+  instead of misleading `Searching` text while nearby discovery runs. Signed
+  TestFlight build `1.0.0 (20260718041048)` uploaded from this exact SHA in run
+  `29630108653`; Apple delivery
+  `a1fa24b9-1bec-4656-b3b6-8641ede8c854` reported upload success. The initial
+  20-minute visibility check timed out while Apple indexed the build; recovery
+  run `29630740348` performs verification only and does not duplicate the IPA.
+  Do not call the label physically accepted until this build is visible,
+  installed, and checked on Greg's iPhone.
+- Fresh verification on PR #30 source: 477 Mac app tests passed with two
+  intentional skips; 218 core tests passed; the production Swift build passed;
+  and the full iPhone scheme passed 6 unit plus 24 UI tests with zero failures.
+  Result bundle:
+  `~/Library/Developer/Xcode/DerivedData/CodeIslandCompanion-abkbncwynakyihgwigzxamfbugzs/Logs/Test/Test-CodeIslandCompanion-2026.07.17_21-02-54--0700.xcresult`.
+- The installed host is now `/Applications/CodeIsland.app` `1.0.40`, signed by
+  Team `44JG2Y95CH`, and its real listener answers `/health` with
+  `running: true`. The 1.0.40 DMG came from run `29621743481`, source
+  `4041ea71d95e18556a6b125d333b2006a31821d0`, artifact `8422488531`.
+- The TestFlight workflow now gives Apple 60 minutes to index a normal upload
+  and preserves the signed IPA artifact even when the processing check fails.
+- Exact physical proof and the still-open matrix are recorded in
+  `docs/evidence/2026-07-17-crest-mobile-physical-acceptance.md`. Remaining
+  gates are a real question/replay, background push/Live Activity/Dynamic
+  Island, cellular/Tailscale with Wi-Fi off, and Greg's real TCC-backed
+  Calendar/Reminders/weather/Join plus module/accessory workflows.
+
 ## Current outcome
 
 CodeIsland is Greg's private Mac host plus iPhone companion for Crest-class
@@ -14,14 +57,14 @@ out of scope.
   through PR #20. The completion implementation source is
   `2f7a6b1bb66e14baad870d45fd0767553f816968`; PR #24 added the Apple-required
   App Intent metadata correction and release guard. Current `main` is
-  `4c3e274d4cdc3f231459a2a10e5a73557dc4e47e`.
-- Signed macOS `1.0.39` from that merged source is installed at
+  `7f311899a97410b7f69727f39a4c8b0e1ad019c6`.
+- Signed macOS `1.0.40` is installed at
   `/Applications/CodeIsland.app`, running as Team `44JG2Y95CH`, CDHash
-  `e0f24c10a72e631b05de10fef17d3a6c4ca57458`.
+  `cc8ccbd31b5daf02fa440a641928706b33a7ae68`.
 - The exact DMG is
-  `/Users/gregharned/Downloads/CodeIsland-1.0.39-run-29616108584/CodeIsland.dmg`,
+  `/Users/gregharned/Downloads/CodeIsland-1.0.40-run-29621743481/CodeIsland.dmg`,
   SHA-256
-  `17d45d870aa8cb8267eeabd537026889b068784e2342fc3e724bae8cdff74041`.
+  `6c792b79921ebb67ff820fdcdcde58a89769dcc8c8b831dc1621185aa907f547`.
 - iOS `1.0.0 (20260717225004)` is Apple `VALID`, audience
   `APP_STORE_ELIGIBLE`, and available to the all-builds internal group
   `CodeIsland Internal` in TestFlight.
@@ -63,10 +106,10 @@ single-user setup rather than scale.
 ### macOS
 
 - Workflow: `Build macOS ARM DMG`
-- Run: `29616108584`
-- Artifact: `8420619293` (`CodeIsland-macos-arm64-dmg`)
-- Version: `1.0.39`
-- Source SHA: `2f7a6b1bb66e14baad870d45fd0767553f816968`
+- Run: `29621743481`
+- Artifact: `8422488531` (`CodeIsland-macos-arm64-dmg`)
+- Version: `1.0.40`
+- Source SHA: `4041ea71d95e18556a6b125d333b2006a31821d0`
 - Signing: Apple Development, Team `44JG2Y95CH`
 - Previous installed app backup:
   `/Applications/CodeIsland-backup-1.0.38-20260717-1449.app`
@@ -140,14 +183,14 @@ physical phone. Do not turn implementation presence into a live claim.
 
 ## Verification already green
 
-- Full current-head Swift run: 472 app tests with two intentional skips and
+- Full current-head target-isolated Swift run: 477 app tests with two intentional skips and
   zero failures, plus 218 core tests with zero failures.
 - Release Mac build passed. Existing Swift 6 migration/deprecation warnings are
   non-fatal and should be retired separately.
-- Complete native companion scheme: 24 tests, zero failures, zero skips on
-  isolated Simulator `codex-CodeIsland-Shelf`, iPhone 17 Pro, iOS 27.0.
+- Complete native companion scheme: 6 unit tests plus 24 UI tests, zero
+  failures on Simulator `OB1 Widget Proof iPhone 16`, iOS 26.5.
   Result bundle:
-  `ios/CodeIslandCompanion/.build/Task13DerivedData/Logs/Test/Test-CodeIslandCompanion-2026.07.17_14-16-45--0700.xcresult`.
+  `~/Library/Developer/Xcode/DerivedData/CodeIslandCompanion-abkbncwynakyihgwigzxamfbugzs/Logs/Test/Test-CodeIslandCompanion-2026.07.17_21-02-54--0700.xcresult`.
 - A first aggregate run found an XCTest accessibility-shape assumption in the
   hub module helper. The focused Home/Work/Code matrix passed after the helper
   was hardened, followed by the clean 24-test aggregate. This is not being

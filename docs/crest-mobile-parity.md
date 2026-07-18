@@ -34,7 +34,7 @@ Sources used for the baseline:
 | Weather | Unverified: WeatherKit/location with manual ZIP fallback | Unverified: mirrored remote weather and refresh | Permission, remote refresh, and offline-state runtime tests |
 | Notifications | Partial by deliberate platform boundary: CodeIsland action-required alerts are prioritized, deduped, redacted, and separated; macOS exposes no public cross-app Notification Center history API, so CodeIsland does not read private databases or request Full Disk Access | Ready personal extension implementation: opaque APNs, pending/resolved routing, token rotation, authenticated detail refresh, Live Activity, and Dynamic Island lifecycle | Physical-iPhone permission, token, delivery, resolved cleanup, and stale-push tests; cross-app history remains unsupported unless Apple adds a public API |
 | Claude co-pilot/voice/proposals | Ready implementation: read-only Ask and reviewed Do through authenticated local Claude Code with tools disabled, push-to-talk/continuous speech, visible listening state, bounded user-selected/drop file context, and best-effort screen-share-hidden strip with honest disclosure | Ready implementation: Ask/Do, speech recognition, proposal review, exact confirmation, and deep-linked task/note preparation | Run real Ask and multi-action Do, Mac voice/file context, and physical-iPhone dictation/task creation |
-| AI Coding sessions/approvals/questions | Ready: sessions, decisions-first attention model, questions, approvals, exact-confirmation actions, and audited continuation | Ready implementation: real-listener pairing/auth/approval/question/replay protection, pending deep links, opaque push routing, Live Activity lifecycle, and away-use action surfaces; physical Tailscale use is unverified | Physical-iPhone approval/question/action tests away from the Mac |
+| AI Coding sessions/approvals/questions | Ready: sessions, decisions-first attention model, questions, approvals, exact-confirmation actions, and audited continuation | Physical partial: pairing, authenticated polling, stable foreground rendering, production push-token registration, and three real approval decisions are proven; questions, background push/Live Activity, replay, and cellular use still need physical proof | Physical-iPhone question/replay plus background and cellular/Tailscale action tests away from the Mac |
 | GitHub pull requests and CI | Ready: authenticated `gh` PR list/status/deep links | Ready: mirrored list/status/deep links | Runtime refresh/open test from iPhone |
 | Audio device switcher | Unverified: enumerate/default input/output, switch, mute, and exact 0–100 output volume | Unverified: mirrored device actions, ±10, and native/web volume editor | Physical device switch, volume update, and expected failure states |
 | Bluetooth devices/connect/disconnect | Unverified: connected/remembered devices, battery, connect/disconnect | Unverified: mirrored devices and confirmed remote actions | Physical accessory connect/disconnect tests |
@@ -48,7 +48,7 @@ Sources used for the baseline:
 | Media-key HUD and Crest ambient polish | Ready supported implementation: short-lived notch HUD for CodeIsland media/volume/brightness actions, bounded artwork, progress, thermal/Reduce Motion-aware ambient bars | Ready useful mirror: artwork/progress and exact host controls; no need to mimic a Mac bezel HUD | Capture multi-display/full-screen evidence; macOS has no public API for intercepting all hardware brightness-key events |
 | Custom dashboard/day-progress surface | Ready implementation: one shared saved dashboard toggle, per-mode rack configuration, and local-day progress header | Ready implementation: same configuration and day progress with native editing | Verify saved state and day rollover on the physical pair |
 | Private web fallback | Ready automated implementation: responsive authenticated Home/Work/Code, approvals, questions, opaque push registration, exact actions, file transfer, retry/offline state, and replay protection | Ready as an iPhone browser fallback; physical Tailscale browser use is unverified | Physical Tailscale browser module/action/file round trip |
-| TestFlight distribution | Ready: signed archive/upload pipeline, source plus compiled App Intent metadata validation, and internal group | Ready for acceptance: build `1.0.0 (20260717225004)` is Apple `VALID`; `gregharned@gmail.com` is `ready` in the all-builds internal group; physical install of this build remains unverified | Refresh TestFlight, install/update, launch, grant permissions, pair, and prove push/Live Activity on Greg's iPhone |
+| TestFlight distribution | Ready: signed archive/upload pipeline, source plus compiled App Intent metadata validation, and internal group | Physical partial: build `1.0.0 (20260718031753)` is installed from TestFlight, paired, polling, and has a production push token; the PR #30 connection-label build is awaiting physical install/acceptance after Apple processing | Install the PR #30 build, confirm the connected label and stability, then prove background push/Live Activity on Greg's iPhone |
 
 ## Behavior-level completion adjudication
 
@@ -69,7 +69,10 @@ similar provider/API limits and are disclosed at the affected surface.
 CodeIsland's personal extensions—away approvals and questions, exact-confirmation
 actions, Downloads/Shelf transfer, Tailscale, APNs, Live Activities, Dynamic
 Island, App Intents, and web fallback—are evaluated separately. Their automated
-contracts are green; physical iPhone/cellular/TCC proof remains a distinct gate.
+contracts are green; the installed physical iPhone has now proved pairing,
+foreground stability, authenticated polling, and three approval decisions.
+Cellular, background push/Live Activity, question/replay, and TCC-backed modules
+remain distinct gates.
 
 ## Architecture invariant
 
@@ -108,7 +111,7 @@ uses an isolated Downloads directory and the real listener to prove:
 
 Current automated completion evidence on 2026-07-17:
 
-- `swift test`: `CodeIslandTests` passed **472** tests with two intentional
+- target-isolated `swift test`: `CodeIslandTests` passed **477** tests with two intentional
   skips and zero failures; `CodeIslandCoreTests` passed **218** tests with zero
   failures. This includes the real loopback listener, configuration restart,
   APNs envelope/privacy, push-token rotation, Live Activity lifecycle, media,
@@ -116,10 +119,10 @@ Current automated completion evidence on 2026-07-17:
   and drag-to-notch reducers.
 - `swift build -c release` passed. The compiler emitted existing Swift 6
   migration/deprecation warnings, but no release-build error.
-- The complete `CodeIslandCompanion` Xcode scheme passed **24/24** tests with
-  zero failures and zero skips on isolated Simulator
-  `codex-CodeIsland-Shelf`, iPhone 17 Pro, iOS 27.0. Result bundle:
-  `ios/CodeIslandCompanion/.build/Task13DerivedData/Logs/Test/Test-CodeIslandCompanion-2026.07.17_14-16-45--0700.xcresult`.
+- The complete `CodeIslandCompanion` Xcode scheme passed **6 unit tests and
+  24 UI tests** with zero failures on Simulator `OB1 Widget Proof iPhone 16`,
+  iOS 26.5. Result bundle:
+  `~/Library/Developer/Xcode/DerivedData/CodeIslandCompanion-abkbncwynakyihgwigzxamfbugzs/Logs/Test/Test-CodeIslandCompanion-2026.07.17_21-02-54--0700.xcresult`.
   It covers native mode/module rendering, rack reorder review, Calendar month,
   Now Playing seek, task/note creation, Claude Do, Downloads and Shelf share,
   camera preview, deep links, landscape board, pairing recovery, and Live
@@ -131,31 +134,31 @@ Current automated completion evidence on 2026-07-17:
   target in order. The focused three-mode rerun passed, followed by the clean
   24-test aggregate above.
 
-This is native Simulator evidence, not physical-iPhone or cellular/Tailscale
-proof.
+These test results are native Simulator evidence. Physical-iPhone proof is
+recorded separately below; cellular/Tailscale acceptance is still pending.
 
 ## Current signed delivery receipts
 
 These receipts were captured on 2026-07-17. They prove the automated delivery
 surfaces, not the remaining physical-device interactions.
 
-- macOS `1.0.39`: merged commit `2f7a6b1bb66e14baad870d45fd0767553f816968`,
-  Actions run `29616108584`, artifact `8420619293`, DMG SHA-256
-  `17d45d870aa8cb8267eeabd537026889b068784e2342fc3e724bae8cdff74041`.
+- macOS `1.0.40`: source commit `4041ea71d95e18556a6b125d333b2006a31821d0`,
+  Actions run `29621743481`, artifact `8422488531`, DMG SHA-256
+  `6c792b79921ebb67ff820fdcdcde58a89769dcc8c8b831dc1621185aa907f547`.
   The downloaded DMG passed `codesign --verify --deep --strict` directly from
   its mounted image, and that exact app is installed at
   `/Applications/CodeIsland.app` with team `44JG2Y95CH` and CDHash
-  `e0f24c10a72e631b05de10fef17d3a6c4ca57458`. The prior installed 1.0.38 app
+  `cc8ccbd31b5daf02fa440a641928706b33a7ae68`. The prior installed 1.0.38 app
   is preserved at `/Applications/CodeIsland-backup-1.0.38-20260717-1449.app`.
-- iOS `1.0.0 (20260717225004)`: merged commit
-  `4c3e274d4cdc3f231459a2a10e5a73557dc4e47e`, Actions run `29619011267`,
-  signed IPA artifact `8421590778`. App Store Connect reported bundle
+- iOS `1.0.0 (20260718031753)`: merged commit
+  `96c1a74bca0c851dcaf1ef91248cc9751c136816`, Actions run `29628559171`,
+  signed IPA artifact `8424725763`. App Store Connect reported bundle
   `com.revopsglobal.codeisland.buddy` as `VALID`, audience
   `APP_STORE_ELIGIBLE`; internal group `CodeIsland Internal` has access to all
-  builds. Upload delivery `dc6f1d45-d4ab-448e-9d73-49be811710ee` completed,
-  and tester receipt artifact `8421528342` records `gregharned@gmail.com` as
-  `ready`. The downloaded IPA SHA-256 is
-  `431960f551777405b059e09c26bb7e624eb6edc5456ae55f686631354e048ff2`;
+  builds, and tester receipt artifact `8424682761` records
+  `gregharned@gmail.com` as `ready`. This exact build is installed and paired
+  on Greg's physical iPhone; three approval decisions and foreground stability
+  are recorded in the physical evidence receipt. The signed archive's
   strict signature verification passed for both app and widget under Team
   `44JG2Y95CH`, and compiled App Intent metadata passed the `ITMS-90626` guard.
 - App Store Connect tester repair run `29591716380` verified
@@ -168,38 +171,40 @@ surfaces, not the remaining physical-device interactions.
   `running: true`; the Tailscale root returned the expected CSP/frame/referrer
   headers and unauthenticated Downloads-file access returned `401`.
 - The installed app's designated requirement is stable across the preserved
-  1.0.38 and installed 1.0.39 (bundle `com.codeisland.app`, the same Apple
+  1.0.38 and installed 1.0.40 (bundle `com.codeisland.app`, the same Apple
   Development certificate and Team `44JG2Y95CH`). Its signed entitlements
   include Calendar and Apple Events automation. Unified logs show the real app
   requested full Calendar access on 2026-07-16 at 23:43:06, received EventKit
   result `3`, `error = 0`, completion `YES`, and immediately issued a Calendar
   event predicate. This is strong proof that the access request succeeded in
   that installed identity; it is not proof of the current visible event list
-  after the 1.0.39 restart.
+  after the 1.0.40 restart.
 - APNs team, key ID, topic, and private-key path are configured on the Mac and
-  the private key exists. The paired-device store still contains zero devices
-  and therefore zero physical push tokens, so delivery cannot be exercised
-  until Buddy is installed and paired on Greg's iPhone.
+  the private key exists. The paired-device store contains Greg's physical
+  iPhone with a production push token and continuing authenticated heartbeats.
+  Token registration is proven; background delivery and resolved cleanup are
+  not yet physically proven.
 
 ## Physical acceptance run
 
-This is the remaining morning run. It cannot be completed by CI because it
-requires Greg's physical iPhone, biometric/permission taps, real accessories,
-and real Calendar/Reminders data.
+This run is partially complete. CI cannot finish the remaining items because
+they require Greg's physical iPhone, biometric/permission taps, real
+accessories, and real Calendar/Reminders data. Exact completed proof is in
+`docs/evidence/2026-07-17-crest-mobile-physical-acceptance.md`.
 
 1. On iPhone, open Apple's **TestFlight** app while signed in as
-   `gregharned@gmail.com`, refresh, and install or update **CodeIsland Buddy**
-   to `1.0.0 (20260717225004)` from `CodeIsland Internal`. The tester is already
-   enrolled; this private internal build does not require public App Store
-   review. Install or enable Tailscale and confirm the phone is on Greg's
-   tailnet.
+   `gregharned@gmail.com`, refresh, and install the newest **CodeIsland Buddy**
+   build from `CodeIsland Internal`. The tester is already enrolled; this
+   private internal build does not require public App Store review. Tailscale
+   must remain enabled on Greg's tailnet.
 2. Unlock the Mac and open CodeIsland Settings. Use the app's permission
    buttons, then approve CodeIsland in System Settings under Calendars,
    Reminders, Location Services, Camera, and Accessibility as each test needs.
-3. Pair the iPhone from CodeIsland Settings using the displayed six-digit code.
-   Confirm Home, Work, and Code load in Buddy over Wi-Fi, then repeat over
+3. Pairing and authenticated foreground polling are already proven. Confirm
+   Home, Work, and Code on the newest build over Wi-Fi, then repeat over
    cellular with Tailscale enabled.
-4. Trigger a real coding approval and a real question on the Mac. Confirm the
+4. Real physical approvals are already proven. Trigger a real question on the
+   Mac. Confirm the
    iPhone receives the push, the Live Activity/Dynamic Island surface appears,
    approval/answer resumes only the selected request, and replay is rejected.
 5. Create a dedicated test reminder list; add, reorder, complete, archive,
