@@ -12,12 +12,37 @@ fi
 # App Store Connect rejects discoverable App Intent descriptions containing
 # the platform name "Mac" with ITMS-90626 (Invalid Siri Support). Inspect the
 # complete string literal so multiline IntentDescription declarations are
-# covered as well as the common one-line form.
-if matches="$(rg --line-number --multiline --pcre2 --ignore-case \
-  --glob '*.swift' \
-  --glob '!**/.build/**' \
-  'IntentDescription\s*\(\s*"[^"]*mac[^"]*"' \
-  "$source_root")"; then
+# covered as well as the common one-line form. Use system Perl rather than a
+# developer-shell convenience such as ripgrep: signed archive runners must
+# fail closed even when optional command-line tools are absent.
+if ! command -v perl >/dev/null 2>&1; then
+  echo "::error::Perl is required to validate App Intent source metadata."
+  exit 2
+fi
+
+set +e
+matches="$(find "$source_root" \
+  -type f \
+  -name '*.swift' \
+  ! -path '*/.build/*' \
+  -exec perl -0777 -ne '
+    while (/IntentDescription\s*\(\s*"[^"]*mac[^"]*"/ig) {
+      my $before = substr($_, 0, $-[0]);
+      my $line = 1 + ($before =~ tr/\n/\n/);
+      my $match = $&;
+      $match =~ s/\s+/ /g;
+      print "$ARGV:$line:$match\n";
+    }
+  ' {} +)"
+search_status=$?
+set -e
+
+if [ "$search_status" -ne 0 ]; then
+  echo "::error::App Intent source metadata scan failed."
+  exit 2
+fi
+
+if [ -n "$matches" ]; then
   echo "::error::ITMS-90626 Invalid Siri Support: App Intent descriptions must not contain 'Mac'."
   printf '%s\n' "$matches"
   exit 1
