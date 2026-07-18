@@ -47,20 +47,31 @@ This section supersedes older build/pairing statements later in the document.
   25 UI tests with zero failures.
   Result bundle:
   `/tmp/CodeIsland-final-full-20260717-2223.xcresult`.
-- The installed host is now `/Applications/CodeIsland.app` `1.0.40`, signed by
-  Team `44JG2Y95CH`, and its real listener answers `/health` with
-  `running: true`. The 1.0.40 DMG came from run `29621743481`, source
-  `4041ea71d95e18556a6b125d333b2006a31821d0`, artifact `8422488531`.
+- PR #31 merged as `61310ee2d20c651221ee6ef9a3ef823bb7bb0558`.
+  Signed Mac `1.0.41` from run `29632458432`, artifact `8425985562`, is
+  installed at `/Applications/CodeIsland.app`; strict signature verification
+  passed with Team `44JG2Y95CH`, CDHash
+  `3922e9616d0ec54d7a590331325ab254197d29e2`. Both local and Tailscale health
+  return `running: true`, and the physical iPhone pairing plus production APNs
+  token survived the replacement.
+- Final TestFlight build `1.0.0 (20260718053347)` from run `29632459018` is
+  Apple `VALID`, `APP_STORE_ELIGIBLE`, and available to all builds in
+  `CodeIsland Internal`. Delivery UUID:
+  `835af987-3aef-4cc9-82d4-8d88ec0684f1`; IPA artifact `8425978534`; tester
+  receipt `8425940062` records `gregharned@gmail.com` as `ready`. It includes
+  the authenticated Sessions and ActivityKit push-to-start work, but remains
+  signed-delivery proof until Greg unlocks iPhone Mirroring or updates it on
+  the physical phone.
 - The TestFlight workflow now gives Apple 60 minutes to index a normal upload
   and preserves the signed IPA artifact even when the processing check fails.
-- The installed build exposed one more truthful-state defect: Sessions could
+- The previous installed build exposed one more truthful-state defect: Sessions could
   show nearby `Waiting for Mac` despite an authenticated Tailscale connection.
-  The follow-up branch now fetches the Code session rack independently and uses
+  PR #31 fetches the Code session rack independently and uses
   nearby discovery only when unpaired. It also registers ActivityKit
   push-to-start/update tokens, remotely starts a privacy-redacted Live Activity
   only for approvals/questions, and remotely ends it on resolution. Replacement
-  signed Mac and iPhone builds plus physical acceptance are still required
-  before calling either behavior live.
+  signed Mac and iPhone builds are now delivered; physical iPhone installation
+  and acceptance are still required before calling either behavior live.
 - Exact physical proof and the still-open matrix are recorded in
   `docs/evidence/2026-07-17-crest-mobile-physical-acceptance.md`. Remaining
   gates are physical replay rejection, background push/Live Activity/Dynamic
@@ -78,15 +89,15 @@ out of scope.
   through PR #20. The completion implementation source is
   `2f7a6b1bb66e14baad870d45fd0767553f816968`; PR #24 added the Apple-required
   App Intent metadata correction and release guard. Current `main` is
-  `7f311899a97410b7f69727f39a4c8b0e1ad019c6`.
-- Signed macOS `1.0.40` is installed at
+  `61310ee2d20c651221ee6ef9a3ef823bb7bb0558`.
+- Signed macOS `1.0.41` is installed at
   `/Applications/CodeIsland.app`, running as Team `44JG2Y95CH`, CDHash
-  `cc8ccbd31b5daf02fa440a641928706b33a7ae68`.
+  `3922e9616d0ec54d7a590331325ab254197d29e2`.
 - The exact DMG is
-  `/Users/gregharned/Downloads/CodeIsland-1.0.40-run-29621743481/CodeIsland.dmg`,
+  `/Users/gregharned/Downloads/CodeIsland-1.0.41-run-29632458432/CodeIsland.dmg`,
   SHA-256
-  `6c792b79921ebb67ff820fdcdcde58a89769dcc8c8b831dc1621185aa907f547`.
-- iOS `1.0.0 (20260717225004)` is Apple `VALID`, audience
+  `8d33b2c721ec0a13be3878f3e46d54d1ffaf7d61bec730db21b208882a542ecb`.
+- iOS `1.0.0 (20260718053347)` is Apple `VALID`, audience
   `APP_STORE_ELIGIBLE`, and available to the all-builds internal group
   `CodeIsland Internal` in TestFlight.
 - `gregharned@gmail.com` is now verified as an `ACCOUNT_HOLDER,ADMIN` App Store
@@ -127,31 +138,31 @@ single-user setup rather than scale.
 ### macOS
 
 - Workflow: `Build macOS ARM DMG`
-- Run: `29621743481`
-- Artifact: `8422488531` (`CodeIsland-macos-arm64-dmg`)
-- Version: `1.0.40`
-- Source SHA: `4041ea71d95e18556a6b125d333b2006a31821d0`
+- Run: `29632458432`
+- Artifact: `8425985562` (`CodeIsland-macos-arm64-dmg`)
+- Version: `1.0.41`
+- Source SHA: `61310ee2d20c651221ee6ef9a3ef823bb7bb0558`
 - Signing: Apple Development, Team `44JG2Y95CH`
 - Previous installed app backup:
-  `/Applications/CodeIsland-backup-1.0.38-20260717-1449.app`
+  `/Users/gregharned/Downloads/CodeIsland-app-backups/CodeIsland-1.0.40-pre-1.0.41.app`
 
 ### iOS / TestFlight
 
 - Workflow: `Build and Upload iOS TestFlight`
-- Run: `29619011267`
-- Signed IPA artifact: `8421590778`
-- Tester receipt artifact: `8421528342`
-- Version/build: `1.0.0 (20260717225004)`
+- Run: `29632459018`
+- Signed IPA artifact: `8425978534`
+- Tester receipt artifact: `8425940062`
+- Version/build: `1.0.0 (20260718053347)`
 - Bundle: `com.revopsglobal.codeisland.buddy`
-- Source SHA: `4c3e274d4cdc3f231459a2a10e5a73557dc4e47e`
+- Source SHA: `61310ee2d20c651221ee6ef9a3ef823bb7bb0558`
 - Apple processing: `VALID`, `APP_STORE_ELIGIBLE`
 - Internal group: `CodeIsland Internal`, all-build access
 - Internal tester: `gregharned@gmail.com`, enrollment `ready`
-- Upload delivery: `dc6f1d45-d4ab-448e-9d73-49be811710ee`
+- Upload delivery: `835af987-3aef-4cc9-82d4-8d88ec0684f1`
 - Downloaded IPA:
-  `/Users/gregharned/Downloads/CodeIsland-TestFlight-20260717225004-run-29619011267/CodeIsland-Buddy-TestFlight-20260717225004/CodeIslandCompanion.ipa`
+  `/Users/gregharned/Downloads/CodeIsland-TestFlight-20260718053347-run-29632459018/CodeIslandCompanion.ipa`
 - IPA SHA-256:
-  `431960f551777405b059e09c26bb7e624eb6edc5456ae55f686631354e048ff2`
+  `27259eccd5eb7890c3a4e852a52782cbf323b98956ef9025cb03f7e2925b2630`
 - Fresh invitation receipt: run `29591716380`, artifact `8411326331`,
   invitation `9679ce07-ac35-4b29-b007-461e0b418801`
 
@@ -238,7 +249,7 @@ Greg must perform the physical/TCC steps in
 `docs/crest-mobile-parity.md#physical-acceptance-run`. The short version:
 
 1. Open TestFlight while signed in as `gregharned@gmail.com`, refresh, then
-   install or update CodeIsland Buddy to `1.0.0 (20260717225004)`. The tester is
+   install or update CodeIsland Buddy to `1.0.0 (20260718053347)`. The tester is
    already enrolled and no public App Store review is required. Enable
    Tailscale on the iPhone.
 2. On the unlocked Mac, use CodeIsland Settings permission buttons and approve

@@ -42,10 +42,43 @@ It must not be read as blanket acceptance of every Crest/mobile module.
   proves the installed Mac identity now has working Calendar access and that the
   authenticated iPhone read path works. Calendar mutation, recurrence, and
   one-click Join remain unproven.
-- **Host availability:** `/Applications/CodeIsland.app` `1.0.40` is signed by
-  Team `44JG2Y95CH` and running. Its real listener answered local `/health`
-  with `running: true`; Tailscale reported the Mac online at
-  `gregs-macbook-air.tail62f27c.ts.net` / `100.84.86.6`.
+- **Replacement host installed:** `/Applications/CodeIsland.app` `1.0.41` is
+  installed from run `29632458432`, source
+  `61310ee2d20c651221ee6ef9a3ef823bb7bb0558`, artifact `8425985562`.
+  The downloaded DMG SHA-256 is
+  `8d33b2c721ec0a13be3878f3e46d54d1ffaf7d61bec730db21b208882a542ecb`.
+  Mounted-image and installed-app strict signature verification passed; the
+  ARM64 app is signed by Team `44JG2Y95CH` with CDHash
+  `3922e9616d0ec54d7a590331325ab254197d29e2`. Local and Tailscale `/health`
+  both returned `running: true`, server `Greg’s MacBook Air`. The paired
+  physical-iPhone record and its production APNs token survived the update.
+- **Replacement host data surfaces:** the installed 1.0.41 app rendered four
+  current authenticated coding sessions without the previous discovery card,
+  Greg's real Calendar (`40 upcoming`), the selected Grocery Reminders list,
+  12 recent Downloads, 18 Shelf items, and manual-ZIP weather
+  (`61° Clear · Ridgefield, Washington`). This is physical Mac read proof, not
+  iPhone acceptance of the replacement build.
+
+## Final replacement TestFlight delivery
+
+PR #31 merged as `61310ee2d20c651221ee6ef9a3ef823bb7bb0558`. TestFlight run
+`29632459018` uploaded `1.0.0 (20260718053347)` with delivery UUID
+`835af987-3aef-4cc9-82d4-8d88ec0684f1`; Apple reported `VALID`, audience
+`APP_STORE_ELIGIBLE`, and confirmed that all-builds group `CodeIsland Internal`
+has access. Artifact `8425978534` preserves the signed IPA; its SHA-256 is
+`27259eccd5eb7890c3a4e852a52782cbf323b98956ef9025cb03f7e2925b2630`.
+
+Independent local inspection passed strict signature verification for the app
+and widget. The app is signed for production APNs, declares
+`NSSupportsLiveActivities = true`, and both bundles use Team `44JG2Y95CH`.
+Tester receipt artifact `8425940062` records `gregharned@gmail.com` as `ready`
+in `CodeIsland Internal` at `2026-07-18T05:33:36Z`.
+
+This replacement build is Apple-valid and available, but it is not yet
+installed on Greg's physical iPhone. iPhone Mirroring is currently locked and
+requires Greg's Touch ID or Mac login password; neither can be supplied by an
+unattended agent. The older physical build therefore remains the source of the
+completed iPhone proof above.
 
 ## Latest connection-status correction
 
@@ -95,8 +128,9 @@ installed together.
 
 ## Still requires physical proof
 
-- install the PR #30 TestFlight build and confirm the header shows the Mac name
-  instead of `Searching`, with no recurrence of the four-second flash;
+- update the physical iPhone from TestFlight to build `20260718053347`, confirm
+  the authenticated Mac name and Sessions surface, and recheck foreground
+  stability;
 - exact-request replay rejection on the phone (the real question answer is
   proven above);
 - background APNs delivery, resolved cleanup, Live Activity, and Dynamic Island;
