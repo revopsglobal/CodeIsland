@@ -28,8 +28,9 @@ statement below. Older sections remain as an evidence history.
   PR #51 adds automatic Launch at Login with a permanent explicit opt-out and
   machine-readable host availability; PR #52 recovers the macOS 27
   `SMAppService.mainApp.status == .notFound` state by attempting registration
-  and exposing any exact ServiceManagement error. Current `main` is
-  `bf69f80f64ffbd9115cc433bf7d44854da3ee3a5`.
+  and exposing any exact ServiceManagement error. The installed runtime source
+  is `bf69f80f64ffbd9115cc433bf7d44854da3ee3a5`; current `main` is
+  `22bfdc6da74064380a63e7bfb95fb74feea06ac5`.
 - Signed run `29644344626` produced artifact `8429617233` from that source. The
   downloaded DMG SHA-256 is
   `ad666a75dff15ac51cae16551602eaab8b13098c128dd8628dd8a77f74ab9982`.
@@ -46,18 +47,28 @@ statement below. Older sections remain as an evidence history.
   the expanded release selection passed again in run `29644344626`.
 - PR #46 merged the exact current delivery receipt as
   `53c420047d3e75159ae9da040e17e476d3beb229`.
-- Physical acceptance is still open. The paired iPhone record has production
-  APNs and ActivityKit push-to-start tokens, but `clientVersion` and
-  `clientBuild` remain absent and its last authenticated lifecycle receipt is
-  from `2026-07-18T10:40:31Z`. Therefore build `20260718112841` is not yet
-  proven installed or opened. The Mac is locked, so iPhone Mirroring cannot be
-  operated until Greg manually unlocks the Mac.
-- `scripts/report-physical-acceptance.sh` now produces a sanitized delivery and
-  pairing report. Against the current `1.0.49` runtime it passes every Mac/signature/
-  health gate and fails only `physicalBuildConfirmed`; strict mode exits `2`
-  until the exact iPhone version/build registers. Its Bats coverage verifies
-  both the passing and absent-client cases and proves raw push tokens are never
-  printed.
+- Physical acceptance for this exact build is now real. TestFlight showed
+  `1.0.0 (20260718112841)` installed and opened on Greg's physical iPhone. The
+  paired record advanced to `clientVersion = 1.0.0` and
+  `clientBuild = 20260718112841`; strict
+  `scripts/report-physical-acceptance.sh` passed every
+  Mac, signature, health, delivery, and physical-build gate.
+- Three captures over 16 seconds showed a stable premium Now surface with no
+  four-second flash. Sessions rendered authenticated host data (`2 running`,
+  later `1 running`) and `no decisions waiting`. Calendar rendered Greg's real
+  July store and `40 upcoming`; Work Tools rendered Tasks, Notes, Prompter,
+  Camera, Shelf, Notifications, and Downloads from the paired Mac.
+- A real physical `AskUserQuestion` request
+  `decbb81a-45a0-4edf-9e0c-eda2e6aef703` rendered one exact `Decision needed`
+  card, selected and explicitly reviewed `Continue`, resumed the blocked hook
+  socket with `behavior: allow`, started one ActivityKit activity, and resolved
+  to zero active activities. A second probe also reached active and then
+  dismissed state without leaving a pending request.
+- iPhone Mirroring displayed the Dynamic Island as the plain black hardware
+  cutout while ActivityKit reported the request active. Therefore the physical
+  lifecycle is accepted, but compact/expanded or Lock Screen artwork is not
+  visually accepted. No per-activity update token registered. Cellular/
+  Tailscale action and the remaining real-data mutation matrices are also open.
 
 ## Final signed lifecycle-receipt delta
 

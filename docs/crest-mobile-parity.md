@@ -29,10 +29,18 @@ below.
   Apple `VALID`, group `CodeIsland Internal`, tester state `ready`.
 - Native premium suite: 39 passed, 0 failed, 0 skipped, 0 runtime warnings;
   result bundle `/tmp/CodeIsland-premium-full-final-20260718-0415.xcresult`.
-- Physical boundary: the paired-device store still has no `clientVersion` or
-  `clientBuild`, so the current TestFlight build is not proven installed or
-  opened. Physical premium UI, Live Activity/Dynamic Island, Calendar/Reminders
-  mutation, Join, and cellular/Tailscale acceptance remain open.
+- Physical premium proof: TestFlight build `20260718112841` is installed and
+  open on Greg's iPhone. The paired-device store records
+  `clientVersion = 1.0.0` and `clientBuild = 20260718112841`; strict physical
+  acceptance passes all delivery gates. Three captures over 16 seconds were visually stable,
+  authenticated Sessions rendered without a discovery/loading substitution,
+  and Calendar returned Greg's real store with `40 upcoming`.
+- Physical attention proof: a real `AskUserQuestion` round trip produced the
+  exact decision card and explicit review, returned `Continue` through the
+  blocked hook socket, started one ActivityKit activity, and resolved to zero
+  active activities. iPhone Mirroring did not render the compact or expanded
+  Dynamic Island artwork, and no per-activity update token registered, so those
+  two visual/update claims remain open.
 
 ## Acceptance states
 
@@ -53,9 +61,9 @@ below.
 | Notes/jot/categories/checklists/merge | Unverified: persistent add/copy/delete/edit/append, categories, checklist toggles, 20-step undo, and revision-safe replacement | Unverified: same editors/actions with stale-revision rejection | Runtime add/edit/conflict/checklist/undo round trip across Mac and iPhone |
 | System CPU/memory/load | Ready: host load/memory/disk/thermal/uptime | Ready: mirrored readings and refresh through an authenticated, exact-confirmation host action | Compare readings with Activity Monitor on the physical Mac/iPhone pair |
 | Weather | Physical ZIP fallback proven during the unlocked 1.0.41 run: `61° Clear · Ridgefield, Washington`; Location Services mode remains unverified | Ready implementation: mirrored remote weather and refresh | Physical location-mode, remote refresh, and offline-state runtime tests |
-| Notifications | Partial by deliberate platform boundary: CodeIsland action-required alerts are prioritized, deduped, redacted, and separated; macOS exposes no public cross-app Notification Center history API, so CodeIsland does not read private databases or request Full Disk Access | Physical replacement-build proof: production APNs and ActivityKit push-to-start tokens reached the paired Mac; pending and resolved background pushes each woke the client for authenticated refresh at `06:23:23Z` and `06:25:17Z`. No update token or unlocked visual proof was captured | Prove visible Live Activity/Dynamic Island, per-activity update/end, and stale-push behavior |
+| Notifications | Partial by deliberate platform boundary: CodeIsland action-required alerts are prioritized, deduped, redacted, and separated; macOS exposes no public cross-app Notification Center history API, so CodeIsland does not read private databases or request Full Disk Access | Physical current-build proof: production APNs and ActivityKit push-to-start tokens are registered. A real question started one ActivityKit activity, rendered the exact attention card, returned the reviewed answer, and resolved to zero active activities. iPhone Mirroring showed only the black hardware cutout, and no per-activity update token registered | Observe compact/expanded or Lock Screen artwork directly on-device, prove token-based update/end and stale-push behavior |
 | Claude co-pilot/voice/proposals | Ready implementation: read-only Ask and reviewed Do through authenticated local Claude Code with tools disabled, push-to-talk/continuous speech, visible listening state, bounded user-selected/drop file context, and best-effort screen-share-hidden strip with honest disclosure | Ready implementation: Ask/Do, speech recognition, proposal review, exact confirmation, and deep-linked task/note preparation | Run real Ask and multi-action Do, Mac voice/file context, and physical-iPhone dictation/task creation |
-| AI Coding sessions/approvals/questions | Prior physical proof: 1.0.43 rendered five authenticated sessions, `3 running · no decisions waiting`, with no discovery/loading substitution. Premium 1.0.49 is installed, healthy, keeps the private host awake, and is registered to launch at login, but cannot be visually accepted while the Mac is locked | Prior physical builds proved pairing, background APNs wakeups, three approval decisions, and one audited question answer. Premium build `20260718112841` is Apple-valid but not yet proven installed/opened because paired client version/build metadata remain absent | Unlock the Mac, install/open the exact TestFlight build through iPhone Mirroring, verify authenticated Sessions and stability, then run replay plus Live Activity and cellular/Tailscale action tests away from the Mac |
+| AI Coding sessions/approvals/questions | Premium 1.0.49 is installed, healthy, keeps the private host awake, launches at login, and backed the new physical question continuation | Physical build `20260718112841` is installed/opened and authenticated. Sessions rendered `2 running`, later `1 running`, with `no decisions waiting`; a real exact question was selected, reviewed, answered, audited, and drained without routine-content noise | Run exact-request replay and one cellular/Tailscale approval away from local Wi-Fi |
 | GitHub pull requests and CI | Ready: authenticated `gh` PR list/status/deep links | Ready: mirrored list/status/deep links | Runtime refresh/open test from iPhone |
 | Audio device switcher | Physical read proof on 1.0.43: only MacBook Air Microphone and MacBook Air Speakers carry the respective default flags; the remaining real and virtual devices no longer show false defaults. Switching, mute, and exact 0–100 output volume remain physically unverified | Unverified: mirrored device actions, ±10, and native/web volume editor | Run physical device switch, volume update, and expected failure states |
 | Bluetooth devices/connect/disconnect | Unverified: connected/remembered devices, battery, connect/disconnect | Unverified: mirrored devices and confirmed remote actions | Physical accessory connect/disconnect tests |
@@ -69,7 +77,7 @@ below.
 | Media-key HUD and Crest ambient polish | Ready supported implementation: short-lived notch HUD for CodeIsland media/volume/brightness actions, bounded artwork, progress, thermal/Reduce Motion-aware ambient bars | Ready useful mirror: artwork/progress and exact host controls; no need to mimic a Mac bezel HUD | Capture multi-display/full-screen evidence; macOS has no public API for intercepting all hardware brightness-key events |
 | Custom dashboard/day-progress surface | Ready implementation: one shared saved dashboard toggle, per-mode rack configuration, and local-day progress header | Ready implementation: same configuration and day progress with native editing | Verify saved state and day rollover on the physical pair |
 | Private web fallback | Ready automated implementation: responsive authenticated Home/Work/Code, approvals, questions, opaque push registration, exact actions, file transfer, retry/offline state, and replay protection | Ready as an iPhone browser fallback; physical Tailscale browser use is unverified | Physical Tailscale browser module/action/file round trip |
-| TestFlight distribution | Ready: signed archive/upload pipeline, source plus compiled App Intent metadata validation, internal group, 60-minute Apple indexing window, and always-preserved IPA artifact | Current build `1.0.0 (20260718112841)` is Apple `VALID` and available to `CodeIsland Internal`; tester state is `ready`. Its install/open on the physical iPhone is not yet proven | Install/open the exact build through TestFlight, require paired `clientVersion = 1.0.0` and `clientBuild = 20260718112841`, then visually confirm connected Sessions, stability, background push, and Live Activity |
+| TestFlight distribution | Ready: signed archive/upload pipeline, source plus compiled App Intent metadata validation, internal group, 60-minute Apple indexing window, and always-preserved IPA artifact | Current build `1.0.0 (20260718112841)` is Apple `VALID`, installed/opened from `CodeIsland Internal`, and confirmed by paired `clientVersion = 1.0.0` plus `clientBuild = 20260718112841`; Sessions, stability, question action, and ActivityKit lifecycle passed physically | Preserve the current internal delivery pipeline; compact/expanded Dynamic Island artwork and cellular action remain separate runtime gates |
 
 ## Behavior-level completion adjudication
 
@@ -90,11 +98,13 @@ similar provider/API limits and are disclosed at the affected surface.
 CodeIsland's personal extensions—away approvals and questions, exact-confirmation
 actions, Downloads/Shelf transfer, Tailscale, APNs, Live Activities, Dynamic
 Island, App Intents, and web fallback—are evaluated separately. Their automated
-contracts are green; the installed physical iPhone has now proved pairing,
-foreground stability, authenticated polling, three approval decisions, one
-question continuation, one Reminders add/store/cleanup round trip, and real
-Calendar read access. Cellular, background push/Live Activity, replay, and the
-remaining TCC-backed mutations remain distinct gates.
+contracts are green; the installed current physical build has now proved exact
+build identity, foreground stability, authenticated Sessions, Calendar read,
+attention-only question presentation, explicit answer review, hook
+continuation, and ActivityKit start-to-resolution cleanup. Prior physical proof
+also covers three approvals and one Reminders add/store/cleanup round trip.
+Cellular/Tailscale action, direct Dynamic Island artwork, token-based updates,
+replay, and the remaining TCC-backed mutations remain distinct gates.
 
 ## Architecture invariant
 
