@@ -10,42 +10,50 @@ iPhone acceptance as separate proof states.
 - Mac version correction pull request: `revopsglobal/CodeIsland#45`.
 - Away-host reliability pull request: `revopsglobal/CodeIsland#48`.
 - Release-regression pull request: `revopsglobal/CodeIsland#49`.
-- Current `main`: `2f6456bb1f16d8118b975f982ba6469e6b80647d`.
+- Login-launch reliability pull requests: `revopsglobal/CodeIsland#51` and
+  `revopsglobal/CodeIsland#52`.
+- Current `main`: `bf69f80f64ffbd9115cc433bf7d44854da3ee3a5`.
 - Native iPhone Simulator scheme: 39 passed, 0 failed, 0 skipped, and 0
   runtime warnings.
 - Result bundle: `/tmp/CodeIsland-premium-full-final-20260718-0415.xcresult`.
 - Reproducible visual smoke: eight settled light/dark native renders from
   `scripts/smoke-companion-ui.sh`, including idle, approval, question,
   multiple-attention, Sessions, and Tools states.
-- Mac/Core unit suite after the away-host fix: 483 app tests passed with two
-  intentional skips; 221 core tests passed.
+- Mac/Core unit suite after the final login recovery: 489 app tests passed with
+  two intentional skips; 223 core tests passed.
 - Release build: passed.
 
 ## Mac distribution and installed runtime
 
 - Internal Apple Development build workflow:
-  `revopsglobal/CodeIsland` run `29643405438`.
-- Workflow source: `62f2f8f43496577efcd2268c6c26804ff5c811aa`.
-- Artifact: `CodeIsland-macos-arm64-dmg`, ID `8429339117`.
-- Version/build: `1.0.47`.
+  `revopsglobal/CodeIsland` run `29644344626`.
+- Workflow source: `bf69f80f64ffbd9115cc433bf7d44854da3ee3a5`.
+- Artifact: `CodeIsland-macos-arm64-dmg`, ID `8429617233`.
+- Version/build: `1.0.49`.
 - Downloaded DMG SHA-256:
-  `4b7a893db6512cfeaa36bcf75884a017b6f5e2e0261f194c4e65da8980e1b519`.
+  `ad666a75dff15ac51cae16551602eaab8b13098c128dd8628dd8a77f74ab9982`.
 - Installed app: `/Applications/CodeIsland.app`.
 - Architecture: `arm64`.
 - Bundle identifier: `com.codeisland.app`.
 - Signing authority: `Apple Development: Greg Harned (BD6FD6Q8AS)`.
 - Team identifier: `44JG2Y95CH`.
 - Calendar entitlement: present.
-- Runtime PID after replacement: `67615`, launched from the installed app.
+- Runtime PID after replacement: `80804`, launched from the installed app.
 - Runtime health after replacement: loopback `/health` on
   `127.0.0.1:43891` and private Tailscale `/health` on port `9443` both
-  returned HTTP 200 with `running: true` and `pendingCount: 0`.
+  returned HTTP 200 with `running: true`, `pendingCount: 0`,
+  `hostVersion: 1.0.49`, and `launchAtLoginStatus: enabled`.
 - Reversible prior bundle:
-  `/Users/gregharned/Library/Application Support/CodeIsland/Install Backups/20260718T120149Z/CodeIsland.app`.
+  `/Users/gregharned/Library/Application Support/CodeIsland/Install Backups/20260718T123300Z/CodeIsland.app`.
 - Away-host power proof: with remote access enabled, AC power connected, and
   the MacBook lid open, `pmset -g assertions` attributed a live
-  `PreventUserIdleSystemSleep` assertion to PID `67615` with reason
+  `PreventUserIdleSystemSleep` assertion to PID `80804` with reason
   `CodeIsland remote access is enabled`.
+- Login recovery proof: after stale historical copies were unregistered from
+  LaunchServices without deleting their files, the installed bundle was the
+  sole canonical `com.codeisland.app`. The first 1.0.49 launch recovered
+  ServiceManagement from `notFound` to `enabled`, persisted the explicit
+  preference, and reported no registration error.
 
 The DMG is intentionally not Developer ID notarized. It is a private internal
 build signed with the existing stable Apple Development identity, which

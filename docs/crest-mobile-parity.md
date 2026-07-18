@@ -20,11 +20,11 @@ below.
 
 - Premium source: PR #44, merge
   `8c072442fbe1ee44e5c2db133f920cea534ae83d`.
-- Installed Mac: `1.0.47`, run `29643405438`, artifact `8429339117`, ARM64,
+- Installed Mac: `1.0.49`, run `29644344626`, artifact `8429617233`, ARM64,
   strict signatures valid under Team `44JG2Y95CH`; loopback and Tailscale
-  `/health` both return HTTP 200 with `running: true`. CodeIsland owns a live
-  `PreventUserIdleSystemSleep` assertion while remote access is enabled, on AC
-  power with the MacBook lid open.
+  `/health` both return HTTP 200 with `running: true`, `hostVersion: 1.0.49`,
+  and `launchAtLoginStatus: enabled`. CodeIsland owns a live
+  `PreventUserIdleSystemSleep` assertion while remote access is enabled.
 - Current internal TestFlight: `1.0.0 (20260718112841)`, run `29642614681`,
   Apple `VALID`, group `CodeIsland Internal`, tester state `ready`.
 - Native premium suite: 39 passed, 0 failed, 0 skipped, 0 runtime warnings;
@@ -55,7 +55,7 @@ below.
 | Weather | Physical ZIP fallback proven during the unlocked 1.0.41 run: `61° Clear · Ridgefield, Washington`; Location Services mode remains unverified | Ready implementation: mirrored remote weather and refresh | Physical location-mode, remote refresh, and offline-state runtime tests |
 | Notifications | Partial by deliberate platform boundary: CodeIsland action-required alerts are prioritized, deduped, redacted, and separated; macOS exposes no public cross-app Notification Center history API, so CodeIsland does not read private databases or request Full Disk Access | Physical replacement-build proof: production APNs and ActivityKit push-to-start tokens reached the paired Mac; pending and resolved background pushes each woke the client for authenticated refresh at `06:23:23Z` and `06:25:17Z`. No update token or unlocked visual proof was captured | Prove visible Live Activity/Dynamic Island, per-activity update/end, and stale-push behavior |
 | Claude co-pilot/voice/proposals | Ready implementation: read-only Ask and reviewed Do through authenticated local Claude Code with tools disabled, push-to-talk/continuous speech, visible listening state, bounded user-selected/drop file context, and best-effort screen-share-hidden strip with honest disclosure | Ready implementation: Ask/Do, speech recognition, proposal review, exact confirmation, and deep-linked task/note preparation | Run real Ask and multi-action Do, Mac voice/file context, and physical-iPhone dictation/task creation |
-| AI Coding sessions/approvals/questions | Prior physical proof: 1.0.43 rendered five authenticated sessions, `3 running · no decisions waiting`, with no discovery/loading substitution. Premium 1.0.47 is installed, healthy, and now keeps the private host awake, but cannot be visually accepted while the Mac is locked | Prior physical builds proved pairing, background APNs wakeups, three approval decisions, and one audited question answer. Premium build `20260718112841` is Apple-valid but not yet proven installed/opened because paired client version/build metadata remain absent | Unlock the Mac, install/open the exact TestFlight build through iPhone Mirroring, verify authenticated Sessions and stability, then run replay plus Live Activity and cellular/Tailscale action tests away from the Mac |
+| AI Coding sessions/approvals/questions | Prior physical proof: 1.0.43 rendered five authenticated sessions, `3 running · no decisions waiting`, with no discovery/loading substitution. Premium 1.0.49 is installed, healthy, keeps the private host awake, and is registered to launch at login, but cannot be visually accepted while the Mac is locked | Prior physical builds proved pairing, background APNs wakeups, three approval decisions, and one audited question answer. Premium build `20260718112841` is Apple-valid but not yet proven installed/opened because paired client version/build metadata remain absent | Unlock the Mac, install/open the exact TestFlight build through iPhone Mirroring, verify authenticated Sessions and stability, then run replay plus Live Activity and cellular/Tailscale action tests away from the Mac |
 | GitHub pull requests and CI | Ready: authenticated `gh` PR list/status/deep links | Ready: mirrored list/status/deep links | Runtime refresh/open test from iPhone |
 | Audio device switcher | Physical read proof on 1.0.43: only MacBook Air Microphone and MacBook Air Speakers carry the respective default flags; the remaining real and virtual devices no longer show false defaults. Switching, mute, and exact 0–100 output volume remain physically unverified | Unverified: mirrored device actions, ±10, and native/web volume editor | Run physical device switch, volume update, and expected failure states |
 | Bluetooth devices/connect/disconnect | Unverified: connected/remembered devices, battery, connect/disconnect | Unverified: mirrored devices and confirmed remote actions | Physical accessory connect/disconnect tests |
@@ -244,7 +244,7 @@ tokens, never the tokens themselves. Strict mode exits `2` until the exact
 physical build has registered with the Mac:
 
 ```bash
-EXPECTED_MAC_VERSION=1.0.47 \
+EXPECTED_MAC_VERSION=1.0.49 \
 EXPECTED_CLIENT_VERSION=1.0.0 \
 EXPECTED_CLIENT_BUILD=20260718112841 \
 STRICT=1 \
