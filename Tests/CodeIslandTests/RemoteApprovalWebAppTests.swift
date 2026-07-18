@@ -34,6 +34,14 @@ final class RemoteApprovalWebAppTests: XCTestCase {
         XCTAssertTrue(html.contains("claudeInput.resolve"))
     }
 
+    func testClaudeAskResponseBodyRendersInWebFallback() {
+        let html = RemoteApprovalWebApp.html
+
+        XCTAssertTrue(html.contains(".hub-item-detail"))
+        XCTAssertTrue(html.contains("moduleID==='claude'&&item.detail"))
+        XCTAssertTrue(html.contains("${visibleDetail}"))
+    }
+
     func testFallbackBrandMatchesNativeApp() {
         XCTAssertTrue(RemoteApprovalWebApp.html.contains("<title>CodeIsland</title>"))
         XCTAssertTrue(RemoteApprovalWebApp.html.contains("Your Mac, when it needs you"))

@@ -681,6 +681,17 @@ private struct MacHubModuleCard: View {
                 }
                 Spacer()
             }
+            if module.id == .claude,
+               let detail = item.detail?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !detail.isEmpty {
+                Text(detail)
+                    .font(.system(size: 9, weight: .regular, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.68))
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+                    .accessibilityIdentifier("hub.item.detail.\(module.id.rawValue).\(item.id)")
+            }
             if let progress = item.progress {
                 ProgressView(value: progress).tint(.orange)
             }

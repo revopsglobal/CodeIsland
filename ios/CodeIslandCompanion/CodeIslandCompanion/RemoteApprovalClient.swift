@@ -1048,6 +1048,16 @@ final class RemoteApprovalClient: ObservableObject {
                 id: id,
                 availability: ready,
                 summary: "Your Claude Code subscription · tools disabled",
+                items: [
+                    .init(
+                        id: "latest",
+                        title: "What CodeIsland version is running on my Mac?",
+                        subtitle: "Claude Code · read-only",
+                        detail: "CodeIsland 1.0.49 is running on your Mac.",
+                        symbol: "sparkles",
+                        actions: [.init(id: "copyToDevice", label: "Copy", symbol: "doc.on.doc")]
+                    )
+                ],
                 actions: [
                     .init(id: "ask", label: "Ask", symbol: "questionmark.bubble"),
                     .init(id: "plan", label: "Do", symbol: "checkmark.circle"),

@@ -109,6 +109,7 @@ enum RemoteApprovalWebApp {
         .hub-item { margin-top:8px; padding:9px; border-radius:10px; background:#050806; }
         .hub-item-title { font-size:12px; font-weight:700; overflow-wrap:anywhere; }
         .hub-item-subtitle { margin-top:2px; color:#78847a; font-size:10px; }
+        .hub-item-detail { margin-top:8px; color:#c6cec8; font-size:12px; line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere; }
         .media-item-head { display:flex; align-items:center; gap:9px; }
         .media-art { width:52px; height:52px; flex:0 0 52px; border-radius:11px; object-fit:cover; box-shadow:0 8px 22px #0009,inset 0 0 0 1px #ffffff18; }
         .media-copy { min-width:0; flex:1; }
@@ -419,9 +420,10 @@ enum RemoteApprovalWebApp {
         function renderHubItem(moduleID,item) {
           const artwork=typeof item.artworkDataURL==='string'&&/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(item.artworkDataURL)?item.artworkDataURL:'';
           const position=Number(item.mediaPosition); const duration=Number(item.mediaDuration);
+          const visibleDetail=moduleID==='claude'&&item.detail?`<div class="hub-item-detail">${escapeHTML(item.detail)}</div>`:'';
           const seek=Number.isFinite(position)&&Number.isFinite(duration)&&duration>0
             ? `<input class="media-seek" type="range" min="0" max="${duration}" step="0.1" value="${Math.min(Math.max(position,0),duration)}" data-media-seek="1" data-target="${escapeHTML(item.id)}" aria-label="Playback position"><div class="media-times"><span data-media-current>${playbackTime(position)}</span><span>${playbackTime(duration)}</span></div>`:'';
-          return `<div class="hub-item"><div class="media-item-head">${artwork?`<img class="media-art" src="${escapeHTML(artwork)}" alt="">`:''}<div class="media-copy"><div class="hub-item-title">${escapeHTML(item.title)}</div>${item.subtitle?`<div class="hub-item-subtitle">${escapeHTML(item.subtitle)}</div>`:''}</div></div>${item.progress!==null&&item.progress!==undefined?`<progress value="${Number(item.progress)}" max="1"></progress>`:''}${seek}${renderHubActions(moduleID,item.actions||[],item.id,item.detail||'')}</div>`;
+          return `<div class="hub-item"><div class="media-item-head">${artwork?`<img class="media-art" src="${escapeHTML(artwork)}" alt="">`:''}<div class="media-copy"><div class="hub-item-title">${escapeHTML(item.title)}</div>${item.subtitle?`<div class="hub-item-subtitle">${escapeHTML(item.subtitle)}</div>`:''}</div></div>${visibleDetail}${item.progress!==null&&item.progress!==undefined?`<progress value="${Number(item.progress)}" max="1"></progress>`:''}${seek}${renderHubActions(moduleID,item.actions||[],item.id,item.detail||'')}</div>`;
         }
 
         function playbackTime(seconds) {
