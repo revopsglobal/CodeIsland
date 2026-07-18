@@ -16,6 +16,7 @@ struct PersonalHubMacView: View {
     @State private var preparedAction: PersonalHubPreparedAction?
     @State private var actionMessage: String?
     @State private var showingRackEditor = false
+    @State private var selectedModuleID: PersonalHubModuleID?
     @State private var calendarReferenceDate = Date()
     @State private var calendarSelectedDate = Date()
 
@@ -28,15 +29,15 @@ struct PersonalHubMacView: View {
 
             if let snapshot {
                 HStack {
-                    Text(snapshot.resolvedMode.rawValue.uppercased())
-                        .font(.system(size: 9, weight: .black, design: .monospaced))
+                    Text("\(snapshot.resolvedMode.rawValue.capitalized) tools")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
                         .foregroundStyle(accent)
                     Text(snapshot.serverName)
-                        .font(.system(size: 9, weight: .medium))
+                        .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(.white.opacity(0.34))
                     Spacer()
                     Text(snapshot.generatedAt, style: .time)
-                        .font(.system(size: 8, weight: .medium, design: .monospaced))
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
                         .foregroundStyle(.white.opacity(0.25))
                     Button {
                         toggleDashboard(snapshot)
@@ -80,21 +81,28 @@ struct PersonalHubMacView: View {
                     .padding(.horizontal, 12)
                 }
 
-                ScrollView {
-                    LazyVStack(spacing: 7) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 5) {
                         ForEach(snapshot.modules) { module in
-                            MacHubModuleCard(
-                                module: module,
-                                prepare: prepare,
-                                addText: addText,
-                                selectCalendarDate: selectCalendarDate
-                            )
+                            moduleTab(module)
                         }
                     }
                     .padding(.horizontal, 10)
-                    .padding(.bottom, 10)
                 }
-                .frame(maxHeight: 410)
+
+                if let selectedModule {
+                    ScrollView {
+                        MacHubModuleCard(
+                            module: selectedModule,
+                            prepare: prepare,
+                            addText: addText,
+                            selectCalendarDate: selectCalendarDate
+                        )
+                        .padding(.horizontal, 10)
+                        .padding(.bottom, 10)
+                    }
+                    .frame(maxHeight: 370)
+                }
             }
 
             if let actionMessage {
@@ -149,13 +157,13 @@ struct PersonalHubMacView: View {
                 Button {
                     requestedMode = mode
                 } label: {
-                    Text(mode.rawValue.uppercased())
-                        .font(.system(size: 8, weight: .black, design: .monospaced))
+                    Text(mode.rawValue.capitalized)
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
                         .foregroundStyle(requestedMode == mode ? .black : .white.opacity(0.38))
-                        .frame(maxWidth: .infinity, minHeight: 25)
+                        .frame(maxWidth: .infinity, minHeight: 30)
                         .background(
                             requestedMode == mode ? accent : Color.white.opacity(0.055),
-                            in: RoundedRectangle(cornerRadius: 6)
+                            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
                         )
                 }
                 .buttonStyle(.plain)
@@ -166,12 +174,43 @@ struct PersonalHubMacView: View {
     }
 
     private func refresh() {
-        snapshot = service.snapshot(
+        let updated = service.snapshot(
             appState: appState,
             requestedMode: requestedMode,
             calendarReferenceDate: calendarReferenceDate,
             calendarSelectedDate: calendarSelectedDate
         )
+        snapshot = updated
+        if let selectedModuleID,
+           updated.modules.contains(where: { $0.id == selectedModuleID }) {
+            return
+        }
+        selectedModuleID = updated.modules.first?.id
+    }
+
+    private var selectedModule: PersonalHubModuleSnapshot? {
+        guard let selectedModuleID else { return snapshot?.modules.first }
+        return snapshot?.modules.first(where: { $0.id == selectedModuleID })
+    }
+
+    private func moduleTab(_ module: PersonalHubModuleSnapshot) -> some View {
+        let definition = PersonalHubCatalog.definition(for: module.id)
+        let selected = selectedModuleID == module.id
+        return Button {
+            selectedModuleID = module.id
+        } label: {
+            Label(definition.title, systemImage: definition.symbol)
+                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                .foregroundStyle(selected ? Color.black : Color.white.opacity(0.56))
+                .padding(.horizontal, 10)
+                .frame(minHeight: 32)
+                .background(
+                    selected ? accent : Color.white.opacity(0.055),
+                    in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+                )
+        }
+        .buttonStyle(.plain)
+        .help(definition.title)
     }
 
     private func selectCalendarDate(referenceDate: Date, selectedDate: Date) {

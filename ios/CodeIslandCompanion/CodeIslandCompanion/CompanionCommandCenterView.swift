@@ -95,22 +95,8 @@ struct CompanionCommandCenterView: View {
         .sheet(item: $presentedSheet) { sheet in
             switch sheet {
             case .more:
-                NavigationStack {
-                    ScrollView {
-                        PersonalHubSurface()
-                            .environmentObject(remoteApprovals)
-                            .padding(.horizontal, 12)
-                            .padding(.bottom, 24)
-                    }
-                    .background(Color.ciBackground.ignoresSafeArea())
-                    .navigationTitle("More")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar {
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button("Done") { presentedSheet = nil }
-                        }
-                    }
-                }
+                PersonalHubDirectorySurface(dismiss: { presentedSheet = nil })
+                    .environmentObject(remoteApprovals)
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
                 .accessibilityElement(children: .contain)
@@ -150,10 +136,9 @@ struct CompanionCommandCenterView: View {
         RemoteApprovalSurface()
             .environmentObject(remoteApprovals)
 
-        if remoteApprovals.hasPairingCredential {
+        if remoteApprovals.hasPairingCredential, attentionCount == 0 {
             CompanionTodayTimeline(
                 snapshot: remoteApprovals.hubSnapshot,
-                hasAttention: attentionCount > 0,
                 openSessions: { select(.sessions) },
                 openMore: { presentedSheet = .more }
             )
@@ -187,11 +172,7 @@ private struct CompanionPresenceHeader: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            CompanionMascotView(
-                source: connection.latestState?.source ?? "codex",
-                status: connection.latestState?.status ?? .idle,
-                size: 36
-            )
+            CodeIslandPresenceMark()
             .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -259,6 +240,26 @@ private struct CompanionPresenceHeader: View {
     }
 }
 
+private struct CodeIslandPresenceMark: View {
+    var body: some View {
+        RoundedRectangle(cornerRadius: 13, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [Color(white: 0.08), Color(white: 0.17)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .frame(width: 42, height: 42)
+            .overlay {
+                Image(systemName: "terminal.fill")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.white)
+            }
+        .frame(width: 44, height: 44)
+    }
+}
+
 private struct CompanionActionDock: View {
     let destination: CommandCenterDestination
     let attentionCount: Int
@@ -298,9 +299,12 @@ private struct CompanionActionDock: View {
                 VStack(spacing: 3) {
                     Image(systemName: "plus")
                         .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(Color.black)
+                        .foregroundStyle(attentionCount == 0 ? Color.black : Color.ciForeground.opacity(0.72))
                         .frame(width: 30, height: 30)
-                        .background(Color.orange, in: Circle())
+                        .background(
+                            attentionCount == 0 ? Color.orange : Color.ciForeground.opacity(0.08),
+                            in: Circle()
+                        )
                     Text("Capture")
                         .font(.caption2.weight(.semibold))
                 }
@@ -312,7 +316,7 @@ private struct CompanionActionDock: View {
             .accessibilityIdentifier("companion.capture")
 
             Button(action: more) {
-                dockLabel(title: "More", symbol: "square.grid.2x2", selected: false)
+                dockLabel(title: "Tools", symbol: "square.grid.2x2", selected: false)
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("companion.more")
@@ -345,7 +349,7 @@ private struct CompanionActionDock: View {
 
     private func dockLabel(title: String, symbol: String, selected: Bool) -> some View {
         VStack(spacing: 4) {
-            Image(systemName: selected ? "\(symbol).fill" : symbol)
+            Image(systemName: symbol)
                 .font(.system(size: 16, weight: .semibold))
             Text(title)
                 .font(.caption2.weight(.semibold))
@@ -362,7 +366,6 @@ private struct CompanionActionDock: View {
 
 private struct CompanionTodayTimeline: View {
     let snapshot: PersonalHubSnapshot?
-    let hasAttention: Bool
     let openSessions: () -> Void
     let openMore: () -> Void
 
@@ -410,7 +413,7 @@ private struct CompanionTodayTimeline: View {
                 Text("Today")
                     .font(.largeTitle.weight(.bold))
                     .foregroundStyle(Color.ciForeground)
-                Text(weatherSummary ?? (hasAttention || hasAgentAttention
+                Text(weatherSummary ?? (hasAgentAttention
                     ? "An agent is waiting for your decision."
                     : "Nothing needs you right now."))
                     .font(.subheadline)
@@ -445,7 +448,7 @@ private struct CompanionTodayTimeline: View {
             }
 
             Button(action: openMore) {
-                Label("View all modules", systemImage: "arrow.right")
+                Label("Open Tools", systemImage: "arrow.right")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Color.ciForeground.opacity(0.62))
             }

@@ -155,10 +155,10 @@ final class CodeIslandCompanionUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(capture.frame.height, 44)
         XCTAssertGreaterThanOrEqual(more.frame.height, 44)
         XCTAssertTrue(app.otherElements["companion.now.overview"].exists)
-        XCTAssertFalse(app.otherElements["hub.surface"].exists)
+        XCTAssertFalse(hubSurface(in: app).exists)
 
         more.tap()
-        XCTAssertTrue(app.otherElements["hub.surface"].waitForExistence(timeout: 5))
+        XCTAssertTrue(hubSurface(in: app).waitForExistence(timeout: 5))
         XCTAssertTrue(
             app.descendants(matching: .any)
                 .matching(identifier: "companion.more.sheet").firstMatch.exists
@@ -267,7 +267,7 @@ final class CodeIslandCompanionUITests: XCTestCase {
 
         for expectation in expectations {
             let app = launchHubApp(mode: expectation.mode)
-            XCTAssertTrue(app.otherElements["hub.surface"].waitForExistence(timeout: 8))
+            XCTAssertTrue(hubSurface(in: app).waitForExistence(timeout: 8))
             assertHubModules(expectation.modules, in: app, mode: expectation.mode)
             app.terminate()
         }
@@ -276,8 +276,9 @@ final class CodeIslandCompanionUITests: XCTestCase {
     @MainActor
     func testCalendarMonthNavigatesAndKeepsSelectedDaySurface() throws {
         let app = launchHubApp(mode: "home")
-        XCTAssertTrue(app.otherElements["hub.surface"].waitForExistence(timeout: 8))
+        XCTAssertTrue(hubSurface(in: app).waitForExistence(timeout: 8))
 
+        openHubModule("calendar", in: app)
         let month = findHubElement("hub.calendar.month", in: app)
         XCTAssertTrue(month.exists)
         let title = app.staticTexts["hub.calendar.monthTitle"].firstMatch
@@ -303,10 +304,9 @@ final class CodeIslandCompanionUITests: XCTestCase {
     @MainActor
     func testTaskCreationRequiresReviewAndExplicitExecution() throws {
         let app = launchHubApp(mode: "work")
-        XCTAssertTrue(app.otherElements["hub.surface"].waitForExistence(timeout: 8))
+        XCTAssertTrue(hubSurface(in: app).waitForExistence(timeout: 8))
 
-        let taskModule = findHubElement("hub.module.reminders", in: app)
-        XCTAssertTrue(taskModule.exists)
+        openHubModule("reminders", in: app)
 
         let addTask = app.buttons["Add task"].firstMatch
         XCTAssertTrue(addTask.waitForExistence(timeout: 4))
@@ -333,7 +333,7 @@ final class CodeIslandCompanionUITests: XCTestCase {
     @MainActor
     func testModeRackReorderRequiresReviewAndExplicitExecution() throws {
         let app = launchHubApp(mode: "work")
-        XCTAssertTrue(app.otherElements["hub.surface"].waitForExistence(timeout: 8))
+        XCTAssertTrue(hubSurface(in: app).waitForExistence(timeout: 8))
 
         let edit = app.buttons["hub.rack.edit"].firstMatch
         XCTAssertTrue(edit.waitForExistence(timeout: 4))
@@ -356,9 +356,13 @@ final class CodeIslandCompanionUITests: XCTestCase {
     @MainActor
     func testQuickNoteEntryRequiresReviewAndExplicitExecution() throws {
         let app = launchHubApp(mode: "work")
-        XCTAssertTrue(app.otherElements["hub.surface"].waitForExistence(timeout: 8))
+        XCTAssertTrue(hubSurface(in: app).waitForExistence(timeout: 8))
 
-        let newNote = app.buttons["New Note"].firstMatch
+        app.buttons["Done"].firstMatch.tap()
+        let capture = app.buttons["companion.capture"].firstMatch
+        XCTAssertTrue(capture.waitForExistence(timeout: 4))
+        capture.tap()
+        let newNote = app.buttons["New note"].firstMatch
         XCTAssertTrue(newNote.waitForExistence(timeout: 4))
         newNote.tap()
 
@@ -383,10 +387,8 @@ final class CodeIslandCompanionUITests: XCTestCase {
             mode: "home",
             deepLink: "codeisland://hub/reminders"
         )
-        XCTAssertTrue(app.otherElements["hub.surface"].waitForExistence(timeout: 8))
-        let tasks = findHubElement("hub.module.reminders", in: app)
-        XCTAssertTrue(tasks.exists)
-        XCTAssertEqual(tasks.value as? String, "Opened from link")
+        XCTAssertTrue(app.navigationBars["Tasks"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.otherElements["hub.module.reminders"].waitForExistence(timeout: 5))
     }
 
     @MainActor
@@ -406,10 +408,9 @@ final class CodeIslandCompanionUITests: XCTestCase {
     @MainActor
     func testClaudeDoProposalRequiresReviewAndExplicitExecution() throws {
         let app = launchHubApp(mode: "code")
-        XCTAssertTrue(app.otherElements["hub.surface"].waitForExistence(timeout: 8))
+        XCTAssertTrue(hubSurface(in: app).waitForExistence(timeout: 8))
 
-        let claudeModule = findHubElement("hub.module.claude", in: app)
-        XCTAssertTrue(claudeModule.exists)
+        openHubModule("claude", in: app)
 
         let doButton = app.buttons["Do"].firstMatch
         XCTAssertTrue(doButton.waitForExistence(timeout: 4))
@@ -443,10 +444,9 @@ final class CodeIslandCompanionUITests: XCTestCase {
     @MainActor
     func testCompletedDownloadOpensNativeShareSheet() throws {
         let app = launchHubApp(mode: "code")
-        XCTAssertTrue(app.otherElements["hub.surface"].waitForExistence(timeout: 8))
+        XCTAssertTrue(hubSurface(in: app).waitForExistence(timeout: 8))
 
-        let downloadsModule = findHubElement("hub.module.downloads", in: app)
-        XCTAssertTrue(downloadsModule.exists)
+        openHubModule("downloads", in: app)
 
         let download = app.buttons["hub.action.downloads.downloadToDevice"].firstMatch
         for _ in 0..<4 where !download.exists {
@@ -464,10 +464,9 @@ final class CodeIslandCompanionUITests: XCTestCase {
     @MainActor
     func testShelfFileOpensNativeShareSheet() throws {
         let app = launchHubApp(mode: "code")
-        XCTAssertTrue(app.otherElements["hub.surface"].waitForExistence(timeout: 8))
+        XCTAssertTrue(hubSurface(in: app).waitForExistence(timeout: 8))
 
-        let shelfModule = findHubElement("hub.module.shelf", in: app)
-        XCTAssertTrue(shelfModule.exists)
+        openHubModule("shelf", in: app)
         let download = app.buttons["hub.action.shelf.downloadToDevice"].firstMatch
         for _ in 0..<4 where !download.exists {
             app.swipeUp()
@@ -484,10 +483,9 @@ final class CodeIslandCompanionUITests: XCTestCase {
     @MainActor
     func testNowPlayingScrubberShowsExactSeekConfirmation() throws {
         let app = launchHubApp(mode: "home")
-        XCTAssertTrue(app.otherElements["hub.surface"].waitForExistence(timeout: 8))
+        XCTAssertTrue(hubSurface(in: app).waitForExistence(timeout: 8))
 
-        let nowPlaying = findHubElement("hub.module.nowPlaying", in: app)
-        XCTAssertTrue(nowPlaying.exists)
+        openHubModule("nowPlaying", in: app)
         let slider = app.sliders["hub.seek.nowPlaying"].firstMatch
         XCTAssertTrue(slider.waitForExistence(timeout: 5))
         slider.adjust(toNormalizedSliderPosition: 0.7)
@@ -504,10 +502,9 @@ final class CodeIslandCompanionUITests: XCTestCase {
     @MainActor
     func testCameraActionOpensPrivateNativePreview() throws {
         let app = launchHubApp(mode: "work")
-        XCTAssertTrue(app.otherElements["hub.surface"].waitForExistence(timeout: 8))
+        XCTAssertTrue(hubSurface(in: app).waitForExistence(timeout: 8))
 
-        let cameraModule = findHubElement("hub.module.camera", in: app)
-        XCTAssertTrue(cameraModule.exists)
+        openHubModule("camera", in: app)
 
         addUIInterruptionMonitor(withDescription: "Camera permission") { alert in
             let allow = alert.buttons["Allow"]
@@ -558,7 +555,7 @@ final class CodeIslandCompanionUITests: XCTestCase {
             app.launchArguments += ["-CodeIslandCompanionMockDeepLink", deepLink]
         }
         app.launch()
-        let hub = app.otherElements["hub.surface"].firstMatch
+        let hub = hubSurface(in: app)
         if !hub.waitForExistence(timeout: 2) {
             let more = app.buttons["companion.more"]
             if more.waitForExistence(timeout: 4) {
@@ -590,6 +587,17 @@ final class CodeIslandCompanionUITests: XCTestCase {
     }
 
     @MainActor
+    private func openHubModule(_ moduleID: String, in app: XCUIApplication) {
+        let module = findHubElement("hub.module.\(moduleID)", in: app)
+        XCTAssertTrue(module.exists, "Missing \(moduleID) tool row")
+        module.tap()
+        XCTAssertTrue(
+            app.otherElements["hub.module.\(moduleID)"].waitForExistence(timeout: 5),
+            "\(moduleID) detail did not open"
+        )
+    }
+
+    @MainActor
     private func findHubElement(_ identifier: String, in app: XCUIApplication) -> XCUIElement {
         let query = app.descendants(matching: .any).matching(identifier: identifier)
         let element = query.firstMatch
@@ -598,7 +606,7 @@ final class CodeIslandCompanionUITests: XCTestCase {
         }
 
         let companionScroll = app.scrollViews["companion.scroll"].firstMatch
-        let hubSurface = app.otherElements["hub.surface"].firstMatch
+        let hubSurface = hubSurface(in: app)
         for _ in 0..<10 where !element.exists {
             if companionScroll.exists {
                 companionScroll.swipeUp()
@@ -609,5 +617,12 @@ final class CodeIslandCompanionUITests: XCTestCase {
             }
         }
         return element
+    }
+
+    @MainActor
+    private func hubSurface(in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any)
+            .matching(identifier: "hub.surface")
+            .firstMatch
     }
 }

@@ -448,13 +448,13 @@ enum HomePanelSelection: String, CaseIterable, Identifiable {
 struct GlancesToggleRow: View {
     @Binding var selection: HomePanelSelection
 
-    private static let accent = Color(red: 0.3, green: 0.85, blue: 0.4)
+    private static let accent = Color.orange
 
     var body: some View {
         HStack(spacing: 1) {
-            tab(label: "NOW", selection: .sessions)
-            tab(label: "TODAY", selection: .glances)
-            tab(label: "TOOLS", selection: .hub)
+            tab(label: "Now", selection: .sessions)
+            tab(label: "Today", selection: .glances)
+            tab(label: "Tools", selection: .hub)
             Spacer()
         }
         .padding(.horizontal, 12)
@@ -467,12 +467,14 @@ struct GlancesToggleRow: View {
             withAnimation(.easeInOut(duration: 0.15)) { selection = target }
         } label: {
             Text(label)
-                .font(.system(size: 10, weight: .semibold, design: .rounded))
-                .tracking(0.4)
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
                 .foregroundStyle(selection == target ? Self.accent : .white.opacity(0.3))
                 .padding(.horizontal, 10)
-                .frame(minHeight: 28)
-                .background(Rectangle().fill(selection == target ? Color.white.opacity(0.1) : .clear))
+                .frame(minHeight: 32)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(selection == target ? Self.accent.opacity(0.14) : .clear)
+                )
         }
         .buttonStyle(.plain)
     }

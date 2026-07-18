@@ -162,7 +162,7 @@ private struct RemoteQuestionCard: View {
             HStack(spacing: 10) {
                 Label("Decision needed", systemImage: "questionmark.bubble.fill")
                     .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(.orange)
                 Spacer()
                 Text(question.createdAt, style: .relative)
                     .font(.caption)
@@ -192,7 +192,7 @@ private struct RemoteQuestionCard: View {
                         if let header = prompt.header, !header.isEmpty {
                             Text(header)
                                 .font(.caption.weight(.semibold))
-                                .foregroundStyle(.blue)
+                                .foregroundStyle(.orange)
                         }
                         Text(prompt.question)
                             .font(.title3.weight(.bold))
@@ -214,7 +214,7 @@ private struct RemoteQuestionCard: View {
                                     Image(systemName: isSelected(option, for: prompt)
                                           ? (prompt.allowsMultipleSelection ? "checkmark.square.fill" : "largecircle.fill.circle")
                                           : (prompt.allowsMultipleSelection ? "square" : "circle"))
-                                        .foregroundStyle(isSelected(option, for: prompt) ? Color.blue : Color.ciForeground.opacity(0.38))
+                                        .foregroundStyle(isSelected(option, for: prompt) ? Color.orange : Color.ciForeground.opacity(0.38))
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(option)
                                             .font(.system(size: 13, weight: .bold))
@@ -230,7 +230,7 @@ private struct RemoteQuestionCard: View {
                                 .padding(12)
                                 .background(
                                     isSelected(option, for: prompt)
-                                        ? Color.blue.opacity(0.12)
+                                        ? Color.orange.opacity(0.12)
                                         : Color.ciForeground.opacity(0.045),
                                     in: RoundedRectangle(cornerRadius: 14, style: .continuous)
                                 )
@@ -256,14 +256,14 @@ private struct RemoteQuestionCard: View {
                         .frame(maxWidth: .infinity, minHeight: 48)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(.blue)
+                .tint(.orange)
                 .disabled(!canSubmit)
             }
         }
         .padding(20)
         .background(
             LinearGradient(
-                colors: [Color.blue.opacity(0.10), Color.ciSurface],
+                colors: [Color.orange.opacity(0.10), Color.ciSurface],
                 startPoint: .topLeading,
                 endPoint: .center
             ),
@@ -271,11 +271,11 @@ private struct RemoteQuestionCard: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 28, style: .continuous).stroke(
-                client.highlightedQuestionID == question.id ? Color.blue.opacity(0.70) : Color.blue.opacity(0.16),
+                client.highlightedQuestionID == question.id ? Color.orange.opacity(0.70) : Color.orange.opacity(0.16),
                 lineWidth: client.highlightedQuestionID == question.id ? 1.5 : 0.5
             )
         )
-        .shadow(color: Color.blue.opacity(0.08), radius: 24, y: 12)
+        .shadow(color: Color.orange.opacity(0.08), radius: 24, y: 12)
         .confirmationDialog(
             "Send this answer to the exact waiting agent request?",
             isPresented: $confirming
@@ -389,7 +389,7 @@ private struct RemotePairingCard: View {
                 .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(.black)
                 .frame(maxWidth: .infinity, minHeight: 48)
-                .background(Color(red: 0.3, green: 0.85, blue: 0.4), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(Color.orange, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
             .buttonStyle(.plain)
             .disabled(code.count != 6 || isConnecting)
@@ -428,7 +428,7 @@ private struct RemoteOfflineCard: View {
             HStack(spacing: 8) {
                 Button("Retry") { Task { await client.refresh() } }
                     .buttonStyle(.borderedProminent)
-                    .tint(Color(red: 0.3, green: 0.85, blue: 0.4))
+                    .tint(.orange)
                 Button("Pair again", role: .destructive) { client.unpair() }
                     .buttonStyle(.bordered)
             }
@@ -569,7 +569,7 @@ private struct RemoteApprovalCard: View {
         if decision == .approve {
             actionButton(title, icon: icon, decision: decision)
                 .buttonStyle(.borderedProminent)
-                .tint(.green)
+                .tint(.orange)
                 .accessibilityIdentifier("companion.remote.\(decision.rawValue).\(approval.id)")
         } else {
             actionButton(title, icon: icon, decision: decision)

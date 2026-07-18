@@ -2,7 +2,7 @@ import Foundation
 
 /// The four surfaces shared by the Mac notch, iPhone app, and private web app.
 /// `auto` is a requested mode; snapshots always include the concrete resolved mode.
-public enum PersonalHubMode: String, Codable, CaseIterable, Identifiable, Sendable {
+public enum PersonalHubMode: String, Codable, CaseIterable, Identifiable, Sendable, Hashable {
     case auto
     case home
     case work
@@ -15,7 +15,7 @@ public enum PersonalHubMode: String, Codable, CaseIterable, Identifiable, Sendab
 /// asked CodeIsland to carry. Pomodoro/focus timers are intentionally excluded.
 /// Keeping this in CodeIslandCore prevents the Mac and iPhone from silently
 /// drifting into different products.
-public enum PersonalHubModuleID: String, Codable, CaseIterable, Identifiable, Sendable {
+public enum PersonalHubModuleID: String, Codable, CaseIterable, Identifiable, Sendable, Hashable {
     // Crest 4.9 catalog
     case nowPlaying
     case shelf
