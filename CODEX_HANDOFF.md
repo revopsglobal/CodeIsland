@@ -41,7 +41,7 @@ This section supersedes older build/pairing statements later in the document.
   all-builds `CodeIsland Internal` group. Do not call the label physically
   accepted until the final replacement build is installed and checked on
   Greg's iPhone.
-- Fresh verification on the current follow-up source: 479 Mac app tests passed
+- Fresh verification on the current follow-up source: 480 Mac app tests passed
   with two intentional skips on the clean rerun; 219 core tests passed; the
   production Swift build passed; and the full iPhone scheme passed 7 unit plus
   25 UI tests with zero failures.
@@ -64,6 +64,26 @@ This section supersedes older build/pairing statements later in the document.
   the physical phone.
 - The TestFlight workflow now gives Apple 60 minutes to index a normal upload
   and preserves the signed IPA artifact even when the processing check fails.
+- Live unlocked inspection of Mac `1.0.41` exposed two provider-truth defects:
+  Spotify reported its track duration in milliseconds while playback position
+  was seconds, and the audio parser treated every listed input/output as the
+  default device. PR #33 merged the Spotify normalization as
+  `bca730bd9ac47f7ab9cb6e5a4352b6fab15f2d9b`; PR #34 merged the real
+  `coreaudio_default_audio_input_device` /
+  `coreaudio_default_audio_output_device` parsing as
+  `265cc544d20a7144c3cfe1cd340a2f10748ab267`.
+- Final signed Mac `1.0.43` from run `29633277978`, artifact `8426279211`, is
+  installed from that PR #34 source. Its DMG SHA-256 is
+  `e0369fbfd51c939b6b8e8e8afe7fa91a447e64a825b638a9885ec3c40a219b20`;
+  mounted-image and installed-app strict signature checks passed with Team
+  `44JG2Y95CH`, CDHash `78ef64fc758f0bebed52066a88eaf80c9bbad9dd`.
+  Local and Tailscale health both returned `running: true`, and the physical
+  iPhone pairing plus production APNs token survived this second replacement.
+  The exact 19-test remote-security selection passed locally; its first CI
+  attempt stopped transiently with signal 5 immediately after one passing
+  test, and the clean rerun of the same workflow passed every gate and packaged
+  the DMG. Post-install visual reinspection of the two provider fixes is still
+  pending because macOS locked before that check.
 - The previous installed build exposed one more truthful-state defect: Sessions could
   show nearby `Waiting for Mac` despite an authenticated Tailscale connection.
   PR #31 fetches the Code session rack independently and uses
@@ -89,14 +109,14 @@ out of scope.
   through PR #20. The completion implementation source is
   `2f7a6b1bb66e14baad870d45fd0767553f816968`; PR #24 added the Apple-required
   App Intent metadata correction and release guard. Current `main` is
-  `61310ee2d20c651221ee6ef9a3ef823bb7bb0558`.
-- Signed macOS `1.0.41` is installed at
+  `265cc544d20a7144c3cfe1cd340a2f10748ab267`.
+- Signed macOS `1.0.43` is installed at
   `/Applications/CodeIsland.app`, running as Team `44JG2Y95CH`, CDHash
-  `3922e9616d0ec54d7a590331325ab254197d29e2`.
+  `78ef64fc758f0bebed52066a88eaf80c9bbad9dd`.
 - The exact DMG is
-  `/Users/gregharned/Downloads/CodeIsland-1.0.41-run-29632458432/CodeIsland.dmg`,
+  `/Users/gregharned/Downloads/CodeIsland-1.0.43-run-29633277978/CodeIsland.dmg`,
   SHA-256
-  `8d33b2c721ec0a13be3878f3e46d54d1ffaf7d61bec730db21b208882a542ecb`.
+  `e0369fbfd51c939b6b8e8e8afe7fa91a447e64a825b638a9885ec3c40a219b20`.
 - iOS `1.0.0 (20260718053347)` is Apple `VALID`, audience
   `APP_STORE_ELIGIBLE`, and available to the all-builds internal group
   `CodeIsland Internal` in TestFlight.
@@ -106,7 +126,7 @@ out of scope.
   `29591716380`, tester receipt artifact `8411326331`, invitation
   `9679ce07-ac35-4b29-b007-461e0b418801`.
 - Mac local and Tailscale `/health` both returned `running: true` after the
-  1.0.39 install.
+  1.0.43 install.
   The Tailscale root returned the expected security headers and an
   unauthenticated Downloads-file request returned `401`.
 
@@ -138,13 +158,16 @@ single-user setup rather than scale.
 ### macOS
 
 - Workflow: `Build macOS ARM DMG`
-- Run: `29632458432`
-- Artifact: `8425985562` (`CodeIsland-macos-arm64-dmg`)
-- Version: `1.0.41`
-- Source SHA: `61310ee2d20c651221ee6ef9a3ef823bb7bb0558`
+- Run: `29633277978`
+- Artifact: `8426279211` (`CodeIsland-macos-arm64-dmg`)
+- Version: `1.0.43`
+- Source SHA: `265cc544d20a7144c3cfe1cd340a2f10748ab267`
 - Signing: Apple Development, Team `44JG2Y95CH`
+- DMG SHA-256:
+  `e0369fbfd51c939b6b8e8e8afe7fa91a447e64a825b638a9885ec3c40a219b20`
+- Installed CDHash: `78ef64fc758f0bebed52066a88eaf80c9bbad9dd`
 - Previous installed app backup:
-  `/Users/gregharned/Downloads/CodeIsland-app-backups/CodeIsland-1.0.40-pre-1.0.41.app`
+  `/Users/gregharned/Downloads/CodeIsland-app-backups/CodeIsland-1.0.41-pre-1.0.43.app`
 
 ### iOS / TestFlight
 
@@ -166,9 +189,11 @@ single-user setup rather than scale.
 - Fresh invitation receipt: run `29591716380`, artifact `8411326331`,
   invitation `9679ce07-ac35-4b29-b007-461e0b418801`
 
-The installed Mac build comes from the completion source SHA above. The current
-Apple-VALID TestFlight build includes that completion source plus the App Intent
-metadata correction and pre-upload validation merged through PR #24.
+The installed Mac build contains the completion source plus the Mac-only
+Spotify-duration and audio-default corrections in PRs #33 and #34. The current
+Apple-VALID TestFlight build remains compatible and comes from PR #31; the two
+new provider corrections execute on the Mac host and do not require a new iOS
+binary.
 
 ## Implemented product surface
 
@@ -215,7 +240,7 @@ physical phone. Do not turn implementation presence into a live claim.
 
 ## Verification already green
 
-- Full current-head target-isolated Swift run: 479 app tests with two intentional skips and
+- Full current-head target-isolated Swift run: 480 app tests with two intentional skips and
   zero failures on the clean rerun, plus 219 core tests with zero failures.
 - Release Mac build passed. Existing Swift 6 migration/deprecation warnings are
   non-fatal and should be retired separately.
