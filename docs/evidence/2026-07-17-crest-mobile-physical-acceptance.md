@@ -3,6 +3,63 @@
 This receipt separates automated, signed-delivery, and physical-device proof.
 It must not be read as blanket acceptance of every Crest/mobile module.
 
+## Mac 1.0.53 and TestFlight 20260718212803 physical acceptance
+
+PR #61 merged Live Activity update-token recovery as
+`24c2c16d9cc41546db88d5ca8bcc0fa1a182b208`. PR #62 advanced the Mac bundle
+to `1.0.53` and merged as
+`69a7a6ff7d6040dc338b5ee7d59b740268d2d4c3`.
+
+TestFlight run `29661636076` built and uploaded `1.0.0
+(20260718212803)` from PR #61's exact merge. Apple reported `VALID`, audience
+`APP_STORE_ELIGIBLE`, and all-build access for `CodeIsland Internal`; the
+tester receipt remained `INSTALLED` for `gregharned@gmail.com`. Signed IPA
+artifact `8434523952` was downloaded to
+`/Users/gregharned/Downloads/CodeIsland-TestFlight-20260718212803-run-29661636076/CodeIslandCompanion.ipa`
+and has SHA-256
+`af0e7bfa56b99a60aa5e31c1d35e55b2d593f82bb8530653355cc593c181bfbf`.
+
+Signed Mac run `29661855725` built `1.0.53` from PR #62's exact merge. Its DMG
+is
+`/Users/gregharned/Downloads/CodeIsland-1.0.53-run-29661855725/CodeIsland.dmg`
+with SHA-256
+`08eca54e453e5cd92f247e359d9de12ea58f14b2ea61d17bd92ff5a5fb31026c`.
+The installed ARM64 `/Applications/CodeIsland.app` passes strict signature
+verification under Team `44JG2Y95CH`, has CDHash
+`d9ddede51874623aab8e7213dbc5ae880125ccbd`, and reports version/build
+`1.0.53`. Loopback and Tailscale health both return HTTP 200 with
+`running: true` and no pending work.
+
+The physical iPhone installed and opened exact TestFlight build
+`20260718212803`. Device `afba2915-b0a3-456f-a5f2-265bf7e8a64a` preserved its
+pairing, production APNs token, and ActivityKit push-to-start token. Strict
+`scripts/report-physical-acceptance.sh` passed the Mac version, signature,
+delivery health, and exact physical-build gates together.
+
+Three foreground captures at `2026-07-18T23:09:06Z`, `23:09:14Z`, and
+`23:09:21Z` kept the native structure stable. Only the expected live session
+label changed between `Processing` and `Running`; the former four-second
+full-surface flash did not recur.
+
+A real hook-socket question rendered as a privacy-bounded decision card on the
+physical iPhone, required explicit review, returned exact answer `Approve`, and
+drained with zero pending work. A second request proved the full ActivityKit
+token lifecycle. Request `6ce1e9a8-e928-451d-9571-d10751ee017a` registered a
+request-scoped per-activity update token while `activeActivityCount = 1`.
+After the reviewed answer, the physical client reported `state = resolved`,
+`activeActivityCount = 0`, and no active request IDs; the Mac then pruned that
+exact terminal request's update token. This closes push-to-start, update-token
+registration, reviewed answer, remote resolution, and terminal cleanup on the
+current signed pair.
+
+Direct compact/expanded Dynamic Island artwork was visually proven earlier on
+the physical phone, but the simultaneous Instacart Live Activity prevented a
+clean current-build expanded-artwork capture during this pass. The physical
+cellular-only Tailscale action remains separate because changing iPhone Wi-Fi
+requires explicit action-time authorization. Accessory, audio, camera/mic,
+teleprompter, multi-display window, and remaining task/note lifecycle rows also
+remain separate physical gates; they are not implied by this receipt.
+
 ## Final 1.0.52 host, current TestFlight, and authenticated web acceptance
 
 PR #58 fixed two failures discovered against the real paired web service:

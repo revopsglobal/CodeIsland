@@ -40,10 +40,12 @@ controls, and Mac Tools renders one selected module instead of an equal-weight
 card stack. The rejected beige cast and repeated green ready indicators are
 removed in favor of neutral semantic surfaces and one signal accent.
 
-It has **not reached physical end-to-end completion**. Automated and Simulator
-proof cannot substitute for the replacement TestFlight build registering from
-Greg's iPhone, or for real Calendar, Reminders, Join, Live Activity, Dynamic
-Island, background push, and cellular Tailscale acceptance.
+It has **not reached blanket physical end-to-end completion**. The current
+TestFlight build is now installed and registered; real Calendar read,
+Reminders/Notes writes, reviewed question continuation, production APNs,
+ActivityKit push-to-start, request-scoped update-token registration, terminal
+cleanup, and stable foreground rendering are physically proven. Cellular
+Tailscale and the named accessory/TCC mutation rows remain separate gates.
 
 ## Parity matrix
 
@@ -54,10 +56,10 @@ Island, background push, and cellular Tailscale acceptance.
 | Calendar agenda/month/CRUD/Join | Implemented | Implemented with trusted Join | Current Calendar permission plus real CRUD/Join run pending |
 | Tasks, lists, completion, notes, quick jot | Implemented | Implemented with reviewed writes | Replacement-build real task/note round trip pending |
 | Shelf, clipboard, capture, downloads | Implemented | Authenticated transfer/share/copy/remove | Cellular Tailscale file round trip pending |
-| Agent sessions, approvals, questions | Implemented | Exact, single-use remote actions | Replacement-build physical approval/question replay pending |
+| Agent sessions, approvals, questions | Implemented | Exact, single-use remote actions | Current-build physical question review/answer passed; cellular approval and replay remain |
 | System, weather, GitHub, audio, Bluetooth, battery, toggles | Implemented | Mirrored/confirmed host actions | Accessory, audio, GitHub, location, and toggle runtime pending |
 | Camera/mic preflight, teleprompter, window snapping | Implemented | Useful remote/native equivalents | Physical permissions and multi-display/window runs pending |
-| Push, Live Activity, Dynamic Island, App Intents | Host and APNs path implemented | Native extension and lifecycle implemented | APNs callback is proven; visible physical lifecycle pending |
+| Push, Live Activity, Dynamic Island, App Intents | Host and APNs path implemented | Native extension and lifecycle implemented | Physical push-to-start, update-token registration, reviewed answer, resolution, and cleanup passed; clean current-build expanded artwork remains |
 | Private web fallback | Implemented | Responsive Tailscale path | Physical mobile-browser actions pending |
 
 The full feature-by-feature proof ledger remains in
