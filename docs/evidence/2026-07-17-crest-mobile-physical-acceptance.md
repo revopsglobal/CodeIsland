@@ -82,11 +82,14 @@ and widget. The app is signed for production APNs, declares
 Tester receipt artifact `8425940062` records `gregharned@gmail.com` as `ready`
 in `CodeIsland Internal` at `2026-07-18T05:33:36Z`.
 
-This replacement build is Apple-valid and available, but it is not yet
-installed on Greg's physical iPhone. iPhone Mirroring is currently locked and
-requires Greg's Touch ID or Mac login password; neither can be supplied by an
-unattended agent. The older physical build therefore remains the source of the
-completed iPhone proof above.
+This replacement build is now installed/opened on Greg's physical iPhone. At
+`2026-07-18T06:14:00Z` the existing device
+`afba2915-b0a3-456f-a5f2-265bf7e8a64a` authenticated to the Mac and registered
+an ActivityKit push-to-start token in addition to its production APNs token.
+That registration code exists only in PR #31, so it is evidence for the final
+build rather than the older physical build. iPhone Mirroring and the Mac are
+currently locked, so this does not yet prove the corrected Sessions rendering,
+background delivery, or visible Live Activity/Dynamic Island state.
 
 ## Latest connection-status correction
 
@@ -121,8 +124,9 @@ path did not prove a Dynamic Island start because `simctl push` did not provide
 the required `liveactivity` APNs headers; the physical-device/APNs run remains
 the acceptance surface for that claim.
 
-The fresh TestFlight build from this source is a signed-delivery proof until it
-is installed and visually accepted on the physical phone.
+The fresh TestFlight build from this source now has physical install/open,
+authenticated-heartbeat, production APNs, and ActivityKit push-to-start token
+proof. Visual acceptance remains separate.
 
 The installed build also exposed a separate Sessions-tab truth bug: while the
 Tailscale client was authenticated, the tab could still render the nearby
@@ -130,15 +134,15 @@ Bluetooth `Waiting for Mac` discovery card. The follow-up change makes Sessions
 use its own authenticated Code-rack snapshot, reserves nearby discovery for an
 unpaired phone, registers ActivityKit push-to-start and update tokens, starts a
 privacy-redacted Live Activity remotely only for approvals/questions, and sends
-an ActivityKit end on resolution. Its regression tests are green locally; it is
-not a physical-device claim until the replacement Mac and TestFlight builds are
-installed together.
+an ActivityKit end on resolution. Its regression tests are green locally. The
+replacement Mac and TestFlight builds are installed together and the new token
+registration is physical; the Sessions and Dynamic Island UI states are not
+yet visually accepted.
 
 ## Still requires physical proof
 
-- update the physical iPhone from TestFlight to build `20260718053347`, confirm
-  the authenticated Mac name and Sessions surface, and recheck foreground
-  stability;
+- unlock the physical iPhone surface, confirm the authenticated Mac name and
+  Sessions surface on build `20260718053347`, and recheck foreground stability;
 - exact-request replay rejection on the phone (the real question answer is
   proven above);
 - background APNs delivery, resolved cleanup, Live Activity, and Dynamic Island;
