@@ -320,6 +320,7 @@ jobs:
           test -n "$(/usr/libexec/PlistBuddy -c 'Print :NSSpeechRecognitionUsageDescription' "$APP/Info.plist")"
           BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")"
           test -n "$BUNDLE_ID"
+          scripts/test-validate-app-intent-metadata.sh
           scripts/validate-app-intent-metadata.sh ios/CodeIslandCompanion "$APP"
           echo "BUNDLE_ID=$BUNDLE_ID" >> "$GITHUB_ENV"
           echo "Archived bundle identifier: $BUNDLE_ID"
