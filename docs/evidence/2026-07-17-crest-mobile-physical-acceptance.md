@@ -88,8 +88,21 @@ This replacement build is now installed/opened on Greg's physical iPhone. At
 an ActivityKit push-to-start token in addition to its production APNs token.
 That registration code exists only in PR #31, so it is evidence for the final
 build rather than the older physical build. iPhone Mirroring and the Mac are
-currently locked, so this does not yet prove the corrected Sessions rendering,
-background delivery, or visible Live Activity/Dynamic Island state.
+currently locked, so this does not yet prove the corrected Sessions rendering
+or visible Live Activity/Dynamic Island state.
+
+The background delivery gate was then narrowed further without unlocking the
+devices. A temporary, clearly labeled `AskUserQuestion` acceptance probe was
+introduced through the real hook socket after the phone had been idle for more
+than seven minutes. The paired-device heartbeat advanced at
+`2026-07-18T06:23:23Z` immediately after pending attention, proving the physical
+client woke and authenticated to refresh details. The unanswered socket was
+then cancelled; the host drained the question and sent resolved attention, and
+the phone authenticated again at `2026-07-18T06:25:17Z`. The probe ran no
+command and left no pending action. This proves pending/resolved background
+APNs wake-and-refresh behavior. The host received no per-activity update token,
+and the locked screen could not be observed, so Live Activity creation,
+Dynamic Island visibility, and token-based remote end remain unproven.
 
 ## Latest connection-status correction
 
@@ -145,7 +158,9 @@ yet visually accepted.
   Sessions surface on build `20260718053347`, and recheck foreground stability;
 - exact-request replay rejection on the phone (the real question answer is
   proven above);
-- background APNs delivery, resolved cleanup, Live Activity, and Dynamic Island;
+- visible Live Activity/Dynamic Island creation, per-activity update-token
+  registration, and token-based remote end (pending/resolved APNs wake-and-
+  refresh is proven above);
 - Wi-Fi-off cellular/Tailscale approval, task creation, Calendar read, and
   private web fallback while the Mac is locked (Wi-Fi task creation and
   Calendar read are proven above);
