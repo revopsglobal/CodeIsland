@@ -13,6 +13,42 @@ Sources used for the baseline:
 - <https://crestnotch.app/#modes>
 - <https://crestnotch.app/changelog>
 
+## Final acceptance delta — 2026-07-18
+
+This delta supersedes all older current-build statements below.
+
+- Final source: PR #58 merge
+  `5f616bd6926894389d4309aa0e2e3c0f4a2e7e07` fixes web attribute metadata
+  and Calendar EventKit targeting; PR #59 merge
+  `4449955791a91ac17c16f9a9c58e6452778a5a8d` prevents delayed pending Live
+  Activity receipts from replacing a terminal summary.
+- Installed Mac: `1.0.52`, run `29658378890`, artifact `8433603147`, DMG
+  SHA-256
+  `60945033ddbfe84507c2dfb4c0436c97617c77131318ac2fbb53dbc1c898e02c`,
+  ARM64, Team `44JG2Y95CH`, CDHash
+  `c890f8c2fc11bcec9819019365f778ead3862dc4`. Local and Tailscale health are
+  HTTP 200 with zero pending work and Launch at Login enabled.
+- Physical iPhone: TestFlight `1.0.0 (20260718183055)` is installed and
+  registered from device `afba2915-b0a3-456f-a5f2-265bf7e8a64a` with
+  production APNs and ActivityKit push-to-start tokens. Strict delivery and
+  physical-build acceptance passes against Mac `1.0.52`.
+- Final automated proof: `493` app tests passed with two intentional opt-in
+  skips, `223` core tests passed, and the production ARM64 build passed.
+- Physical current-build proof: Claude Ask rendered the returned answer body;
+  the foreground remained stable over nine seconds; ActivityKit request
+  `93aa1d8a-2527-4fd1-bb14-b362cf203852` moved from active to resolved and
+  dismissed with zero active activities; no work remained pending.
+- Authenticated private web proof: a live headless browser client rendered real
+  mode racks over the Tailscale endpoint; confirmed System refresh passed; an
+  exact 1,401,875-byte Downloads transfer matched SHA-256
+  `7195bd5c9ad10c43760f135dafdb68b3686034f6e0caacd241c48f283a471664`;
+  Calendar add, edit, trusted one-click Join, and delete passed against the real
+  store. All temporary Calendar data is removed and the count is back to
+  `40 upcoming`.
+- Still separate physical gates: cellular-only Tailscale action, directly
+  visible Dynamic Island/Lock Screen artwork, per-activity update-token
+  delivery, and the remaining accessory/TCC mutation rows in the matrix.
+
 ## Current premium delivery delta — 2026-07-18
 
 This delta supersedes older build numbers in the historical receipt sections
@@ -80,7 +116,7 @@ below.
 | Auto, Home, Work, Code modes | Ready implementation: shared catalog, automatic/manual context, versioned per-mode pin/order persistence, drag editing, dashboard toggle, and local-day progress | Ready implementation: shared modes, native reorder/pin editing, dashboard, deep links, and confirmed remote persistence | Capture native automatic-switch, edit, restart, and cross-device persistence evidence |
 | Now Playing, queue, lyrics, controls | Physical Spotify read proof on 1.0.43: `Sound of Horns`, progress `1:27`, duration `2:21`, artwork/provider metadata, and the disclosed queue limitation rendered correctly. Apple Music, transport, scrub, seek, and lyrics remain unverified | Ready implementation: artwork, scrubber, mirrored host controls, and exact-confirmation seek | Test Apple Music plus real transport/scrub/seek/lyrics on Mac and iPhone; Spotify does not expose queue data through macOS automation |
 | Shelf, clipboard history, file handoff | Ready implementation: guarded clipboard/file history, drag/drop and picker ingest, forward-only automatic screenshot capture, user-selected still capture and recording, reveal/copy/remove, and private storage | Ready implementation: authenticated file download/share plus copy/remove and the same 100 MB/path-confinement rules | Run real Mac capture/drop plus iPhone/web file round trips and permission-denial cases |
-| Calendar two-week agenda, CRUD, Join | Physical read proven: the signed Mac host returned Greg's real month, selected-day events, and `40 upcoming`; CRUD, recurrence, and Join remain unverified | Physical read proven through the paired iPhone; CRUD and trusted Join remain implementation-only | Run dedicated real event add/edit/delete, recurrence, and one-click Join acceptance |
+| Calendar two-week agenda, CRUD, Join | Physical read proven from Greg's real store; live authenticated browser automation through Tailscale passed add/edit/delete and trusted one-click Join against the signed Mac host, with exact confirmation and full cleanup | Physical read proven through the paired iPhone; native-iPhone CRUD, recurrence, and physical-iPhone browser use remain separate | Run native-iPhone recurrence/CRUD and the physical browser path if parity requires them rather than the live web service proof |
 | Tasks/lists/due dates/reorder/archive | Physical partial: a task created on iPhone appeared in Apple's real Mac Reminders store and was cleaned up; list/reorder/archive/restore remain unverified | Physical partial: New Task review, exact confirmation, host write, and store visibility are proven | Run a dedicated list plus reorder/complete/archive/restore/delete matrix |
 | Notes/jot/categories/checklists/merge | Physical partial: the current iPhone build created a reviewed/confirmed note on the host, rendered it as revision 1, and the exact test data was cleaned up; delete/edit/append/categories/checklists/undo remain unverified | Physical partial: composer, exact reviewed action, separate `Do it`, host persistence, and refreshed iPhone visibility passed | Run in-app delete, edit/conflict, category, checklist, and undo round trips across Mac and iPhone |
 | System CPU/memory/load | Ready: host load/memory/disk/thermal/uptime | Ready: mirrored readings and refresh through an authenticated, exact-confirmation host action | Compare readings with Activity Monitor on the physical Mac/iPhone pair |
@@ -100,8 +136,8 @@ below.
 | Quick jot and global task/note capture | Ready implementation: Carbon Control-Option-T and Control-Option-N panels with explicit destination, Escape/Return behavior, save, and undo through existing mutation paths | Ready implementation: dedicated New Task/New Note entry points, deep links, review, and exact confirmation | Run global-hotkey, undo, and cross-device visibility acceptance with real data |
 | Media-key HUD and Crest ambient polish | Ready supported implementation: short-lived notch HUD for CodeIsland media/volume/brightness actions, bounded artwork, progress, thermal/Reduce Motion-aware ambient bars | Ready useful mirror: artwork/progress and exact host controls; no need to mimic a Mac bezel HUD | Capture multi-display/full-screen evidence; macOS has no public API for intercepting all hardware brightness-key events |
 | Custom dashboard/day-progress surface | Ready implementation: one shared saved dashboard toggle, per-mode rack configuration, and local-day progress header | Ready implementation: same configuration and day progress with native editing | Verify saved state and day rollover on the physical pair |
-| Private web fallback | Ready automated implementation: responsive authenticated Home/Work/Code, approvals, questions, opaque push registration, exact actions, file transfer, retry/offline state, and replay protection | Ready as an iPhone browser fallback; physical Tailscale browser use is unverified | Physical Tailscale browser module/action/file round trip |
-| TestFlight distribution | Ready: signed archive/upload pipeline, source plus compiled App Intent metadata validation, internal group, 60-minute Apple indexing window, and always-preserved IPA artifact | Current build `1.0.0 (20260718112841)` is Apple `VALID`, installed/opened from `CodeIsland Internal`, and confirmed by paired `clientVersion = 1.0.0` plus `clientBuild = 20260718112841`; Sessions, stability, question action, and ActivityKit lifecycle passed physically | Preserve the current internal delivery pipeline; compact/expanded Dynamic Island artwork and cellular action remain separate runtime gates |
+| Private web fallback | Ready and live-exercised from a headless browser client: responsive authenticated Home/Work/Code, exact actions, Calendar CRUD/Join, confirmed System refresh, exact-byte Downloads transfer, retry/offline state, and replay protection | Physical-iPhone browser and cellular-only use remain unverified | Toggle iPhone Wi-Fi off and repeat one action plus file read in the physical iPhone browser over cellular Tailscale |
+| TestFlight distribution | Ready: signed archive/upload pipeline, source plus compiled App Intent metadata validation, internal group, 60-minute Apple indexing window, and always-preserved IPA artifact | Current build `1.0.0 (20260718183055)` is Apple `VALID`, installed/opened from `CodeIsland Internal`, and confirmed by paired `clientVersion = 1.0.0` plus exact `clientBuild`; stability, Claude Ask, background ActivityKit start/resolution, and final-host reauthentication passed physically | Preserve the current internal delivery pipeline; compact/expanded Dynamic Island artwork and cellular action remain separate runtime gates |
 
 ## Behavior-level completion adjudication
 
