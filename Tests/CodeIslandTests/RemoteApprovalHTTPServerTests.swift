@@ -44,6 +44,57 @@ final class RemoteApprovalHTTPServerTests: XCTestCase {
         XCTAssertTrue(String(decoding: icon.data, as: UTF8.self).contains("<svg"))
     }
 
+    func testDelayedActivityStartedReceiptDoesNotRegressDismissedSummary() throws {
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CodeIslandReceiptOrdering-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let store = RemoteApprovalDeviceStore(
+            stateURL: temporaryDirectory.appendingPathComponent("devices.json")
+        )
+        let pair = try XCTUnwrap(store.pair(.init(code: store.pairingCode, deviceName: "iPhone")))
+        let observedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let dismissed = RemoteLiveActivityReceipt(
+            eventId: "dismissed-receipt",
+            source: .activityStateChanged,
+            requestId: "request-id",
+            kind: .question,
+            activityState: .dismissed,
+            observedAt: observedAt,
+            activitiesEnabled: true,
+            activeActivityCount: 0,
+            activeRequestIds: []
+        )
+        let delayedStart = RemoteLiveActivityReceipt(
+            eventId: "delayed-start-receipt",
+            source: .activityStarted,
+            requestId: "request-id",
+            kind: .question,
+            state: .pending,
+            activityState: .active,
+            observedAt: observedAt,
+            activitiesEnabled: true,
+            activeActivityCount: 0,
+            activeRequestIds: []
+        )
+
+        XCTAssertEqual(store.registerPushToken(
+            .init(environment: "production", liveActivityReceipts: [dismissed]),
+            deviceID: pair.deviceId
+        ), [dismissed])
+        XCTAssertEqual(store.registerPushToken(
+            .init(environment: "production", liveActivityReceipts: [delayedStart]),
+            deviceID: pair.deviceId
+        ), [delayedStart])
+
+        XCTAssertEqual(store.devices.first?.lastLiveActivityReceipt, dismissed)
+        XCTAssertEqual(
+            store.devices.first?.recentLiveActivityReceiptIDs,
+            [dismissed.eventId, delayedStart.eventId]
+        )
+    }
+
     func testServerRetainsConnectionUntilResponseCompletes() async throws {
         let ready = expectation(description: "listener ready")
         var startupError: Error?
