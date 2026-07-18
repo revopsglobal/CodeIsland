@@ -124,7 +124,7 @@ jobs:
 
       - name: Test remote approval security and exact-request routing
         run: |
-          swift test --filter 'RemoteActionTokenVaultTests|RemoteApprovalHTTPServerTests|RemoteAvailabilityPowerTests|RemotePairAttemptLimiterTests|RemotePairingCodeLifecycleTests|SessionAttentionRouterTests|AppStatePermissionFlowTests/testRemoteDecisionResolvesOnlyTheSelectedPermission|AppStateQuestionFlowTests/testRemoteAnswerResolvesOnlyTheSelectedQuestion|AppStateQuestionFlowTests/testRemoteAnswerNeverResolvesSecretQuestion'
+          swift test --filter 'LaunchAtLoginReliabilityTests|RemoteActionTokenVaultTests|RemoteApprovalHTTPServerTests|RemoteAvailabilityPowerTests|RemotePairAttemptLimiterTests|RemotePairingCodeLifecycleTests|RemoteServiceStatusTests|SessionAttentionRouterTests|AppStatePermissionFlowTests/testRemoteDecisionResolvesOnlyTheSelectedPermission|AppStateQuestionFlowTests/testRemoteAnswerResolvesOnlyTheSelectedQuestion|AppStateQuestionFlowTests/testRemoteAnswerNeverResolvesSecretQuestion'
 
       - name: Test iPhone companion models
         run: ios/CodeIslandCompanion/scripts/run-model-tests.sh

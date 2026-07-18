@@ -1,9 +1,10 @@
 import AppKit
+import os.log
 import ServiceManagement
 
 enum AppVersion {
     /// Update this each release. Used as fallback when Info.plist is unavailable (debug builds).
-    static let fallback = "1.0.47"
+    static let fallback = "1.0.48"
 
     static var current: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? fallback
@@ -240,6 +241,8 @@ struct SettingsDefaults {
 class SettingsManager {
     static let shared = SettingsManager()
 
+    private static let log = Logger(subsystem: "com.codeisland", category: "Settings")
+
     private let defaults = UserDefaults.standard
 
     private init() {
@@ -314,15 +317,95 @@ class SettingsManager {
     }
 
     var launchAtLogin: Bool {
-        get { SMAppService.mainApp.status == .enabled }
-        set {
-            do {
-                if newValue { try SMAppService.mainApp.register() }
-                else { try SMAppService.mainApp.unregister() }
-            } catch {
-                // Login item update may fail silently in sandboxed environments
+        get {
+            switch SMAppService.mainApp.status {
+            case .enabled, .requiresApproval:
+                return true
+            case .notRegistered, .notFound:
+                return false
+            @unknown default:
+                return false
             }
         }
+        set {
+            // Persist intent separately from ServiceManagement state. This lets
+            // the remote-access bootstrap retry a requested registration after
+            // a transient failure while permanently respecting an explicit opt-out.
+            defaults.set(newValue, forKey: SettingsKey.launchAtLogin)
+            do {
+                if newValue {
+                    switch SMAppService.mainApp.status {
+                    case .notRegistered:
+                        try SMAppService.mainApp.register()
+                    case .enabled, .requiresApproval:
+                        break
+                    case .notFound:
+                        Self.log.error("Launch at login could not be enabled because the main app service was not found")
+                    @unknown default:
+                        break
+                    }
+                } else if SMAppService.mainApp.status != .notRegistered {
+                    try SMAppService.mainApp.unregister()
+                }
+            } catch {
+                Self.log.error("Launch at login update failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    var launchAtLoginRequiresApproval: Bool {
+        SMAppService.mainApp.status == .requiresApproval
+    }
+
+    var launchAtLoginStatusDescription: String {
+        switch SMAppService.mainApp.status {
+        case .enabled:
+            return "enabled"
+        case .requiresApproval:
+            return "requiresApproval"
+        case .notRegistered:
+            return "notRegistered"
+        case .notFound:
+            return "notFound"
+        @unknown default:
+            return "unknown"
+        }
+    }
+
+    /// A private remote command center must return after sign-in without a
+    /// manual launch. Register once by default while preserving any explicit
+    /// user choice made through the General settings toggle.
+    @discardableResult
+    func ensureLaunchAtLoginForRemoteAccess() -> Bool {
+        let explicitPreference = defaults.object(forKey: SettingsKey.launchAtLogin) as? Bool
+        let serviceIsNotRegistered: Bool
+        switch SMAppService.mainApp.status {
+        case .notRegistered:
+            serviceIsNotRegistered = true
+        case .enabled, .requiresApproval, .notFound:
+            serviceIsNotRegistered = false
+        @unknown default:
+            serviceIsNotRegistered = false
+        }
+
+        guard Self.shouldAttemptAutomaticLaunchAtLoginRegistration(
+            remoteAccessEnabled: defaults.bool(forKey: SettingsKey.remoteApprovalsEnabled),
+            explicitPreference: explicitPreference,
+            serviceIsNotRegistered: serviceIsNotRegistered
+        ) else {
+            return false
+        }
+
+        launchAtLogin = true
+        return launchAtLogin
+    }
+
+    static func shouldAttemptAutomaticLaunchAtLoginRegistration(
+        remoteAccessEnabled: Bool,
+        explicitPreference: Bool?,
+        serviceIsNotRegistered: Bool
+    ) -> Bool {
+        remoteAccessEnabled && explicitPreference != false && serviceIsNotRegistered
     }
 
     var displayChoice: String {

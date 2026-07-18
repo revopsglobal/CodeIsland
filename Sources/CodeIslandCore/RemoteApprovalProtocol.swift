@@ -420,12 +420,23 @@ public struct RemoteServiceStatus: Codable, Equatable, Sendable {
     public let running: Bool
     public let pendingCount: Int
     public let serverName: String
+    public let hostVersion: String?
+    public let launchAtLoginStatus: String?
     public let version: Int
 
-    public init(running: Bool, pendingCount: Int, serverName: String, version: Int = 1) {
+    public init(
+        running: Bool,
+        pendingCount: Int,
+        serverName: String,
+        hostVersion: String? = nil,
+        launchAtLoginStatus: String? = nil,
+        version: Int = 1
+    ) {
         self.running = running
         self.pendingCount = pendingCount
         self.serverName = serverName
+        self.hostVersion = hostVersion
+        self.launchAtLoginStatus = launchAtLoginStatus
         self.version = version
     }
 }
