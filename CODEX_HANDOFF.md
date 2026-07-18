@@ -38,9 +38,9 @@ This section supersedes older build/pairing statements later in the document.
   20-minute visibility check timed out while Apple indexed the build. Recovery
   run `29630740348` did not duplicate the IPA and found the build at
   `2026-07-18T05:14:12Z`: `VALID`, `APP_STORE_ELIGIBLE`, and available to the
-  all-builds `CodeIsland Internal` group. Do not call the label physically
-  accepted until the final replacement build is installed and checked on
-  Greg's iPhone.
+  all-builds `CodeIsland Internal` group. The final replacement is now
+  installed/opened, but do not call this specific label visually accepted
+  until the locked iPhone surface is inspected.
 - Fresh verification on the current follow-up source: 480 Mac app tests passed
   with two intentional skips on the clean rerun; 219 core tests passed; the
   production Swift build passed; and the full iPhone scheme passed 7 unit plus
@@ -59,9 +59,12 @@ This section supersedes older build/pairing statements later in the document.
   `CodeIsland Internal`. Delivery UUID:
   `835af987-3aef-4cc9-82d4-8d88ec0684f1`; IPA artifact `8425978534`; tester
   receipt `8425940062` records `gregharned@gmail.com` as `ready`. It includes
-  the authenticated Sessions and ActivityKit push-to-start work, but remains
-  signed-delivery proof until Greg unlocks iPhone Mirroring or updates it on
-  the physical phone.
+  the authenticated Sessions and ActivityKit push-to-start work. The physical
+  iPhone subsequently authenticated at `2026-07-18T06:14:00Z` and registered
+  the new ActivityKit push-to-start token; because that registration path
+  exists only in PR #31, this is physical install/open proof for this build.
+  Sessions rendering, background delivery, and Dynamic Island visibility are
+  still separate locked-screen acceptance gates.
 - The TestFlight workflow now gives Apple 60 minutes to index a normal upload
   and preserves the signed IPA artifact even when the processing check fails.
 - Live unlocked inspection of Mac `1.0.41` exposed two provider-truth defects:
@@ -90,8 +93,9 @@ This section supersedes older build/pairing statements later in the document.
   nearby discovery only when unpaired. It also registers ActivityKit
   push-to-start/update tokens, remotely starts a privacy-redacted Live Activity
   only for approvals/questions, and remotely ends it on resolution. Replacement
-  signed Mac and iPhone builds are now delivered; physical iPhone installation
-  and acceptance are still required before calling either behavior live.
+  signed Mac and iPhone builds are installed together, authenticated pairing is
+  preserved, and production push-to-start registration is physically proven.
+  The locked iPhone still prevents visual Sessions and Live Activity acceptance.
 - Exact physical proof and the still-open matrix are recorded in
   `docs/evidence/2026-07-17-crest-mobile-physical-acceptance.md`. Remaining
   gates are physical replay rejection, background push/Live Activity/Dynamic
