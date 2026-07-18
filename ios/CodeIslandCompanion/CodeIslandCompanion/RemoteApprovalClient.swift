@@ -88,6 +88,7 @@ final class RemoteApprovalClient: ObservableObject {
         usesMockHub = ProcessInfo.processInfo.arguments.contains("-CodeIslandCompanionMockHub")
         usesMockPairing = ProcessInfo.processInfo.arguments.contains("-CodeIslandCompanionMockPairing")
         let launchMode = Self.mockHubModeFromLaunchArguments()
+        let mockAttention = Self.mockAttentionFromLaunchArguments()
 #else
         usesMockHub = false
         usesMockPairing = false
@@ -111,6 +112,8 @@ final class RemoteApprovalClient: ObservableObject {
             lastUpdatedAt = Date()
             hubSnapshot = Self.mockHubSnapshot(requestedMode: selectedMode)
             sessionsModule = Self.mockHubModule(.agents)
+            approvals = mockAttention.approvals
+            questions = mockAttention.questions
             if let url = Self.mockDeepLinkFromLaunchArguments() {
                 openDeepLink(url)
             }
@@ -784,6 +787,59 @@ final class RemoteApprovalClient: ObservableObject {
               arguments.indices.contains(index + 1)
         else { return nil }
         return PersonalHubMode(rawValue: arguments[index + 1].lowercased())
+    }
+
+    private static func mockAttentionFromLaunchArguments() -> (
+        approvals: [RemoteApprovalItem],
+        questions: [RemoteQuestionItem]
+    ) {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let index = arguments.firstIndex(of: "-CodeIslandCompanionMockAttention"),
+              arguments.indices.contains(index + 1)
+        else { return ([], []) }
+
+        let now = Date()
+        let approval = RemoteApprovalItem(
+            id: "approval-a",
+            sessionId: "codex-release-session",
+            source: "Codex",
+            tool: "Run release build",
+            detail: "xcodebuild -scheme CodeIslandCompanion archive",
+            workspace: "CodeIsland",
+            createdAt: now.addingTimeInterval(-90),
+            actionToken: "ui-test-approval-token",
+            actionExpiresAt: now.addingTimeInterval(600)
+        )
+        let question = RemoteQuestionItem(
+            id: "question-b",
+            sessionId: "codex-release-session",
+            source: "Codex",
+            workspace: "CodeIsland",
+            createdAt: now.addingTimeInterval(-60),
+            prompts: [
+                RemoteQuestionPrompt(
+                    id: "ship-timing",
+                    header: "Release",
+                    question: "Ship the signed build tonight?",
+                    options: ["Ship tonight", "Hold for review"],
+                    descriptions: [
+                        "Archive, upload, and keep the release internal.",
+                        "Leave the current TestFlight build in place."
+                    ],
+                    allowsMultipleSelection: false
+                )
+            ],
+            requiresLocalResponse: false,
+            actionToken: "ui-test-question-token",
+            actionExpiresAt: now.addingTimeInterval(600)
+        )
+
+        switch arguments[index + 1].lowercased() {
+        case "approval": return ([approval], [])
+        case "question": return ([], [question])
+        case "multiple": return ([approval], [question])
+        default: return ([], [])
+        }
     }
 
     private static func mockHubSnapshot(

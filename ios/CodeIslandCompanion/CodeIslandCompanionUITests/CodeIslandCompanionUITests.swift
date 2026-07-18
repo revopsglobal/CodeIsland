@@ -166,6 +166,48 @@ final class CodeIslandCompanionUITests: XCTestCase {
     }
 
     @MainActor
+    func testApprovalAttentionStageKeepsExactActionsProminent() throws {
+        let app = launchAttentionApp("approval")
+
+        XCTAssertTrue(app.staticTexts["Approval needed"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Run release build"].exists)
+
+        let deny = app.buttons["Deny"]
+        let approve = app.buttons["Approve once"]
+        XCTAssertTrue(deny.exists)
+        XCTAssertTrue(approve.exists)
+        XCTAssertGreaterThanOrEqual(deny.frame.height, 44)
+        XCTAssertGreaterThanOrEqual(approve.frame.height, 44)
+    }
+
+    @MainActor
+    func testQuestionAttentionStageUsesNativeSelectionAndSubmit() throws {
+        let app = launchAttentionApp("question")
+
+        XCTAssertTrue(app.staticTexts["Decision needed"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Ship the signed build tonight?"].exists)
+        let option = app.buttons["Ship tonight"]
+        XCTAssertTrue(option.exists)
+        option.tap()
+
+        let submit = app.buttons["Send answer"]
+        XCTAssertTrue(submit.exists)
+        XCTAssertTrue(submit.isEnabled)
+        XCTAssertGreaterThanOrEqual(submit.frame.height, 44)
+    }
+
+    @MainActor
+    func testMultipleAttentionItemsDoNotRotateAutomatically() throws {
+        let app = launchAttentionApp("multiple")
+
+        XCTAssertTrue(app.staticTexts["Run release build"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.buttons["1 of 2"].exists)
+        sleep(5)
+        XCTAssertTrue(app.staticTexts["Run release build"].exists)
+        XCTAssertFalse(app.staticTexts["Ship the signed build tonight?"].exists)
+    }
+
+    @MainActor
     func testAuthenticatedTailscaleConnectionDoesNotLookLikeNearbySearch() throws {
         let app = XCUIApplication()
         app.launchArguments = ["-CodeIslandCompanionMockHub"]
@@ -523,6 +565,19 @@ final class CodeIslandCompanionUITests: XCTestCase {
                 more.tap()
             }
         }
+        return app
+    }
+
+    @MainActor
+    private func launchAttentionApp(_ kind: String) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-CodeIslandCompanionMockState", "idle",
+            "-CodeIslandCompanionMockHub",
+            "-CodeIslandCompanionMockHubMode", "code",
+            "-CodeIslandCompanionMockAttention", kind,
+        ]
+        app.launch()
         return app
     }
 

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RemoteApprovalSurface: View {
     @EnvironmentObject private var client: RemoteApprovalClient
+    @State private var selectedAttentionID: String?
 
     var body: some View {
         Group {
@@ -21,23 +22,110 @@ struct RemoteApprovalSurface: View {
                 RemoteOfflineCard(message: message)
                     .environmentObject(client)
             default:
-                if client.approvals.isEmpty && client.questions.isEmpty {
+                if attentionItems.isEmpty {
                     EmptyView()
                 } else {
-                    VStack(spacing: 10) {
-                        ForEach(client.questions) { question in
-                            RemoteQuestionCard(question: question)
-                                .environmentObject(client)
+                    VStack(alignment: .leading, spacing: 12) {
+                        if attentionItems.count > 1 {
+                            HStack {
+                                Text("Attention queue")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(Color.ciForeground.opacity(0.58))
+                                Spacer()
+                                Menu {
+                                    ForEach(attentionItems) { item in
+                                        Button {
+                                            selectedAttentionID = item.id
+                                        } label: {
+                                            Label(item.menuTitle, systemImage: item.symbol)
+                                        }
+                                    }
+                                } label: {
+                                    Text("\(selectedIndex + 1) of \(attentionItems.count)")
+                                        .font(.subheadline.weight(.semibold))
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                            }
+                            .padding(.horizontal, 4)
                         }
-                        ForEach(client.approvals) { approval in
-                            RemoteApprovalCard(approval: approval)
-                                .environmentObject(client)
+
+                        if let selectedAttention {
+                            switch selectedAttention {
+                            case .approval(let approval):
+                                RemoteApprovalCard(approval: approval)
+                                    .environmentObject(client)
+                            case .question(let question):
+                                RemoteQuestionCard(question: question)
+                                    .environmentObject(client)
+                            }
                         }
                     }
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("companion.attention.stage")
                 }
             }
         }
         .accessibilityIdentifier("companion.remoteApprovals")
+        .onAppear { synchronizeAttentionSelection() }
+        .onChange(of: attentionIDs) { _, _ in synchronizeAttentionSelection() }
+    }
+
+    private var attentionItems: [RemoteAttentionCardItem] {
+        client.approvals.map(RemoteAttentionCardItem.approval)
+            + client.questions.map(RemoteAttentionCardItem.question)
+    }
+
+    private var attentionIDs: [String] {
+        attentionItems.map(\.id)
+    }
+
+    private var selectedAttention: RemoteAttentionCardItem? {
+        let resolvedID = CompanionAttentionSelection.resolve(
+            previousID: selectedAttentionID,
+            currentIDs: attentionIDs
+        )
+        return attentionItems.first(where: { $0.id == resolvedID })
+    }
+
+    private var selectedIndex: Int {
+        guard let selectedAttention,
+              let index = attentionItems.firstIndex(where: { $0.id == selectedAttention.id })
+        else { return 0 }
+        return index
+    }
+
+    private func synchronizeAttentionSelection() {
+        selectedAttentionID = CompanionAttentionSelection.resolve(
+            previousID: selectedAttentionID,
+            currentIDs: attentionIDs
+        )
+    }
+}
+
+private enum RemoteAttentionCardItem: Identifiable {
+    case approval(RemoteApprovalItem)
+    case question(RemoteQuestionItem)
+
+    var id: String {
+        switch self {
+        case .approval(let approval): return approval.id
+        case .question(let question): return question.id
+        }
+    }
+
+    var menuTitle: String {
+        switch self {
+        case .approval(let approval): return approval.tool
+        case .question(let question): return question.prompts.first?.question ?? "Question"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .approval: return "checkmark.shield"
+        case .question: return "questionmark.bubble"
+        }
     }
 }
 
@@ -70,16 +158,26 @@ private struct RemoteQuestionCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                Text("\(question.source.uppercased()) · QUESTION")
-                    .font(.system(size: 11, weight: .black, design: .monospaced))
-                    .foregroundStyle(.cyan)
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(spacing: 10) {
+                Label("Decision needed", systemImage: "questionmark.bubble.fill")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.blue)
                 Spacer()
                 Text(question.createdAt, style: .relative)
-                    .font(.caption2.monospaced())
+                    .font(.caption)
                     .foregroundStyle(.ciForeground.opacity(0.42))
             }
+
+            HStack(spacing: 6) {
+                Text(question.source)
+                if let workspace = question.workspace, !workspace.isEmpty {
+                    Text("·")
+                    Text(workspace)
+                }
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(Color.ciForeground.opacity(0.52))
 
             if question.requiresLocalResponse {
                 Label("Sensitive question waiting on Mac", systemImage: "eye.slash.fill")
@@ -90,14 +188,14 @@ private struct RemoteQuestionCard: View {
                     .foregroundStyle(.ciForeground.opacity(0.62))
             } else {
                 ForEach(question.prompts) { prompt in
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 12) {
                         if let header = prompt.header, !header.isEmpty {
-                            Text(header.uppercased())
-                                .font(.system(size: 10, weight: .black, design: .monospaced))
-                                .foregroundStyle(.ciForeground.opacity(0.46))
+                            Text(header)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.blue)
                         }
                         Text(prompt.question)
-                            .font(.system(size: 15, weight: .bold, design: .rounded))
+                            .font(.title3.weight(.bold))
                             .foregroundStyle(.ciForeground)
                             .fixedSize(horizontal: false, vertical: true)
 
@@ -116,7 +214,7 @@ private struct RemoteQuestionCard: View {
                                     Image(systemName: isSelected(option, for: prompt)
                                           ? (prompt.allowsMultipleSelection ? "checkmark.square.fill" : "largecircle.fill.circle")
                                           : (prompt.allowsMultipleSelection ? "square" : "circle"))
-                                        .foregroundStyle(isSelected(option, for: prompt) ? Color.cyan : Color.ciForeground.opacity(0.38))
+                                        .foregroundStyle(isSelected(option, for: prompt) ? Color.blue : Color.ciForeground.opacity(0.38))
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(option)
                                             .font(.system(size: 13, weight: .bold))
@@ -129,18 +227,24 @@ private struct RemoteQuestionCard: View {
                                     Spacer(minLength: 0)
                                 }
                                 .foregroundStyle(.ciForeground)
-                                .padding(10)
-                                .background(Color.ciForeground.opacity(0.055), in: RoundedRectangle(cornerRadius: 9))
+                                .padding(12)
+                                .background(
+                                    isSelected(option, for: prompt)
+                                        ? Color.blue.opacity(0.12)
+                                        : Color.ciForeground.opacity(0.045),
+                                    in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                )
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel(option)
                         }
 
                         TextField(prompt.options.isEmpty ? "Type your answer" : "Or type a custom answer", text: customBinding(for: prompt.id))
                             .textInputAutocapitalization(.sentences)
                             .font(.system(size: 13, weight: .medium))
-                            .padding(.horizontal, 11)
-                            .frame(minHeight: 44)
-                            .background(Color.ciForeground.opacity(0.06), in: RoundedRectangle(cornerRadius: 9))
+                            .padding(.horizontal, 13)
+                            .frame(minHeight: 48)
+                            .background(Color.ciForeground.opacity(0.055), in: RoundedRectangle(cornerRadius: 14))
                     }
                 }
 
@@ -149,22 +253,29 @@ private struct RemoteQuestionCard: View {
                 } label: {
                     Label("Send answer", systemImage: "paperplane.fill")
                         .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(.black)
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                        .background(Color.cyan, in: RoundedRectangle(cornerRadius: 9))
+                        .frame(maxWidth: .infinity, minHeight: 48)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.borderedProminent)
+                .tint(.blue)
                 .disabled(!canSubmit)
             }
         }
-        .padding(14)
-        .background(IslandShellShape().fill(Color.ciSurface))
+        .padding(20)
+        .background(
+            LinearGradient(
+                colors: [Color.blue.opacity(0.10), Color.ciSurface],
+                startPoint: .topLeading,
+                endPoint: .center
+            ),
+            in: RoundedRectangle(cornerRadius: 28, style: .continuous)
+        )
         .overlay(
-            IslandShellShape().stroke(
-                client.highlightedQuestionID == question.id ? Color.cyan : Color.cyan.opacity(0.48),
-                lineWidth: client.highlightedQuestionID == question.id ? 2 : 1
+            RoundedRectangle(cornerRadius: 28, style: .continuous).stroke(
+                client.highlightedQuestionID == question.id ? Color.blue.opacity(0.70) : Color.blue.opacity(0.16),
+                lineWidth: client.highlightedQuestionID == question.id ? 1.5 : 0.5
             )
         )
+        .shadow(color: Color.blue.opacity(0.08), radius: 24, y: 12)
         .confirmationDialog(
             "Send this answer to the exact waiting agent request?",
             isPresented: $confirming
@@ -366,53 +477,69 @@ private struct RemoteApprovalCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                Text(approval.source.uppercased())
-                    .font(.system(size: 11, weight: .black, design: .monospaced))
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(spacing: 10) {
+                Label("Approval needed", systemImage: "checkmark.shield.fill")
+                    .font(.subheadline.weight(.bold))
                     .foregroundStyle(.orange)
                 Spacer()
                 Text(approval.createdAt, style: .relative)
-                    .font(.caption2.monospaced())
+                    .font(.caption)
                     .foregroundStyle(.ciForeground.opacity(0.42))
             }
 
+            HStack(spacing: 6) {
+                Text(approval.source)
+                if let workspace = approval.workspace, !workspace.isEmpty {
+                    Text("·")
+                    Text(workspace)
+                }
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(Color.ciForeground.opacity(0.52))
+
             Text(approval.tool)
-                .font(.system(size: 18, weight: .bold, design: .rounded))
+                .font(.title3.weight(.bold))
                 .foregroundStyle(.ciForeground)
                 .fixedSize(horizontal: false, vertical: true)
 
-            HStack(spacing: 7) {
-                if let workspace = approval.workspace {
-                    remoteChip(icon: "folder", text: workspace)
-                }
-                remoteChip(icon: "number", text: String(approval.sessionId.suffix(8)))
-            }
-
             if let detail = approval.detail, !detail.isEmpty {
-                Text(detail)
-                    .font(.system(size: 12, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.ciForeground.opacity(0.74))
-                    .lineLimit(8)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.black.opacity(0.28), in: RoundedRectangle(cornerRadius: 9))
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("Requested action", systemImage: "terminal")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.ciForeground.opacity(0.5))
+                    Text(detail)
+                        .font(.system(.callout, design: .monospaced, weight: .medium))
+                        .foregroundStyle(.ciForeground.opacity(0.78))
+                        .lineLimit(8)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.ciForeground.opacity(0.045), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
 
-            HStack(spacing: 8) {
-                remoteAction("Deny", icon: "xmark", tint: .red, decision: .deny)
-                remoteAction("Approve once", icon: "checkmark", tint: Color(red: 0.3, green: 0.85, blue: 0.4), decision: .approve)
+            HStack(spacing: 10) {
+                remoteAction("Deny", icon: "xmark", decision: .deny)
+                remoteAction("Approve once", icon: "checkmark", decision: .approve)
             }
         }
-        .padding(14)
-        .background(IslandShellShape().fill(Color.ciSurface))
+        .padding(20)
+        .background(
+            LinearGradient(
+                colors: [Color.orange.opacity(0.11), Color.ciSurface],
+                startPoint: .topLeading,
+                endPoint: .center
+            ),
+            in: RoundedRectangle(cornerRadius: 28, style: .continuous)
+        )
         .overlay(
-            IslandShellShape().stroke(
-                client.highlightedApprovalID == approval.id ? Color.orange : Color.orange.opacity(0.46),
-                lineWidth: client.highlightedApprovalID == approval.id ? 2 : 1
+            RoundedRectangle(cornerRadius: 28, style: .continuous).stroke(
+                client.highlightedApprovalID == approval.id ? Color.orange.opacity(0.72) : Color.orange.opacity(0.18),
+                lineWidth: client.highlightedApprovalID == approval.id ? 1.5 : 0.5
             )
         )
+        .shadow(color: Color.orange.opacity(0.08), radius: 24, y: 12)
         .confirmationDialog(
             selection?.decision == .approve ? "Approve this exact request?" : "Deny this exact request?",
             isPresented: Binding(
@@ -433,33 +560,43 @@ private struct RemoteApprovalCard: View {
         .accessibilityIdentifier("companion.remote.approval.\(approval.id)")
     }
 
-    private func remoteChip(icon: String, text: String) -> some View {
-        Label(text, systemImage: icon)
-            .font(.system(size: 10, weight: .bold, design: .monospaced))
-            .foregroundStyle(.ciForeground.opacity(0.55))
-            .padding(.horizontal, 7)
-            .padding(.vertical, 5)
-            .background(Color.ciForeground.opacity(0.055), in: RoundedRectangle(cornerRadius: 7))
-    }
-
+    @ViewBuilder
     private func remoteAction(
         _ title: String,
         icon: String,
-        tint: Color,
+        decision: RemoteApprovalDecision
+    ) -> some View {
+        if decision == .approve {
+            actionButton(title, icon: icon, decision: decision)
+                .buttonStyle(.borderedProminent)
+                .tint(.green)
+                .accessibilityIdentifier("companion.remote.\(decision.rawValue).\(approval.id)")
+        } else {
+            actionButton(title, icon: icon, decision: decision)
+                .buttonStyle(.bordered)
+                .tint(.red)
+                .accessibilityIdentifier("companion.remote.\(decision.rawValue).\(approval.id)")
+        }
+    }
+
+    private func actionButton(
+        _ title: String,
+        icon: String,
         decision: RemoteApprovalDecision
     ) -> some View {
         Button {
             selection = DecisionSelection(decision: decision)
         } label: {
             Label(title, systemImage: icon)
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(decision == .approve ? .black : .white)
-                .frame(maxWidth: .infinity, minHeight: 44)
-                .background(tint.opacity(decision == .approve ? 1 : 0.34), in: RoundedRectangle(cornerRadius: 9))
-                .overlay(RoundedRectangle(cornerRadius: 9).stroke(tint.opacity(0.55)))
+                .font(.callout.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.88)
+                .frame(
+                    minWidth: decision == .approve ? 0 : 116,
+                    maxWidth: decision == .approve ? .infinity : 128,
+                    minHeight: 48
+                )
         }
-        .buttonStyle(.plain)
         .disabled(client.busyRequestIDs.contains(approval.id))
-        .accessibilityIdentifier("companion.remote.\(decision.rawValue).\(approval.id)")
     }
 }
