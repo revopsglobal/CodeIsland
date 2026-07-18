@@ -736,7 +736,12 @@ final class RemoteApprovalDeviceStore {
         for receipt in registration.liveActivityReceipts ?? [] where knownReceiptIDs.insert(receipt.eventId).inserted {
             acceptedReceipts.append(receipt)
             receiptIDs.append(receipt.eventId)
-            devices[index].lastLiveActivityReceipt = receipt
+            if Self.shouldReplaceLiveActivitySummary(
+                devices[index].lastLiveActivityReceipt,
+                with: receipt
+            ) {
+                devices[index].lastLiveActivityReceipt = receipt
+            }
         }
         if receiptIDs.count > 128 {
             receiptIDs = Array(receiptIDs.suffix(128))
@@ -748,6 +753,28 @@ final class RemoteApprovalDeviceStore {
         devices[index].lastSeenAt = Date()
         save()
         return acceptedReceipts
+    }
+
+    private static func shouldReplaceLiveActivitySummary(
+        _ current: RemoteLiveActivityReceipt?,
+        with candidate: RemoteLiveActivityReceipt
+    ) -> Bool {
+        guard let current else { return true }
+
+        if current.requestId != nil, current.requestId == candidate.requestId {
+            let currentIsTerminal = isTerminalLiveActivityReceipt(current)
+            let candidateIsTerminal = isTerminalLiveActivityReceipt(candidate)
+            if currentIsTerminal != candidateIsTerminal {
+                return candidateIsTerminal
+            }
+        }
+
+        return candidate.observedAt >= current.observedAt
+    }
+
+    private static func isTerminalLiveActivityReceipt(_ receipt: RemoteLiveActivityReceipt) -> Bool {
+        if receipt.state == .resolved { return true }
+        return receipt.activityState == .ended || receipt.activityState == .dismissed
     }
 
     func revoke(deviceID: String) {
