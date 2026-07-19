@@ -70,6 +70,7 @@ final class RemoteApprovalClient: ObservableObject {
     private var pollTask: Task<Void, Never>?
     private var isActive = true
     private var clientMetadataRegisteredThisLaunch = false
+    private var consecutiveApprovalRefreshFailures = 0
     private var notificationObservers: [NSObjectProtocol] = []
     private var pendingGenericDeepLink: RemoteAttentionKind?
     var onSnapshotReceived: ((RemoteApprovalSnapshot) -> Void)?
@@ -83,6 +84,15 @@ final class RemoteApprovalClient: ObservableObject {
     /// that stable presentation in place while subsequent polls run.
     nonisolated static func refreshStartState(hasCompletedSnapshot: Bool) -> ConnectionState? {
         hasCompletedSnapshot ? nil : .connecting
+    }
+
+    nonisolated static func refreshFailureState(
+        hasCompletedSnapshot: Bool,
+        consecutiveFailures: Int,
+        message: String
+    ) -> ConnectionState? {
+        guard hasCompletedSnapshot else { return .offline(message) }
+        return consecutiveFailures >= 3 ? .offline(message) : nil
     }
 
     nonisolated static func genericPendingDeepLinkTarget(
@@ -275,6 +285,7 @@ final class RemoteApprovalClient: ObservableObject {
             try Self.saveKeychainToken(response.deviceToken)
             deviceToken = response.deviceToken
             serverName = response.serverName
+            consecutiveApprovalRefreshFailures = 0
             UserDefaults.standard.set(normalizedServerURL?.absoluteString, forKey: Self.serverURLKey)
             state = .connected
             await registerPendingPushToken()
@@ -305,6 +316,7 @@ final class RemoteApprovalClient: ObservableObject {
         sessionsError = nil
         hubError = nil
         preparedAction = nil
+        consecutiveApprovalRefreshFailures = 0
         state = .unpaired
     }
 
@@ -366,6 +378,7 @@ final class RemoteApprovalClient: ObservableObject {
             state = .unpaired
             approvals = []
             questions = []
+            consecutiveApprovalRefreshFailures = 0
             return
         }
         guard let url = endpoint("/api/approvals") else {
@@ -382,6 +395,7 @@ final class RemoteApprovalClient: ObservableObject {
             request.httpMethod = "GET"
             request.cachePolicy = .reloadIgnoringLocalCacheData
             let snapshot: RemoteApprovalSnapshot = try await perform(request, authenticated: true)
+            consecutiveApprovalRefreshFailures = 0
             approvals = snapshot.approvals
             questions = snapshot.questions
             consumePendingGenericDeepLink()
@@ -401,7 +415,14 @@ final class RemoteApprovalClient: ObservableObject {
         } catch RemoteClientError.unauthorized {
             unpair()
         } catch {
-            state = .offline(error.localizedDescription)
+            consecutiveApprovalRefreshFailures += 1
+            if let failureState = Self.refreshFailureState(
+                hasCompletedSnapshot: lastUpdatedAt != nil,
+                consecutiveFailures: consecutiveApprovalRefreshFailures,
+                message: error.localizedDescription
+            ) {
+                state = failureState
+            }
         }
     }
 
