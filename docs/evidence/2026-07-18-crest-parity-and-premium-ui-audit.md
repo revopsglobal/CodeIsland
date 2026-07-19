@@ -221,6 +221,19 @@ action. Put transport diagnostics behind Connection Details.
 
 ### Source and Simulator verification completed
 
+- Late command-center polish on branch `codex/continue-e2e-acceptance`
+  regenerated the eight settled native renders with `scripts/smoke-companion-ui.sh`.
+  The refreshed idle Now render is calm (`Nothing needs you right now.`) rather
+  than a mock pending approval, while explicit approval/question renders still
+  keep the exact attention card prominent. The Tools directory now uses neutral
+  icon wells for routine modules so the orange signal is reserved for attention
+  and primary action, not every row.
+- `scripts/check-companion-ui-regressions.sh` passed.
+- A focused native UI run passed with exit code 0 in 75.611 seconds using
+  Xcode beta and simulator `ECC99681-C3ED-4452-B727-0F9E2C09C469`:
+  `testAttentionFirstShellKeepsToolsSecondary`,
+  `testApprovalAttentionStageKeepsExactActionsProminent`, and
+  `testPersonalHubModesRenderAdvertisedModules`.
 - `scripts/smoke-companion-ui.sh` completed with a 20-second system settle
   gate and produced eight full-chrome native renders: idle, approval,
   question, multiple-attention, Sessions, Tools, light, and dark.

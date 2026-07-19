@@ -518,11 +518,13 @@ private struct CommandTimelineRow: Identifiable {
     }
 
     var tint: Color {
-        switch moduleID {
-        case .calendar: return .blue
-        case .reminders: return .orange
-        case .agents: return .purple
-        default: return .secondary
+        let signal = [item.title, item.subtitle ?? "", item.detail ?? ""]
+            .joined(separator: " ")
+            .lowercased()
+        if moduleID == .agents,
+           signal.contains("approval") || signal.contains("question") || signal.contains("needs") || signal.contains("waiting") {
+            return .orange
         }
+        return Color.ciForeground.opacity(0.62)
     }
 }

@@ -9,6 +9,8 @@ enum HubTheme {
     static let foreground = Color.ciForeground
     static let surface = Color.ciSurface
     static let border = Color.ciForeground.opacity(0.08)
+    static let iconForeground = Color.ciForeground.opacity(0.68)
+    static let iconBackground = Color.ciForeground.opacity(0.045)
 }
 
 typealias BuddyQuickJotDestination = PersonalHubQuickJotDestination
@@ -290,9 +292,9 @@ struct PersonalHubDirectorySurface: View {
         return HStack(spacing: 14) {
             Image(systemName: definition.symbol)
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(HubTheme.accent)
+                .foregroundStyle(HubTheme.iconForeground)
                 .frame(width: 38, height: 38)
-                .background(HubTheme.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                .background(HubTheme.iconBackground, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(definition.title)

@@ -1064,7 +1064,13 @@ final class RemoteApprovalClient: ObservableObject {
                 ]
             )
         case .agents:
-            return .init(id: id, availability: ready, summary: "2 active sessions", items: [.init(id: "agent:codex", title: "Codex", subtitle: "Waiting for approval")], actions: [.init(id: "refresh", label: "Refresh")])
+            return .init(
+                id: id,
+                availability: ready,
+                summary: "2 active sessions",
+                items: [.init(id: "agent:codex", title: "Codex", subtitle: "Running in ob1-app")],
+                actions: [.init(id: "refresh", label: "Refresh")]
+            )
         case .github:
             return .init(id: id, availability: ready, summary: "1 pull request", items: [.init(id: "pr:8", title: "#8 Crest parity", subtitle: "Merged", actions: [.init(id: "open", label: "Open", deepLink: URL(string: "https://github.com/revopsglobal/CodeIsland/pull/8"))])], actions: [.init(id: "refresh", label: "Refresh")])
         case .audio:
