@@ -459,8 +459,8 @@ final class PersonalHubDataModel: ObservableObject {
         let prompt = rawPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !claudeBusy, !prompt.isEmpty, prompt.count <= 20_000,
               contexts.count <= ClaudeFileContextLoader.maximumFiles else { return false }
-        let candidates = ["/usr/local/bin/claude", "/opt/homebrew/bin/claude"]
-        guard let path = candidates.first(where: FileManager.default.isExecutableFile(atPath:)) else {
+        let configuredPath = defaults.string(forKey: ClaudeExecutableLocator.defaultsKey)
+        guard let path = ClaudeExecutableLocator.resolve(explicitPath: configuredPath) else {
             claudeError = "Claude Code is not installed on the Mac"
             return false
         }
@@ -504,8 +504,8 @@ final class PersonalHubDataModel: ObservableObject {
         let prompt = rawPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !claudeBusy, !prompt.isEmpty, prompt.count <= 20_000,
               contexts.count <= ClaudeFileContextLoader.maximumFiles else { return false }
-        let candidates = ["/usr/local/bin/claude", "/opt/homebrew/bin/claude"]
-        guard let path = candidates.first(where: FileManager.default.isExecutableFile(atPath:)) else {
+        let configuredPath = defaults.string(forKey: ClaudeExecutableLocator.defaultsKey)
+        guard let path = ClaudeExecutableLocator.resolve(explicitPath: configuredPath) else {
             claudeError = "Claude Code is not installed on the Mac"
             return false
         }
