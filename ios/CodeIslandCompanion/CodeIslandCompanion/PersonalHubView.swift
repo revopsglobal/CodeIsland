@@ -511,7 +511,7 @@ struct PersonalHubSurface: View {
                 hubEmptyState(
                     symbol: "iphone.and.arrow.forward",
                     title: "Pair with your Mac",
-                    detail: "Use the six-digit code in CodeIsland Settings → Buddy."
+                    detail: "Use the six-digit code in Code Island Settings → Buddy."
                 )
             } else if let error = client.hubError {
                 hubEmptyState(

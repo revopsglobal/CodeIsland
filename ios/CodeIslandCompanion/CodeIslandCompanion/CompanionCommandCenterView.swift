@@ -40,39 +40,43 @@ struct CompanionCommandCenterView: View {
     @State private var showsCaptureChoices = false
 
     var body: some View {
-        ScrollView(.vertical) {
-            LazyVStack(alignment: .leading, spacing: 24) {
-                CompanionPresenceHeader()
-                    .environmentObject(connection)
-                    .environmentObject(remoteApprovals)
+        ZStack {
+            CompanionCommandBackground()
 
-                switch destination {
-                case .now:
-                    nowContent
-                case .sessions:
-                    CompanionSessionsSurface()
+            ScrollView(.vertical) {
+                LazyVStack(alignment: .leading, spacing: 20) {
+                    CompanionPresenceHeader()
                         .environmentObject(connection)
-                        .environmentObject(liveActivity)
                         .environmentObject(remoteApprovals)
-                        .transition(.opacity)
-                }
 
-                if let error = liveActivity.lastError {
-                    Label(error, systemImage: "livephoto.slash")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.orange)
-                        .padding(.horizontal, 4)
-                        .accessibilityIdentifier("companion.liveActivity.error")
+                    switch destination {
+                    case .now:
+                        nowContent
+                    case .sessions:
+                        CompanionSessionsSurface()
+                            .environmentObject(connection)
+                            .environmentObject(liveActivity)
+                            .environmentObject(remoteApprovals)
+                            .transition(.opacity)
+                    }
+
+                    if let error = liveActivity.lastError {
+                        Label(error, systemImage: "livephoto.slash")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.orange)
+                            .padding(.horizontal, 4)
+                            .accessibilityIdentifier("companion.liveActivity.error")
+                    }
                 }
+                .padding(.horizontal, 18)
+                .padding(.top, topPadding)
+                .padding(.bottom, 24)
+                .frame(maxWidth: 640)
+                .frame(maxWidth: .infinity, alignment: .top)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, topPadding)
-            .padding(.bottom, 24)
-            .frame(maxWidth: 640)
-            .frame(maxWidth: .infinity, alignment: .top)
+            .scrollIndicators(.hidden)
+            .scrollBounceBehavior(.basedOnSize)
         }
-        .scrollIndicators(.hidden)
-        .scrollBounceBehavior(.basedOnSize)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             CompanionActionDock(
                 destination: destination,
@@ -165,6 +169,31 @@ struct CompanionCommandCenterView: View {
     }
 }
 
+private struct CompanionCommandBackground: View {
+    var body: some View {
+        ZStack {
+            Color.ciBackground
+
+            GeometryReader { proxy in
+                Circle()
+                    .fill(Color.orange.opacity(0.10))
+                    .frame(width: proxy.size.width * 0.72, height: proxy.size.width * 0.72)
+                    .blur(radius: 80)
+                    .offset(x: -proxy.size.width * 0.26, y: -proxy.size.height * 0.18)
+
+                Circle()
+                    .fill(Color.ciForeground.opacity(0.045))
+                    .frame(width: proxy.size.width * 0.58, height: proxy.size.width * 0.58)
+                    .blur(radius: 72)
+                    .offset(x: proxy.size.width * 0.54, y: proxy.size.height * 0.22)
+            }
+            .allowsHitTesting(false)
+        }
+        .ignoresSafeArea()
+        .accessibilityHidden(true)
+    }
+}
+
 private struct CompanionPresenceHeader: View {
     @EnvironmentObject private var connection: CompanionConnection
     @EnvironmentObject private var remoteApprovals: RemoteApprovalClient
@@ -175,13 +204,13 @@ private struct CompanionPresenceHeader: View {
             CodeIslandPresenceMark()
             .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text("CodeIsland")
-                    .font(.headline.weight(.bold))
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Code Island")
+                    .font(.system(size: 20, weight: .black, design: .rounded))
                     .foregroundStyle(Color.ciForeground)
                 Text(presentation.subtitle)
-                    .font(.subheadline)
-                    .foregroundStyle(Color.ciForeground.opacity(0.58))
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundStyle(Color.ciForeground.opacity(0.52))
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -218,7 +247,14 @@ private struct CompanionPresenceHeader: View {
             .accessibilityLabel("Connection and appearance")
             .accessibilityIdentifier("companion.presence.menu")
         }
-        .frame(minHeight: 54)
+        .padding(10)
+        .frame(minHeight: 68)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .stroke(Color.ciForeground.opacity(0.08), lineWidth: 0.5)
+        )
+        .shadow(color: Color.black.opacity(0.08), radius: 22, y: 10)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("companion.presence")
     }
@@ -250,13 +286,24 @@ private struct CodeIslandPresenceMark: View {
                     endPoint: .bottomTrailing
                 )
             )
-            .frame(width: 42, height: 42)
+            .frame(width: 48, height: 48)
             .overlay {
-                Image(systemName: "terminal.fill")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(.white)
+                VStack(spacing: 1) {
+                    Image(systemName: "terminal.fill")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.white)
+                    Capsule()
+                        .fill(Color.orange)
+                        .frame(width: 14, height: 3)
+                        .opacity(0.92)
+                }
             }
-        .frame(width: 44, height: 44)
+        .overlay(
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .stroke(Color.white.opacity(0.16), lineWidth: 0.5)
+        )
+        .shadow(color: Color.black.opacity(0.18), radius: 10, y: 5)
+        .frame(width: 50, height: 50)
     }
 }
 
@@ -286,6 +333,7 @@ private struct CompanionActionDock: View {
             }
         }
         .shadow(color: Color.black.opacity(0.10), radius: 24, y: 10)
+        .padding(.horizontal, 2)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("companion.actionDock")
     }
@@ -352,12 +400,12 @@ private struct CompanionActionDock: View {
             Image(systemName: symbol)
                 .font(.system(size: 16, weight: .semibold))
             Text(title)
-                .font(.caption2.weight(.semibold))
+                .font(.system(size: 10, weight: .bold, design: .rounded))
         }
         .foregroundStyle(selected ? Color.ciForeground : Color.ciForeground.opacity(0.56))
         .frame(maxWidth: .infinity, minHeight: 52)
         .background(
-            selected ? Color.ciForeground.opacity(0.085) : Color.clear,
+            selected ? Color.ciForeground.opacity(0.10) : Color.clear,
             in: Capsule()
         )
         .contentShape(Rectangle())
@@ -407,15 +455,30 @@ private struct CompanionTodayTimeline: View {
         }
     }
 
+    private var headlineSubtitle: String {
+        if let weatherSummary {
+            return weatherSummary
+        }
+        if hasAgentAttention {
+            return "An agent is waiting for your decision."
+        }
+        if let first = rows.first {
+            let subtitle = first.item.subtitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let subtitle, !subtitle.isEmpty {
+                return "Next: \(first.item.title) · \(subtitle)"
+            }
+            return "Next: \(first.item.title)"
+        }
+        return "Nothing needs you right now."
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 5) {
                 Text("Today")
-                    .font(.largeTitle.weight(.bold))
+                    .font(.system(size: 36, weight: .black, design: .rounded))
                     .foregroundStyle(Color.ciForeground)
-                Text(weatherSummary ?? (hasAgentAttention
-                    ? "An agent is waiting for your decision."
-                    : "Nothing needs you right now."))
+                Text(headlineSubtitle)
                     .font(.subheadline)
                     .foregroundStyle(Color.ciForeground.opacity(0.56))
                     .lineLimit(2)
@@ -454,7 +517,13 @@ private struct CompanionTodayTimeline: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, 4)
+        .padding(18)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .stroke(Color.ciForeground.opacity(0.075), lineWidth: 0.5)
+        )
+        .shadow(color: Color.black.opacity(0.06), radius: 18, y: 8)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("companion.now.overview")
     }

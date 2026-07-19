@@ -332,7 +332,7 @@ private struct RemotePairingCard: View {
                 }
             }
 
-            Label("On your Mac: CodeIsland Settings → Buddy", systemImage: "1.circle.fill")
+            Label("On your Mac: Code Island Settings → Buddy", systemImage: "1.circle.fill")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.ciForeground.opacity(0.7))
 

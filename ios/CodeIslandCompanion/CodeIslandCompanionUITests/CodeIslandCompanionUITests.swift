@@ -125,7 +125,7 @@ final class CodeIslandCompanionUITests: XCTestCase {
 
         XCTAssertTrue(
             app.staticTexts[
-                "That code expired. Open CodeIsland Settings → Buddy on your Mac for the current code."
+                "That code expired. Open Code Island Settings → Buddy on your Mac for the current code."
             ].waitForExistence(timeout: 3)
         )
         XCTAssertTrue(app.staticTexts["Connect to Greg's Mac"].exists)
@@ -221,7 +221,7 @@ final class CodeIslandCompanionUITests: XCTestCase {
         app.launchArguments = ["-CodeIslandCompanionMockHub"]
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["CodeIsland UI Test Mac"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Code Island UI Test Mac"].waitForExistence(timeout: 8))
         XCTAssertFalse(app.staticTexts["Searching"].exists)
         XCTAssertFalse(app.staticTexts["Searching nearby"].exists)
         XCTAssertFalse(app.staticTexts["Private to your Tailscale network"].exists)
@@ -242,7 +242,7 @@ final class CodeIslandCompanionUITests: XCTestCase {
         sessions.tap()
 
         XCTAssertTrue(app.otherElements["companion.remote.sessions"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["CodeIsland UI Test Mac"].exists)
+        XCTAssertTrue(app.staticTexts["Code Island UI Test Mac"].exists)
         XCTAssertFalse(app.staticTexts["Waiting for Mac"].exists)
         XCTAssertFalse(app.otherElements["companion.discoveryCard"].exists)
     }
