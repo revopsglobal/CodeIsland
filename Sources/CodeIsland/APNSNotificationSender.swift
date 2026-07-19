@@ -27,8 +27,6 @@ final class APNSNotificationSender: ObservableObject {
                 || (state == .pending && device.liveActivityPushToStartToken?.isEmpty == false)
                 || (state != .pending && device.liveActivityUpdateTokens?[requestID]?.isEmpty == false)
         }
-        guard !targets.isEmpty else { return }
-        guard let configuration = configuration() else { return }
         let issuedAt = Date()
         let envelope = RemoteAttentionPushEnvelope(
             kind: kind,
@@ -37,7 +35,10 @@ final class APNSNotificationSender: ObservableObject {
             issuedAt: issuedAt,
             expiresAt: issuedAt.addingTimeInterval(state == .pending ? 600 : 60)
         )
+        TelegramAttentionNotifier.shared.notify(envelope: envelope)
 
+        guard !targets.isEmpty else { return }
+        guard let configuration = configuration() else { return }
         Task {
             do {
                 let jwt = try authorizationToken(configuration: configuration)

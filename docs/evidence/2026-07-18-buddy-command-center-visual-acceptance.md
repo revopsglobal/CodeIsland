@@ -92,3 +92,20 @@ They do not prove a signed TestFlight install, current physical-iPhone build
 number, cellular/Tailscale behavior, push wake, Live Activity/Dynamic Island
 visibility, or a real approval/task/calendar mutation on this replacement
 build. Those are tracked as later delivery and physical E2E gates.
+
+## Outbound Telegram fallback — 2026-07-18
+
+CodeIsland now has an optional Telegram fallback in the Mac Buddy settings. It
+is deliberately attention-only: new pending approvals and questions can produce
+a redacted outbound Telegram message, but routine session changes, resolved
+events, commands, transcripts, workspaces, request IDs, and tool payloads are not
+sent.
+
+Verification:
+
+- `DEVELOPER_DIR=/Users/gregharned/Downloads/Xcode-beta.app/Contents/Developer swift test --filter APNSNotificationSenderTests`
+- Result: **6 passed, 0 failed**.
+
+This is a source-level and unit-test receipt only. No real Telegram message was
+sent, because that would require Greg's bot token/chat ID and an explicit
+configured personal alert target.
