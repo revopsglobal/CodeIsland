@@ -72,6 +72,7 @@ mac_build=""
 mac_archs=""
 mac_signature_valid=false
 mac_team_id=""
+mac_cdhash=""
 mac_pid=""
 mac_running=false
 
@@ -87,6 +88,7 @@ if [[ -d "$APP_PATH" ]]; then
     fi
     signing_details="$($CODESIGN_BIN -dv --verbose=4 "$APP_PATH" 2>&1 || true)"
     mac_team_id="$(printf '%s\n' "$signing_details" | awk -F= '/^TeamIdentifier=/{print $2; exit}')"
+    mac_cdhash="$(printf '%s\n' "$signing_details" | awk -F= '/^CDHash=/{print $2; exit}')"
     mac_pid="$($PGREP_BIN -f "^$APP_PATH/Contents/MacOS/CodeIsland$" 2>/dev/null | head -n 1 || true)"
     if [[ -n "$mac_pid" ]]; then
         mac_running=true
@@ -191,6 +193,7 @@ report="$(jq -n \
     --arg macBuild "$mac_build" \
     --arg macArchitectures "$mac_archs" \
     --arg macTeamIdentifier "$mac_team_id" \
+    --arg macCDHash "$mac_cdhash" \
     --arg macPid "$mac_pid" \
     --arg expectedMacVersion "$EXPECTED_MAC_VERSION" \
     --arg deviceStore "$DEVICE_STORE" \
@@ -222,6 +225,7 @@ report="$(jq -n \
             architectures:$macArchitectures,
             signatureValid:$macSignatureValid,
             teamIdentifier:$macTeamIdentifier,
+            cdhash:($macCDHash | select(length > 0) // null),
             pid:$macPid,
             running:$macRunning
         },

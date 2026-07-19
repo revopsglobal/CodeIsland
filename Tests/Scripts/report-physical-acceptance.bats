@@ -32,7 +32,7 @@ STUB
 if [[ " $* " == *" --verify "* ]]; then
   exit 0
 fi
-printf '%s\n' 'Identifier=com.codeisland.app' 'TeamIdentifier=44JG2Y95CH' >&2
+printf '%s\n' 'Identifier=com.codeisland.app' 'CDHash=abc123def456' 'TeamIdentifier=44JG2Y95CH' >&2
 STUB
 
   cat > "$LIPO_BIN" <<'STUB'
@@ -59,6 +59,7 @@ JSON
   printf '%s' "$output" | jq -e '
     .mac.version == "1.0.46" and
     .mac.signatureValid == true and
+    .mac.cdhash == "abc123def456" and
     .health.local.running == true and
     .health.tailscale.running == true and
     .gates.deliveryHealthy == true and
