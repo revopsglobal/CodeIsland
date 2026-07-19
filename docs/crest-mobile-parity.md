@@ -17,15 +17,19 @@ Sources used for the baseline:
 
 This delta supersedes older "current build" language below.
 
-- Latest source: PR #74 merged as
-  `b12ad84607ecf3938712d8333e877d23a367b60d`, adding inline Calendar,
-  Reminders, and Weather recovery actions to the Mac Glances panel.
-- Installed Mac: `1.0.53`, workflow run `29668659780`, artifact
-  `8436600885`, downloaded DMG SHA-256
-  `f25352a62d7b3d5c75dc4c0c7a01e1933b828c01f2045c5ddb5fb2f2b0b7da95`,
+- Latest source: PR #76 merged as
+  `fac1d28e53d7d590d4bf4f786dc117aa8023d466`, replacing all browser-native
+  `prompt()`, `confirm()`, and `alert()` paths in the private web fallback
+  with an inline reviewed action sheet.
+- Installed Mac: `1.0.53`, workflow run `29669109759`, artifact
+  `8436758203`, downloaded DMG SHA-256
+  `0fff1a780679443596ece438dd663063d2bcf77c9818b23364f7952b7cb15bf9`,
   ARM64, signature valid under Team `44JG2Y95CH`, CDHash
-  `f026ef64aee13e297d0d5c6696bd6b109579f1ef`, local `/health` and
+  `0339fa5efb341fdce379d21980614de5cc61d7b4`, local `/health` and
   Tailscale `/health` both running with zero pending work.
+- Installed private web root verification from loopback returned the new
+  `reviewDialog`, `reviewSheet`, `confirmSheet`, and `promptSheet` code, with
+  no remaining `prompt(`, `confirm(`, or `alert(` calls in the served HTML.
 - Latest TestFlight delivery remains run `29668329068`, Buddy build
   `1.0.0 (20260719011702)`, delivery UUID
   `c8dcbe08-5e61-4a0e-b27f-7abb19067009`, Apple state `VALID`, audience
@@ -46,6 +50,9 @@ This delta supersedes older "current build" language below.
   and installed via Mac workflow `29668659780`: Calendar and Reminders show
   Grant/Upgrade/Privacy actions inline, and Weather shows Grant/Privacy or Set
   ZIP without requiring Greg to discover the settings icon first.
+- Previous Mac source PR #74 merged as
+  `b12ad84607ecf3938712d8333e877d23a367b60d`, adding the inline Calendar,
+  Reminders, and Weather recovery actions to the Mac Glances panel.
 
 Previous current-source deliveries retained for traceability: PR #72 merged as
 `5ccefcd8683ad2ce22ac833f4c16e153df3df8fc`; Mac workflow `29668328492`
