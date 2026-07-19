@@ -17,26 +17,33 @@ Sources used for the baseline:
 
 This delta supersedes older "current build" language below.
 
-- Latest source receipt: PR #68 merged as
-  `f6c9455979229474e2c7575df34087f895d98716`, recording the PR #67
-  attention-only Telegram fallback delivery from merge
-  `c1d5cf536e3d6d7687d53a5db96542485476b566`.
-- Installed Mac: `1.0.53`, workflow run `29667371137`, artifact
-  `8436194546`, downloaded DMG SHA-256
-  `65953f22a2d44a1cd0bf2296f53a8709b1e13239c54a85791bd6ae0b585686b9`,
+- Latest source: PR #69 merged as
+  `33fc732043fa93b132a740d478c5bcc2899c47df`, adding the shared
+  `PersonalHubBuddyParity.validate(snapshot:)` guard and authenticated
+  `/api/hub/snapshot` action-parity coverage on top of the PR #67
+  attention-only Telegram fallback.
+- Installed Mac: `1.0.53`, workflow run `29667770216`, artifact
+  `8436322662`, downloaded DMG SHA-256
+  `7109cc4a7ba2ab2f38683b4e8d87f11bffe742db24d506c97f0cd5a630ace71e`,
   ARM64, signature valid under Team `44JG2Y95CH`, local `/health` and
   Tailscale `/health` both running with zero pending work.
-- Latest TestFlight delivery: run `29667371841`, Buddy build
-  `1.0.0 (20260719004222)`, delivery UUID
-  `3e7203b8-8dd7-4ba1-ba57-7814853dcc40`, Apple state `VALID`, audience
+- Latest TestFlight delivery: run `29667770858`, Buddy build
+  `1.0.0 (20260719005630)`, delivery UUID
+  `3a9151da-3662-407b-84c0-feb81de00b2f`, Apple state `VALID`, audience
   `APP_STORE_ELIGIBLE`, internal group `CodeIsland Internal`, artifact
-  `8436181146`, downloaded IPA SHA-256
-  `2cd1a35a0a1bd0f8ec3dab2c8203f9cd2a1668c14e7734e10595b73a686bc14c`.
+  `8436310864`, downloaded IPA SHA-256
+  `9d45a1ecbbe2b245e2d088d45e2f37665fe9f96385448ac55ef2bba2e5f0f987`.
 - Latest physical iPhone state is **stale**, not accepted for the newest
-  TestFlight build. Expected Buddy is `1.0.0 (20260719004222)`; newest
+  TestFlight build. Expected Buddy is `1.0.0 (20260719005630)`; newest
   observed physical Buddy is still `1.0.0 (20260718212803)` from device
   `afba2915-b0a3-456f-a5f2-265bf7e8a64a`, last seen
   `2026-07-19T00:17:23Z`.
+
+Previous current-source delivery retained for traceability: PR #68 merged as
+`f6c9455979229474e2c7575df34087f895d98716`; Mac workflow `29667371137` and
+TestFlight workflow `29667371841` delivered Buddy `1.0.0 (20260719004222)`,
+which was also not physically observed before the newer `20260719005630` build
+superseded it.
 
 ## Final acceptance delta — 2026-07-18
 
