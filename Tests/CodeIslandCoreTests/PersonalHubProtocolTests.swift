@@ -22,6 +22,90 @@ final class PersonalHubProtocolTests: XCTestCase {
         }
     }
 
+    func testBuddyParityValidatorRejectsUnclassifiedSnapshotActions() {
+        let snapshot = PersonalHubSnapshot(
+            serverName: "Greg's Mac",
+            requestedMode: .work,
+            resolvedMode: .work,
+            modules: [
+                PersonalHubModuleSnapshot(
+                    id: .calendar,
+                    availability: .ready,
+                    summary: "Today",
+                    items: [
+                        PersonalHubItem(
+                            id: "event-1",
+                            title: "Standup",
+                            actions: [.init(id: "join", label: "Join")]
+                        )
+                    ],
+                    actions: [.init(id: "teleport", label: "Teleport")],
+                    calendarMonth: PersonalHubCalendarMonth(
+                        displayedMonth: Date(timeIntervalSince1970: 1_800_000_000),
+                        selectedDate: Date(timeIntervalSince1970: 1_800_000_000),
+                        days: [],
+                        selectedEvents: [
+                            PersonalHubItem(
+                                id: "event-2",
+                                title: "Review",
+                                actions: [.init(id: "unknownCalendarAction", label: "Mystery")]
+                            )
+                        ]
+                    )
+                )
+            ]
+        )
+
+        let violations = PersonalHubBuddyParity.validate(snapshot: snapshot)
+        XCTAssertEqual(violations.count, 2)
+        XCTAssertTrue(violations.contains {
+            $0.moduleID == .calendar
+                && $0.actionID == "teleport"
+                && $0.location == "module.actions"
+                && $0.reason == "missing Buddy action disposition"
+        })
+        XCTAssertTrue(violations.contains {
+            $0.moduleID == .calendar
+                && $0.actionID == "unknownCalendarAction"
+                && $0.location == "calendarMonth.selectedEvents[event-2].actions"
+                && $0.reason == "missing Buddy action disposition"
+        })
+    }
+
+    func testBuddyParityValidatorAcceptsKnownNativeReadOnlyAndMacOnlyActions() {
+        let snapshot = PersonalHubSnapshot(
+            serverName: "Greg's Mac",
+            requestedMode: .code,
+            resolvedMode: .code,
+            modules: [
+                PersonalHubModuleSnapshot(
+                    id: .downloads,
+                    availability: .ready,
+                    summary: "Recent downloads",
+                    items: [
+                        PersonalHubItem(
+                            id: "download-1",
+                            title: "deck.pdf",
+                            actions: [
+                                .init(id: "downloadToDevice", label: "Download"),
+                                .init(id: "reveal", label: "Reveal on Mac")
+                            ]
+                        )
+                    ],
+                    actions: [.init(id: "refresh", label: "Refresh")]
+                ),
+                PersonalHubModuleSnapshot(
+                    id: .system,
+                    availability: .ready,
+                    summary: "Healthy",
+                    actions: [.init(id: "refresh", label: "Refresh")]
+                )
+            ]
+        )
+
+        XCTAssertEqual(PersonalHubBuddyParity.validate(snapshot: snapshot), [])
+    }
+
     func testPersonalHubDeepLinksRoundTripAllRoutesAndEscapedQuickJotText() throws {
         let routes: [PersonalHubDeepLink] = [
             .pendingApproval(id: nil),
