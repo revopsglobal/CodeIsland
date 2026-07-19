@@ -17,12 +17,26 @@ Sources used for the baseline:
 
 This delta supersedes older "current build" language below.
 
-- Latest source: PR #78 merged as
+- Latest source: PR #80 merged as
+  `a946634d61bc77c3db0cb4295e4cee67f0a68248`, surfacing stale Buddy
+  TestFlight builds in Mac Settings and syncing the latest expected Buddy
+  version/build into `com.codeisland.app` defaults from the strict physical
+  gate script. Local verification covered `RemoteBuddyBuildExpectationTests`,
+  the latest-TestFlight gate Bats suite, `git diff --check`, and
+  `graphify update . --no-viz`.
+- Installed Mac: `1.0.53`, workflow run `29669820263`, downloaded DMG SHA-256
+  `5566399b49e08c0d6301019fec075a5f2e8892db8755eb2bd8027143c3a4d88a`,
+  ARM64, signature valid under Team `44JG2Y95CH`, CDHash
+  `3cc519663f28ab3191d73ce9e36497ed20f759fe`, local `/health` and
+  Tailscale `/health` both running with zero pending work. The strict physical
+  gate wrote `remoteApprovalExpectedClientVersion = 1.0.0` and
+  `remoteApprovalExpectedClientBuild = 20260719011702` to the Mac app defaults.
+- Previous source: PR #78 merged as
   `d9faa5efd75f33f8eda1d02be5edd3ea58a49ae4`, adding a manual
   Telegram fallback test alert in Buddy Settings. The test alert uses the same
   redacted approval/question message shape and private Tailscale link as real
   Telegram fallback alerts.
-- Installed Mac: `1.0.53`, workflow run `29669425030`, artifact
+- Previous installed Mac: `1.0.53`, workflow run `29669425030`, artifact
   `8436864822`, downloaded DMG SHA-256
   `c421fe53f3011eded8cff233c2e7a55b61efb618257ae7b568c909dd51cee58a`,
   ARM64, signature valid under Team `44JG2Y95CH`, CDHash
