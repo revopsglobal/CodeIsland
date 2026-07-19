@@ -17,6 +17,12 @@ Sources used for the baseline:
 
 This delta supersedes all older current-build statements below.
 
+- Source after the installed `1.0.53` acceptance now includes late companion
+  command-center polish on `codex/continue-e2e-acceptance`: the native idle
+  mock renders a calm Now state instead of a fake pending approval, and routine
+  Tools/module icons are neutral so orange remains reserved for attention and
+  primary actions. This polish is source/simulator verified only until a new
+  signed Mac/TestFlight pair is built and physically accepted.
 - Current source: PR #61 merge
   `24c2c16d9cc41546db88d5ca8bcc0fa1a182b208` hardens delayed ActivityKit
   update-token recovery; PR #62 merge
