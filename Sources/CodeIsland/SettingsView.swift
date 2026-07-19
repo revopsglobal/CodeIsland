@@ -2094,7 +2094,7 @@ private struct BuddyPage: View {
                         .textSelection(.enabled)
                 }
 
-                Text("Optional personal backup for when APNs or Live Activities miss you. It only sends redacted approval/question alerts, a Buddy deep link, a TestFlight recovery hint, and your private Tailscale web link; the actual decision still happens in Buddy or the CodeIsland web app.")
+                Text("Optional personal backup for when APNs or Live Activities miss you. It only sends redacted approval/question alerts, a Buddy deep link, the expected Buddy TestFlight build when known, and your private Tailscale web link; the actual decision still happens in Buddy or the CodeIsland web app.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

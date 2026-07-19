@@ -23,7 +23,8 @@ final class TelegramAttentionNotifier: ObservableObject {
             for: envelope,
             remoteURL: remoteURL,
             buddyURL: Self.buddyURL(for: envelope.kind),
-            testFlightURL: Self.buddyTestFlightURL
+            testFlightURL: Self.buddyTestFlightURL,
+            expectedBuddyBuild: Self.expectedBuddyBuild()
         )
         sendInBackground(text: text)
     }
@@ -32,7 +33,8 @@ final class TelegramAttentionNotifier: ObservableObject {
         let text = TelegramAttentionMessageBuilder.testMessage(
             remoteURL: Self.remoteApprovalURL(),
             buddyURL: Self.buddyURL(for: .question),
-            testFlightURL: Self.buddyTestFlightURL
+            testFlightURL: Self.buddyTestFlightURL,
+            expectedBuddyBuild: Self.expectedBuddyBuild()
         )
         sendInBackground(text: text, reportMissingConfiguration: true)
     }
@@ -115,6 +117,18 @@ final class TelegramAttentionNotifier: ObservableObject {
         }
     }
 
+    private static func expectedBuddyBuild() -> String? {
+        let defaults = UserDefaults.standard
+        let version = (defaults.string(forKey: SettingsKey.remoteApprovalExpectedClientVersion)
+            ?? SettingsDefaults.remoteApprovalExpectedClientVersion).trimmingCharacters(in: .whitespacesAndNewlines)
+        let build = (defaults.string(forKey: SettingsKey.remoteApprovalExpectedClientBuild)
+            ?? SettingsDefaults.remoteApprovalExpectedClientBuild).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !version.isEmpty || !build.isEmpty else { return nil }
+        guard !version.isEmpty else { return build }
+        guard !build.isEmpty else { return version }
+        return "\(version) (\(build))"
+    }
+
     private func send(text: String, configuration: Configuration) async throws {
         guard let url = URL(string: "https://api.telegram.org/bot\(configuration.botToken)/sendMessage") else {
             throw TelegramError.incompleteConfiguration
@@ -148,7 +162,8 @@ enum TelegramAttentionMessageBuilder {
     static func testMessage(
         remoteURL: URL?,
         buddyURL: URL? = nil,
-        testFlightURL: URL? = nil
+        testFlightURL: URL? = nil,
+        expectedBuddyBuild: String? = nil
     ) -> String {
         let now = Date()
         let envelope = RemoteAttentionPushEnvelope(
@@ -163,7 +178,8 @@ enum TelegramAttentionMessageBuilder {
             for: envelope,
             remoteURL: remoteURL,
             buddyURL: buddyURL,
-            testFlightURL: testFlightURL
+            testFlightURL: testFlightURL,
+            expectedBuddyBuild: expectedBuddyBuild
         )
     }
 
@@ -171,7 +187,8 @@ enum TelegramAttentionMessageBuilder {
         for envelope: RemoteAttentionPushEnvelope,
         remoteURL: URL?,
         buddyURL: URL? = nil,
-        testFlightURL: URL? = nil
+        testFlightURL: URL? = nil,
+        expectedBuddyBuild: String? = nil
     ) -> String {
         let noun = envelope.kind == .approval ? "approval" : "answer"
         var lines = [
@@ -185,7 +202,9 @@ enum TelegramAttentionMessageBuilder {
             lines.append("Web fallback: \(remoteURL.absoluteString)")
         }
         if let testFlightURL {
-            lines.append("If Buddy is stale: update CodeIsland Buddy in TestFlight \(testFlightURL.absoluteString)")
+            let trimmedBuild = expectedBuddyBuild?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let target = trimmedBuild.isEmpty ? "" : " to \(trimmedBuild)"
+            lines.append("If Buddy is stale: update CodeIsland Buddy\(target) in TestFlight \(testFlightURL.absoluteString)")
         }
         return lines.joined(separator: "\n")
     }
