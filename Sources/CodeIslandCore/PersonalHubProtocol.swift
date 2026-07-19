@@ -985,6 +985,20 @@ public enum PersonalHubBuddyParity {
         routes.first(where: { $0.moduleID == moduleID })
     }
 
+    public static func disposition(
+        for moduleID: PersonalHubModuleID,
+        actionID: String
+    ) -> PersonalHubBuddyActionDisposition? {
+        route(for: moduleID)?.actionDispositions[actionID]
+    }
+
+    public static func isReadOnlyAction(
+        moduleID: PersonalHubModuleID,
+        actionID: String
+    ) -> Bool {
+        disposition(for: moduleID, actionID: actionID) == .readOnly
+    }
+
     public static func validate(snapshot: PersonalHubSnapshot) -> [PersonalHubBuddyParityViolation] {
         snapshot.modules.flatMap(validate(module:))
     }
