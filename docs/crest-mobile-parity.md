@@ -51,6 +51,32 @@ This delta supersedes older "current build" language below.
   `CodeIslandCompanionTests/CompanionCommandCenterModelTests` on device
   `ECC99681-C3ED-4452-B727-0F9E2C09C469`; `git diff --check` passed;
   `graphify update . --no-viz` rebuilt the project graph.
+- Latest Dynamic Island / Live Activity signal source: PR #94 merged as
+  `b4abdc32a74c2eab73b5c641b9934d179e9b38d9`, prioritizing sessions that
+  require approval or question input ahead of routine running work in
+  multi-session Live Activity and Dynamic Island surfaces. Compact and expanded
+  copy now says **Needs you** / **N need you** when attention is required, and
+  routine sessions use stable identity sorting so heartbeat order does not
+  create visual churn. Verification passed the iOS Simulator XCTest
+  `CodeIslandCompanionTests/LiveActivityPrivacyTests` on device
+  `ECC99681-C3ED-4452-B727-0F9E2C09C469` (12/12), `git diff --check`, and
+  `graphify update . --no-viz`.
+- Latest TestFlight delivery after PR #94: workflow run `29671885894` from
+  `b4abdc32a74c2eab73b5c641b9934d179e9b38d9` produced Buddy
+  `1.0.0 (20260719033128)`, delivery UUID
+  `7c194df6-625e-4a68-bb3f-f4ace9aa3e94`, Apple state `VALID`, audience
+  `APP_STORE_ELIGIBLE`, internal group `CodeIsland Internal`, artifact
+  `8437634356`, downloaded IPA SHA-256
+  `fea23549cc8a1a3bdab667a775bd8b5e5b8f4075af0ff3c60243a9582c5036e8`.
+- Latest strict E2E report at `2026-07-19T03:39:24Z` returned
+  `status = physical-gate-incomplete`, `complete = false`: the Mac app is
+  installed and running at `1.0.53`, local and Tailscale `/health` are HTTP
+  `200` with zero pending work, Mac Settings sync expects Buddy
+  `1.0.0 (20260719033128)`, and
+  `RemoteApprovalHTTPServerTests/testAuthenticatedHostLifecycleOverRealListener`
+  passed, but the physical iPhone is still stale on Buddy
+  `1.0.0 (20260718212803)` instead of latest TestFlight
+  `1.0.0 (20260719033128)`.
 - Latest TestFlight delivery after PR #92: workflow run `29671608588` from
   `e27cb6acfd136e8bcaca49bc6cd928aec598782d` produced Buddy
   `1.0.0 (20260719032043)`, delivery UUID
