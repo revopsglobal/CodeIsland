@@ -153,11 +153,13 @@ final class APNSNotificationSenderTests: XCTestCase {
 
         let message = TelegramAttentionMessageBuilder.message(
             for: envelope,
-            remoteURL: URL(string: "https://gregs-mac.tailnet.example")
+            remoteURL: URL(string: "https://gregs-mac.tailnet.example"),
+            buddyURL: PersonalHubDeepLink.pendingApproval(id: nil).url
         )
 
         XCTAssertTrue(message.contains("CodeIsland needs your approval."))
-        XCTAssertTrue(message.contains("https://gregs-mac.tailnet.example"))
+        XCTAssertTrue(message.contains("Buddy: codeisland://approvals/pending"))
+        XCTAssertTrue(message.contains("Web fallback: https://gregs-mac.tailnet.example"))
         XCTAssertFalse(message.contains("opaque-approval-id"))
         XCTAssertFalse(message.localizedCaseInsensitiveContains("command"))
         XCTAssertFalse(message.localizedCaseInsensitiveContains("transcript"))
@@ -177,7 +179,8 @@ final class APNSNotificationSenderTests: XCTestCase {
 
         let message = TelegramAttentionMessageBuilder.message(
             for: envelope,
-            remoteURL: nil
+            remoteURL: nil,
+            buddyURL: PersonalHubDeepLink.pendingQuestion(id: nil).url
         )
 
         XCTAssertEqual(
@@ -185,18 +188,21 @@ final class APNSNotificationSenderTests: XCTestCase {
             """
             CodeIsland needs your answer.
             Open Buddy to review the private details.
+            Buddy: codeisland://questions/pending
             """
         )
     }
 
     func testTelegramFallbackTestMessageUsesSameRedactedShape() throws {
         let message = TelegramAttentionMessageBuilder.testMessage(
-            remoteURL: URL(string: "https://gregs-mac.tailnet.example")
+            remoteURL: URL(string: "https://gregs-mac.tailnet.example"),
+            buddyURL: PersonalHubDeepLink.pendingQuestion(id: nil).url
         )
 
         XCTAssertTrue(message.contains("CodeIsland needs your answer."))
         XCTAssertTrue(message.contains("Open Buddy to review the private details."))
-        XCTAssertTrue(message.contains("https://gregs-mac.tailnet.example"))
+        XCTAssertTrue(message.contains("Buddy: codeisland://questions/pending"))
+        XCTAssertTrue(message.contains("Web fallback: https://gregs-mac.tailnet.example"))
         XCTAssertFalse(message.contains("telegram-test"))
         XCTAssertFalse(message.localizedCaseInsensitiveContains("command"))
         XCTAssertFalse(message.localizedCaseInsensitiveContains("transcript"))
