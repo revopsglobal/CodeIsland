@@ -7,6 +7,12 @@ struct RemoteTaskRecord: Codable, Equatable, Identifiable {
     let request: RemoteTaskCreateRequest
     let deviceID: String
     var summary: RemoteTaskSummary
+    /// Optional for backward-compatible decoding of snapshots written before
+    /// mutation idempotency was introduced.
+    var processedMutationIDs: [UUID]?
+    /// Set before the provider is invoked. A crash can therefore require
+    /// review, but can never replay the original prompt automatically.
+    var executionStarted: Bool?
 }
 
 @MainActor
@@ -89,7 +95,9 @@ final class RemoteTaskStore: ObservableObject {
                 updatedAt: timestamp,
                 lastReceiptSequence: 1,
                 latestSummary: "Accepted by Mac"
-            )
+            ),
+            processedMutationIDs: [],
+            executionStarted: false
         )
         let accepted = RemoteTaskReceipt(
             taskID: taskID,
@@ -127,6 +135,53 @@ final class RemoteTaskStore: ObservableObject {
 
     func task(id: UUID) -> RemoteTaskRecord? {
         tasks.first(where: { $0.id == id })
+    }
+
+    /// Atomically records a client mutation before dispatch. Persisting the
+    /// claim prevents a retry after a process restart from executing twice.
+    @discardableResult
+    func claimMutation(taskID: UUID, idempotencyKey: UUID) throws -> Bool {
+        guard let index = tasks.firstIndex(where: { $0.id == taskID }) else {
+            throw StoreError.unknownTask(taskID)
+        }
+        var claimed = tasks[index].processedMutationIDs ?? []
+        guard !claimed.contains(idempotencyKey) else { return false }
+        claimed.append(idempotencyKey)
+        // Bound retained client keys independently of the task retention cap.
+        if claimed.count > 256 {
+            claimed.removeFirst(claimed.count - 256)
+        }
+        var updated = tasks
+        updated[index].processedMutationIDs = claimed
+        try persist(updated)
+        tasks = updated
+        return true
+    }
+
+    func releaseMutation(taskID: UUID, idempotencyKey: UUID) throws {
+        guard let index = tasks.firstIndex(where: { $0.id == taskID }) else {
+            throw StoreError.unknownTask(taskID)
+        }
+        var claimed = tasks[index].processedMutationIDs ?? []
+        guard let mutationIndex = claimed.firstIndex(of: idempotencyKey) else { return }
+        claimed.remove(at: mutationIndex)
+        var updated = tasks
+        updated[index].processedMutationIDs = claimed
+        try persist(updated)
+        tasks = updated
+    }
+
+    @discardableResult
+    func markExecutionStarted(taskID: UUID) throws -> Bool {
+        guard let index = tasks.firstIndex(where: { $0.id == taskID }) else {
+            throw StoreError.unknownTask(taskID)
+        }
+        guard tasks[index].executionStarted != true else { return false }
+        var updated = tasks
+        updated[index].executionStarted = true
+        try persist(updated)
+        tasks = updated
+        return true
     }
 
     func snapshot() -> RemoteTaskSnapshot {

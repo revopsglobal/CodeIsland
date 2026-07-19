@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import CodeIslandCore
 
@@ -63,6 +64,9 @@ final class RemoteTaskCoordinator {
         case providerUnavailable(RemoteTaskProvider)
         case invalidActionToken
         case staleAction
+        case unknownAttachment(String)
+        case attachmentMismatch(String)
+        case unsafeAttachmentWorkspace
 
         var errorDescription: String? {
             switch self {
@@ -71,6 +75,9 @@ final class RemoteTaskCoordinator {
             case .providerUnavailable(let provider): return "\(Self.name(provider)) is unavailable on this Mac"
             case .invalidActionToken: return "The exact action approval is invalid or expired"
             case .staleAction: return "The task changed after this action was prepared"
+            case .unknownAttachment(let id): return "Attachment \(id) was not declared for this task"
+            case .attachmentMismatch(let id): return "Attachment \(id) does not match its declared size or SHA-256"
+            case .unsafeAttachmentWorkspace: return "The task attachment workspace is unsafe"
             }
         }
 
@@ -116,6 +123,21 @@ final class RemoteTaskCoordinator {
 
     func task(id: UUID) -> RemoteTaskRecord? { store.task(id: id) }
 
+    func task(idempotencyKey: UUID) -> RemoteTaskRecord? {
+        store.tasks.first { $0.request.idempotencyKey == idempotencyKey }
+    }
+
+    func snapshot(deviceID: String) -> RemoteTaskSnapshot {
+        let current = store.snapshot()
+        let ownedIDs = Set(store.tasks.lazy.filter { $0.deviceID == deviceID }.map(\.id))
+        return RemoteTaskSnapshot(
+            version: current.version,
+            serverName: current.serverName,
+            generatedAt: current.generatedAt,
+            tasks: current.tasks.filter { ownedIDs.contains($0.id) }
+        )
+    }
+
     @discardableResult
     func create(request: RemoteTaskCreateRequest, deviceID: String) throws -> RemoteTaskRecord {
         if let existing = store.tasks.first(where: { $0.request.idempotencyKey == request.idempotencyKey }) {
@@ -126,38 +148,34 @@ final class RemoteTaskCoordinator {
         let hostRequest = replacingProvider(request, with: resolvedProvider)
         let record = try store.create(hostRequest, deviceID: deviceID)
 
-        guard let workspaceID = hostRequest.workspaceID,
-              let workspaceURL = workspaceCatalog.resolve(id: workspaceID)
-        else {
-            try appendNeedsYou(taskID: record.id, summary: "Choose an available Mac workspace")
-            return store.task(id: record.id) ?? record
+        try startIfReady(taskID: record.id)
+        return store.task(id: record.id) ?? record
+    }
+
+    @discardableResult
+    func stageAttachment(taskID: UUID, attachmentID: String, data: Data) throws -> RemoteTaskRecord {
+        guard let record = store.task(id: taskID) else { throw CoordinatorError.unknownTask(taskID) }
+        guard let descriptor = record.request.attachments.first(where: { $0.id == attachmentID }) else {
+            throw CoordinatorError.unknownAttachment(attachmentID)
         }
-        guard let runner = runners[resolvedProvider], runner.isAvailable else {
-            try appendNeedsYou(
-                taskID: record.id,
-                summary: "\(providerName(resolvedProvider)) is unavailable on this Mac"
-            )
-            return store.task(id: record.id) ?? record
+        let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        guard Int64(data.count) == descriptor.byteCount,
+              digest.caseInsensitiveCompare(descriptor.sha256) == .orderedSame
+        else {
+            throw CoordinatorError.attachmentMismatch(attachmentID)
         }
 
-        do {
-            let attachments = try attachmentURLs(for: record)
-            try runner.start(
-                taskID: record.id,
-                workspaceURL: workspaceURL,
-                prompt: hostRequest.prompt,
-                attachments: attachments
+        if record.executionStarted != true {
+            _ = try attachmentStore.stage(
+                data: data,
+                taskID: taskID,
+                attachmentID: descriptor.id,
+                displayName: descriptor.displayName,
+                mediaType: descriptor.mediaType
             )
-        } catch {
-            try append(
-                taskID: record.id,
-                kind: .failed,
-                state: .failed,
-                summary: "\(providerName(resolvedProvider)) could not start: \(error.localizedDescription)",
-                provider: resolvedProvider
-            )
+            try startIfReady(taskID: taskID)
         }
-        return store.task(id: record.id) ?? record
+        return store.task(id: taskID) ?? record
     }
 
     /// Reattaches durable nonterminal tasks to provider session identifiers.
@@ -204,6 +222,26 @@ final class RemoteTaskCoordinator {
             throw CoordinatorError.providerUnavailable(record.summary.provider)
         }
         try runner.followUp(taskID: taskID, text: text, attachments: attachments)
+    }
+
+    @discardableResult
+    func followUp(_ request: RemoteTaskFollowUpRequest) throws -> RemoteTaskRecord {
+        guard let record = store.task(id: request.taskID) else {
+            throw CoordinatorError.unknownTask(request.taskID)
+        }
+        guard request.attachments.isEmpty else {
+            throw CoordinatorError.unknownAttachment(request.attachments[0].id)
+        }
+        guard try store.claimMutation(taskID: request.taskID, idempotencyKey: request.idempotencyKey) else {
+            return record
+        }
+        do {
+            try followUp(taskID: request.taskID, text: request.text, attachments: [])
+        } catch {
+            try? store.releaseMutation(taskID: request.taskID, idempotencyKey: request.idempotencyKey)
+            throw error
+        }
+        return store.task(id: request.taskID) ?? record
     }
 
     func cancel(taskID: UUID) throws {
@@ -309,9 +347,112 @@ final class RemoteTaskCoordinator {
         )
     }
 
-    private func attachmentURLs(for record: RemoteTaskRecord) throws -> [URL] {
-        try record.request.attachments.map {
-            try attachmentStore.url(taskID: record.id, attachmentID: $0.id)
+    private func startIfReady(taskID: UUID) throws {
+        guard let record = store.task(id: taskID), record.executionStarted != true else { return }
+        let provider = record.summary.provider
+        guard let workspaceURL = workspaceCatalog.resolve(id: record.summary.workspaceID) else {
+            try appendNeedsYou(taskID: taskID, summary: "Choose an available Mac workspace")
+            return
+        }
+        guard let runner = runners[provider], runner.isAvailable else {
+            try appendNeedsYou(taskID: taskID, summary: "\(providerName(provider)) is unavailable on this Mac")
+            return
+        }
+        guard let stagedAttachments = stagedAttachmentURLs(for: record) else {
+            if record.summary.latestSummary != "Waiting for attachments" {
+                try append(
+                    taskID: taskID,
+                    kind: .changed,
+                    state: .queued,
+                    summary: "Waiting for attachments",
+                    provider: provider
+                )
+            }
+            return
+        }
+
+        do {
+            let attachments = try materialize(
+                stagedAttachments,
+                descriptors: record.request.attachments,
+                taskID: taskID,
+                workspaceURL: workspaceURL
+            )
+            guard try store.markExecutionStarted(taskID: taskID) else { return }
+            try runner.start(
+                taskID: taskID,
+                workspaceURL: workspaceURL,
+                prompt: record.request.prompt,
+                attachments: attachments
+            )
+        } catch {
+            try append(
+                taskID: taskID,
+                kind: .failed,
+                state: .failed,
+                summary: "\(providerName(provider)) could not start: \(error.localizedDescription)",
+                provider: provider
+            )
+        }
+    }
+
+    private func stagedAttachmentURLs(for record: RemoteTaskRecord) -> [URL]? {
+        var result: [URL] = []
+        for descriptor in record.request.attachments {
+            guard let url = try? attachmentStore.url(taskID: record.id, attachmentID: descriptor.id) else {
+                return nil
+            }
+            result.append(url)
+        }
+        return result
+    }
+
+    private func materialize(
+        _ stagedURLs: [URL],
+        descriptors: [RemoteTaskAttachmentDescriptor],
+        taskID: UUID,
+        workspaceURL: URL
+    ) throws -> [URL] {
+        guard !stagedURLs.isEmpty else { return [] }
+        let fileManager = FileManager.default
+        let canonicalWorkspace = RemoteCwdFilter.canonical(workspaceURL)
+        let privateRoot = canonicalWorkspace.appendingPathComponent(".codeisland", isDirectory: true)
+        let attachmentsRoot = privateRoot.appendingPathComponent("remote-task-attachments", isDirectory: true)
+        let taskRoot = attachmentsRoot.appendingPathComponent(taskID.uuidString.lowercased(), isDirectory: true)
+        for directory in [privateRoot, attachmentsRoot, taskRoot] {
+            guard RemoteCwdFilter.contains(directory, in: canonicalWorkspace) else {
+                throw CoordinatorError.unsafeAttachmentWorkspace
+            }
+            if fileManager.fileExists(atPath: directory.path) {
+                let values = try directory.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+                guard values.isDirectory == true, values.isSymbolicLink != true else {
+                    throw CoordinatorError.unsafeAttachmentWorkspace
+                }
+            } else {
+                try fileManager.createDirectory(
+                    at: directory,
+                    withIntermediateDirectories: false,
+                    attributes: [.posixPermissions: 0o700]
+                )
+            }
+            try? fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
+        }
+
+        return try zip(stagedURLs, descriptors).map { source, descriptor in
+            let target = taskRoot.appendingPathComponent(descriptor.id, isDirectory: false)
+            guard RemoteCwdFilter.contains(target, in: taskRoot) else {
+                throw CoordinatorError.unsafeAttachmentWorkspace
+            }
+            if fileManager.fileExists(atPath: target.path) {
+                let values = try target.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+                guard values.isRegularFile == true, values.isSymbolicLink != true else {
+                    throw CoordinatorError.unsafeAttachmentWorkspace
+                }
+            }
+            let data = try Data(contentsOf: source, options: [.mappedIfSafe])
+            try data.write(to: target, options: .atomic)
+            try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: target.path)
+            return target
         }
     }
 

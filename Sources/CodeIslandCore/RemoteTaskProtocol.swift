@@ -411,6 +411,27 @@ public struct RemoteTaskPreparedAction: Codable, Equatable, Sendable {
     }
 }
 
+/// The exact prepared action and its single-use device-bound authorization.
+/// Keeping the intent in the execution request lets the Mac recompute the
+/// binding instead of trusting a client-supplied action identifier.
+public struct RemoteTaskActionExecutionRequest: Codable, Equatable, Sendable {
+    public static let currentVersion = 1
+
+    public let version: Int
+    public let intent: RemoteTaskActionIntent
+    public let actionToken: String
+
+    public init(
+        version: Int = Self.currentVersion,
+        intent: RemoteTaskActionIntent,
+        actionToken: String
+    ) {
+        self.version = version
+        self.intent = intent
+        self.actionToken = actionToken
+    }
+}
+
 /// Privacy-preserving APNs metadata. Prompt text, workspace identity,
 /// attachment names, provider transcripts, and action tokens never enter it.
 public struct RemoteTaskPushSummary: Codable, Equatable, Sendable {
