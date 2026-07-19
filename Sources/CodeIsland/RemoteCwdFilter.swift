@@ -5,7 +5,23 @@ import Foundation
 /// prefix because `/work/repo-escape` is not inside `/work/repo`.
 enum RemoteCwdFilter {
     static func canonical(_ url: URL) -> URL {
-        url.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
+        let standardized = url.standardizedFileURL
+        var existingAncestor = standardized
+        var missingComponents: [String] = []
+
+        // resolvingSymlinksInPath() can leave an intermediate symlink
+        // unresolved when the final file does not exist yet. Walk up to the
+        // deepest existing ancestor first so new writes cannot escape through
+        // a symlinked parent directory.
+        while existingAncestor.path != "/",
+              !FileManager.default.fileExists(atPath: existingAncestor.path) {
+            missingComponents.insert(existingAncestor.lastPathComponent, at: 0)
+            existingAncestor.deleteLastPathComponent()
+        }
+        let resolvedAncestor = existingAncestor.resolvingSymlinksInPath().standardizedFileURL
+        return missingComponents.reduce(resolvedAncestor) {
+            $0.appendingPathComponent($1)
+        }.standardizedFileURL
     }
 
     static func contains(_ candidate: URL, in root: URL) -> Bool {
