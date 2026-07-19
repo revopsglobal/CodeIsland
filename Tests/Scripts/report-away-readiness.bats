@@ -5,6 +5,7 @@ setup() {
   export TEST_TMPDIR="$BATS_TEST_TMPDIR/test"
   export STRICT_E2E_BIN="$TEST_TMPDIR/strict-e2e"
   export DEFAULTS_BIN="$TEST_TMPDIR/defaults"
+  export CURL_BIN="$TEST_TMPDIR/curl"
   mkdir -p "$TEST_TMPDIR"
 
   cat > "$DEFAULTS_BIN" <<'STUB'
@@ -19,6 +20,50 @@ case "$key" in
 esac
 STUB
   chmod +x "$DEFAULTS_BIN"
+  cat > "$CURL_BIN" <<'STUB'
+#!/usr/bin/env bash
+output=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -o)
+      output="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+case "${TEST_WEB_SHELL_CASE:-ready}" in
+  unreachable)
+    printf '503\ntext/plain\n'
+    printf '%s\n' 'service unavailable' > "$output"
+    ;;
+  marker-mismatch)
+    printf '200\ntext/html; charset=utf-8\n'
+    printf '%s\n' '<html><title>Wrong</title></html>' > "$output"
+    ;;
+  *)
+    printf '200\ntext/html; charset=utf-8\n'
+    cat > "$output" <<'HTML'
+<html>
+<head>
+<title>CodeIsland</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/app-icon.svg">
+</head>
+<body>
+<h1>Your Mac, when it needs you</h1>
+<section id="questions"></section>
+<section id="approvals"></section>
+<section id="hub"></section>
+</body>
+</html>
+HTML
+    ;;
+esac
+STUB
+  chmod +x "$CURL_BIN"
 }
 
 write_strict_report() {
@@ -48,8 +93,8 @@ jq -n '{
   },
   remoteHostHealth:{
     deliveryHealthy:$web,
-    local:{running:$web,pendingCount:0},
-    tailscale:{running:$web,pendingCount:0},
+    local:{url:"http://local.test/health",running:$web,pendingCount:0},
+    tailscale:{url:"https://tailscale.test/health",running:$web,pendingCount:0},
     nextAction:"Restore Tailscale host health."
   },
   testFlightSourceDrift:{
@@ -93,6 +138,10 @@ STUB
     .nativeBuddy.sourceCurrent == true and
     .nativeBuddy.physicalAccepted == false and
     .webFallback.reachable == true and
+    .webFallback.shell.reachable == true and
+    .webFallback.shell.markers.questions == true and
+    .webFallback.shell.markers.approvals == true and
+    .webFallback.shell.markers.hub == true and
     .telegramFallback.enabled == false and
     .telegramFallback.controlPlane == false and
     ([.requiredGates[] | select(.id == "physical-buddy-checkin" and .owner == "greg")] | length) == 1 and
@@ -160,6 +209,50 @@ STUB
     .readyForAwayManualAcceptance == false and
     .nativeBuddy.sourceCurrent == false and
     ([.requiredGates[] | select(.id == "latest-testflight-current" and .owner == "codex")] | length) == 1'
+}
+
+@test "blocks away readiness when private web fallback shell is missing expected markers" {
+  export TEST_WEB_SHELL_CASE=marker-mismatch
+  write_strict_report
+
+  run "$REPO_ROOT/scripts/report-away-readiness.sh"
+
+  [ "$status" -eq 2 ]
+  printf '%s' "$output" | jq -e '
+    .status == "web-fallback-shell-unavailable" and
+    .readyForAwayManualAcceptance == false and
+    .webFallback.reachable == true and
+    .webFallback.shell.status == "marker-mismatch" and
+    .webFallback.shell.reachable == false and
+    ([.requiredGates[] | select(.id == "private-web-shell" and .owner == "codex")] | length) == 1'
+}
+
+@test "blocks away readiness when private web fallback shell does not return HTTP 200" {
+  export TEST_WEB_SHELL_CASE=unreachable
+  write_strict_report
+
+  run "$REPO_ROOT/scripts/report-away-readiness.sh"
+
+  [ "$status" -eq 2 ]
+  printf '%s' "$output" | jq -e '
+    .status == "web-fallback-shell-unavailable" and
+    .webFallback.shell.status == "unreachable" and
+    .webFallback.shell.httpCode == "503" and
+    ([.requiredGates[] | select(.id == "private-web-shell")] | length) == 1'
+}
+
+@test "fails closed from combined readiness even when strict report is complete" {
+  export TEST_WEB_SHELL_CASE=marker-mismatch
+  write_strict_report "complete" true true true false
+
+  run "$REPO_ROOT/scripts/report-away-readiness.sh"
+
+  [ "$status" -eq 2 ]
+  printf '%s' "$output" | jq -e '
+    .complete == false and
+    .status == "web-fallback-shell-unavailable" and
+    .strictE2E.complete == true and
+    ([.requiredGates[] | select(.id == "private-web-shell")] | length) == 1'
 }
 
 @test "fails closed when strict E2E output is not JSON" {
