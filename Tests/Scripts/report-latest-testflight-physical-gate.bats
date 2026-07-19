@@ -70,6 +70,9 @@ STUB
     .physicalAcceptance.gates.physicalBuildStatus.expectedBuild == "20260719005630" and
     .macSettingsSync.status == "synced" and
     .macSettingsSync.expectedClientBuild == "20260719005630" and
+    .installGuide.testFlightURL == "itms-beta://" and
+    (.installGuide.instruction | contains("CodeIsland Buddy 1.0.0 (20260719005630)")) and
+    (.installGuide.copyText | contains("report-latest-testflight-physical-gate.sh")) and
     .gate.status == "stale" and
     .gate.complete == false and
     (.gate.nextAction | contains("Install and open CodeIsland Buddy build 20260719005630"))'
@@ -107,6 +110,7 @@ STUB
   printf '%s' "$output" | jq -e '
     .latestTestFlight.buildNumber == "20260719005630" and
     .macSettingsSync.status == "synced" and
+    (.installGuide.instruction | contains("physically registered")) and
     .gate.status == "matched" and
     .gate.complete == true and
     (.gate.nextAction | contains("strict physical E2E interaction acceptance"))'
@@ -141,6 +145,7 @@ STUB
   [ "$status" -eq 2 ]
   printf '%s' "$output" | jq -e '
     .latestTestFlight.buildNumber == "20260719005630" and
+    .installGuide.testFlightURL == "itms-beta://" and
     .macSettingsSync.status == "disabled"'
   [ ! -s "$DEFAULTS_LOG" ]
 }

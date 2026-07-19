@@ -40,6 +40,29 @@ struct RemoteBuddyBuildExpectation: Equatable {
     }
 }
 
+struct RemoteBuddyInstallGuidance: Equatable {
+    static let testFlightURL = URL(string: "itms-beta://")!
+
+    let expectedVersion: String
+    let expectedBuild: String
+
+    init(expectedVersion: String, expectedBuild: String) {
+        self.expectedVersion = expectedVersion.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.expectedBuild = expectedBuild.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var instruction: String {
+        if expectedVersion.isEmpty {
+            return "Open TestFlight on the iPhone, install the newest CodeIsland Buddy build, then open Buddy for at least 10 seconds."
+        }
+        return "Open TestFlight on the iPhone, install CodeIsland Buddy \(expectedVersion) (\(expectedBuild)), then open Buddy for at least 10 seconds."
+    }
+
+    var copyText: String {
+        "\(instruction) Leave Tailscale connected, then rerun scripts/report-latest-testflight-physical-gate.sh on the Mac."
+    }
+}
+
 enum RemoteBuddyBuildStatus: Equatable {
     case notConfigured
     case missing(expectedVersion: String, expectedBuild: String)

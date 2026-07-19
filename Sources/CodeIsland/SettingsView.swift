@@ -1580,6 +1580,19 @@ private struct BuddyPage: View {
         RemoteBuddyBuildExpectation(expectedVersion: expectedBuddyVersion, expectedBuild: expectedBuddyBuild)
     }
 
+    private var buddyInstallGuidance: RemoteBuddyInstallGuidance {
+        RemoteBuddyInstallGuidance(expectedVersion: expectedBuddyVersion, expectedBuild: expectedBuddyBuild)
+    }
+
+    private var shouldShowBuddyInstallGuidance: Bool {
+        switch buddyBuildExpectation.status(for: remoteApprovals.pairedDevices) {
+        case .missing, .stale:
+            return true
+        case .notConfigured, .matched:
+            return false
+        }
+    }
+
     private var localizedPowerError: String {
         switch bridge.lastError {
         case "Bluetooth permission denied":
@@ -1984,6 +1997,9 @@ private struct BuddyPage: View {
                 }
 
                 buddyBuildStatusRow
+                if shouldShowBuddyInstallGuidance {
+                    buddyTestFlightActionRow
+                }
 
                 DisclosureGroup("TestFlight acceptance target") {
                     TextField("Expected Buddy version", text: $expectedBuddyVersion)
@@ -2158,6 +2174,30 @@ private struct BuddyPage: View {
             }
             .font(.caption)
         }
+    }
+
+    private var buddyTestFlightActionRow: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(buddyInstallGuidance.instruction)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack {
+                Button {
+                    NSWorkspace.shared.open(RemoteBuddyInstallGuidance.testFlightURL)
+                } label: {
+                    Label("Open TestFlight", systemImage: "square.and.arrow.up")
+                }
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(buddyInstallGuidance.copyText, forType: .string)
+                } label: {
+                    Label("Copy install steps", systemImage: "doc.on.doc")
+                }
+            }
+            .buttonStyle(.bordered)
+        }
+        .padding(10)
+        .background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     private func pairingExpiryText(at date: Date) -> String {
