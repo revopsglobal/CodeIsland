@@ -49,6 +49,13 @@ struct CompanionCommandCenterView: View {
                         .environmentObject(connection)
                         .environmentObject(remoteApprovals)
 
+                    CompanionSignalBoard(
+                        approvalCount: remoteApprovals.approvals.count,
+                        questionCount: remoteApprovals.questions.count,
+                        connectionState: remoteApprovals.state,
+                        activeSessionStatus: connection.latestState?.status
+                    )
+
                     switch destination {
                     case .now:
                         nowContent
@@ -166,6 +173,144 @@ struct CompanionCommandCenterView: View {
     private func openQuickJot(_ destination: BuddyQuickJotDestination) {
         remoteApprovals.quickJotDestination = destination
         presentedSheet = .more
+    }
+}
+
+private struct CompanionSignalBoard: View {
+    let approvalCount: Int
+    let questionCount: Int
+    let connectionState: RemoteApprovalClient.ConnectionState
+    let activeSessionStatus: CompanionStatus?
+
+    private var needsAttention: Bool {
+        approvalCount + questionCount > 0
+    }
+
+    private var connectionTitle: String {
+        switch connectionState {
+        case .connected: return "Mac online"
+        case .connecting: return "Connecting"
+        case .offline: return "Mac offline"
+        case .unpaired: return "Pair Mac"
+        }
+    }
+
+    private var connectionSymbol: String {
+        switch connectionState {
+        case .connected: return "checkmark"
+        case .connecting: return "arrow.triangle.2.circlepath"
+        case .offline: return "wifi.slash"
+        case .unpaired: return "link.badge.plus"
+        }
+    }
+
+    private var sessionTitle: String {
+        guard let activeSessionStatus else { return "Quiet" }
+        switch activeSessionStatus {
+        case .waitingApproval, .waitingQuestion: return "Needs you"
+        case .running, .processing: return "Working"
+        case .idle: return "Quiet"
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(needsAttention ? "Signal is hot" : "Signal is quiet")
+                        .font(.system(size: 16, weight: .black, design: .rounded))
+                        .foregroundStyle(Color.ciForeground)
+                    Text(needsAttention ? "Review what needs Greg before anything else." : "No approvals or questions are waiting.")
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(Color.ciForeground.opacity(0.52))
+                }
+                Spacer(minLength: 12)
+                Image(systemName: needsAttention ? "exclamationmark.triangle.fill" : "sparkle")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(needsAttention ? .orange : Color.ciForeground.opacity(0.58))
+                    .frame(width: 36, height: 36)
+                    .background(
+                        (needsAttention ? Color.orange : Color.ciForeground).opacity(needsAttention ? 0.16 : 0.07),
+                        in: Circle()
+                    )
+            }
+
+            HStack(spacing: 8) {
+                CompanionSignalTile(
+                    title: "\(approvalCount)",
+                    subtitle: approvalCount == 1 ? "approval" : "approvals",
+                    symbol: "checkmark.seal",
+                    tint: approvalCount > 0 ? .orange : Color.ciForeground.opacity(0.55)
+                )
+                CompanionSignalTile(
+                    title: "\(questionCount)",
+                    subtitle: questionCount == 1 ? "question" : "questions",
+                    symbol: "questionmark.bubble",
+                    tint: questionCount > 0 ? Color(red: 0.34, green: 0.62, blue: 1.0) : Color.ciForeground.opacity(0.55)
+                )
+                CompanionSignalTile(
+                    title: sessionTitle,
+                    subtitle: connectionTitle,
+                    symbol: connectionSymbol,
+                    tint: connectionState == .connected ? .green : .orange
+                )
+            }
+        }
+        .padding(16)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .stroke(
+                    needsAttention ? Color.orange.opacity(0.26) : Color.ciForeground.opacity(0.075),
+                    lineWidth: needsAttention ? 1 : 0.5
+                )
+        )
+        .shadow(
+            color: (needsAttention ? Color.orange : Color.black).opacity(needsAttention ? 0.14 : 0.055),
+            radius: needsAttention ? 22 : 16,
+            y: needsAttention ? 10 : 7
+        )
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(needsAttention
+            ? "\(approvalCount) approvals and \(questionCount) questions need attention"
+            : "Signal is quiet. No approvals or questions are waiting.")
+        .accessibilityIdentifier("companion.signalBoard")
+    }
+}
+
+private struct CompanionSignalTile: View {
+    let title: String
+    let subtitle: String
+    let symbol: String
+    let tint: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Image(systemName: symbol)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(tint)
+                .frame(width: 28, height: 28)
+                .background(tint.opacity(0.12), in: Circle())
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.system(size: title.count > 3 ? 13 : 18, weight: .black, design: .rounded))
+                    .foregroundStyle(Color.ciForeground.opacity(0.92))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                Text(subtitle)
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Color.ciForeground.opacity(0.48))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 92, alignment: .leading)
+        .padding(10)
+        .background(Color.ciForeground.opacity(0.045), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.ciForeground.opacity(0.055), lineWidth: 0.5)
+        )
     }
 }
 

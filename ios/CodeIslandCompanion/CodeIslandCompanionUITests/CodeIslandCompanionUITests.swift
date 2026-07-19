@@ -141,8 +141,9 @@ final class CodeIslandCompanionUITests: XCTestCase {
         ]
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["CodeIsland"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Code Island"].waitForExistence(timeout: 8))
         XCTAssertTrue(app.buttons["companion.presence.menu"].exists)
+        XCTAssertTrue(app.otherElements["companion.signalBoard"].exists)
         let now = app.buttons["companion.destination.now"]
         let sessions = app.buttons["companion.destination.sessions"]
         let capture = app.buttons["companion.capture"]
