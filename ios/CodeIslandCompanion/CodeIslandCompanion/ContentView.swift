@@ -1857,13 +1857,9 @@ private func standbySessions(for state: CompanionStatePayload) -> [CompanionSess
             )
         ]
     }
-    // Pending items auto-focus: sorted by status priority (approval > question > running > processing > idle), ties broken by most recent update.
-    return state.sessions.sorted { lhs, rhs in
-        if lhs.status.priority != rhs.status.priority {
-            return lhs.status.priority > rhs.status.priority
-        }
-        return lhs.updatedAt > rhs.updatedAt
-    }
+    // Pending items auto-focus: sorted by status priority (approval > question > running > processing > idle),
+    // then by stable session identity so routine polling does not rotate the stage every few seconds.
+    return CompanionSessionOrdering.ordered(state.sessions)
 }
 
 // Appearance switcher menu: follow system / light / dark.
