@@ -13,6 +13,9 @@
 ## Preconditions and delivery rules
 
 - Read `docs/plans/2026-07-19-iphone-edit-test-dispatch-design.md` before implementation.
+- Treat `docs/plans/2026-07-19-crest-changelog-dmg-parity-audit.md` as the
+  cross-cutting Mac utility, permission, attention, polish, and physical parity
+  acceptance contract. Pomodoro and Apple Watch remain explicitly excluded.
 - Start from current `origin/main` in a dedicated `codex/` worktree. Preserve the existing untracked `.playwright-cli/` and `graphify-out/` directories.
 - Keep source, commit, push, merge, signed build, TestFlight availability, physical install, Wi-Fi proof, and cellular proof as separate states.
 - Do not add a hosted database, paid service, inbound Telegram bot, generic shell API, Pomodoro feature, or Apple Watch work.
@@ -707,6 +710,10 @@ git commit -m "feat: sync remote tasks in Buddy"
 - Modify: `ios/CodeIslandCompanion/CodeIslandCompanion/ContentView.swift:100-560`
 - Modify: `ios/CodeIslandCompanion/CodeIslandCompanionUITests/CodeIslandCompanionUITests.swift`
 
+The implementation and UI evidence must also satisfy the signal, IA, hit-area,
+permission-recovery, empty-state, and motion requirements in the Crest parity
+audit. Crest's session-wide approval bypass is specifically not parity.
+
 **Step 1: Write failing presentation-model tests**
 
 Prove ranking:
@@ -1068,6 +1075,10 @@ git commit -m "feat: surface remote task attention everywhere"
 - Create: `docs/evidence/2026-07-19-iphone-edit-test-dispatch-acceptance.md`
 
 **Step 1: Write failing script tests**
+
+The physical acceptance evidence must include a checklist disposition for
+every `Adopt now` item in the Crest parity audit: `verified`, `platform/API
+limited` with exact evidence, or `not shipped`. No item may be silently omitted.
 
 The report must stay incomplete until it can prove all of:
 
