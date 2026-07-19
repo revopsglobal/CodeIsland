@@ -154,12 +154,14 @@ final class APNSNotificationSenderTests: XCTestCase {
         let message = TelegramAttentionMessageBuilder.message(
             for: envelope,
             remoteURL: URL(string: "https://gregs-mac.tailnet.example"),
-            buddyURL: PersonalHubDeepLink.pendingApproval(id: nil).url
+            buddyURL: PersonalHubDeepLink.pendingApproval(id: nil).url,
+            testFlightURL: URL(string: "itms-beta://")
         )
 
         XCTAssertTrue(message.contains("CodeIsland needs your approval."))
         XCTAssertTrue(message.contains("Buddy: codeisland://approvals/pending"))
         XCTAssertTrue(message.contains("Web fallback: https://gregs-mac.tailnet.example"))
+        XCTAssertTrue(message.contains("If Buddy is stale: update CodeIsland Buddy in TestFlight itms-beta://"))
         XCTAssertFalse(message.contains("opaque-approval-id"))
         XCTAssertFalse(message.localizedCaseInsensitiveContains("command"))
         XCTAssertFalse(message.localizedCaseInsensitiveContains("transcript"))
@@ -180,7 +182,8 @@ final class APNSNotificationSenderTests: XCTestCase {
         let message = TelegramAttentionMessageBuilder.message(
             for: envelope,
             remoteURL: nil,
-            buddyURL: PersonalHubDeepLink.pendingQuestion(id: nil).url
+            buddyURL: PersonalHubDeepLink.pendingQuestion(id: nil).url,
+            testFlightURL: URL(string: "itms-beta://")
         )
 
         XCTAssertEqual(
@@ -189,6 +192,7 @@ final class APNSNotificationSenderTests: XCTestCase {
             CodeIsland needs your answer.
             Open Buddy to review the private details.
             Buddy: codeisland://questions/pending
+            If Buddy is stale: update CodeIsland Buddy in TestFlight itms-beta://
             """
         )
     }
@@ -196,13 +200,15 @@ final class APNSNotificationSenderTests: XCTestCase {
     func testTelegramFallbackTestMessageUsesSameRedactedShape() throws {
         let message = TelegramAttentionMessageBuilder.testMessage(
             remoteURL: URL(string: "https://gregs-mac.tailnet.example"),
-            buddyURL: PersonalHubDeepLink.pendingQuestion(id: nil).url
+            buddyURL: PersonalHubDeepLink.pendingQuestion(id: nil).url,
+            testFlightURL: URL(string: "itms-beta://")
         )
 
         XCTAssertTrue(message.contains("CodeIsland needs your answer."))
         XCTAssertTrue(message.contains("Open Buddy to review the private details."))
         XCTAssertTrue(message.contains("Buddy: codeisland://questions/pending"))
         XCTAssertTrue(message.contains("Web fallback: https://gregs-mac.tailnet.example"))
+        XCTAssertTrue(message.contains("If Buddy is stale: update CodeIsland Buddy in TestFlight itms-beta://"))
         XCTAssertFalse(message.contains("telegram-test"))
         XCTAssertFalse(message.localizedCaseInsensitiveContains("command"))
         XCTAssertFalse(message.localizedCaseInsensitiveContains("transcript"))
