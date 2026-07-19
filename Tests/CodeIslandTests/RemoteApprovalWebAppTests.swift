@@ -32,6 +32,19 @@ final class RemoteApprovalWebAppTests: XCTestCase {
         XCTAssertTrue(html.contains("!userIsEditing())refresh()"))
         XCTAssertTrue(html.contains("mediaSeekState.active"))
         XCTAssertTrue(html.contains("claudeInput.resolve"))
+        XCTAssertTrue(html.contains("!reviewDialog.classList.contains('hidden')"))
+    }
+
+    func testWebFallbackUsesInlineReviewSheetsInsteadOfBrowserDialogs() {
+        let html = RemoteApprovalWebApp.html
+
+        XCTAssertTrue(html.contains(#"id="reviewDialog""#))
+        XCTAssertTrue(html.contains("function reviewSheet"))
+        XCTAssertTrue(html.contains("function confirmSheet"))
+        XCTAssertTrue(html.contains("function promptSheet"))
+        XCTAssertFalse(html.contains("prompt("))
+        XCTAssertFalse(html.contains("confirm("))
+        XCTAssertFalse(html.contains("alert("))
     }
 
     func testClaudeAskResponseBodyRendersInWebFallback() {
