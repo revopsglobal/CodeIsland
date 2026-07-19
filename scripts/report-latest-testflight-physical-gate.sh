@@ -1,0 +1,129 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+REPO="${REPO:-revopsglobal/CodeIsland}"
+WORKFLOW="${WORKFLOW:-testflight-ios.yml}"
+BRANCH="${BRANCH:-main}"
+EXPECTED_MAC_VERSION="${EXPECTED_MAC_VERSION:-1.0.53}"
+EXPECTED_CLIENT_VERSION="${EXPECTED_CLIENT_VERSION:-1.0.0}"
+GH_BIN="${GH_BIN:-gh}"
+REPORT_PHYSICAL_ACCEPTANCE_BIN="${REPORT_PHYSICAL_ACCEPTANCE_BIN:-$(dirname "$0")/report-physical-acceptance.sh}"
+
+if ! command -v jq >/dev/null 2>&1; then
+    echo "jq is required" >&2
+    exit 1
+fi
+
+latest_run="$("$GH_BIN" run list \
+    --repo "$REPO" \
+    --workflow "$WORKFLOW" \
+    --branch "$BRANCH" \
+    --limit 20 \
+    --json databaseId,status,conclusion,headSha,createdAt,url \
+    | jq -c '[.[] | select(.status == "completed" and .conclusion == "success")] | first // empty')"
+
+if [[ -z "$latest_run" ]]; then
+    jq -n \
+        --arg repo "$REPO" \
+        --arg workflow "$WORKFLOW" \
+        --arg branch "$BRANCH" \
+        '{
+            latestTestFlight:null,
+            gate:{
+                status:"missing-testflight-run",
+                complete:false,
+                nextAction:"Run the iOS TestFlight workflow successfully before physical acceptance."
+            },
+            query:{repo:$repo,workflow:$workflow,branch:$branch}
+        }'
+    exit 2
+fi
+
+run_id="$(printf '%s' "$latest_run" | jq -r '.databaseId')"
+run_log="$("$GH_BIN" run view "$run_id" --repo "$REPO" --log)"
+
+build_number="$(printf '%s\n' "$run_log" \
+    | sed -nE 's/.*Building CodeIsland Buddy 1\.0\.0 \(([0-9]+)\).*/\1/p' \
+    | tail -n 1)"
+delivery_uuid="$(printf '%s\n' "$run_log" \
+    | sed -nE 's/.*Delivery UUID: ([0-9a-fA-F-]+).*/\1/p' \
+    | tail -n 1)"
+apple_state="$(printf '%s\n' "$run_log" \
+    | sed -nE 's/.*TestFlight build [0-9]+ processing state: ([A-Z_]+).*/\1/p' \
+    | tail -n 1)"
+audience="$(printf '%s\n' "$run_log" \
+    | sed -nE 's/.*TestFlight build [0-9]+ is valid, audience ([A-Z_]+),.*/\1/p' \
+    | tail -n 1)"
+artifact_id="$(printf '%s\n' "$run_log" \
+    | sed -nE 's/.*Artifact CodeIsland-Buddy-TestFlight-[0-9]+ has been successfully uploaded!.*Artifact ID is ([0-9]+).*/\1/p' \
+    | tail -n 1)"
+
+if [[ -z "$build_number" ]]; then
+    jq -n \
+        --argjson latestRun "$latest_run" \
+        '{
+            latestTestFlight:$latestRun,
+            gate:{
+                status:"missing-build-number",
+                complete:false,
+                nextAction:"Latest TestFlight run succeeded but the Buddy build number could not be extracted from its logs."
+            }
+        }'
+    exit 2
+fi
+
+acceptance_report="$(EXPECTED_MAC_VERSION="$EXPECTED_MAC_VERSION" \
+    EXPECTED_CLIENT_VERSION="$EXPECTED_CLIENT_VERSION" \
+    EXPECTED_CLIENT_BUILD="$build_number" \
+    STRICT=0 \
+    "$REPORT_PHYSICAL_ACCEPTANCE_BIN")"
+
+physical_status="$(printf '%s' "$acceptance_report" | jq -r '.gates.physicalBuildStatus.status')"
+complete="$(printf '%s' "$acceptance_report" | jq -r '.gates.complete')"
+
+case "$physical_status" in
+    matched)
+        next_action="Run strict physical E2E interaction acceptance for Buddy build $build_number."
+        ;;
+    stale)
+        next_action="Install and open CodeIsland Buddy build $build_number from TestFlight on the iPhone, then rerun strict physical acceptance."
+        ;;
+    missing)
+        next_action="Open CodeIsland Buddy build $build_number on the physical iPhone so it registers with the Mac, then rerun strict physical acceptance."
+        ;;
+    *)
+        next_action="Configure expected client build/version and rerun physical acceptance."
+        ;;
+esac
+
+jq -n \
+    --argjson latestRun "$latest_run" \
+    --arg buildNumber "$build_number" \
+    --arg deliveryUUID "$delivery_uuid" \
+    --arg appleState "$apple_state" \
+    --arg audience "$audience" \
+    --arg artifactID "$artifact_id" \
+    --argjson acceptance "$acceptance_report" \
+    --arg status "$physical_status" \
+    --argjson complete "$complete" \
+    --arg nextAction "$next_action" \
+    '{
+        latestTestFlight:($latestRun + {
+            buildNumber:$buildNumber,
+            deliveryUUID:($deliveryUUID | select(length > 0) // null),
+            appleState:($appleState | select(length > 0) // null),
+            audience:($audience | select(length > 0) // null),
+            artifactID:($artifactID | select(length > 0) // null)
+        }),
+        physicalAcceptance:$acceptance,
+        gate:{
+            status:$status,
+            complete:$complete,
+            nextAction:$nextAction
+        }
+    }'
+
+if [[ "$complete" != "true" ]]; then
+    exit 2
+fi

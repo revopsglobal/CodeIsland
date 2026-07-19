@@ -38,6 +38,11 @@ This delta supersedes older "current build" language below.
   observed physical Buddy is still `1.0.0 (20260718212803)` from device
   `afba2915-b0a3-456f-a5f2-265bf7e8a64a`, last seen
   `2026-07-19T00:17:23Z`.
+- Latest-build physical gate: run
+  `scripts/report-latest-testflight-physical-gate.sh` to discover the newest
+  successful `testflight-ios.yml` delivery on `main`, extract the delivered
+  Buddy build, and fail closed until that exact build is opened on the physical
+  iPhone.
 
 Previous current-source delivery retained for traceability: PR #68 merged as
 `f6c9455979229474e2c7575df34087f895d98716`; Mac workflow `29667371137` and
@@ -407,6 +412,15 @@ EXPECTED_CLIENT_VERSION=1.0.0 \
 EXPECTED_CLIENT_BUILD=20260718112841 \
 STRICT=1 \
 scripts/report-physical-acceptance.sh
+```
+
+For the current release train, prefer the latest-build gate so stale TestFlight
+installs cannot be mistaken for acceptance of a newer upload:
+
+```bash
+EXPECTED_MAC_VERSION=1.0.53 \
+EXPECTED_CLIENT_VERSION=1.0.0 \
+scripts/report-latest-testflight-physical-gate.sh
 ```
 
 1. On iPhone, open Apple's **TestFlight** app while signed in as
