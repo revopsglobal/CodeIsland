@@ -61,6 +61,36 @@ This delta supersedes older "current build" language below.
   `CodeIslandCompanionTests/LiveActivityPrivacyTests` on device
   `ECC99681-C3ED-4452-B727-0F9E2C09C469` (12/12), `git diff --check`, and
   `graphify update . --no-viz`.
+- Latest iPhone command-center polish source: PR #96 merged as
+  `a6f0b68ad69d91b0e745479cc10944bec1c8c53d`, raising the Buddy shell from
+  a flat utility screen toward a premium Apple-style command center: ambient
+  off-white/orange depth, a larger glass presence header, clearer **Code
+  Island** brand typography, stronger Today hierarchy, connection-aware
+  subtitles, and calmer bottom navigation states. Visual QA captured the final
+  mock paired Now surface at
+  `/tmp/codeisland-now-polish-final-1784432741.png`. Verification passed
+  `CodeIslandCompanionTests/CompanionCommandCenterModelTests`, UI tests
+  `testPairingSurfaceKeepsRecoveryInline`,
+  `testAuthenticatedTailscaleConnectionDoesNotLookLikeNearbySearch`, and
+  `testSessionsUsesAuthenticatedTailscaleInsteadOfNearbyDiscovery` on
+  Simulator device `ECC99681-C3ED-4452-B727-0F9E2C09C469`; `git diff --check`
+  passed; `graphify update . --no-viz` rebuilt the project graph.
+- Latest TestFlight delivery after PR #96: workflow run `29672295258` from
+  `a6f0b68ad69d91b0e745479cc10944bec1c8c53d` produced Buddy
+  `1.0.0 (20260719034740)`, delivery UUID
+  `e5aa160e-61c6-4fee-9925-546cb6609018`, Apple state `VALID`, audience
+  `APP_STORE_ELIGIBLE`, internal group `CodeIsland Internal`, artifact
+  `8437761408`, downloaded IPA SHA-256
+  `d6a8f989aa285edf3091dc0e6e993789c4a99d28f6c381c61808a1a839efb877`.
+- Latest strict E2E report at `2026-07-19T03:57:15Z` returned
+  `status = physical-gate-incomplete`, `complete = false`: the Mac app is
+  installed and running at `1.0.53`, local and Tailscale `/health` are HTTP
+  `200` with zero pending work, Mac Settings sync expects Buddy
+  `1.0.0 (20260719034740)`, and
+  `RemoteApprovalHTTPServerTests/testAuthenticatedHostLifecycleOverRealListener`
+  passed, but the physical iPhone is still stale on Buddy
+  `1.0.0 (20260718212803)` instead of latest TestFlight
+  `1.0.0 (20260719034740)`.
 - Latest TestFlight delivery after PR #94: workflow run `29671885894` from
   `b4abdc32a74c2eab73b5c641b9934d179e9b38d9` produced Buddy
   `1.0.0 (20260719033128)`, delivery UUID
