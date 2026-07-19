@@ -3,6 +3,7 @@
 set -euo pipefail
 
 LATEST_GATE_BIN="${LATEST_GATE_BIN:-$(dirname "$0")/report-latest-testflight-physical-gate.sh}"
+DIRECT_DEVICE_VISIBILITY_BIN="${DIRECT_DEVICE_VISIBILITY_BIN:-$(dirname "$0")/report-ios-direct-device-visibility.sh}"
 SWIFT_BIN="${SWIFT_BIN:-swift}"
 SWIFT_TEST_FILTER="${SWIFT_TEST_FILTER:-RemoteApprovalHTTPServerTests/testAuthenticatedHostLifecycleOverRealListener}"
 DEVELOPER_DIR="${DEVELOPER_DIR:-/Users/gregharned/Downloads/Xcode-beta.app/Contents/Developer}"
@@ -34,6 +35,28 @@ fi
 
 latest_gate_complete="$(printf '%s' "$latest_gate_output" | jq -r '.gate.complete == true')"
 
+direct_device_visibility_output=""
+set +e
+direct_device_visibility_output="$(DEVELOPER_DIR="$DEVELOPER_DIR" "$DIRECT_DEVICE_VISIBILITY_BIN" 2>&1)"
+set -e
+
+if ! printf '%s' "$direct_device_visibility_output" | jq -e . >/dev/null 2>&1; then
+    direct_device_visibility_output="$(jq -n -c \
+        --arg generatedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        --arg output "$direct_device_visibility_output" \
+        '{
+            generatedAt:$generatedAt,
+            checked:true,
+            toolAvailable:null,
+            status:"visibility-report-invalid-json",
+            physicalDeviceCount:0,
+            simulatorCount:0,
+            devices:[],
+            output:$output,
+            nextAction:"The direct-device visibility diagnostic did not return JSON; rerun scripts/report-ios-direct-device-visibility.sh."
+        }')"
+fi
+
 interaction_log="$(mktemp -t codeisland-strict-e2e)"
 interaction_exit=0
 set +e
@@ -62,6 +85,7 @@ jq -n \
     --argjson complete "$complete" \
     --argjson latestGate "$latest_gate_output" \
     --argjson latestGateExit "$latest_gate_exit" \
+    --argjson directDeviceVisibility "$direct_device_visibility_output" \
     --arg swiftTestFilter "$SWIFT_TEST_FILTER" \
     --argjson interactionExit "$interaction_exit" \
     --argjson interactionPassed "$interaction_passed" \
@@ -77,6 +101,7 @@ jq -n \
             nextAction:$latestGate.gate.nextAction,
             report:$latestGate
         },
+        directDeviceVisibility:$directDeviceVisibility,
         interactionContract:{
             command:"swift test --filter \($swiftTestFilter)",
             filter:$swiftTestFilter,
