@@ -53,6 +53,7 @@ remote_host_health_output="$(printf '%s' "$latest_gate_output" | jq -c '
             end
         )
     }')"
+remote_host_ready="$(printf '%s' "$remote_host_health_output" | jq -r '(.deliveryHealthy == true) and (.tailscale.running == true)')"
 
 testflight_source_drift_output=""
 set +e
@@ -77,6 +78,7 @@ if ! printf '%s' "$testflight_source_drift_output" | jq -e . >/dev/null 2>&1; th
             nextAction:"The TestFlight source-drift diagnostic did not return JSON; rerun scripts/report-testflight-source-drift.sh."
         }')"
 fi
+testflight_source_ready="$(printf '%s' "$testflight_source_drift_output" | jq -r '(.checked == true) and (.buddyRelevantChanged != true)')"
 
 direct_device_visibility_output=""
 set +e
@@ -115,11 +117,15 @@ fi
 
 complete=false
 status="physical-gate-incomplete"
-if [[ "$latest_gate_complete" == "true" && "$interaction_passed" == "true" ]]; then
+if [[ "$latest_gate_complete" == "true" && "$interaction_passed" == "true" && "$remote_host_ready" == "true" && "$testflight_source_ready" == "true" ]]; then
     complete=true
     status="complete"
 elif [[ "$latest_gate_complete" == "true" && "$interaction_passed" != "true" ]]; then
     status="interaction-contract-failed"
+elif [[ "$remote_host_ready" != "true" ]]; then
+    status="remote-host-health-incomplete"
+elif [[ "$testflight_source_ready" != "true" ]]; then
+    status="testflight-source-drift-incomplete"
 fi
 
 jq -n \
@@ -135,10 +141,101 @@ jq -n \
     --argjson interactionExit "$interaction_exit" \
     --argjson interactionPassed "$interaction_passed" \
     --arg interactionLogTail "$interaction_tail" \
-    '{
+    '
+    def gate($id; $status; $required; $owner; $nextAction):
+        {
+            id:$id,
+            status:$status,
+            required:$required,
+            owner:$owner,
+            nextAction:$nextAction
+        };
+    def host_ready:
+        ($remoteHostHealth.deliveryHealthy == true) and
+        ($remoteHostHealth.tailscale.running == true);
+    def source_ready:
+        ($testFlightSourceDrift.checked == true) and
+        ($testFlightSourceDrift.buddyRelevantChanged != true);
+    def latest_testflight_ready:
+        (($latestGate.latestTestFlight.buildNumber // "") | length) > 0;
+    def interaction_ready:
+        $interactionPassed == true;
+    def manual_acceptance_ready:
+        host_ready and source_ready and latest_testflight_ready and interaction_ready;
+    def remaining_gates:
+        []
+        + (
+            if host_ready then [] else [
+                gate(
+                    "remote-host-health";
+                    (if ($remoteHostHealth.checked == false) then "missing" else "unhealthy" end);
+                    true;
+                    "codex";
+                    ($remoteHostHealth.nextAction // "Relaunch CodeIsland on the Mac, verify Tailscale is connected, and rerun strict E2E.")
+                )
+            ] end
+        )
+        + (
+            if source_ready then [] else [
+                gate(
+                    "testflight-source";
+                    ($testFlightSourceDrift.status // "unknown");
+                    true;
+                    "codex";
+                    ($testFlightSourceDrift.nextAction // "Upload a fresh internal TestFlight Buddy build from the current Buddy-relevant source.")
+                )
+            ] end
+        )
+        + (
+            if latest_testflight_ready then [] else [
+                gate(
+                    "latest-testflight-build";
+                    "missing";
+                    true;
+                    "codex";
+                    "Upload a valid internal TestFlight Buddy build before physical iPhone acceptance."
+                )
+            ] end
+        )
+        + (
+            if interaction_ready then [] else [
+                gate(
+                    "interaction-contract";
+                    "failed";
+                    true;
+                    "codex";
+                    "Fix the authenticated host lifecycle interaction contract and rerun swift test."
+                )
+            ] end
+        )
+        + (
+            if ($latestGate.gate.complete == true) then [] else [
+                gate(
+                    "physical-buddy-checkin";
+                    ($latestGate.gate.status // "unknown");
+                    true;
+                    "greg";
+                    ($latestGate.gate.nextAction // "Open the latest CodeIsland Buddy build from TestFlight on the physical iPhone with Tailscale connected, wait 10 seconds, then rerun strict E2E.")
+                )
+            ] end
+        )
+        + (
+            if (($directDeviceVisibility.physicalDeviceCount // 0) > 0) then [] else [
+                gate(
+                    "direct-device-visibility";
+                    ($directDeviceVisibility.status // "unknown");
+                    false;
+                    "codex";
+                    ($directDeviceVisibility.nextAction // "Codex cannot directly see/open the physical iPhone from this Mac; use manual TestFlight open for acceptance.")
+                )
+            ] end
+        );
+    {
         generatedAt:$generatedAt,
         complete:$complete,
         status:$status,
+        readyForManualPhysicalAcceptance:manual_acceptance_ready,
+        remainingGates:remaining_gates,
         latestGate:{
             exitCode:$latestGateExit,
             complete:($latestGate.gate.complete == true),
