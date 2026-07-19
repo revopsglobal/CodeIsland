@@ -57,6 +57,18 @@ final class LiveActivityPrivacyTests: XCTestCase {
         )
     }
 
+    @MainActor
+    func testMockHubUsesOnlyProductionBuddyActionVocabulary() {
+        for mode in PersonalHubMode.allCases {
+            let violations = RemoteApprovalClient.mockHubParityViolations(requestedMode: mode)
+            XCTAssertEqual(
+                violations.map(\.description),
+                [],
+                "\(mode.rawValue) mock hub exposes an action that the real Buddy contract does not classify"
+            )
+        }
+    }
+
     func testStatusPulseIsReservedForActionRequiredStates() {
         XCTAssertFalse(CompanionMotionPolicy.shouldPulse(status: .idle, reduceMotion: false))
         XCTAssertFalse(CompanionMotionPolicy.shouldPulse(status: .processing, reduceMotion: false))
