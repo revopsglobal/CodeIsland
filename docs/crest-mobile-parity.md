@@ -75,6 +75,33 @@ This delta supersedes older "current build" language below.
   `testSessionsUsesAuthenticatedTailscaleInsteadOfNearbyDiscovery` on
   Simulator device `ECC99681-C3ED-4452-B727-0F9E2C09C469`; `git diff --check`
   passed; `graphify update . --no-viz` rebuilt the project graph.
+- Latest iPhone read-only action routing source: PR #100 merged as
+  `b7864342a2e7456d7d0f7ee057c98c1ab96bd948`, routing Buddy read-only actions
+  through quiet local refresh/reporting instead of the mutation confirmation
+  sheet. Agents/GitHub/Battery refreshes now follow the “update the surface,
+  don't ask for a decision” path while real task/note/system mutations still
+  require explicit review and **Do it**. Verification passed the core
+  `PersonalHubProtocolTests/testBuddyParityIdentifiesReadOnlyRefreshActions`,
+  the iOS Simulator UI test
+  `testReadOnlyRefreshUpdatesHubWithoutConfirmation`, the mock-action
+  vocabulary test, the task-creation review/execute UI test, `git diff
+  --check`, and `graphify update . --no-viz`.
+- Latest TestFlight delivery after PR #100: workflow run `29673216426` from
+  `b7864342a2e7456d7d0f7ee057c98c1ab96bd948` produced Buddy
+  `1.0.0 (20260719042243)`, delivery UUID
+  `6b6f1977-df9f-4257-8f00-fdc268946281`, Apple state `VALID`, audience
+  `APP_STORE_ELIGIBLE`, internal group `CodeIsland Internal`, artifact
+  `8438019701`, downloaded IPA SHA-256
+  `49d630077497c5ffd59dacf177f551520330d9b40c92e30d758d761a49753379`.
+- Latest strict E2E report at `2026-07-19T04:27:14Z` returned
+  `status = physical-gate-incomplete`, `complete = false`: the Mac app is
+  installed and running at `1.0.53`, local and Tailscale `/health` are HTTP
+  `200` with zero pending work, Mac Settings sync expects Buddy
+  `1.0.0 (20260719042243)`, and
+  `RemoteApprovalHTTPServerTests/testAuthenticatedHostLifecycleOverRealListener`
+  passed, but the physical iPhone is still stale on Buddy
+  `1.0.0 (20260718212803)` instead of latest TestFlight
+  `1.0.0 (20260719042243)`.
 - Latest Buddy parity-contract source: PR #98 merged as
   `b877909bb280eedaa368feef8e669631f365a60a`, aligning the iPhone
   mock/demo hub with the production Buddy action vocabulary. Demo-only action
