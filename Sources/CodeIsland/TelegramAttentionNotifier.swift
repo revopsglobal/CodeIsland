@@ -20,13 +20,17 @@ final class TelegramAttentionNotifier: ObservableObject {
         let remoteURL = Self.remoteApprovalURL()
         let text = TelegramAttentionMessageBuilder.message(
             for: envelope,
-            remoteURL: remoteURL
+            remoteURL: remoteURL,
+            buddyURL: Self.buddyURL(for: envelope.kind)
         )
         sendInBackground(text: text)
     }
 
     func sendTestAlert() {
-        let text = TelegramAttentionMessageBuilder.testMessage(remoteURL: Self.remoteApprovalURL())
+        let text = TelegramAttentionMessageBuilder.testMessage(
+            remoteURL: Self.remoteApprovalURL(),
+            buddyURL: Self.buddyURL(for: .question)
+        )
         sendInBackground(text: text, reportMissingConfiguration: true)
     }
 
@@ -99,6 +103,15 @@ final class TelegramAttentionNotifier: ObservableObject {
         return url
     }
 
+    private static func buddyURL(for kind: RemoteAttentionKind) -> URL {
+        switch kind {
+        case .approval:
+            return PersonalHubDeepLink.pendingApproval(id: nil).url
+        case .question:
+            return PersonalHubDeepLink.pendingQuestion(id: nil).url
+        }
+    }
+
     private func send(text: String, configuration: Configuration) async throws {
         guard let url = URL(string: "https://api.telegram.org/bot\(configuration.botToken)/sendMessage") else {
             throw TelegramError.incompleteConfiguration
@@ -129,7 +142,7 @@ final class TelegramAttentionNotifier: ObservableObject {
 }
 
 enum TelegramAttentionMessageBuilder {
-    static func testMessage(remoteURL: URL?) -> String {
+    static func testMessage(remoteURL: URL?, buddyURL: URL? = nil) -> String {
         let now = Date()
         let envelope = RemoteAttentionPushEnvelope(
             eventID: "telegram-test-\(UUID().uuidString)",
@@ -139,20 +152,24 @@ enum TelegramAttentionMessageBuilder {
             issuedAt: now,
             expiresAt: now.addingTimeInterval(600)
         )
-        return message(for: envelope, remoteURL: remoteURL)
+        return message(for: envelope, remoteURL: remoteURL, buddyURL: buddyURL)
     }
 
     static func message(
         for envelope: RemoteAttentionPushEnvelope,
-        remoteURL: URL?
+        remoteURL: URL?,
+        buddyURL: URL? = nil
     ) -> String {
         let noun = envelope.kind == .approval ? "approval" : "answer"
         var lines = [
             "CodeIsland needs your \(noun).",
             "Open Buddy to review the private details."
         ]
+        if let buddyURL {
+            lines.append("Buddy: \(buddyURL.absoluteString)")
+        }
         if let remoteURL {
-            lines.append(remoteURL.absoluteString)
+            lines.append("Web fallback: \(remoteURL.absoluteString)")
         }
         return lines.joined(separator: "\n")
     }
