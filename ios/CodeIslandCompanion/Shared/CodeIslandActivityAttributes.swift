@@ -27,6 +27,33 @@ struct CodeIslandSessionActivityPreview: Codable, Hashable, Identifiable {
     var sourceLabel: String {
         source.isEmpty ? "CodeIsland" : source.uppercased()
     }
+
+    var isActionRequired: Bool {
+        status == "waitingApproval" || status == "waitingQuestion"
+    }
+
+    var displayPriority: Int {
+        switch status {
+        case "waitingApproval": return 5
+        case "waitingQuestion": return 4
+        case "running": return 3
+        case "processing": return 2
+        default: return 0
+        }
+    }
+
+    var stableSortKey: String {
+        [
+            sessionId,
+            source,
+            workspaceName,
+            toolName,
+            message,
+        ]
+        .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+        .filter { !$0.isEmpty }
+        .joined(separator: "|")
+    }
 }
 
 struct CodeIslandActivityAttributes: ActivityAttributes {
@@ -70,6 +97,26 @@ struct CodeIslandActivityAttributes: ActivityAttributes {
 
         var activeSessionCount: Int {
             sessions.filter { $0.status != "idle" }.count
+        }
+
+        var actionRequiredSessionCount: Int {
+            orderedSessions.filter(\.isActionRequired).count
+        }
+
+        var orderedSessions: [CodeIslandSessionActivityPreview] {
+            Self.orderedSessions(sessions)
+        }
+
+        static func orderedSessions(_ sessions: [CodeIslandSessionActivityPreview]) -> [CodeIslandSessionActivityPreview] {
+            sessions.sorted { lhs, rhs in
+                if lhs.displayPriority != rhs.displayPriority {
+                    return lhs.displayPriority > rhs.displayPriority
+                }
+                if lhs.stableSortKey != rhs.stableSortKey {
+                    return lhs.stableSortKey < rhs.stableSortKey
+                }
+                return lhs.updatedAt > rhs.updatedAt
+            }
         }
     }
 
