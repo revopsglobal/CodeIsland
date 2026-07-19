@@ -17,15 +17,16 @@ Sources used for the baseline:
 
 This delta supersedes older "current build" language below.
 
-- Latest source: PR #76 merged as
-  `fac1d28e53d7d590d4bf4f786dc117aa8023d466`, replacing all browser-native
-  `prompt()`, `confirm()`, and `alert()` paths in the private web fallback
-  with an inline reviewed action sheet.
-- Installed Mac: `1.0.53`, workflow run `29669109759`, artifact
-  `8436758203`, downloaded DMG SHA-256
-  `0fff1a780679443596ece438dd663063d2bcf77c9818b23364f7952b7cb15bf9`,
+- Latest source: PR #78 merged as
+  `d9faa5efd75f33f8eda1d02be5edd3ea58a49ae4`, adding a manual
+  Telegram fallback test alert in Buddy Settings. The test alert uses the same
+  redacted approval/question message shape and private Tailscale link as real
+  Telegram fallback alerts.
+- Installed Mac: `1.0.53`, workflow run `29669425030`, artifact
+  `8436864822`, downloaded DMG SHA-256
+  `c421fe53f3011eded8cff233c2e7a55b61efb618257ae7b568c909dd51cee58a`,
   ARM64, signature valid under Team `44JG2Y95CH`, CDHash
-  `0339fa5efb341fdce379d21980614de5cc61d7b4`, local `/health` and
+  `b114eabb5e6307da3509f5a4ff375cdba10c96fb`, local `/health` and
   Tailscale `/health` both running with zero pending work.
 - Installed private web root verification from loopback returned the new
   `reviewDialog`, `reviewSheet`, `confirmSheet`, and `promptSheet` code, with
@@ -50,6 +51,13 @@ This delta supersedes older "current build" language below.
   and installed via Mac workflow `29668659780`: Calendar and Reminders show
   Grant/Upgrade/Privacy actions inline, and Weather shows Grant/Privacy or Set
   ZIP without requiring Greg to discover the settings icon first.
+- Previous Mac source PR #76 merged as
+  `fac1d28e53d7d590d4bf4f786dc117aa8023d466`, replacing all browser-native
+  `prompt()`, `confirm()`, and `alert()` paths in the private web fallback
+  with an inline reviewed action sheet. Installed private web root verification
+  from loopback returned the new `reviewDialog`, `reviewSheet`, `confirmSheet`,
+  and `promptSheet` code, with no remaining browser-native dialog calls in the
+  served HTML.
 - Previous Mac source PR #74 merged as
   `b12ad84607ecf3938712d8333e877d23a367b60d`, adding the inline Calendar,
   Reminders, and Weather recovery actions to the Mac Glances panel.
