@@ -57,6 +57,43 @@ final class LiveActivityPrivacyTests: XCTestCase {
         )
     }
 
+    func testTransientRefreshFailuresKeepEstablishedContentStable() {
+        XCTAssertEqual(
+            RemoteApprovalClient.refreshFailureState(
+                hasCompletedSnapshot: false,
+                consecutiveFailures: 1,
+                message: "network unavailable"
+            ),
+            .offline("network unavailable"),
+            "Before the first authenticated snapshot, a failed refresh must still show the actionable connection error."
+        )
+        XCTAssertNil(
+            RemoteApprovalClient.refreshFailureState(
+                hasCompletedSnapshot: true,
+                consecutiveFailures: 1,
+                message: "network unavailable"
+            ),
+            "A single routine poll miss after content has loaded must not flash the whole Now surface to offline."
+        )
+        XCTAssertNil(
+            RemoteApprovalClient.refreshFailureState(
+                hasCompletedSnapshot: true,
+                consecutiveFailures: 2,
+                message: "network unavailable"
+            ),
+            "Two routine poll misses should keep the established signal board stable instead of alternating every 4 seconds."
+        )
+        XCTAssertEqual(
+            RemoteApprovalClient.refreshFailureState(
+                hasCompletedSnapshot: true,
+                consecutiveFailures: 3,
+                message: "network unavailable"
+            ),
+            .offline("network unavailable"),
+            "Three consecutive misses indicate the Mac is probably unavailable, so the offline recovery controls should appear."
+        )
+    }
+
     @MainActor
     func testMockHubUsesOnlyProductionBuddyActionVocabulary() {
         for mode in PersonalHubMode.allCases {
