@@ -9,6 +9,60 @@ enum CompanionAttentionSelection {
     }
 }
 
+struct CompanionAttentionSummary: Equatable {
+    let needsAttention: Bool
+    let title: String
+    let subtitle: String
+
+    static func resolve(
+        approvalCount: Int,
+        questionCount: Int,
+        fallbackPendingAction: CompanionPendingAction?,
+        fallbackWeather: String?
+    ) -> CompanionAttentionSummary {
+        let safeApprovalCount = max(0, approvalCount)
+        let safeQuestionCount = max(0, questionCount)
+        let total = safeApprovalCount + safeQuestionCount
+
+        if total > 0 {
+            return CompanionAttentionSummary(
+                needsAttention: true,
+                title: "Needs you",
+                subtitle: attentionCopy(approvals: safeApprovalCount, questions: safeQuestionCount)
+            )
+        }
+
+        if let fallbackPendingAction {
+            return CompanionAttentionSummary(
+                needsAttention: true,
+                title: "Needs you",
+                subtitle: fallbackPendingAction == .approval
+                    ? "An agent is waiting for approval"
+                    : "An agent is waiting for an answer"
+            )
+        }
+
+        return CompanionAttentionSummary(
+            needsAttention: false,
+            title: "Today",
+            subtitle: fallbackWeather ?? "Nothing else needs your attention"
+        )
+    }
+
+    private static func attentionCopy(approvals: Int, questions: Int) -> String {
+        switch (approvals, questions) {
+        case (1, 0): return "1 approval needs a decision"
+        case let (count, 0): return "\(count) approvals need decisions"
+        case (0, 1): return "1 question needs an answer"
+        case let (0, count): return "\(count) questions need answers"
+        case (1, 1): return "1 approval and 1 question need you"
+        case let (approvals, 1): return "\(approvals) approvals and 1 question need you"
+        case let (1, questions): return "1 approval and \(questions) questions need you"
+        case let (approvals, questions): return "\(approvals) approvals and \(questions) questions need you"
+        }
+    }
+}
+
 extension CompanionMotionPolicy {
     static let animatesRoutinePoll = false
 
