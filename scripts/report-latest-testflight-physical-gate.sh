@@ -7,7 +7,10 @@ WORKFLOW="${WORKFLOW:-testflight-ios.yml}"
 BRANCH="${BRANCH:-main}"
 EXPECTED_MAC_VERSION="${EXPECTED_MAC_VERSION:-1.0.53}"
 EXPECTED_CLIENT_VERSION="${EXPECTED_CLIENT_VERSION:-1.0.0}"
+SYNC_MAC_EXPECTED_BUDDY_DEFAULTS="${SYNC_MAC_EXPECTED_BUDDY_DEFAULTS:-1}"
+MAC_DEFAULTS_DOMAIN="${MAC_DEFAULTS_DOMAIN:-com.codeisland.app}"
 GH_BIN="${GH_BIN:-gh}"
+DEFAULTS_BIN="${DEFAULTS_BIN:-defaults}"
 REPORT_PHYSICAL_ACCEPTANCE_BIN="${REPORT_PHYSICAL_ACCEPTANCE_BIN:-$(dirname "$0")/report-physical-acceptance.sh}"
 
 if ! command -v jq >/dev/null 2>&1; then
@@ -73,6 +76,37 @@ if [[ -z "$build_number" ]]; then
     exit 2
 fi
 
+mac_settings_sync="$(jq -n \
+    --argjson enabled false \
+    --arg status "disabled" \
+    '{enabled:$enabled,status:$status}')"
+if [[ "$SYNC_MAC_EXPECTED_BUDDY_DEFAULTS" == "1" ]]; then
+    if command -v "$DEFAULTS_BIN" >/dev/null 2>&1; then
+        if "$DEFAULTS_BIN" write "$MAC_DEFAULTS_DOMAIN" remoteApprovalExpectedClientVersion "$EXPECTED_CLIENT_VERSION" \
+            && "$DEFAULTS_BIN" write "$MAC_DEFAULTS_DOMAIN" remoteApprovalExpectedClientBuild "$build_number"; then
+            mac_settings_sync="$(jq -n \
+                --argjson enabled true \
+                --arg status "synced" \
+                --arg domain "$MAC_DEFAULTS_DOMAIN" \
+                --arg expectedClientVersion "$EXPECTED_CLIENT_VERSION" \
+                --arg expectedClientBuild "$build_number" \
+                '{enabled:$enabled,status:$status,domain:$domain,expectedClientVersion:$expectedClientVersion,expectedClientBuild:$expectedClientBuild}')"
+        else
+            mac_settings_sync="$(jq -n \
+                --argjson enabled true \
+                --arg status "failed" \
+                --arg domain "$MAC_DEFAULTS_DOMAIN" \
+                '{enabled:$enabled,status:$status,domain:$domain}')"
+        fi
+    else
+        mac_settings_sync="$(jq -n \
+            --argjson enabled true \
+            --arg status "defaults-command-missing" \
+            --arg domain "$MAC_DEFAULTS_DOMAIN" \
+            '{enabled:$enabled,status:$status,domain:$domain}')"
+    fi
+fi
+
 acceptance_report="$(EXPECTED_MAC_VERSION="$EXPECTED_MAC_VERSION" \
     EXPECTED_CLIENT_VERSION="$EXPECTED_CLIENT_VERSION" \
     EXPECTED_CLIENT_BUILD="$build_number" \
@@ -104,6 +138,7 @@ jq -n \
     --arg appleState "$apple_state" \
     --arg audience "$audience" \
     --arg artifactID "$artifact_id" \
+    --argjson macSettingsSync "$mac_settings_sync" \
     --argjson acceptance "$acceptance_report" \
     --arg status "$physical_status" \
     --argjson complete "$complete" \
@@ -116,6 +151,7 @@ jq -n \
             audience:($audience | select(length > 0) // null),
             artifactID:($artifactID | select(length > 0) // null)
         }),
+        macSettingsSync:$macSettingsSync,
         physicalAcceptance:$acceptance,
         gate:{
             status:$status,

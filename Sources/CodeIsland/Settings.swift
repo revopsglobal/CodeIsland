@@ -130,6 +130,8 @@ enum SettingsKey {
     static let remoteApprovalTelegramEnabled = "remoteApprovalTelegramEnabled"
     static let remoteApprovalTelegramBotToken = "remoteApprovalTelegramBotToken"
     static let remoteApprovalTelegramChatID = "remoteApprovalTelegramChatID"
+    static let remoteApprovalExpectedClientVersion = "remoteApprovalExpectedClientVersion"
+    static let remoteApprovalExpectedClientBuild = "remoteApprovalExpectedClientBuild"
 
     // Glances utilities
     // Comma-separated EventKit reminder calendar identifiers. An empty value is
@@ -226,6 +228,8 @@ struct SettingsDefaults {
     static let remoteApprovalTelegramEnabled = false
     static let remoteApprovalTelegramBotToken = ""
     static let remoteApprovalTelegramChatID = ""
+    static let remoteApprovalExpectedClientVersion = ""
+    static let remoteApprovalExpectedClientBuild = ""
 
     static let glancesReminderCalendarIDs = ""
     static let glancesWeatherLocation = ""
@@ -315,6 +319,8 @@ class SettingsManager {
             SettingsKey.remoteApprovalTelegramEnabled: SettingsDefaults.remoteApprovalTelegramEnabled,
             SettingsKey.remoteApprovalTelegramBotToken: SettingsDefaults.remoteApprovalTelegramBotToken,
             SettingsKey.remoteApprovalTelegramChatID: SettingsDefaults.remoteApprovalTelegramChatID,
+            SettingsKey.remoteApprovalExpectedClientVersion: SettingsDefaults.remoteApprovalExpectedClientVersion,
+            SettingsKey.remoteApprovalExpectedClientBuild: SettingsDefaults.remoteApprovalExpectedClientBuild,
             SettingsKey.glancesReminderCalendarIDs: SettingsDefaults.glancesReminderCalendarIDs,
             SettingsKey.glancesWeatherLocation: SettingsDefaults.glancesWeatherLocation,
             SettingsKey.defaultSource: SettingsDefaults.defaultSource,
