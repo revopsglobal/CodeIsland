@@ -17,7 +17,15 @@ Sources used for the baseline:
 
 This delta supersedes older "current build" language below.
 
-- Latest source: PR #84 merged as
+- Latest source: PR #86 merged as
+  `d8473799fdffeafbad1c759fd5b0421a02831647`, adding the physical,
+  latest-TestFlight, and strict E2E Bats acceptance-script suites to the
+  macOS DMG workflow so the acceptance harness is verified before future signed
+  Mac builds. GitHub workflow run `29670616616` completed successfully from
+  that commit; step 12, **Test acceptance scripts**, passed, followed by the
+  Buddy Simulator build, DMG build, ARM64 verification, stable internal signing
+  verification, and artifact upload.
+- Previous source: PR #84 merged as
   `dcdc2ddc83799e26e1335f4c322c008c1c146866`, adding
   `scripts/report-strict-physical-e2e.sh`, a fail-closed report that combines
   the newest TestFlight physical-build gate with the authenticated remote host
