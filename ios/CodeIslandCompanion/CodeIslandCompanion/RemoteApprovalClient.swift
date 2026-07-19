@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import Security
 import UIKit
@@ -57,6 +58,9 @@ final class RemoteApprovalClient: ObservableObject {
     @Published var quickJotDestination: BuddyQuickJotDestination?
     @Published var quickJotSeedText: String?
     @Published private(set) var remoteTaskDeepLinkDestination: RemoteTaskDeepLinkDestination?
+    @Published private(set) var remoteTasks: [RemoteTaskSummary] = []
+    @Published private(set) var remoteTaskDrafts: [RemoteTaskDraft] = []
+    @Published private(set) var remoteTaskError: String?
     @Published var selectedMode: PersonalHubMode {
         didSet {
             UserDefaults.standard.set(selectedMode.rawValue, forKey: Self.selectedModeKey)
@@ -90,6 +94,8 @@ final class RemoteApprovalClient: ObservableObject {
     private var consecutiveApprovalRefreshFailures = 0
     private var notificationObservers: [NSObjectProtocol] = []
     private var pendingGenericDeepLink: RemoteAttentionKind?
+    private let remoteTaskClient = RemoteTaskClient()
+    private var remoteTaskCancellables: Set<AnyCancellable> = []
     var onSnapshotReceived: ((RemoteApprovalSnapshot) -> Void)?
 
     var hasPairingCredential: Bool {
@@ -126,6 +132,7 @@ final class RemoteApprovalClient: ObservableObject {
     }
 
     init() {
+        remoteTaskDrafts = remoteTaskClient.localDrafts
 #if DEBUG
         usesMockHub = ProcessInfo.processInfo.arguments.contains("-CodeIslandCompanionMockHub")
         usesMockPairing = ProcessInfo.processInfo.arguments.contains("-CodeIslandCompanionMockPairing")
@@ -140,6 +147,7 @@ final class RemoteApprovalClient: ObservableObject {
         selectedMode = launchMode ?? PersonalHubMode(
             rawValue: UserDefaults.standard.string(forKey: Self.selectedModeKey) ?? ""
         ) ?? .auto
+        bindRemoteTaskClient()
 
 #if DEBUG
         if usesMockPairing {
@@ -269,6 +277,7 @@ final class RemoteApprovalClient: ObservableObject {
         isActive = active
         if active {
             consumePendingIntentRoute()
+            remoteTaskClient.resetForActivation()
             Task { await refresh() }
         }
     }
@@ -325,6 +334,7 @@ final class RemoteApprovalClient: ObservableObject {
     func unpair() {
         Self.deleteKeychainToken()
         deviceToken = nil
+        remoteTaskClient.clearConnection()
         approvals = []
         questions = []
         serverName = nil
@@ -334,7 +344,21 @@ final class RemoteApprovalClient: ObservableObject {
         hubError = nil
         preparedAction = nil
         consecutiveApprovalRefreshFailures = 0
+        remoteTasks = []
+        remoteTaskDrafts = remoteTaskClient.localDrafts
         state = .unpaired
+    }
+
+    private func bindRemoteTaskClient() {
+        remoteTaskClient.$tasks
+            .sink { [weak self] in self?.remoteTasks = $0 }
+            .store(in: &remoteTaskCancellables)
+        remoteTaskClient.$localDrafts
+            .sink { [weak self] in self?.remoteTaskDrafts = $0 }
+            .store(in: &remoteTaskCancellables)
+        remoteTaskClient.$lastError
+            .sink { [weak self] in self?.remoteTaskError = $0 }
+            .store(in: &remoteTaskCancellables)
     }
 
     func resolve(_ approval: RemoteApprovalItem, decision: RemoteApprovalDecision) async {
@@ -429,6 +453,7 @@ final class RemoteApprovalClient: ObservableObject {
             state = .connected
             onSnapshotReceived?(snapshot)
             await refreshHub()
+            await refreshRemoteTasks()
         } catch RemoteClientError.unauthorized {
             unpair()
         } catch {
@@ -440,6 +465,42 @@ final class RemoteApprovalClient: ObservableObject {
             ) {
                 state = failureState
             }
+        }
+    }
+
+    @discardableResult
+    func enqueueRemoteTask(_ input: RemoteTaskDraftInput) async throws -> RemoteTaskDraft {
+        let draft = try remoteTaskClient.enqueue(input)
+        remoteTaskDrafts = remoteTaskClient.localDrafts
+        await refreshRemoteTasks(force: true)
+        return draft
+    }
+
+    func refreshRemoteTasks(force: Bool = false) async {
+#if DEBUG
+        if usesMockHub { return }
+#endif
+        guard let deviceToken, let baseURL = normalizedServerURL else {
+            remoteTaskDrafts = remoteTaskClient.localDrafts
+            return
+        }
+        let result = await remoteTaskClient.sync(
+            baseURL: baseURL,
+            bearerToken: deviceToken,
+            force: force
+        )
+        remoteTasks = remoteTaskClient.tasks
+        remoteTaskDrafts = remoteTaskClient.localDrafts
+        remoteTaskError = remoteTaskClient.lastError
+        switch result {
+        case .pairingRequired:
+            unpair()
+        case .offline:
+            if lastUpdatedAt == nil {
+                state = .offline(remoteTaskClient.lastError ?? "Mac offline")
+            }
+        case .success, .conflict, .deferred:
+            break
         }
     }
 
