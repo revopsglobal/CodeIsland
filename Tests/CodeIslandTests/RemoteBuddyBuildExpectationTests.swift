@@ -45,6 +45,26 @@ final class RemoteBuddyBuildExpectationTests: XCTestCase {
         XCTAssertEqual(status, .missing(expectedVersion: "1.0.0", expectedBuild: "20260719011702"))
     }
 
+    func testInstallGuidanceNamesExactExpectedBuild() {
+        let guidance = RemoteBuddyInstallGuidance(expectedVersion: " 1.0.0 ", expectedBuild: " 20260719011702 ")
+
+        XCTAssertEqual(RemoteBuddyInstallGuidance.testFlightURL.absoluteString, "itms-beta://")
+        XCTAssertEqual(
+            guidance.instruction,
+            "Open TestFlight on the iPhone, install CodeIsland Buddy 1.0.0 (20260719011702), then open Buddy for at least 10 seconds."
+        )
+        XCTAssertTrue(guidance.copyText.contains("scripts/report-latest-testflight-physical-gate.sh"))
+    }
+
+    func testInstallGuidanceFallsBackWhenVersionIsUnknown() {
+        let guidance = RemoteBuddyInstallGuidance(expectedVersion: "", expectedBuild: "20260719011702")
+
+        XCTAssertEqual(
+            guidance.instruction,
+            "Open TestFlight on the iPhone, install the newest CodeIsland Buddy build, then open Buddy for at least 10 seconds."
+        )
+    }
+
     private func device(
         name: String = "iPhone",
         version: String? = "1.0.0",

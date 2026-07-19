@@ -9,6 +9,7 @@ EXPECTED_MAC_VERSION="${EXPECTED_MAC_VERSION:-1.0.53}"
 EXPECTED_CLIENT_VERSION="${EXPECTED_CLIENT_VERSION:-1.0.0}"
 SYNC_MAC_EXPECTED_BUDDY_DEFAULTS="${SYNC_MAC_EXPECTED_BUDDY_DEFAULTS:-1}"
 MAC_DEFAULTS_DOMAIN="${MAC_DEFAULTS_DOMAIN:-com.codeisland.app}"
+BUDDY_TESTFLIGHT_URL="${BUDDY_TESTFLIGHT_URL:-itms-beta://}"
 GH_BIN="${GH_BIN:-gh}"
 DEFAULTS_BIN="${DEFAULTS_BIN:-defaults}"
 REPORT_PHYSICAL_ACCEPTANCE_BIN="${REPORT_PHYSICAL_ACCEPTANCE_BIN:-$(dirname "$0")/report-physical-acceptance.sh}"
@@ -119,17 +120,23 @@ complete="$(printf '%s' "$acceptance_report" | jq -r '.gates.complete')"
 case "$physical_status" in
     matched)
         next_action="Run strict physical E2E interaction acceptance for Buddy build $build_number."
+        install_instruction="Newest CodeIsland Buddy build $EXPECTED_CLIENT_VERSION ($build_number) is physically registered. Continue with strict physical E2E interaction acceptance."
         ;;
     stale)
         next_action="Install and open CodeIsland Buddy build $build_number from TestFlight on the iPhone, then rerun strict physical acceptance."
+        install_instruction="Open TestFlight on the iPhone, install CodeIsland Buddy $EXPECTED_CLIENT_VERSION ($build_number), then open Buddy for at least 10 seconds."
         ;;
     missing)
         next_action="Open CodeIsland Buddy build $build_number on the physical iPhone so it registers with the Mac, then rerun strict physical acceptance."
+        install_instruction="Open TestFlight on the iPhone, install CodeIsland Buddy $EXPECTED_CLIENT_VERSION ($build_number), then open Buddy for at least 10 seconds."
         ;;
     *)
         next_action="Configure expected client build/version and rerun physical acceptance."
+        install_instruction="Configure the expected Buddy version/build, then rerun physical acceptance."
         ;;
 esac
+
+install_copy_text="$install_instruction Leave Tailscale connected, then rerun scripts/report-latest-testflight-physical-gate.sh on the Mac."
 
 jq -n \
     --argjson latestRun "$latest_run" \
@@ -143,6 +150,9 @@ jq -n \
     --arg status "$physical_status" \
     --argjson complete "$complete" \
     --arg nextAction "$next_action" \
+    --arg testFlightURL "$BUDDY_TESTFLIGHT_URL" \
+    --arg installInstruction "$install_instruction" \
+    --arg installCopyText "$install_copy_text" \
     '{
         latestTestFlight:($latestRun + {
             buildNumber:$buildNumber,
@@ -153,6 +163,11 @@ jq -n \
         }),
         macSettingsSync:$macSettingsSync,
         physicalAcceptance:$acceptance,
+        installGuide:{
+            testFlightURL:$testFlightURL,
+            instruction:$installInstruction,
+            copyText:$installCopyText
+        },
         gate:{
             status:$status,
             complete:$complete,
