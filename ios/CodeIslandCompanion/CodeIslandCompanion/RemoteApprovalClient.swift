@@ -62,6 +62,7 @@ final class RemoteApprovalClient: ObservableObject {
     private static let pendingApprovalIDKey = "codeisland.remote.pendingApprovalID"
     private static let pendingQuestionIDKey = "codeisland.remote.pendingQuestionID"
     private static let selectedModeKey = "codeisland.hub.selectedMode.v1"
+    static let invalidServerURLMessage = "Check the Mac connection URL in Connection settings"
 
     private let usesMockHub: Bool
     private let usesMockPairing: Bool
@@ -239,7 +240,7 @@ final class RemoteApprovalClient: ObservableObject {
             return false
         }
         guard let requestURL = endpoint("/api/pair") else {
-            state = .offline("Enter a valid Tailscale HTTPS URL")
+            state = .offline(Self.invalidServerURLMessage)
             return false
         }
         state = .connecting
@@ -354,7 +355,7 @@ final class RemoteApprovalClient: ObservableObject {
             return
         }
         guard let url = endpoint("/api/approvals") else {
-            state = .offline("Enter a valid Tailscale HTTPS URL")
+            state = .offline(Self.invalidServerURLMessage)
             return
         }
         if let refreshStartState = Self.refreshStartState(
@@ -406,7 +407,7 @@ final class RemoteApprovalClient: ObservableObject {
             return
         }
         guard let url = endpoint("/api/hub/snapshot") else {
-            hubError = "Enter a valid Tailscale HTTPS URL"
+            hubError = Self.invalidServerURLMessage
             return
         }
         do {
@@ -446,7 +447,7 @@ final class RemoteApprovalClient: ObservableObject {
             return
         }
         guard let url = endpoint("/api/hub/snapshot") else {
-            sessionsError = "Enter a valid Tailscale HTTPS URL"
+            sessionsError = Self.invalidServerURLMessage
             return
         }
         do {
@@ -533,12 +534,16 @@ final class RemoteApprovalClient: ObservableObject {
     }
 
     var connectionDetail: String {
-        let host = normalizedServerURL?.host ?? serverURLText
-        let transport = host.lowercased().hasSuffix(".ts.net") ? "Tailscale HTTPS" : "Private HTTPS"
-        return [serverName, host, transport].compactMap { value in
-            guard let value, !value.isEmpty else { return nil }
-            return value
-        }.joined(separator: " · ")
+        Self.connectionDetail(serverName: serverName)
+    }
+
+    nonisolated static func connectionDetail(serverName: String?) -> String {
+        guard let serverName = serverName?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !serverName.isEmpty
+        else {
+            return "Connected to Greg's Mac"
+        }
+        return "Connected to \(serverName)"
     }
 
     func clearQuickJotSeed() {

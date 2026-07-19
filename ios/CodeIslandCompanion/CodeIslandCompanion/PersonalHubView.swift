@@ -524,7 +524,7 @@ struct PersonalHubSurface: View {
                 hubEmptyState(
                     symbol: "arrow.triangle.2.circlepath",
                     title: "Loading your Mac",
-                    detail: "Fetching the selected mode over Tailscale."
+                    detail: "Fetching the selected workspace from your Mac."
                 )
             }
 
