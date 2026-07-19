@@ -138,6 +138,7 @@ jobs:
           bats Tests/Scripts/report-latest-testflight-physical-gate.bats
           bats Tests/Scripts/report-strict-physical-e2e.bats
           bats Tests/Scripts/report-away-readiness.bats
+          bats Tests/Scripts/report-codeisland-completion-audit.bats
 
       - name: Build iPhone Buddy for Simulator
         run: |

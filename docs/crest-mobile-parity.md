@@ -43,6 +43,13 @@ This delta supersedes older "current build" language below.
   `alert`/`confirm`/`prompt` dialogs. This is stronger desktop-headless
   evidence for the web fallback, not a substitute for physical iPhone browser
   or cellular/Tailscale acceptance.
+- Latest objective-level completion audit source adds
+  `scripts/report-codeisland-completion-audit.sh`. It composes strict physical
+  E2E and away-readiness into one fail-closed report for the actual objective:
+  signed TestFlight delivery, private mobile web fallback, native iPhone away
+  readiness, optional Telegram fallback, real physical E2E, and no-overclaim
+  guardrails. It exits `2` until the latest TestFlight Buddy build has checked
+  in from the physical iPhone and strict E2E is complete.
 - Latest away-readiness report at `2026-07-19T06:36:50Z` returned
   `status = ready-for-manual-physical-acceptance`,
   `readyForAwayManualAcceptance = true`, latest Buddy build
