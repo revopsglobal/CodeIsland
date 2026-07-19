@@ -164,6 +164,30 @@ This delta supersedes older "current build" language below.
   `/Applications/CodeIsland.app.backup-20260718220828`, and the app relaunched
   as PID `49608` with local and Tailscale `/health` both running with
   `pendingCount: 0`.
+- Latest Telegram exact-build recovery source: PR #111 merged as
+  `1b8df18c810fb7872ae6cec14842be249d64a291`, reading the expected Buddy
+  version/build from Mac settings and including it in redacted Telegram
+  TestFlight recovery copy when known. The alert can now say, for example,
+  `If Buddy is stale: update CodeIsland Buddy to 1.0.0 (20260719042243) in
+  TestFlight itms-beta://`, while still excluding request IDs, commands,
+  transcripts, workspace paths, and private details. Verification passed the
+  full `APNSNotificationSenderTests` suite, `git diff --check`, and
+  `graphify update . --no-viz`.
+- Latest Mac delivery after PR #111: workflow run `29674484890` from
+  `1b8df18c810fb7872ae6cec14842be249d64a291` completed successfully. The CI
+  run passed personal utilities, remote approval security/exact-request
+  routing, iPhone companion models, acceptance scripts, Buddy Simulator build,
+  DMG build, ARM64 verification, stable internal signing verification, and
+  artifact upload. Artifact `CodeIsland-macos-arm64-dmg` downloaded locally to
+  `/tmp/codeisland-dmg-29674484890-1784438247/CodeIsland.dmg` with SHA-256
+  `fcd7caaa2fc9f447d424b5ee461af19de368354e407ceb7020e575e2c088d69a`. The
+  mounted and installed app both passed strict codesign verification with
+  bundle `com.codeisland.app`, Team `44JG2Y95CH`, and CDHash
+  `649d8672c83903d2e4c9e553c1e6c916ad0b7bf3`. It is installed at
+  `/Applications/CodeIsland.app`, the prior app was preserved as
+  `/Applications/CodeIsland.app.backup-20260718221752`, and the app relaunched
+  as PID `54512` with local and Tailscale `/health` both running with
+  `pendingCount: 0`.
 - Latest strict-gate diagnostic source: PR #105 merged as
   `f21d11728cece2e4f28fef68ee38bdb316d489e4`, adding
   `scripts/report-ios-direct-device-visibility.sh` and embedding its
@@ -175,14 +199,14 @@ This delta supersedes older "current build" language below.
   live
   `scripts/report-ios-direct-device-visibility.sh`, live strict E2E, `git diff
   --check`, and `graphify update . --no-viz`.
-- Latest strict E2E report at `2026-07-19T05:08:46Z` returned
+- Latest strict E2E report at `2026-07-19T05:18:19Z` returned
   `status = physical-gate-incomplete`, `complete = false`: the Mac app is
   installed and running at `1.0.53`, local and Tailscale `/health` are HTTP
   `200` with zero pending work, Mac Settings sync expects Buddy
   `1.0.0 (20260719042243)`, and
   `RemoteApprovalHTTPServerTests/testAuthenticatedHostLifecycleOverRealListener`
-  passed. The installed Mac app is now the PR #109 DMG build running as PID
-  `49608`. The latest TestFlight gate remains stale: the physical iPhone is
+  passed. The installed Mac app is now the PR #111 DMG build running as PID
+  `54512`. The latest TestFlight gate remains stale: the physical iPhone is
   still last observed on Buddy `1.0.0 (20260718212803)` instead of latest
   TestFlight `1.0.0 (20260719042243)`. The direct-device diagnostic reports
   `status = simulator-only`, `iosDeviceCount = 1`, `simulatorCount = 1`, and
