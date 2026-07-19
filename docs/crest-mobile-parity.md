@@ -52,6 +52,14 @@ This delta supersedes older "current build" language below.
   the iPhone, click **Connect** in iPhone Mirroring if using the Mac path, open
   TestFlight Buddy `20260719063154`, keep Tailscale connected, and rerun strict
   E2E.
+- Latest source-drift hardening makes
+  `scripts/report-testflight-source-drift.sh` include local working-tree/index
+  Buddy edits when the report describes the current checkout. This prevents an
+  uncommitted iOS/Buddy change from being misreported as safe to test against
+  the existing TestFlight build, while ignoring unrelated local tool folders
+  such as `.playwright-cli/` and `graphify-out/`. Verification passed the
+  source-drift Bats suite plus the latest-TestFlight, strict E2E,
+  away-readiness, and direct-device suites together (34/34).
 - Latest source: PR #86 merged as
   `d8473799fdffeafbad1c759fd5b0421a02831647`, adding the physical,
   latest-TestFlight, and strict E2E Bats acceptance-script suites to the
