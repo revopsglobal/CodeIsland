@@ -184,6 +184,16 @@ final class PersonalHubDataModel: ObservableObject {
         }
     }
 
+    struct MediaCommandPlan: Equatable, Sendable {
+        let appName: String
+        let command: String
+        let optimisticPosition: Double?
+
+        var appleScript: String {
+            "tell application \"\(appName)\" to \(command)"
+        }
+    }
+
     struct GitHubPullRequest: Equatable, Identifiable, Sendable {
         let id: String
         let repository: String
@@ -652,13 +662,37 @@ final class PersonalHubDataModel: ObservableObject {
         value: String? = nil
     ) -> Bool {
         guard let media = nowPlaying else { return false }
-        let appName = media.appName
+        guard let plan = Self.mediaCommandPlan(for: media, action: action, targetID: targetID, value: value) else {
+            return false
+        }
+        let result = ProcessRunner.run(path: "/usr/bin/osascript", args: ["-e", plan.appleScript], timeout: 5)
+        guard result != nil else { return false }
+        let optimistic = plan.optimisticPosition.map(media.updatingPosition) ?? media
+        nowPlaying = optimistic
+        MediaHUDController.shared.showNowPlaying(optimistic)
+        refreshNowPlaying()
+        return true
+    }
+
+    nonisolated static func mediaCommandPlan(
+        for media: NowPlaying,
+        action: String,
+        targetID: String? = nil,
+        value: String? = nil
+    ) -> MediaCommandPlan? {
+        guard ["Music", "Spotify"].contains(media.appName) else { return nil }
         let command: String
-        var optimisticPosition: Double?
+        let optimisticPosition: Double?
         switch action {
-        case "next": command = "next track"
-        case "previous": command = "previous track"
-        case "playPause": command = "playpause"
+        case "next":
+            command = "next track"
+            optimisticPosition = nil
+        case "previous":
+            command = "previous track"
+            optimisticPosition = nil
+        case "playPause":
+            command = "playpause"
+            optimisticPosition = nil
         case "seekBack", "seekForward":
             let delta = action == "seekBack" ? -15.0 : 15.0
             let current = media.position ?? 0
@@ -671,28 +705,22 @@ final class PersonalHubDataModel: ObservableObject {
                   let requested = Double(value),
                   let duration = media.duration,
                   let destination = Self.clampedSeekPosition(requested, duration: duration) else {
-                return false
+                return nil
             }
             optimisticPosition = destination
             command = "set player position to \(destination)"
         case "playQueueItem":
-            guard appName == "Music",
+            guard media.appName == "Music",
                   let targetID,
                   media.queue.contains(where: { $0.id == targetID }),
                   let index = Int(targetID),
-                  index > 0 else { return false }
+                  index > 0 else { return nil }
             command = "play track \(index) of current playlist"
+            optimisticPosition = nil
         default:
-            return false
+            return nil
         }
-        let script = "tell application \"\(appName)\" to \(command)"
-        let result = ProcessRunner.run(path: "/usr/bin/osascript", args: ["-e", script], timeout: 5)
-        guard result != nil else { return false }
-        let optimistic = optimisticPosition.map(media.updatingPosition) ?? media
-        nowPlaying = optimistic
-        MediaHUDController.shared.showNowPlaying(optimistic)
-        refreshNowPlaying()
-        return true
+        return MediaCommandPlan(appName: media.appName, command: command, optimisticPosition: optimisticPosition)
     }
 
     func refreshHostData() {

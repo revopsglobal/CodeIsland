@@ -173,6 +173,59 @@ final class PersonalHubDataModelTests: XCTestCase {
         XCTAssertEqual(queue.map(\.title), ["Song A", "Song B"])
     }
 
+    func testMediaCommandPlansBasicTransportControls() {
+        let media = nowPlaying(appName: "Music")
+
+        XCTAssertEqual(
+            PersonalHubDataModel.mediaCommandPlan(for: media, action: "playPause"),
+            .init(appName: "Music", command: "playpause", optimisticPosition: nil)
+        )
+        XCTAssertEqual(
+            PersonalHubDataModel.mediaCommandPlan(for: media, action: "next")?.appleScript,
+            #"tell application "Music" to next track"#
+        )
+        XCTAssertEqual(
+            PersonalHubDataModel.mediaCommandPlan(for: media, action: "previous")?.appleScript,
+            #"tell application "Music" to previous track"#
+        )
+    }
+
+    func testMediaCommandPlansSeekAndClampsRelativeSeek() {
+        let media = nowPlaying(appName: "Spotify", position: 170, duration: 180)
+
+        XCTAssertEqual(
+            PersonalHubDataModel.mediaCommandPlan(for: media, action: "seekForward"),
+            .init(appName: "Spotify", command: "set player position to 180.0", optimisticPosition: 180)
+        )
+        XCTAssertEqual(
+            PersonalHubDataModel.mediaCommandPlan(for: media, action: "seekBack")?.optimisticPosition,
+            155
+        )
+        XCTAssertEqual(
+            PersonalHubDataModel.mediaCommandPlan(for: media, action: "seek", value: "42.5"),
+            .init(appName: "Spotify", command: "set player position to 42.5", optimisticPosition: 42.5)
+        )
+        XCTAssertNil(PersonalHubDataModel.mediaCommandPlan(for: media, action: "seek", value: "not-a-number"))
+    }
+
+    func testMediaCommandPlansMusicQueueOnlyForKnownQueueItems() {
+        let queue = [PersonalHubDataModel.NowPlaying.QueueItem(
+            id: "7",
+            title: "Next song",
+            artist: "Next artist",
+            album: "Next album"
+        )]
+        let music = nowPlaying(appName: "Music", queue: queue)
+        let spotify = nowPlaying(appName: "Spotify", queue: queue)
+
+        XCTAssertEqual(
+            PersonalHubDataModel.mediaCommandPlan(for: music, action: "playQueueItem", targetID: "7")?.appleScript,
+            #"tell application "Music" to play track 7 of current playlist"#
+        )
+        XCTAssertNil(PersonalHubDataModel.mediaCommandPlan(for: music, action: "playQueueItem", targetID: "8"))
+        XCTAssertNil(PersonalHubDataModel.mediaCommandPlan(for: spotify, action: "playQueueItem", targetID: "7"))
+    }
+
     func testLegacyTextShelfEntryDecodesWithoutFilePath() throws {
         let data = try XCTUnwrap(#"{"id":"clip-1","value":"git push origin main","capturedAt":0}"#.data(using: .utf8))
 
@@ -352,5 +405,24 @@ final class PersonalHubDataModelTests: XCTestCase {
         XCTAssertTrue(invocation.systemPrompt.contains("Never execute tools"))
         XCTAssertTrue(invocation.systemPrompt.contains("Return JSON only"))
         XCTAssertTrue(invocation.systemPrompt.contains("proposed CodeIsland actions"))
+    }
+
+    private func nowPlaying(
+        appName: String,
+        position: Double? = 10,
+        duration: Double? = 180,
+        queue: [PersonalHubDataModel.NowPlaying.QueueItem] = []
+    ) -> PersonalHubDataModel.NowPlaying {
+        .init(
+            appName: appName,
+            title: "Current song",
+            artist: "Current artist",
+            album: "Current album",
+            isPlaying: true,
+            position: position,
+            duration: duration,
+            lyrics: nil,
+            queue: queue
+        )
     }
 }
