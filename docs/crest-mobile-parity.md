@@ -246,13 +246,17 @@ This delta supersedes older "current build" language below.
 - Latest away-readiness source adds `scripts/report-away-readiness.sh`, a
   redacted machine-readable report for the exact away-use state: current
   TestFlight Buddy build, physical Buddy check-in, local/Tailscale private web
-  health, strict interaction contract, and optional Telegram fallback
-  configuration. Live report at `2026-07-19T06:14:16Z` returned
+  health, private web shell proof, strict interaction contract, and optional
+  Telegram fallback configuration. Live report at `2026-07-19T06:23:18Z`
+  returned
   `status = ready-for-manual-physical-acceptance`,
   `readyForAwayManualAcceptance = true`, latest Buddy build
   `20260719060201`, web fallback reachable with Tailscale running and
-  `pendingCount = 0`, Telegram fallback disabled/optional, and the sole
-  required gate `physical-buddy-checkin`.
+  `pendingCount = 0`, and private web shell `httpCode = 200`,
+  `contentType = text/html; charset=utf-8`, with title, tagline, manifest,
+  icon, Questions, Approvals, and Hub markers all present. Telegram fallback is
+  disabled/optional, and the sole required gate remains
+  `physical-buddy-checkin`.
 - Latest strict E2E report at `2026-07-19T06:07:24Z` returned
   `status = physical-gate-incomplete`, `complete = false`: the Mac app is
   installed and running at `1.0.53`, local and Tailscale `/health` are HTTP

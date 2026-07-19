@@ -91,9 +91,12 @@ scripts/report-away-readiness.sh
 ```
 
 The report combines the latest TestFlight/physical gate, local and Tailscale
-host health, source-drift status, and redacted Telegram fallback configuration.
-It exits `2` until physical Buddy acceptance is complete, but
+host health, source-drift status, private web shell proof, and redacted Telegram
+fallback configuration. The private web shell check fetches the root Tailscale
+URL without printing the body and verifies the CodeIsland title, tagline,
+manifest/icon links, and the Questions, Approvals, and Hub sections. It exits
+`2` until physical Buddy acceptance is complete, but
 `status = ready-for-manual-physical-acceptance` means the Mac host, private web
-fallback, and current TestFlight build are ready and the remaining required gate
-is the physical iPhone opening the named Buddy build. Telegram is reported as
-an optional fallback, not as a required control plane.
+fallback shell, and current TestFlight build are ready and the remaining
+required gate is the physical iPhone opening the named Buddy build. Telegram is
+reported as an optional fallback, not as a required control plane.
