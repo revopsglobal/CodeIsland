@@ -17,14 +17,33 @@ Sources used for the baseline:
 
 This delta supersedes older "current build" language below.
 
-- Latest source: PR #80 merged as
+- Latest source: PR #82 merged as
+  `aa98b2bf0a8d0f54ed1721213f57ff63908355d0`, adding a visible stale-build
+  install guide to Mac Settings with **Open TestFlight** and **Copy install
+  steps** actions, plus a matching `installGuide` payload in the latest-build
+  physical gate JSON. Local verification covered
+  `RemoteBuddyBuildExpectationTests`, the latest-TestFlight gate Bats suite,
+  `git diff --check`, and `graphify update . --no-viz`.
+- Installed Mac: `1.0.53`, workflow run `29670149624`, downloaded DMG SHA-256
+  `aa5d2bdbfdfa9f0a4a5e074473ffbf801a727751e23111415d16520831fff6f4`,
+  ARM64, signature valid under Team `44JG2Y95CH`, CDHash
+  `a3ac2372a253256292108fd00f920f9b4a0a371d`, local `/health` and
+  Tailscale `/health` both running with zero pending work. Installed-binary
+  string inspection confirms the **Open TestFlight**, **Copy install steps**,
+  and exact Buddy install guidance strings are present.
+- Latest-build physical gate now emits `installGuide.testFlightURL =
+  "itms-beta://"` and exact copy text: open TestFlight on iPhone, install
+  CodeIsland Buddy `1.0.0 (20260719011702)`, open Buddy for at least 10
+  seconds, leave Tailscale connected, then rerun
+  `scripts/report-latest-testflight-physical-gate.sh`.
+- Previous source: PR #80 merged as
   `a946634d61bc77c3db0cb4295e4cee67f0a68248`, surfacing stale Buddy
   TestFlight builds in Mac Settings and syncing the latest expected Buddy
   version/build into `com.codeisland.app` defaults from the strict physical
   gate script. Local verification covered `RemoteBuddyBuildExpectationTests`,
   the latest-TestFlight gate Bats suite, `git diff --check`, and
   `graphify update . --no-viz`.
-- Installed Mac: `1.0.53`, workflow run `29669820263`, downloaded DMG SHA-256
+- Previous installed Mac: `1.0.53`, workflow run `29669820263`, downloaded DMG SHA-256
   `5566399b49e08c0d6301019fec075a5f2e8892db8755eb2bd8027143c3a4d88a`,
   ARM64, signature valid under Team `44JG2Y95CH`, CDHash
   `3cc519663f28ab3191d73ce9e36497ed20f759fe`, local `/health` and
