@@ -17,7 +17,20 @@ Sources used for the baseline:
 
 This delta supersedes older "current build" language below.
 
-- Latest source: PR #82 merged as
+- Latest source: PR #84 merged as
+  `dcdc2ddc83799e26e1335f4c322c008c1c146866`, adding
+  `scripts/report-strict-physical-e2e.sh`, a fail-closed report that combines
+  the newest TestFlight physical-build gate with the authenticated remote host
+  lifecycle contract. It exits `0` only when the current physical iPhone build
+  is matched and the exact pairing / approval / question / replay / altered
+  intent interaction test passes.
+- Latest strict E2E report at `2026-07-19T02:37:06Z` returned
+  `status = physical-gate-incomplete`, `complete = false`: the interaction
+  contract passed (`RemoteApprovalHTTPServerTests/testAuthenticatedHostLifecycleOverRealListener`,
+  exit `0`), but the physical iPhone is still stale on Buddy
+  `1.0.0 (20260718212803)` instead of latest TestFlight
+  `1.0.0 (20260719011702)`.
+- Previous source: PR #82 merged as
   `aa98b2bf0a8d0f54ed1721213f57ff63908355d0`, adding a visible stale-build
   install guide to Mac Settings with **Open TestFlight** and **Copy install
   steps** actions, plus a matching `installGuide` payload in the latest-build
@@ -477,6 +490,14 @@ installs cannot be mistaken for acceptance of a newer upload:
 EXPECTED_MAC_VERSION=1.0.53 \
 EXPECTED_CLIENT_VERSION=1.0.0 \
 scripts/report-latest-testflight-physical-gate.sh
+```
+
+For final E2E acceptance, use the strict combined report. It runs the
+latest-build physical gate and the authenticated remote host lifecycle contract,
+then exits `2` unless both pass:
+
+```bash
+scripts/report-strict-physical-e2e.sh
 ```
 
 1. On iPhone, open Apple's **TestFlight** app while signed in as
