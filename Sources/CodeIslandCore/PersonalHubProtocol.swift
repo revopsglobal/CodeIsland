@@ -864,6 +864,8 @@ public enum PersonalHubDeepLink: Equatable, Sendable {
     case pendingQuestion(id: String?)
     case module(PersonalHubModuleID)
     case quickJot(destination: PersonalHubQuickJotDestination, text: String?)
+    case task(id: UUID)
+    case newTask(text: String?)
 
     public init?(url: URL) {
         guard url.scheme?.lowercased() == "codeisland",
@@ -887,6 +889,13 @@ public enum PersonalHubDeepLink: Equatable, Sendable {
             let text = URLComponents(url: url, resolvingAgainstBaseURL: false)?
                 .queryItems?.first(where: { $0.name == "text" })?.value
             self = .quickJot(destination: destination, text: text)
+        case "tasks":
+            guard let rawID = path.first, let id = UUID(uuidString: rawID) else { return nil }
+            self = .task(id: id)
+        case "new-task":
+            let text = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                .queryItems?.first(where: { $0.name == "text" })?.value
+            self = .newTask(text: text)
         default:
             return nil
         }
@@ -908,6 +917,14 @@ public enum PersonalHubDeepLink: Equatable, Sendable {
         case .quickJot(let destination, let text):
             components.host = "quick-jot"
             components.path = "/\(destination.rawValue)"
+            if let text, !text.isEmpty {
+                components.queryItems = [URLQueryItem(name: "text", value: text)]
+            }
+        case .task(let id):
+            components.host = "tasks"
+            components.path = "/\(id.uuidString)"
+        case .newTask(let text):
+            components.host = "new-task"
             if let text, !text.isEmpty {
                 components.queryItems = [URLQueryItem(name: "text", value: text)]
             }
