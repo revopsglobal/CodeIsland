@@ -121,6 +121,10 @@ final class RemoteTaskCoordinator {
     var snapshot: RemoteTaskSnapshot { store.snapshot() }
     var workspaces: [RemoteWorkspaceSummary] { workspaceCatalog.entries.map(\.summary) }
 
+    func workspaceURL(id: String) -> URL? {
+        workspaceCatalog.resolve(id: id)
+    }
+
     func task(id: UUID) -> RemoteTaskRecord? { store.task(id: id) }
 
     func task(idempotencyKey: UUID) -> RemoteTaskRecord? {

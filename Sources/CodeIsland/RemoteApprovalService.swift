@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import CryptoKit
 import Foundation
@@ -18,6 +19,8 @@ final class RemoteApprovalService: ObservableObject {
     @Published private(set) var pairedDevices: [RemoteApprovalDevice] = []
     @Published private(set) var pairingCode: String = ""
     @Published private(set) var pairingExpiresAt: Date = .distantPast
+    @Published private(set) var remoteTasks: [RemoteTaskSummary] = []
+    @Published private(set) var remoteTaskWorkspaces: [RemoteWorkspaceSummary] = []
 
     private weak var appState: AppState?
     private var server: RemoteApprovalHTTPServer?
@@ -37,6 +40,7 @@ final class RemoteApprovalService: ObservableObject {
     private var remoteTaskStore: RemoteTaskStore?
     private var codexTaskRunner: CodexRemoteTaskRunner?
     private var claudeTaskRunner: ClaudeRemoteTaskRunner?
+    private var remoteTaskStoreCancellable: AnyCancellable?
 
     init(
         deviceStore: RemoteApprovalDeviceStore? = nil,
@@ -129,11 +133,15 @@ final class RemoteApprovalService: ObservableObject {
 
     func stop() {
         remoteTaskCoordinator?.shutdown()
+        remoteTaskStoreCancellable?.cancel()
+        remoteTaskStoreCancellable = nil
         remoteTaskCoordinator = nil
         remoteTaskStore = nil
         codexTaskRunner = nil
         claudeTaskRunner = nil
         appState?.codexRemoteTaskRunner = nil
+        remoteTasks = []
+        remoteTaskWorkspaces = []
         server?.stop()
         server = nil
         running = false
@@ -145,6 +153,7 @@ final class RemoteApprovalService: ObservableObject {
 
         if let remoteTaskCoordinatorOverride {
             remoteTaskCoordinator = remoteTaskCoordinatorOverride
+            refreshRemoteTaskPublishedState()
             do {
                 try remoteTaskCoordinatorOverride.recover()
             } catch {
@@ -206,10 +215,119 @@ final class RemoteApprovalService: ObservableObject {
         )
         remoteTaskStore = store
         remoteTaskCoordinator = coordinator
+        remoteTaskWorkspaces = coordinator.workspaces
+        remoteTaskStoreCancellable = store.$tasks
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] records in
+                self?.remoteTasks = records.map(\.summary)
+        }
+        remoteTasks = store.tasks.map(\.summary)
         do {
             try coordinator.recover()
         } catch {
             lastError = "Remote task recovery failed: \(error.localizedDescription)"
+        }
+    }
+
+    @discardableResult
+    func createLocalRemoteTask(
+        prompt: String,
+        workspaceID: String,
+        provider: RemoteTaskProvider
+    ) throws -> RemoteTaskSummary {
+        guard let remoteTaskCoordinator else {
+            throw RemoteTaskLocalError.unavailable
+        }
+        let cleanPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanPrompt.isEmpty else { throw RemoteTaskLocalError.emptyPrompt }
+        let request = RemoteTaskCreateRequest(
+            clientTaskID: UUID(),
+            idempotencyKey: UUID(),
+            prompt: cleanPrompt,
+            workspaceID: workspaceID,
+            provider: provider,
+            authority: .editAndTest,
+            requestedProof: "Run focused tests and report exact evidence"
+        )
+        let record = try remoteTaskCoordinator.create(request: request, deviceID: "local-mac")
+        refreshRemoteTaskPublishedState()
+        return record.summary
+    }
+
+    func followUpLocalRemoteTask(id: UUID, text: String) throws {
+        guard let remoteTaskCoordinator else { throw RemoteTaskLocalError.unavailable }
+        let cleanText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanText.isEmpty else { throw RemoteTaskLocalError.emptyPrompt }
+        _ = try remoteTaskCoordinator.followUp(RemoteTaskFollowUpRequest(
+            taskID: id,
+            idempotencyKey: UUID(),
+            text: cleanText
+        ))
+        refreshRemoteTaskPublishedState()
+    }
+
+    func cancelLocalRemoteTask(id: UUID) throws {
+        guard let remoteTaskCoordinator else { throw RemoteTaskLocalError.unavailable }
+        try remoteTaskCoordinator.cancel(taskID: id)
+        refreshRemoteTaskPublishedState()
+    }
+
+    @discardableResult
+    func openRemoteTaskOnMac(id: UUID) -> Bool {
+        guard let appState,
+              let remoteTaskCoordinator,
+              let record = remoteTaskCoordinator.task(id: id)
+        else { return false }
+
+        let workspacePath = remoteTaskCoordinator
+            .workspaceURL(id: record.summary.workspaceID)?
+            .standardizedFileURL.path
+        let candidates = appState.sessions.map { key, session in
+            RemoteTaskSessionCandidate(
+                id: key,
+                provider: session.source,
+                workspacePath: session.cwd.map { URL(fileURLWithPath: $0).standardizedFileURL.path },
+                updatedAt: session.lastActivity
+            )
+        }
+        guard let targetID = RemoteTaskOpenTargetResolver.resolve(
+            providerSessionID: record.summary.providerSessionID,
+            provider: record.summary.provider,
+            workspacePath: workspacePath,
+            candidates: candidates
+        ), let session = appState.sessions[targetID]
+        else {
+            if let workspaceURL = remoteTaskCoordinator.workspaceURL(id: record.summary.workspaceID) {
+                NSWorkspace.shared.open(workspaceURL)
+            }
+            return false
+        }
+
+        appState.activeSessionId = targetID
+        appState.surface = .sessionList
+        TerminalActivator.activate(session: session, sessionId: targetID)
+        return true
+    }
+
+    func refreshRemoteTaskPublishedState() {
+        guard let remoteTaskCoordinator else {
+            remoteTasks = []
+            remoteTaskWorkspaces = []
+            return
+        }
+        remoteTasks = remoteTaskCoordinator.snapshot.tasks
+        remoteTaskWorkspaces = remoteTaskCoordinator.workspaces
+    }
+
+    enum RemoteTaskLocalError: LocalizedError {
+        case unavailable
+        case emptyPrompt
+
+        var errorDescription: String? {
+            switch self {
+            case .unavailable: return "Remote task service is not available"
+            case .emptyPrompt: return "Describe the coding task first"
+            }
         }
     }
 

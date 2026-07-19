@@ -11,6 +11,13 @@ struct CodeIslandApp: App {
         }
         .commands {
             CommandMenu("Capture") {
+                Button("Remote Coding Tasks") {
+                    RemoteTasksWindowController.shared.show(appState: appDelegate.appState)
+                }
+                .keyboardShortcut("t", modifiers: [.command, .shift])
+
+                Divider()
+
                 Button("New Task") {
                     QuickJotWindowController.shared.show(destination: .task)
                 }
