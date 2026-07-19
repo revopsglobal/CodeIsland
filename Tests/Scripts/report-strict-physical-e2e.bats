@@ -25,7 +25,15 @@ STUB
 #!/usr/bin/env bash
 jq -n '{
   gate:{status:"stale",complete:false,nextAction:"Install and open the latest Buddy build."},
-  latestTestFlight:{buildNumber:"20260719011702",headSha:"33fc732"}
+  latestTestFlight:{buildNumber:"20260719011702",headSha:"33fc732"},
+  physicalAcceptance:{
+    mac:{running:true},
+    health:{
+      local:{url:"http://local.test/health",running:true,pendingCount:0},
+      tailscale:{url:"https://tailscale.test/health",running:true,pendingCount:0}
+    },
+    gates:{deliveryHealthy:true}
+  }
 }'
 exit 2
 STUB
@@ -42,6 +50,9 @@ STUB
     .complete == false and
     .status == "physical-gate-incomplete" and
     .latestGate.status == "stale" and
+    .remoteHostHealth.checked == true and
+    .remoteHostHealth.deliveryHealthy == true and
+    .remoteHostHealth.tailscale.running == true and
     .testFlightSourceDrift.status == "source-drift-non-buddy" and
     .testFlightSourceDrift.testFlightHeadSha == "33fc732" and
     .testFlightSourceDrift.buddyRelevantChanged == false and
@@ -55,7 +66,15 @@ STUB
 #!/usr/bin/env bash
 jq -n '{
   gate:{status:"matched",complete:true,nextAction:"Run strict physical E2E interaction acceptance."},
-  latestTestFlight:{buildNumber:"20260719011702",headSha:"33fc732"}
+  latestTestFlight:{buildNumber:"20260719011702",headSha:"33fc732"},
+  physicalAcceptance:{
+    mac:{running:true},
+    health:{
+      local:{url:"http://local.test/health",running:true,pendingCount:0},
+      tailscale:{url:"https://tailscale.test/health",running:true,pendingCount:0}
+    },
+    gates:{deliveryHealthy:true}
+  }
 }'
 STUB
   cat > "$SWIFT_BIN" <<'STUB'
@@ -71,6 +90,7 @@ STUB
     .complete == true and
     .status == "complete" and
     .latestGate.complete == true and
+    .remoteHostHealth.tailscale.running == true and
     .testFlightSourceDrift.checked == true and
     .directDeviceVisibility.checked == true and
     .interactionContract.passed == true'
@@ -81,7 +101,15 @@ STUB
 #!/usr/bin/env bash
 jq -n '{
   gate:{status:"matched",complete:true,nextAction:"Run strict physical E2E interaction acceptance."},
-  latestTestFlight:{buildNumber:"20260719011702",headSha:"33fc732"}
+  latestTestFlight:{buildNumber:"20260719011702",headSha:"33fc732"},
+  physicalAcceptance:{
+    mac:{running:true},
+    health:{
+      local:{url:"http://local.test/health",running:true,pendingCount:0},
+      tailscale:{url:"https://tailscale.test/health",running:true,pendingCount:0}
+    },
+    gates:{deliveryHealthy:true}
+  }
 }'
 STUB
   cat > "$SWIFT_BIN" <<'STUB'
@@ -98,6 +126,7 @@ STUB
     .complete == false and
     .status == "interaction-contract-failed" and
     .latestGate.complete == true and
+    .remoteHostHealth.deliveryHealthy == true and
     .testFlightSourceDrift.checked == true and
     .directDeviceVisibility.status == "simulator-only" and
     .interactionContract.passed == false and
@@ -109,7 +138,15 @@ STUB
 #!/usr/bin/env bash
 jq -n '{
   gate:{status:"stale",complete:false,nextAction:"Install and open the latest Buddy build."},
-  latestTestFlight:{buildNumber:"20260719011702",headSha:"33fc732"}
+  latestTestFlight:{buildNumber:"20260719011702",headSha:"33fc732"},
+  physicalAcceptance:{
+    mac:{running:true},
+    health:{
+      local:{url:"http://local.test/health",running:true,pendingCount:0},
+      tailscale:{url:"https://tailscale.test/health",running:true,pendingCount:0}
+    },
+    gates:{deliveryHealthy:true}
+  }
 }'
 exit 2
 STUB
@@ -137,7 +174,15 @@ STUB
 #!/usr/bin/env bash
 jq -n '{
   gate:{status:"stale",complete:false,nextAction:"Install and open the latest Buddy build."},
-  latestTestFlight:{buildNumber:"20260719011702",headSha:"33fc732"}
+  latestTestFlight:{buildNumber:"20260719011702",headSha:"33fc732"},
+  physicalAcceptance:{
+    mac:{running:true},
+    health:{
+      local:{url:"http://local.test/health",running:true,pendingCount:0},
+      tailscale:{url:"https://tailscale.test/health",running:true,pendingCount:0}
+    },
+    gates:{deliveryHealthy:true}
+  }
 }'
 exit 2
 STUB
@@ -158,4 +203,29 @@ STUB
     .complete == false and
     .testFlightSourceDrift.status == "source-drift-report-invalid-json" and
     (.testFlightSourceDrift.output | contains("git exploded"))'
+}
+
+@test "surfaces missing host health without breaking strict JSON" {
+  cat > "$LATEST_GATE_BIN" <<'STUB'
+#!/usr/bin/env bash
+jq -n '{
+  gate:{status:"stale",complete:false,nextAction:"Install and open the latest Buddy build."},
+  latestTestFlight:{buildNumber:"20260719011702",headSha:"33fc732"}
+}'
+exit 2
+STUB
+  cat > "$SWIFT_BIN" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "Executed 1 test, with 0 failures"
+STUB
+  chmod +x "$LATEST_GATE_BIN" "$SWIFT_BIN"
+
+  run "$REPO_ROOT/scripts/report-strict-physical-e2e.sh"
+
+  [ "$status" -eq 2 ]
+  printf '%s' "$output" | jq -e '
+    .complete == false and
+    .remoteHostHealth.checked == false and
+    .remoteHostHealth.tailscale == null and
+    (.remoteHostHealth.nextAction | contains("did not include host health"))'
 }
