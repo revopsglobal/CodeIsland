@@ -6,6 +6,32 @@ import XCTest
 /// the panel to the configured working directories.
 final class RemoteCwdFilterTests: XCTestCase {
 
+    func testCanonicalContainmentRejectsSiblingPrefixEscape() {
+        let root = URL(fileURLWithPath: "/private/tmp/allowed/project")
+        XCTAssertTrue(RemoteCwdFilter.contains(
+            URL(fileURLWithPath: "/private/tmp/allowed/project/child"),
+            in: root
+        ))
+        XCTAssertFalse(RemoteCwdFilter.contains(
+            URL(fileURLWithPath: "/private/tmp/allowed/project-escape"),
+            in: root
+        ))
+    }
+
+    func testCanonicalContainmentResolvesSymlinkBeforeAuthorizing() throws {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CodeIslandCwdFilter-\(UUID().uuidString)", isDirectory: true)
+        let allowed = base.appendingPathComponent("allowed", isDirectory: true)
+        let outside = base.appendingPathComponent("outside", isDirectory: true)
+        let link = allowed.appendingPathComponent("linked", isDirectory: true)
+        try FileManager.default.createDirectory(at: allowed, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: outside)
+        defer { try? FileManager.default.removeItem(at: base) }
+
+        XCTAssertFalse(RemoteCwdFilter.contains(link, in: allowed))
+    }
+
     // MARK: remoteEventPassesCwdFilter
 
     func testEmptyFilterAllowsEverything() {
