@@ -104,6 +104,7 @@ final class RemoteApprovalClient: ObservableObject {
     private let remoteTaskClient = RemoteTaskClient()
     private var remoteTaskCancellables: Set<AnyCancellable> = []
     var onSnapshotReceived: ((RemoteApprovalSnapshot) -> Void)?
+    var onRemoteTasksReceived: (([RemoteTaskSummary]) -> Void)?
 
     var hasPairingCredential: Bool {
         deviceToken != nil
@@ -135,6 +136,8 @@ final class RemoteApprovalClient: ObservableObject {
             return approvalIDs.first
         case .question:
             return questionIDs.first
+        case .task:
+            return nil
         }
     }
 
@@ -223,6 +226,8 @@ final class RemoteApprovalClient: ObservableObject {
                     self.highlightedApprovalID = nil
                 } else if kind == .question, self.highlightedQuestionID == requestID {
                     self.highlightedQuestionID = nil
+                } else if kind == .task, let requestID, let id = UUID(uuidString: requestID) {
+                    self.remoteTaskDeepLinkDestination = .detail(id)
                 }
                 await self.refresh()
             }
@@ -361,7 +366,10 @@ final class RemoteApprovalClient: ObservableObject {
 
     private func bindRemoteTaskClient() {
         remoteTaskClient.$tasks
-            .sink { [weak self] in self?.remoteTasks = $0 }
+            .sink { [weak self] tasks in
+                self?.remoteTasks = tasks
+                self?.onRemoteTasksReceived?(tasks)
+            }
             .store(in: &remoteTaskCancellables)
         remoteTaskClient.$localDrafts
             .sink { [weak self] in self?.remoteTaskDrafts = $0 }
@@ -726,6 +734,8 @@ final class RemoteApprovalClient: ObservableObject {
                 approvalIDs: approvals.map(\.id),
                 questionIDs: questions.map(\.id)
             )
+        case .task:
+            break
         }
         self.pendingGenericDeepLink = nil
     }

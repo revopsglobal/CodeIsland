@@ -272,6 +272,24 @@ final class CodeIslandCompanionUITests: XCTestCase {
     }
 
     @MainActor
+    func testTaskDetailCanOwnTheSingleFollowedLiveActivity() throws {
+        let app = launchRemoteTaskApp("needs-you")
+        let row = findAny("task.signal.20000000-0000-0000-0000-000000000001", in: app)
+        XCTAssertTrue(row.waitForExistence(timeout: 8))
+        row.tap()
+        XCTAssertTrue(findAny("task.detail.20000000-0000-0000-0000-000000000001", in: app).waitForExistence(timeout: 5))
+        let follow = app.buttons["task.follow"]
+        XCTAssertTrue(follow.waitForExistence(timeout: 5))
+        XCTAssertTrue(follow.label.localizedCaseInsensitiveContains("Follow in Dynamic Island"))
+        follow.tap()
+        let following = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label CONTAINS[c] %@", "Stop following"),
+            object: follow
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [following], timeout: 5), .completed)
+    }
+
+    @MainActor
     func testAuthenticatedTailscaleConnectionDoesNotLookLikeNearbySearch() throws {
         let app = XCUIApplication()
         app.launchArguments = ["-CodeIslandCompanionMockHub"]
@@ -685,6 +703,7 @@ final class CodeIslandCompanionUITests: XCTestCase {
             "-CodeIslandCompanionMockHub",
             "-CodeIslandCompanionMockHubMode", "code",
             "-CodeIslandCompanionMockRemoteTasks", kind,
+            "-CodeIslandCompanionResetFollowedTask",
         ]
         app.launch()
         return app

@@ -32,7 +32,7 @@ enum RemoteApprovalWebApp {
     """#
 
     static let serviceWorker = #"""
-    const CACHE = 'codeisland-personal-hub-v3';
+    const CACHE = 'codeisland-personal-hub-v4';
     self.addEventListener('install', event => {
       event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(['/', '/manifest.webmanifest', '/app-icon.svg'])));
       self.skipWaiting();
@@ -91,6 +91,17 @@ enum RemoteApprovalWebApp {
         .secondary { background:#1a221c; color:#dce3dd; box-shadow:inset 0 0 0 1px #344037; }
         input { width:100%; min-height:50px; border:1px solid #344037; border-radius:12px; padding:0 13px; color:#f4f7f4; background:#080c09; font-size:16px; outline:none; }
         input:focus { border-color:var(--green); box-shadow:0 0 0 3px #4dd96b22; }
+        textarea,select { width:100%; min-height:50px; border:1px solid #344037; border-radius:12px; padding:12px 13px; color:#f4f7f4; background:#080c09; font:16px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif; outline:none; }
+        textarea { min-height:112px; resize:vertical; }
+        textarea:focus,select:focus { border-color:var(--amber); box-shadow:0 0 0 3px #ffb34722; }
+        .task-compose-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+        .task-card { border-color:#31433a; }
+        .task-card.needs-you { border-color:#8a5e22; box-shadow:0 16px 48px #0005,0 0 0 1px #ffb34722; }
+        .task-card.failed { border-color:#743337; }
+        .task-state { margin-left:auto; color:var(--green); font:800 10px ui-monospace,SFMono-Regular,Menlo,monospace; text-transform:uppercase; }
+        .task-card.needs-you .task-state { color:var(--amber); }
+        .task-card.failed .task-state { color:var(--red); }
+        .task-evidence { margin-top:10px; padding:10px; border-radius:11px; background:#050806; color:#9eaaa0; font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; white-space:pre-wrap; overflow-wrap:anywhere; }
         label { display:block; color:#aeb8b0; font-size:12px; font-weight:650; margin:12px 0 6px; }
         .empty { text-align:center; padding:34px 18px; }
         .empty strong { display:block; font-size:17px; margin-bottom:6px; }
@@ -211,6 +222,21 @@ enum RemoteApprovalWebApp {
           <span class="muted">CodeIsland checks your Mac every four seconds.</span>
         </section>
 
+        <div id="taskTitle" class="section-title hidden">Coding tasks · edit &amp; test</div>
+        <section id="taskComposer" class="card hidden">
+          <div class="eyebrow">Dispatch to your Mac</div>
+          <div class="tool">New coding task</div>
+          <label for="taskPrompt">What should the agent edit and test?</label>
+          <textarea id="taskPrompt" placeholder="Describe one bounded outcome"></textarea>
+          <div class="task-compose-grid">
+            <div><label for="taskWorkspace">Workspace</label><select id="taskWorkspace"></select></div>
+            <div><label for="taskProvider">Agent</label><select id="taskProvider"><option value="auto">Auto</option><option value="codex">Codex</option><option value="claude">Claude</option></select></div>
+          </div>
+          <div class="actions" style="grid-template-columns:1fr"><button id="taskCreate" class="approve">Review &amp; dispatch</button></div>
+          <p class="muted">Authority is limited to editing the selected workspace and running tests. Commits, pushes, deploys, external access, and destructive actions still stop for approval.</p>
+        </section>
+        <section id="tasks"></section>
+
         <section id="reviewDialog" class="review-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="reviewTitle">
           <form id="reviewForm" class="review-card">
             <div id="reviewEyebrow" class="eyebrow">Review</div>
@@ -287,6 +313,13 @@ enum RemoteApprovalWebApp {
         const pair = document.getElementById('pair');
         const approvals = document.getElementById('approvals');
         const questions = document.getElementById('questions');
+        const tasks = document.getElementById('tasks');
+        const taskTitle = document.getElementById('taskTitle');
+        const taskComposer = document.getElementById('taskComposer');
+        const taskPrompt = document.getElementById('taskPrompt');
+        const taskWorkspace = document.getElementById('taskWorkspace');
+        const taskProvider = document.getElementById('taskProvider');
+        const taskCreate = document.getElementById('taskCreate');
         const empty = document.getElementById('empty');
         const status = document.getElementById('status');
         const dot = document.getElementById('dot');
@@ -408,6 +441,8 @@ enum RemoteApprovalWebApp {
 
         let lastItems=[];
         let lastQuestions=[];
+        let lastTasks=[];
+        let taskWorkspaces=[];
         function render(items) {
           lastItems=items; renderLast();
         }
@@ -466,6 +501,89 @@ enum RemoteApprovalWebApp {
             await refresh();
           } catch(error) { notify(error.message,true); await refresh(); }
           finally { busy.delete(id); }
+        }
+
+        function taskStateLabel(state) {
+          return ({'waiting-for-mac':'Waiting for Mac',queued:'Queued',working:'Working','needs-you':'Needs You',verified:'Verified',failed:'Failed',cancelled:'Cancelled'})[state]||state;
+        }
+
+        function taskEvidence(task) {
+          const evidence=task.evidence; if(!evidence) return '';
+          const lines=[];
+          if(evidence.branch) lines.push(`Branch: ${evidence.branch}`);
+          lines.push(`Source: ${evidence.sourceState||'unchanged'}`);
+          (evidence.changedFiles||[]).forEach(file=>lines.push(`${file.kind}: ${file.path}`));
+          (evidence.checks||[]).forEach(check=>lines.push(`${check.exitCode===0?'PASS':'FAIL'}: ${check.summary}`));
+          (evidence.warnings||[]).forEach(warning=>lines.push(`Warning: ${warning}`));
+          return lines.join('\n');
+        }
+
+        function renderTasks(snapshot) {
+          lastTasks=(snapshot.tasks||[]).slice().sort((a,b)=>{
+            const rank={'needs-you':0,failed:1,working:2,queued:3,'waiting-for-mac':4,verified:5,cancelled:6};
+            return (rank[a.state]??9)-(rank[b.state]??9)||new Date(b.updatedAt)-new Date(a.updatedAt);
+          });
+          taskTitle.classList.remove('hidden'); taskComposer.classList.remove('hidden');
+          tasks.innerHTML=lastTasks.map(task=>{
+            const terminal=['verified','failed','cancelled'].includes(task.state); const evidence=taskEvidence(task);
+            return `<article class="card task-card ${escapeAttribute(task.state)}" data-task-id="${escapeAttribute(task.id)}">
+              <div class="module-head"><div class="eyebrow">${escapeHTML(task.provider.toUpperCase())} · ${escapeHTML(task.workspaceName)} · ${relativeTime(task.updatedAt)}</div><div class="task-state">${escapeHTML(taskStateLabel(task.state))}</div></div>
+              <div class="tool">${escapeHTML(task.title)}</div>
+              ${task.latestSummary?`<div class="muted">${escapeHTML(task.latestSummary)}</div>`:''}
+              ${evidence?`<details><summary class="muted">Completion evidence</summary><div class="task-evidence">${escapeHTML(evidence)}</div></details>`:''}
+              ${terminal?'':`<div class="actions"><button class="deny" data-task-cancel="1">Cancel</button><button class="secondary" data-task-followup="1">Add follow-up</button></div>`}
+            </article>`;
+          }).join('')||'<section class="card empty"><strong>No coding tasks yet</strong><span class="muted">Dispatch a bounded edit-and-test task above.</span></section>';
+          tasks.querySelectorAll('[data-task-followup]').forEach(button=>button.addEventListener('click',()=>followUpTask(button.closest('[data-task-id]').dataset.taskId)));
+          tasks.querySelectorAll('[data-task-cancel]').forEach(button=>button.addEventListener('click',()=>cancelTask(button.closest('[data-task-id]').dataset.taskId)));
+        }
+
+        async function refreshTasks() {
+          const [workspaceResponse,taskResponse]=await Promise.all([
+            fetch('/api/tasks/workspaces',{headers:authHeaders(),cache:'no-store'}),
+            fetch('/api/tasks',{headers:authHeaders(),cache:'no-store'})
+          ]);
+          if(workspaceResponse.status===401||taskResponse.status===401) throw new Error('unauthorized');
+          const workspaceBody=await workspaceResponse.json(); const taskBody=await taskResponse.json();
+          if(!workspaceResponse.ok) throw new Error(workspaceBody.error||'Workspaces unavailable');
+          if(!taskResponse.ok) throw new Error(taskBody.error||'Coding tasks unavailable');
+          taskWorkspaces=workspaceBody.workspaces||[];
+          const prior=taskWorkspace.value;
+          taskWorkspace.innerHTML=taskWorkspaces.map(workspace=>`<option value="${escapeAttribute(workspace.id)}">${escapeHTML(workspace.name)}</option>`).join('');
+          if(taskWorkspaces.some(workspace=>workspace.id===prior)) taskWorkspace.value=prior;
+          taskCreate.disabled=taskWorkspaces.length===0;
+          renderTasks(taskBody);
+        }
+
+        async function createTask() {
+          const prompt=taskPrompt.value.trim(); const workspaceID=taskWorkspace.value; const provider=taskProvider.value;
+          if(!prompt) { taskPrompt.focus(); return; }
+          const workspace=taskWorkspaces.find(item=>item.id===workspaceID); if(!workspace) { notify('Choose an available workspace',true); return; }
+          if(!await confirmSheet(`${prompt}\n\nWorkspace: ${workspace.name}\nAgent: ${provider}\nAuthority: Edit & Test`,{title:'Dispatch this exact task?',confirmLabel:'Dispatch'})) return;
+          taskCreate.disabled=true;
+          try {
+            const response=await fetch('/api/tasks',{method:'POST',headers:{...authHeaders(),'Content-Type':'application/json'},body:JSON.stringify({version:1,clientTaskID:crypto.randomUUID(),idempotencyKey:crypto.randomUUID(),prompt,workspaceID,provider,authority:'edit-and-test',attachments:[],requestedProof:'Run focused tests and report exact evidence',createdAt:new Date().toISOString()})});
+            const body=await response.json(); if(!response.ok) throw new Error(body.error||'Task dispatch failed');
+            taskPrompt.value=''; notify('Coding task dispatched'); await refreshTasks();
+          } catch(error) { notify(error.message,true); }
+          finally { taskCreate.disabled=taskWorkspaces.length===0; }
+        }
+
+        async function followUpTask(taskID) {
+          const text=await promptSheet('Add task follow-up',{label:'Detail or answer',multiline:true,confirmLabel:'Review'}); if(!text||!text.trim()) return;
+          if(!await confirmSheet(text.trim(),{title:'Send to this exact task?',confirmLabel:'Send follow-up'})) return;
+          try {
+            const response=await fetch(`/api/tasks/${encodeURIComponent(taskID)}/follow-up`,{method:'POST',headers:{...authHeaders(),'Content-Type':'application/json'},body:JSON.stringify({version:1,taskID,idempotencyKey:crypto.randomUUID(),text:text.trim(),attachments:[],createdAt:new Date().toISOString()})});
+            const body=await response.json(); if(!response.ok) throw new Error(body.error||'Follow-up failed'); notify('Follow-up sent'); await refreshTasks();
+          } catch(error) { notify(error.message,true); }
+        }
+
+        async function cancelTask(taskID) {
+          if(!await confirmSheet('Stop this exact coding task? Existing source edits are preserved.',{title:'Cancel task?',confirmLabel:'Cancel task',destructive:true})) return;
+          try {
+            const response=await fetch(`/api/tasks/${encodeURIComponent(taskID)}/cancel`,{method:'POST',headers:{...authHeaders(),'Content-Type':'application/json'},body:'{}'});
+            const body=await response.json(); if(!response.ok) throw new Error(body.error||'Cancellation failed'); notify('Task cancelled'); await refreshTasks();
+          } catch(error) { notify(error.message,true); }
         }
 
         function renderHub(snapshot) {
@@ -846,12 +964,12 @@ enum RemoteApprovalWebApp {
         }
 
         async function refresh() {
-          if(!deviceToken) { pair.classList.remove('hidden'); approvals.innerHTML=''; questions.innerHTML=''; hub.innerHTML=''; hubConfig.innerHTML=''; hubConfig.classList.add('hidden'); modes.classList.add('hidden'); hubTitle.classList.add('hidden'); approvalTitle.classList.add('hidden'); questionTitle.classList.add('hidden'); empty.classList.add('hidden'); setStatus('Pairing required'); return; }
+          if(!deviceToken) { pair.classList.remove('hidden'); approvals.innerHTML=''; questions.innerHTML=''; tasks.innerHTML=''; taskComposer.classList.add('hidden'); taskTitle.classList.add('hidden'); hub.innerHTML=''; hubConfig.innerHTML=''; hubConfig.classList.add('hidden'); modes.classList.add('hidden'); hubTitle.classList.add('hidden'); approvalTitle.classList.add('hidden'); questionTitle.classList.add('hidden'); empty.classList.add('hidden'); setStatus('Pairing required'); return; }
           try {
             const response=await fetch('/api/approvals',{headers:authHeaders(),cache:'no-store'});
             if(response.status===401) { deviceToken=''; localStorage.removeItem(tokenKey); pair.classList.remove('hidden'); setStatus('Pairing required'); return; }
             const body=await response.json(); if(!response.ok) throw new Error(body.error||'Mac unavailable');
-            pair.classList.add('hidden'); render(body.approvals||[]); renderQuestions(body.questions||[]); await refreshHub(); setStatus(`${(body.approvals||[]).length+(body.questions||[]).length} waiting`,true);
+            pair.classList.add('hidden'); render(body.approvals||[]); renderQuestions(body.questions||[]); await Promise.all([refreshTasks(),refreshHub()]); setStatus(`${(body.approvals||[]).length+(body.questions||[]).length} waiting`,true);
           } catch(error) { setStatus('Mac offline'); }
         }
 
@@ -867,6 +985,7 @@ enum RemoteApprovalWebApp {
 
         document.getElementById('pairButton').addEventListener('click',pairDevice);
         document.getElementById('code').addEventListener('keydown',event=>{if(event.key==='Enter')pairDevice();});
+        taskCreate.addEventListener('click',createTask);
         modes.querySelectorAll('[data-mode]').forEach(button=>button.addEventListener('click',()=>setMode(button.dataset.mode)));
         mediaPreflightDone.addEventListener('click',closeMediaPreflight);
         claudeHold.addEventListener('pointerdown',event=>{event.preventDefault();claudeHold.setPointerCapture?.(event.pointerId);startClaudeSpeech(false);});

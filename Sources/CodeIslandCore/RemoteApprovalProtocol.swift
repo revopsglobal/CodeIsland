@@ -3,6 +3,7 @@ import Foundation
 public enum RemoteAttentionKind: String, Codable, Equatable, Sendable {
     case approval
     case question
+    case task
 }
 
 public enum RemoteAttentionState: String, Codable, Equatable, Sendable {
@@ -22,6 +23,7 @@ public struct RemoteAttentionPushEnvelope: Codable, Equatable, Sendable {
     public let kind: RemoteAttentionKind
     public let state: RemoteAttentionState
     public let requestID: String
+    public let taskState: RemoteTaskState?
     public let issuedAt: Date
     public let expiresAt: Date
 
@@ -31,6 +33,7 @@ public struct RemoteAttentionPushEnvelope: Codable, Equatable, Sendable {
         kind: RemoteAttentionKind,
         state: RemoteAttentionState,
         requestID: String,
+        taskState: RemoteTaskState? = nil,
         issuedAt: Date = Date(),
         expiresAt: Date
     ) {
@@ -39,12 +42,13 @@ public struct RemoteAttentionPushEnvelope: Codable, Equatable, Sendable {
         self.kind = kind
         self.state = state
         self.requestID = requestID
+        self.taskState = taskState
         self.issuedAt = issuedAt
         self.expiresAt = expiresAt
     }
 
     public var payloadFields: [String: Any] {
-        [
+        var fields: [String: Any] = [
             "ciVersion": version,
             "ciEventId": eventID,
             "ciAttentionKind": kind.rawValue,
@@ -53,6 +57,8 @@ public struct RemoteAttentionPushEnvelope: Codable, Equatable, Sendable {
             "ciIssuedAt": issuedAt.timeIntervalSince1970,
             "ciExpiresAt": expiresAt.timeIntervalSince1970,
         ]
+        if let taskState { fields["ciTaskState"] = taskState.rawValue }
+        return fields
     }
 
     public init?(payloadFields: [String: Any]) {
@@ -71,12 +77,18 @@ public struct RemoteAttentionPushEnvelope: Codable, Equatable, Sendable {
               let expiresAtValue = Self.number(payloadFields["ciExpiresAt"])
         else { return nil }
 
+        let taskState = (payloadFields["ciTaskState"] as? String).flatMap(RemoteTaskState.init(rawValue:))
+        guard (kind == .task && UUID(uuidString: requestID) != nil && taskState != nil)
+                || (kind != .task && taskState == nil)
+        else { return nil }
+
         self.init(
             version: version,
             eventID: eventID,
             kind: kind,
             state: state,
             requestID: requestID,
+            taskState: taskState,
             issuedAt: Date(timeIntervalSince1970: issuedAtValue),
             expiresAt: Date(timeIntervalSince1970: expiresAtValue)
         )
@@ -102,6 +114,36 @@ public struct RemoteAttentionPushEnvelope: Codable, Equatable, Sendable {
         if let value = value as? Double { return value }
         if let value = value as? Int { return Double(value) }
         return nil
+    }
+}
+
+/// The high-signal task notification contract. Routine progress remains quiet;
+/// only an actionable or failed task interrupts, while completion is sent only
+/// for the one task the user explicitly follows.
+public enum RemoteTaskAttentionPolicy {
+    public static func shouldNotifyImmediately(
+        state: RemoteTaskState,
+        isFollowed: Bool
+    ) -> Bool {
+        switch state {
+        case .needsYou, .failed:
+            return true
+        case .verified, .waitingForMac:
+            return isFollowed
+        case .queued, .working, .cancelled:
+            return false
+        }
+    }
+
+    public static func accepts(
+        previousState: RemoteTaskState?,
+        incomingState: RemoteTaskState
+    ) -> Bool {
+        guard let previousState else { return true }
+        if previousState.isTerminal {
+            return incomingState == previousState
+        }
+        return true
     }
 }
 

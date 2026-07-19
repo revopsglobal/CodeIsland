@@ -22,19 +22,57 @@ final class APNSNotificationSender: ObservableObject {
         state: RemoteAttentionState,
         devices: [RemoteApprovalDevice]
     ) {
+        precondition(kind != .task, "Use notifyTask for task lifecycle events")
+        let issuedAt = Date()
+        deliver(
+            envelope: RemoteAttentionPushEnvelope(
+                kind: kind,
+                state: state,
+                requestID: requestID,
+                issuedAt: issuedAt,
+                expiresAt: issuedAt.addingTimeInterval(state == .pending ? 600 : 60)
+            ),
+            devices: devices
+        )
+    }
+
+    func notifyTask(
+        taskID: UUID,
+        state: RemoteTaskState,
+        devices: [RemoteApprovalDevice]
+    ) {
+        let key = taskID.uuidString.lowercased()
+        let targets = devices.filter { device in
+            let followed = device.liveActivityUpdateTokens?[key]?.isEmpty == false
+            return RemoteTaskAttentionPolicy.shouldNotifyImmediately(state: state, isFollowed: followed)
+        }
+        guard !targets.isEmpty else { return }
+        let issuedAt = Date()
+        deliver(
+            envelope: RemoteAttentionPushEnvelope(
+                kind: .task,
+                state: state.isTerminal ? .resolved : .pending,
+                requestID: key,
+                taskState: state,
+                issuedAt: issuedAt,
+                expiresAt: issuedAt.addingTimeInterval(state.isTerminal ? 300 : 600)
+            ),
+            devices: targets
+        )
+    }
+
+    private func deliver(
+        envelope: RemoteAttentionPushEnvelope,
+        devices: [RemoteApprovalDevice]
+    ) {
+        let requestID = envelope.requestID
+        let state = envelope.state
         let targets = devices.filter { device in
             device.pushToken?.isEmpty == false
-                || (state == .pending && device.liveActivityPushToStartToken?.isEmpty == false)
+                || (APNSNotificationPayloadBuilder.shouldPushToStart(envelope)
+                    && device.liveActivityPushToStartToken?.isEmpty == false)
                 || (state != .pending && device.liveActivityUpdateTokens?[requestID]?.isEmpty == false)
         }
-        let issuedAt = Date()
-        let envelope = RemoteAttentionPushEnvelope(
-            kind: kind,
-            state: state,
-            requestID: requestID,
-            issuedAt: issuedAt,
-            expiresAt: issuedAt.addingTimeInterval(state == .pending ? 600 : 60)
-        )
         TelegramAttentionNotifier.shared.notify(envelope: envelope)
 
         guard !targets.isEmpty else { return }
@@ -48,7 +86,32 @@ final class APNSNotificationSender: ObservableObject {
                     let pushToStartToken = device.liveActivityPushToStartToken.flatMap { $0.isEmpty ? nil : $0 }
                     let updateToken = device.liveActivityUpdateTokens?[requestID].flatMap { $0.isEmpty ? nil : $0 }
 
-                    if state == .pending, let token = pushToStartToken {
+                    if envelope.kind == .task, let token = updateToken {
+                        if APNSNotificationPayloadBuilder.isVisibleAlert(envelope), let pushToken {
+                            try await send(
+                                envelope: envelope,
+                                token: pushToken,
+                                environment: environment,
+                                configuration: configuration,
+                                jwt: jwt
+                            )
+                        }
+                        let terminal = envelope.taskState?.isTerminal == true
+                        try await sendLiveActivity(
+                            payload: terminal
+                                ? APNSNotificationPayloadBuilder.liveActivityEndData(for: envelope)
+                                : APNSNotificationPayloadBuilder.liveActivityUpdateData(for: envelope),
+                            token: token,
+                            environment: environment,
+                            configuration: configuration,
+                            jwt: jwt,
+                            priority: terminal ? "5" : "10",
+                            expiration: envelope.expiresAt
+                        )
+                        continue
+                    }
+
+                    if APNSNotificationPayloadBuilder.shouldPushToStart(envelope), let token = pushToStartToken {
                         do {
                             try await sendLiveActivity(
                                 payload: APNSNotificationPayloadBuilder.liveActivityStartData(for: envelope),
@@ -263,21 +326,32 @@ final class APNSNotificationSender: ObservableObject {
 }
 
 enum APNSNotificationPayloadBuilder {
+    static func isVisibleAlert(_ envelope: RemoteAttentionPushEnvelope) -> Bool {
+        if envelope.kind != .task { return envelope.state == .pending }
+        guard let state = envelope.taskState else { return false }
+        return state == .needsYou || state == .failed || state == .verified || state == .waitingForMac
+    }
+
+    static func shouldPushToStart(_ envelope: RemoteAttentionPushEnvelope) -> Bool {
+        if envelope.kind == .task { return envelope.taskState == .needsYou }
+        return envelope.state == .pending
+    }
+
     static func usesVisibleNotificationFallback(
         for envelope: RemoteAttentionPushEnvelope,
         hasPushToStartToken: Bool
     ) -> Bool {
-        envelope.state == .pending && !hasPushToStartToken
+        isVisibleAlert(envelope) && (!shouldPushToStart(envelope) || !hasPushToStartToken)
     }
 
     static func data(for envelope: RemoteAttentionPushEnvelope) throws -> Data {
         var object = envelope.payloadFields
-        if envelope.state == .pending {
-            let noun = envelope.kind == .approval ? "approval" : "answer"
+        if isVisibleAlert(envelope) {
+            let copy = notificationCopy(for: envelope)
             object["aps"] = [
                 "alert": [
-                    "title": "CodeIsland needs your \(noun)",
-                    "body": "Open Buddy to review it privately.",
+                    "title": copy.title,
+                    "body": copy.body,
                 ],
                 "sound": "default",
                 "interruption-level": "time-sensitive",
@@ -298,15 +372,15 @@ enum APNSNotificationPayloadBuilder {
     }
 
     static func pushType(for envelope: RemoteAttentionPushEnvelope) -> String {
-        envelope.state == .pending ? "alert" : "background"
+        isVisibleAlert(envelope) ? "alert" : "background"
     }
 
     static func priority(for envelope: RemoteAttentionPushEnvelope) -> String {
-        envelope.state == .pending ? "10" : "5"
+        isVisibleAlert(envelope) ? "10" : "5"
     }
 
     static func liveActivityStartData(for envelope: RemoteAttentionPushEnvelope) throws -> Data {
-        let noun = envelope.kind == .approval ? "approval" : "answer"
+        let copy = notificationCopy(for: envelope)
         let aps: [String: Any] = [
             "timestamp": Int(envelope.issuedAt.timeIntervalSince1970),
             "event": "start",
@@ -317,8 +391,8 @@ enum APNSNotificationPayloadBuilder {
             "stale-date": Int(envelope.expiresAt.timeIntervalSince1970),
             "relevance-score": 1.0,
             "alert": [
-                "title": "CodeIsland needs your \(noun)",
-                "body": "Open Buddy to review it privately.",
+                "title": copy.title,
+                "body": copy.body,
                 "sound": "default",
             ],
         ]
@@ -326,11 +400,23 @@ enum APNSNotificationPayloadBuilder {
     }
 
     static func liveActivityEndData(for envelope: RemoteAttentionPushEnvelope) throws -> Data {
+        let terminalStatus = envelope.kind == .task ? taskStatus(envelope.taskState) : "idle"
         let aps: [String: Any] = [
             "timestamp": Int(envelope.issuedAt.timeIntervalSince1970),
             "event": "end",
             "dismissal-date": Int(envelope.issuedAt.timeIntervalSince1970),
-            "content-state": try liveActivityContentState(for: envelope, status: "idle"),
+            "content-state": try liveActivityContentState(for: envelope, status: terminalStatus),
+        ]
+        return try JSONSerialization.data(withJSONObject: ["aps": aps], options: [.sortedKeys])
+    }
+
+    static func liveActivityUpdateData(for envelope: RemoteAttentionPushEnvelope) throws -> Data {
+        let aps: [String: Any] = [
+            "timestamp": Int(envelope.issuedAt.timeIntervalSince1970),
+            "event": "update",
+            "content-state": try liveActivityContentState(for: envelope, status: taskStatus(envelope.taskState)),
+            "stale-date": Int(envelope.expiresAt.timeIntervalSince1970),
+            "relevance-score": envelope.taskState == .needsYou ? 1.0 : 0.7,
         ]
         return try JSONSerialization.data(withJSONObject: ["aps": aps], options: [.sortedKeys])
     }
@@ -349,6 +435,8 @@ enum APNSNotificationPayloadBuilder {
         let status: String
         let message: String?
         let pendingAction: String?
+        let taskID: String?
+        let taskState: String?
         let sessions: [LiveActivitySession]
         let updatedAt: Date
     }
@@ -358,18 +446,23 @@ enum APNSNotificationPayloadBuilder {
         status: String
     ) throws -> [String: Any] {
         let isPending = envelope.state == .pending
-        let message: String? = isPending
-            ? (envelope.kind == .approval
-                ? "Approval waiting · open Buddy privately"
-                : "Answer waiting · open Buddy privately")
-            : "No action waiting"
+        let isTask = envelope.kind == .task
+        let message: String? = isTask
+            ? taskMessage(envelope.taskState)
+            : (isPending
+                ? (envelope.kind == .approval
+                    ? "Approval waiting · open Buddy privately"
+                    : "Answer waiting · open Buddy privately")
+                : "No action waiting")
         let content = LiveActivityContent(
             sequence: UInt64(max(0, envelope.issuedAt.timeIntervalSince1970 * 1_000)),
             source: "codeisland",
             status: status,
             message: message,
             pendingAction: isPending ? envelope.kind.rawValue : nil,
-            sessions: isPending ? [
+            taskID: isTask ? envelope.requestID : nil,
+            taskState: envelope.taskState?.rawValue,
+            sessions: isPending && !isTask ? [
                 LiveActivitySession(
                     sessionId: envelope.requestID,
                     source: "codeisland",
@@ -388,7 +481,50 @@ enum APNSNotificationPayloadBuilder {
     }
 
     private static func pendingStatus(for kind: RemoteAttentionKind) -> String {
-        kind == .approval ? "waitingApproval" : "waitingQuestion"
+        switch kind {
+        case .approval: return "waitingApproval"
+        case .question: return "waitingQuestion"
+        case .task: return "waitingApproval"
+        }
+    }
+
+    private static func taskStatus(_ state: RemoteTaskState?) -> String {
+        switch state {
+        case .waitingForMac: return "taskWaiting"
+        case .queued: return "processing"
+        case .working: return "running"
+        case .needsYou: return "waitingApproval"
+        case .verified: return "taskVerified"
+        case .failed: return "taskFailed"
+        case .cancelled, .none: return "idle"
+        }
+    }
+
+    private static func taskMessage(_ state: RemoteTaskState?) -> String {
+        switch state {
+        case .needsYou: return "Your coding task needs a decision"
+        case .verified: return "Your coding task passed its checks"
+        case .failed: return "Your coding task needs review"
+        case .waitingForMac: return "Your followed task lost its Mac connection"
+        case .queued: return "Your coding task is queued"
+        case .working: return "Your coding task is working"
+        case .cancelled: return "Your coding task was cancelled"
+        case .none: return "Coding task update"
+        }
+    }
+
+    private static func notificationCopy(for envelope: RemoteAttentionPushEnvelope) -> (title: String, body: String) {
+        if envelope.kind == .task {
+            switch envelope.taskState {
+            case .needsYou: return ("CodeIsland needs you", "Open Buddy to review the coding task privately.")
+            case .verified: return ("CodeIsland task verified", "The followed task passed its reported checks.")
+            case .failed: return ("CodeIsland task failed", "Open Buddy to review the failure privately.")
+            case .waitingForMac: return ("CodeIsland lost your Mac", "Open Buddy to reconnect the followed task.")
+            default: return ("CodeIsland task updated", "Open Buddy to review it privately.")
+            }
+        }
+        let noun = envelope.kind == .approval ? "approval" : "answer"
+        return ("CodeIsland needs your \(noun)", "Open Buddy to review it privately.")
     }
 }
 

@@ -41,6 +41,7 @@ final class RemoteApprovalService: ObservableObject {
     private var codexTaskRunner: CodexRemoteTaskRunner?
     private var claudeTaskRunner: ClaudeRemoteTaskRunner?
     private var remoteTaskStoreCancellable: AnyCancellable?
+    private var lastRemoteTaskStates: [UUID: RemoteTaskState] = [:]
 
     init(
         deviceStore: RemoteApprovalDeviceStore? = nil,
@@ -142,6 +143,7 @@ final class RemoteApprovalService: ObservableObject {
         appState?.codexRemoteTaskRunner = nil
         remoteTasks = []
         remoteTaskWorkspaces = []
+        lastRemoteTaskStates = [:]
         server?.stop()
         server = nil
         running = false
@@ -216,17 +218,35 @@ final class RemoteApprovalService: ObservableObject {
         remoteTaskStore = store
         remoteTaskCoordinator = coordinator
         remoteTaskWorkspaces = coordinator.workspaces
-        remoteTaskStoreCancellable = store.$tasks
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] records in
-                self?.remoteTasks = records.map(\.summary)
-        }
-        remoteTasks = store.tasks.map(\.summary)
         do {
             try coordinator.recover()
         } catch {
             lastError = "Remote task recovery failed: \(error.localizedDescription)"
         }
+        remoteTasks = store.tasks.map(\.summary)
+        lastRemoteTaskStates = Dictionary(uniqueKeysWithValues: store.tasks.map { ($0.id, $0.summary.state) })
+        remoteTaskStoreCancellable = store.$tasks
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] records in
+                self?.remoteTaskRecordsDidChange(records)
+            }
+    }
+
+    private func remoteTaskRecordsDidChange(_ records: [RemoteTaskRecord]) {
+        remoteTasks = records.map(\.summary)
+        let nextStates = Dictionary(uniqueKeysWithValues: records.map { ($0.id, $0.summary.state) })
+        for record in records {
+            let prior = lastRemoteTaskStates[record.id]
+            let next = record.summary.state
+            guard prior != next else { continue }
+            APNSNotificationSender.shared.notifyTask(
+                taskID: record.id,
+                state: next,
+                devices: deviceStore.devices
+            )
+        }
+        lastRemoteTaskStates = nextStates
     }
 
     @discardableResult

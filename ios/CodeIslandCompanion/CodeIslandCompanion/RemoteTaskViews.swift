@@ -496,6 +496,7 @@ struct RemoteTaskSessionsView: View {
 struct RemoteTaskDetailView: View {
     let taskID: UUID
     @EnvironmentObject private var remoteApprovals: RemoteApprovalClient
+    @EnvironmentObject private var liveActivity: LiveActivityController
     @Environment(\.dismiss) private var dismiss
     @State private var followUp = ""
     @State private var isSending = false
@@ -525,6 +526,31 @@ struct RemoteTaskDetailView: View {
                                 .foregroundStyle(.green)
                             Text("\(task.workspaceName) · \(task.provider.displayName)")
                                 .foregroundStyle(Color.ciForeground.opacity(0.56))
+                        }
+
+                        if !task.state.isTerminal {
+                            Button {
+                                if liveActivity.isFollowing(taskID: task.id) {
+                                    liveActivity.unfollowTask()
+                                } else {
+                                    liveActivity.follow(task)
+                                }
+                            } label: {
+                                Label(
+                                    liveActivity.isFollowing(taskID: task.id) ? "Stop following" : "Follow in Dynamic Island",
+                                    systemImage: liveActivity.isFollowing(taskID: task.id) ? "waveform.slash" : "waveform"
+                                )
+                                .font(.subheadline.weight(.bold))
+                                .frame(maxWidth: .infinity, minHeight: 46)
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(.orange)
+                            .accessibilityLabel(
+                                liveActivity.isFollowing(taskID: task.id)
+                                    ? "Stop following in Dynamic Island"
+                                    : "Follow in Dynamic Island"
+                            )
+                            .accessibilityIdentifier("task.follow")
                         }
 
                         if let evidence = task.evidence {

@@ -16,13 +16,15 @@ final class TelegramAttentionNotifier: ObservableObject {
     private init() {}
 
     func notify(envelope: RemoteAttentionPushEnvelope) {
-        guard envelope.state == .pending else { return }
+        guard envelope.state == .pending
+                || (envelope.kind == .task && envelope.taskState == .failed)
+        else { return }
 
         let remoteURL = Self.remoteApprovalURL()
         let text = TelegramAttentionMessageBuilder.message(
             for: envelope,
             remoteURL: remoteURL,
-            buddyURL: Self.buddyURL(for: envelope.kind),
+            buddyURL: Self.buddyURL(for: envelope),
             testFlightURL: Self.buddyTestFlightURL,
             expectedBuddyBuild: Self.expectedBuddyBuild()
         )
@@ -32,7 +34,7 @@ final class TelegramAttentionNotifier: ObservableObject {
     func sendTestAlert() {
         let text = TelegramAttentionMessageBuilder.testMessage(
             remoteURL: Self.remoteApprovalURL(),
-            buddyURL: Self.buddyURL(for: .question),
+            buddyURL: PersonalHubDeepLink.pendingQuestion(id: nil).url,
             testFlightURL: Self.buddyTestFlightURL,
             expectedBuddyBuild: Self.expectedBuddyBuild()
         )
@@ -108,12 +110,16 @@ final class TelegramAttentionNotifier: ObservableObject {
         return url
     }
 
-    private static func buddyURL(for kind: RemoteAttentionKind) -> URL {
-        switch kind {
+    private static func buddyURL(for envelope: RemoteAttentionPushEnvelope) -> URL {
+        switch envelope.kind {
         case .approval:
             return PersonalHubDeepLink.pendingApproval(id: nil).url
         case .question:
             return PersonalHubDeepLink.pendingQuestion(id: nil).url
+        case .task:
+            return UUID(uuidString: envelope.requestID)
+                .map { PersonalHubDeepLink.task(id: $0).url }
+                ?? PersonalHubDeepLink.needsYou.url
         }
     }
 
@@ -190,9 +196,17 @@ enum TelegramAttentionMessageBuilder {
         testFlightURL: URL? = nil,
         expectedBuddyBuild: String? = nil
     ) -> String {
-        let noun = envelope.kind == .approval ? "approval" : "answer"
+        let headline: String
+        switch envelope.kind {
+        case .approval: headline = "CodeIsland needs your approval."
+        case .question: headline = "CodeIsland needs your answer."
+        case .task:
+            headline = envelope.taskState == .failed
+                ? "A CodeIsland coding task failed."
+                : "A CodeIsland coding task needs you."
+        }
         var lines = [
-            "CodeIsland needs your \(noun).",
+            headline,
             "Open Buddy to review the private details."
         ]
         if let buddyURL {

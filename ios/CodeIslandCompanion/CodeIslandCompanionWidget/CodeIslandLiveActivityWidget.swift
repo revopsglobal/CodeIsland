@@ -37,6 +37,13 @@ private func activityAttentionURL(
     attributes: CodeIslandActivityAttributes,
     state: CodeIslandActivityAttributes.ContentState
 ) -> URL? {
+    if let taskID = state.taskID, UUID(uuidString: taskID) != nil {
+        var components = URLComponents()
+        components.scheme = "codeisland"
+        components.host = "tasks"
+        components.path = "/\(taskID)"
+        return components.url
+    }
     guard state.pendingAction == "approval" || state.pendingAction == "question" else { return nil }
     var components = URLComponents()
     components.scheme = "codeisland"
@@ -640,6 +647,12 @@ private func statusColor(_ status: String) -> Color {
         return Color(red: 1.0, green: 0.74, blue: 0.25)
     case "processing", "running":
         return Color(red: 0.30, green: 0.72, blue: 1.0)
+    case "taskVerified":
+        return Color(red: 0.30, green: 0.84, blue: 0.48)
+    case "taskFailed":
+        return Color(red: 1.0, green: 0.34, blue: 0.32)
+    case "taskWaiting":
+        return Color(red: 1.0, green: 0.62, blue: 0.24)
     default:
         return Color(red: 0.55, green: 0.60, blue: 0.68)
     }

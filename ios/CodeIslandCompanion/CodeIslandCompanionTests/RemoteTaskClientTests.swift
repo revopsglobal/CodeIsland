@@ -136,7 +136,7 @@ final class RemoteTaskClientTests: XCTestCase {
         let prepared = RemoteTaskPreparedAction(
             intent: intent,
             actionToken: "single-use-token",
-            expiresAt: Date().addingTimeInterval(60),
+            expiresAt: Date(timeIntervalSince1970: 1_800_000_060),
             confirmationSummary: "Commit Finish"
         )
         fixture.transport.responses = [
