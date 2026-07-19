@@ -226,7 +226,8 @@ This delta supersedes older "current build" language below.
   `CodeIslandCompanionUITests/testAttentionFirstShellKeepsToolsSecondary` on
   Simulator `ECC99681-C3ED-4452-B727-0F9E2C09C469`, `git diff --check`, and
   `graphify update . --no-viz`.
-- Latest Telegram-to-Buddy attention routing source preserves generic Telegram
+- Latest Telegram-to-Buddy attention routing source: PR #121 merged as
+  `868e52af7e6594106ca2f952d22ad6125005f0e3`, preserving generic Telegram
   fallback links such as
   `codeisland://approvals/pending` and `codeisland://questions/pending` across
   cold Buddy opens until the first authenticated snapshot arrives. The
@@ -236,31 +237,31 @@ This delta supersedes older "current build" language below.
   and the focused iOS Simulator XCTest
   `CodeIslandCompanionTests/CompanionCommandCenterModelTests` on Simulator
   `ECC99681-C3ED-4452-B727-0F9E2C09C469`.
-- Latest TestFlight delivery after PR #116: workflow run `29675030565` from
-  `4b7b71ef748bd90c9c0f3b77a34b9e51ae809485` produced Buddy
-  `1.0.0 (20260719053349)`, delivery UUID
-  `2738f890-756f-432c-8fb8-386342651ff4`, Apple state `VALID`, audience
+- Latest TestFlight delivery after PR #121: workflow run `29675764698` from
+  `868e52af7e6594106ca2f952d22ad6125005f0e3` produced Buddy
+  `1.0.0 (20260719060201)`, delivery UUID
+  `40484307-1a88-4e5f-860b-0728e4251932`, Apple state `VALID`, audience
   `APP_STORE_ELIGIBLE`, internal group `CodeIsland Internal`, and artifact
-  `8438605218`.
-- Latest strict E2E report at `2026-07-19T05:38:38Z` returned
+  `8438849799`.
+- Latest strict E2E report at `2026-07-19T06:07:24Z` returned
   `status = physical-gate-incomplete`, `complete = false`: the Mac app is
   installed and running at `1.0.53`, local and Tailscale `/health` are HTTP
   `200` with zero pending work, Mac Settings sync expects Buddy
-  `1.0.0 (20260719053349)`, and
+  `1.0.0 (20260719060201)`, and
   `RemoteApprovalHTTPServerTests/testAuthenticatedHostLifecycleOverRealListener`
-  passed. The installed Mac app is now the PR #111 DMG build running as PID
-  `54512`, and the strict report identifies it by CDHash
+  passed. The installed Mac app is the PR #111 DMG build, observed running as
+  PID `81689`, and the strict report identifies it by CDHash
   `649d8672c83903d2e4c9e553c1e6c916ad0b7bf3`. TestFlight source drift is
-  `current` against main SHA `4b7b71ef748bd90c9c0f3b77a34b9e51ae809485`
-  with `changedFileCount = 0` and `buddyRelevantChanged = false`. The latest
+  `current` against main SHA `868e52af7e6594106ca2f952d22ad6125005f0e3`
+  with no Buddy-relevant changes. The latest
   TestFlight gate remains stale: the physical iPhone is
   still last observed on Buddy `1.0.0 (20260718212803)` instead of latest
-  TestFlight `1.0.0 (20260719053349)`. The direct-device diagnostic reports
+  TestFlight `1.0.0 (20260719060201)`. The direct-device diagnostic reports
   `status = simulator-only`, `simulatorCount = 1`, and
   `physicalDeviceCount = 0`; the only visible iOS target is the simulated
   `OB1 Widget Proof iPhone 16` with identifier suffix `2C09C469`. Codex
   therefore cannot directly install/open the physical iPhone from this Mac; the
-  remaining required action is to open latest TestFlight build `20260719053349`
+  remaining required action is to open latest TestFlight build `20260719060201`
   on the physical iPhone, keep Tailscale connected, and rerun strict E2E.
 - Latest Buddy parity-contract source: PR #98 merged as
   `b877909bb280eedaa368feef8e669631f365a60a`, aligning the iPhone
@@ -626,9 +627,9 @@ below.
 | Notes/jot/categories/checklists/merge | Physical partial: the current iPhone build created a reviewed/confirmed note on the host, rendered it as revision 1, and the exact test data was cleaned up; delete/edit/append/categories/checklists/undo remain unverified | Physical partial: composer, exact reviewed action, separate `Do it`, host persistence, and refreshed iPhone visibility passed | Run in-app delete, edit/conflict, category, checklist, and undo round trips across Mac and iPhone |
 | System CPU/memory/load | Ready: host load/memory/disk/thermal/uptime | Ready: mirrored readings and refresh through an authenticated, exact-confirmation host action | Compare readings with Activity Monitor on the physical Mac/iPhone pair |
 | Weather | Physical ZIP fallback proven during the unlocked 1.0.41 run: `61° Clear · Ridgefield, Washington`; Location Services mode remains unverified | Ready implementation: mirrored remote weather and refresh | Physical location-mode, remote refresh, and offline-state runtime tests |
-| Notifications | Partial by deliberate platform boundary: CodeIsland action-required alerts are prioritized, deduped, redacted, and separated; macOS exposes no public cross-app Notification Center history API, so CodeIsland does not read private databases or request Full Disk Access | Physical proof on last observed iPhone build `20260718212803`: production APNs, ActivityKit push-to-start, and request-scoped update tokens are registered. A real question rendered the exact attention card, returned the reviewed answer, registered token for request `6ce1e9a8-e928-451d-9571-d10751ee017a`, resolved to zero active activities, and pruned that terminal token. Latest TestFlight build `20260719053349` is `VALID` but has not yet been opened on the physical iPhone. | Open latest TestFlight build `20260719053349` on the physical iPhone, then capture clean compact/expanded artwork without a competing activity and exercise stale-push behavior |
+| Notifications | Partial by deliberate platform boundary: CodeIsland action-required alerts are prioritized, deduped, redacted, and separated; macOS exposes no public cross-app Notification Center history API, so CodeIsland does not read private databases or request Full Disk Access | Physical proof on last observed iPhone build `20260718212803`: production APNs, ActivityKit push-to-start, and request-scoped update tokens are registered. A real question rendered the exact attention card, returned the reviewed answer, registered token for request `6ce1e9a8-e928-451d-9571-d10751ee017a`, resolved to zero active activities, and pruned that terminal token. Latest TestFlight build `20260719060201` is `VALID` but has not yet been opened on the physical iPhone. | Open latest TestFlight build `20260719060201` on the physical iPhone, then capture clean compact/expanded artwork without a competing activity and exercise stale-push behavior |
 | Claude co-pilot/voice/proposals | Ready implementation: read-only Ask and reviewed Do through authenticated local Claude Code with tools disabled, push-to-talk/continuous speech, visible listening state, bounded user-selected/drop file context, and best-effort screen-share-hidden strip with honest disclosure | Ready implementation: Ask/Do, speech recognition, proposal review, exact confirmation, and deep-linked task/note preparation | Run real Ask and multi-action Do, Mac voice/file context, and physical-iPhone dictation/task creation |
-| AI Coding sessions/approvals/questions | Signed 1.0.53 is installed, healthy, keeps the private host awake, and backed the physical question continuation | Physical build `20260718212803` is installed/opened and authenticated. A real exact question was selected, reviewed, answered `Approve`, audited, and drained without routine-content noise. Latest Buddy source adds the command-center signal board and preserves Telegram fallback `pending` deep links through cold refresh so approvals/questions are summarized and focused before routine sessions, but build `20260719053349` still needs physical iPhone acceptance. | Open latest build `20260719053349`, rerun exact-request replay, and complete one cellular/Tailscale approval away from local Wi-Fi |
+| AI Coding sessions/approvals/questions | Signed 1.0.53 is installed, healthy, keeps the private host awake, and backed the physical question continuation | Physical build `20260718212803` is installed/opened and authenticated. A real exact question was selected, reviewed, answered `Approve`, audited, and drained without routine-content noise. Latest Buddy source adds the command-center signal board and preserves Telegram fallback `pending` deep links through cold refresh so approvals/questions are summarized and focused before routine sessions, but build `20260719060201` still needs physical iPhone acceptance. | Open latest build `20260719060201`, rerun exact-request replay, and complete one cellular/Tailscale approval away from local Wi-Fi |
 | GitHub pull requests and CI | Ready: authenticated `gh` PR list/status/deep links | Ready: mirrored list/status/deep links | Runtime refresh/open test from iPhone |
 | Audio device switcher | Physical read proof on 1.0.43: only MacBook Air Microphone and MacBook Air Speakers carry the respective default flags; the remaining real and virtual devices no longer show false defaults. Switching, mute, and exact 0–100 output volume remain physically unverified | Unverified: mirrored device actions, ±10, and native/web volume editor | Run physical device switch, volume update, and expected failure states |
 | Bluetooth devices/connect/disconnect | Unverified: connected/remembered devices, battery, connect/disconnect | Unverified: mirrored devices and confirmed remote actions | Physical accessory connect/disconnect tests |
@@ -642,7 +643,7 @@ below.
 | Media-key HUD and Crest ambient polish | Ready supported implementation: short-lived notch HUD for CodeIsland media/volume/brightness actions, bounded artwork, progress, thermal/Reduce Motion-aware ambient bars | Ready useful mirror: artwork/progress and exact host controls; no need to mimic a Mac bezel HUD | Capture multi-display/full-screen evidence; macOS has no public API for intercepting all hardware brightness-key events |
 | Custom dashboard/day-progress surface | Ready implementation: one shared saved dashboard toggle, per-mode rack configuration, and local-day progress header | Ready implementation: same configuration and day progress with native editing | Verify saved state and day rollover on the physical pair |
 | Private web fallback | Ready and live-exercised from a headless browser client: responsive authenticated Home/Work/Code, exact actions, Calendar CRUD/Join, confirmed System refresh, exact-byte Downloads transfer, retry/offline state, and replay protection | Physical-iPhone browser and cellular-only use remain unverified | Toggle iPhone Wi-Fi off and repeat one action plus file read in the physical iPhone browser over cellular Tailscale |
-| TestFlight distribution | Ready: signed archive/upload pipeline, source plus compiled App Intent metadata validation, internal group, 60-minute Apple indexing window, and always-preserved IPA artifact. Latest ready build is `1.0.0 (20260719053349)` from run `29675030565`, Apple `VALID`, artifact `8438605218`. | Last physically opened build is `1.0.0 (20260718212803)`, confirmed by paired `clientVersion = 1.0.0` plus exact `clientBuild`; stability, background ActivityKit token lifecycle, reviewed answer, and final-host reauthentication passed physically. Latest ready build `20260719053349` is not physically accepted until Buddy opens on the iPhone and checks in. | Open latest build `20260719053349` from TestFlight on the physical iPhone, then rerun `scripts/report-strict-physical-e2e.sh`; clean expanded Dynamic Island artwork and cellular action remain separate runtime gates |
+| TestFlight distribution | Ready: signed archive/upload pipeline, source plus compiled App Intent metadata validation, internal group, 60-minute Apple indexing window, and always-preserved IPA artifact. Latest ready build is `1.0.0 (20260719060201)` from run `29675764698`, Apple `VALID`, artifact `8438849799`. | Last physically opened build is `1.0.0 (20260718212803)`, confirmed by paired `clientVersion = 1.0.0` plus exact `clientBuild`; stability, background ActivityKit token lifecycle, reviewed answer, and final-host reauthentication passed physically. Latest ready build `20260719060201` is not physically accepted until Buddy opens on the iPhone and checks in. | Open latest build `20260719060201` from TestFlight on the physical iPhone, then rerun `scripts/report-strict-physical-e2e.sh`; clean expanded Dynamic Island artwork and cellular action remain separate runtime gates |
 
 ## Behavior-level completion adjudication
 
