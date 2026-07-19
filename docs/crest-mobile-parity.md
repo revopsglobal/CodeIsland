@@ -25,6 +25,29 @@ This delta supersedes older "current build" language below.
   that commit; step 12, **Test acceptance scripts**, passed, followed by the
   Buddy Simulator build, DMG build, ARM64 verification, stable internal signing
   verification, and artifact upload.
+- Latest Now Playing source: PR #88 merged as
+  `dac5e732f3776e70efc5eda0208c88c4883f3c80`, extracting Music/Spotify
+  media-command planning into a pure, testable helper before AppleScript
+  execution. Local verification passed
+  `PersonalHubDataModelTests` including transport, seek clamping, absolute
+  seek validation, and Music-only queue playback plans; `git diff --check`
+  passed; `graphify update . --no-viz` rebuilt the project graph.
+- Installed Mac after PR #88: `1.0.53`, workflow run `29670971379`,
+  downloaded DMG SHA-256
+  `6624d69ddbacdc0eed32836a7388685d9d5203952dd0dfc8a6da58cf7cd50f3f`,
+  ARM64, signature valid under Team `44JG2Y95CH`, CDHash
+  `858ce8825f381a5ac9f0f265bef1f7408ab95405`. The CI run passed the remote
+  approval security and exact-request routing tests, iPhone companion model
+  tests, acceptance-script tests, Buddy Simulator build, DMG build, ARM64
+  verification, stable internal signing verification, and artifact upload.
+- Latest strict E2E report at `2026-07-19T03:05:08Z` returned
+  `status = physical-gate-incomplete`, `complete = false`: the Mac app is
+  installed and running, local and Tailscale `/health` are HTTP `200` with zero
+  pending work, and
+  `RemoteApprovalHTTPServerTests/testAuthenticatedHostLifecycleOverRealListener`
+  passed, but the physical iPhone is still stale on Buddy
+  `1.0.0 (20260718212803)` instead of latest TestFlight
+  `1.0.0 (20260719011702)`.
 - Previous source: PR #84 merged as
   `dcdc2ddc83799e26e1335f4c322c008c1c146866`, adding
   `scripts/report-strict-physical-e2e.sh`, a fail-closed report that combines
