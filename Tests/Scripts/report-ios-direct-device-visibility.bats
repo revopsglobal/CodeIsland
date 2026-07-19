@@ -4,6 +4,9 @@ setup() {
   export REPO_ROOT="$BATS_TEST_DIRNAME/../.."
   export TEST_TMPDIR="$BATS_TEST_TMPDIR/test"
   export XCRUN_BIN="$TEST_TMPDIR/xcrun"
+  export OSASCRIPT_BIN="$TEST_TMPDIR/missing-osascript"
+  export SCREENCAPTURE_BIN="$TEST_TMPDIR/missing-screencapture"
+  export SWIFT_BIN="$TEST_TMPDIR/missing-swift"
   mkdir -p "$TEST_TMPDIR"
 }
 
@@ -53,6 +56,97 @@ STUB
     .devices[0].identifierSuffix == "2C09C469" and
     .devices[0].isSimulator == true and
     (.nextAction | contains("cannot directly install/open the physical iPhone"))'
+}
+
+@test "reports iPhone Mirroring blocked when the phone is in use" {
+  export MIRRORING_TEXT=$'iPhone in Use\niPhone Mirroring ended due to iPhone use.\nLock your iPhone to connect.\nConnect'
+  cat > "$XCRUN_BIN" <<'STUB'
+#!/usr/bin/env bash
+json_output=""
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    --json-output)
+      json_output="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+cat > "$json_output" <<'JSON'
+{
+  "result": {
+    "devices": [
+      {
+        "identifier": "ECC99681-C3ED-4452-B727-0F9E2C09C469",
+        "properties": {
+          "state": {"name": "OB1 Widget Proof iPhone 16"},
+          "hardware": {"platform": "iOS", "deviceType": "iPhone", "marketingName": "iPhone 16", "productType": "iPhone17,3", "reality": "simulated"},
+          "connection": {"state": "connected", "pairingState": "paired", "transportType": "sameMachine"}
+        }
+      }
+    ]
+  }
+}
+JSON
+STUB
+  chmod +x "$XCRUN_BIN"
+
+  run "$REPO_ROOT/scripts/report-ios-direct-device-visibility.sh"
+
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | jq -e '
+    .status == "simulator-only" and
+    .iphoneMirroring.checked == true and
+    .iphoneMirroring.running == true and
+    .iphoneMirroring.status == "iphone-in-use" and
+    (.iphoneMirroring.observedText | contains("Lock your iPhone")) and
+    (.nextAction | contains("Lock the iPhone"))'
+}
+
+@test "reports iPhone Mirroring waiting for Connect as a distinct recovery path" {
+  export MIRRORING_TEXT=$'Connect'
+  cat > "$XCRUN_BIN" <<'STUB'
+#!/usr/bin/env bash
+json_output=""
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    --json-output)
+      json_output="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+cat > "$json_output" <<'JSON'
+{
+  "result": {
+    "devices": [
+      {
+        "identifier": "ECC99681-C3ED-4452-B727-0F9E2C09C469",
+        "properties": {
+          "state": {"name": "OB1 Widget Proof iPhone 16"},
+          "hardware": {"platform": "iOS", "deviceType": "iPhone", "marketingName": "iPhone 16", "productType": "iPhone17,3", "reality": "simulated"},
+          "connection": {"state": "connected", "pairingState": "paired", "transportType": "sameMachine"}
+        }
+      }
+    ]
+  }
+}
+JSON
+STUB
+  chmod +x "$XCRUN_BIN"
+
+  run "$REPO_ROOT/scripts/report-ios-direct-device-visibility.sh"
+
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | jq -e '
+    .status == "simulator-only" and
+    .iphoneMirroring.status == "waiting-connect" and
+    (.nextAction | contains("waiting on Connect"))'
 }
 
 @test "reports physical-available when devicectl sees a real iPhone" {

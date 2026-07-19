@@ -42,6 +42,16 @@ This delta supersedes older "current build" language below.
   tagline, manifest, icon, Questions, Approvals, and Hub markers present, and
   the sole required gate `physical-buddy-checkin`: install/open Buddy build
   `20260719063154` from TestFlight on the physical iPhone.
+- Latest direct-device diagnostic source adds iPhone Mirroring OCR
+  classification to `scripts/report-ios-direct-device-visibility.sh`.
+  Live strict E2E at `2026-07-19T06:44:44Z` still reported
+  `status = physical-gate-incomplete`, but now distinguishes the Codex-side
+  blocker: `devicectl` sees only Simulator `2C09C469`, and iPhone Mirroring is
+  running with `iphoneMirroring.status = iphone-in-use` and visible copy
+  `Lock your iPhone to connect`. The physical next action is therefore to lock
+  the iPhone, click **Connect** in iPhone Mirroring if using the Mac path, open
+  TestFlight Buddy `20260719063154`, keep Tailscale connected, and rerun strict
+  E2E.
 - Latest source: PR #86 merged as
   `d8473799fdffeafbad1c759fd5b0421a02831647`, adding the physical,
   latest-TestFlight, and strict E2E Bats acceptance-script suites to the
