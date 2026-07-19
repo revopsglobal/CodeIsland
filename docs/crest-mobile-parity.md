@@ -17,6 +17,31 @@ Sources used for the baseline:
 
 This delta supersedes older "current build" language below.
 
+- Latest iPhone signal-stability source: PR #126 merged as
+  `e96388ebe64f179a19e4dc34b6234e4e9d95af33`, keeping the established Buddy
+  Now/signal surface visually stable through brief routine poll misses. Before
+  the first authenticated snapshot, refresh failures still show the actionable
+  connection error; after a good snapshot, one or two transient failures keep
+  the current signal board in place, while three consecutive failures show the
+  offline recovery controls. Verification passed focused iOS Simulator XCTest
+  `CodeIslandCompanionTests/LiveActivityPrivacyTests` on simulator
+  `ECC99681-C3ED-4452-B727-0F9E2C09C469` (14/14),
+  `ios/CodeIslandCompanion/scripts/run-model-tests.sh`,
+  `scripts/check-companion-ui-regressions.sh`, `git diff --check`, and
+  `graphify update . --no-viz`.
+- Latest TestFlight delivery after PR #126: workflow run `29676579062` from
+  `e96388ebe64f179a19e4dc34b6234e4e9d95af33` produced Buddy
+  `1.0.0 (20260719063154)`, delivery UUID
+  `26be25d0-e2b0-4340-9f39-3a401cc3af6f`, Apple state `VALID`, audience
+  `APP_STORE_ELIGIBLE`, internal group `CodeIsland Internal`, and artifact
+  `8439115024`.
+- Latest away-readiness report at `2026-07-19T06:36:50Z` returned
+  `status = ready-for-manual-physical-acceptance`,
+  `readyForAwayManualAcceptance = true`, latest Buddy build
+  `20260719063154`, source current, private web shell HTTP `200` with title,
+  tagline, manifest, icon, Questions, Approvals, and Hub markers present, and
+  the sole required gate `physical-buddy-checkin`: install/open Buddy build
+  `20260719063154` from TestFlight on the physical iPhone.
 - Latest source: PR #86 merged as
   `d8473799fdffeafbad1c759fd5b0421a02831647`, adding the physical,
   latest-TestFlight, and strict E2E Bats acceptance-script suites to the
