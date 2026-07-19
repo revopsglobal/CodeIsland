@@ -203,4 +203,55 @@ final class LiveActivityPrivacyTests: XCTestCase {
         XCTAssertFalse(text.contains("secret-token"))
         XCTAssertTrue(text.contains("open Buddy privately"))
     }
+
+    func testLiveActivityOrdersActionRequiredSessionsBeforeRoutineActivity() {
+        let state = CodeIslandActivityAttributes.ContentState(
+            sequence: 7,
+            source: "codeisland",
+            status: "running",
+            toolName: nil,
+            workspaceName: nil,
+            message: nil,
+            pendingAction: nil,
+            questionText: nil,
+            questionHeader: nil,
+            questionProgress: nil,
+            sessions: [
+                liveActivitySession(id: "running", source: "codex", status: "running", updatedAt: 300),
+                liveActivitySession(id: "approval", source: "claude", status: "waitingApproval", updatedAt: 100),
+                liveActivitySession(id: "question", source: "codex", status: "waitingQuestion", updatedAt: 200),
+            ],
+            updatedAt: Date(timeIntervalSince1970: 400)
+        )
+
+        XCTAssertEqual(state.actionRequiredSessionCount, 2)
+        XCTAssertEqual(state.orderedSessions.map(\.id), ["approval", "question", "running"])
+    }
+
+    func testLiveActivityRoutineSessionsUseStableIdentityInsteadOfHeartbeatOrder() {
+        let olderRunning = liveActivitySession(id: "codex", source: "codex", status: "running", updatedAt: 100)
+        let newerRunning = liveActivitySession(id: "claude", source: "claude", status: "running", updatedAt: 200)
+
+        XCTAssertEqual(
+            CodeIslandActivityAttributes.ContentState.orderedSessions([olderRunning, newerRunning]).map(\.id),
+            CodeIslandActivityAttributes.ContentState.orderedSessions([newerRunning, olderRunning]).map(\.id)
+        )
+    }
+
+    private func liveActivitySession(
+        id: String,
+        source: String,
+        status: String,
+        updatedAt: TimeInterval
+    ) -> CodeIslandSessionActivityPreview {
+        CodeIslandSessionActivityPreview(
+            sessionId: id,
+            source: source,
+            status: status,
+            toolName: nil,
+            workspaceName: "CodeIsland",
+            message: nil,
+            updatedAt: Date(timeIntervalSince1970: updatedAt)
+        )
+    }
 }
