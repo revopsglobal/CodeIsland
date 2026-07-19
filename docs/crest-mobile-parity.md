@@ -23,6 +23,16 @@ This delta supersedes all older current-build statements below.
   Tools/module icons are neutral so orange remains reserved for attention and
   primary actions. This polish is source/simulator verified only until a new
   signed Mac/TestFlight pair is built and physically accepted.
+- Follow-up TestFlight delivery: PR #64 merged as
+  `cf8f829dbc87b8130cdfcc06c1728e241b0141aa`. Workflow run
+  `29666698698` produced Buddy build `1.0.0 (20260719001734)` from that exact
+  commit; Apple reported processing state `VALID`, audience
+  `APP_STORE_ELIGIBLE`, and internal group `CodeIsland Internal` access.
+  Artifact `8436026518` was downloaded to
+  `/Users/gregharned/Downloads/CodeIsland-TestFlight-20260719001734-run-29666698698/CodeIslandCompanion.ipa`
+  with SHA-256
+  `b3c43a4d19c3f4290364527c0ab8c9bf7a8722e972ced1bef202b1cfe82e5480`.
+  This is not yet a physical-install claim for build `20260719001734`.
 - Current source: PR #61 merge
   `24c2c16d9cc41546db88d5ca8bcc0fa1a182b208` hardens delayed ActivityKit
   update-token recovery; PR #62 merge
