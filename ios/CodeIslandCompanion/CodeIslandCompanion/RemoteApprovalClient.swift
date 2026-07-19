@@ -2,6 +2,22 @@ import Foundation
 import Security
 import UIKit
 
+enum RemoteTaskDeepLinkDestination: Equatable, Sendable {
+    case detail(UUID)
+    case composer(text: String?)
+
+    init?(route: PersonalHubDeepLink) {
+        switch route {
+        case .task(let id):
+            self = .detail(id)
+        case .newTask(let text):
+            self = .composer(text: text)
+        case .pendingApproval, .pendingQuestion, .module, .quickJot:
+            return nil
+        }
+    }
+}
+
 @MainActor
 final class RemoteApprovalClient: ObservableObject {
     enum ConnectionState: Equatable {
@@ -40,6 +56,7 @@ final class RemoteApprovalClient: ObservableObject {
     @Published var preparedAction: PersonalHubPreparedAction?
     @Published var quickJotDestination: BuddyQuickJotDestination?
     @Published var quickJotSeedText: String?
+    @Published private(set) var remoteTaskDeepLinkDestination: RemoteTaskDeepLinkDestination?
     @Published var selectedMode: PersonalHubMode {
         didSet {
             UserDefaults.standard.set(selectedMode.rawValue, forKey: Self.selectedModeKey)
@@ -586,6 +603,9 @@ final class RemoteApprovalClient: ObservableObject {
             pendingGenericDeepLink = nil
             quickJotSeedText = text
             quickJotDestination = BuddyQuickJotDestination(rawValue: destination.rawValue)
+        case .task, .newTask:
+            pendingGenericDeepLink = nil
+            remoteTaskDeepLinkDestination = RemoteTaskDeepLinkDestination(route: route)
         }
     }
 
