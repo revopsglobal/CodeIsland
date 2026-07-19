@@ -13,6 +13,31 @@ Sources used for the baseline:
 - <https://crestnotch.app/#modes>
 - <https://crestnotch.app/changelog>
 
+## Latest delivery delta — 2026-07-18 evening
+
+This delta supersedes older "current build" language below.
+
+- Latest source receipt: PR #68 merged as
+  `f6c9455979229474e2c7575df34087f895d98716`, recording the PR #67
+  attention-only Telegram fallback delivery from merge
+  `c1d5cf536e3d6d7687d53a5db96542485476b566`.
+- Installed Mac: `1.0.53`, workflow run `29667371137`, artifact
+  `8436194546`, downloaded DMG SHA-256
+  `65953f22a2d44a1cd0bf2296f53a8709b1e13239c54a85791bd6ae0b585686b9`,
+  ARM64, signature valid under Team `44JG2Y95CH`, local `/health` and
+  Tailscale `/health` both running with zero pending work.
+- Latest TestFlight delivery: run `29667371841`, Buddy build
+  `1.0.0 (20260719004222)`, delivery UUID
+  `3e7203b8-8dd7-4ba1-ba57-7814853dcc40`, Apple state `VALID`, audience
+  `APP_STORE_ELIGIBLE`, internal group `CodeIsland Internal`, artifact
+  `8436181146`, downloaded IPA SHA-256
+  `2cd1a35a0a1bd0f8ec3dab2c8203f9cd2a1668c14e7734e10595b73a686bc14c`.
+- Latest physical iPhone state is **stale**, not accepted for the newest
+  TestFlight build. Expected Buddy is `1.0.0 (20260719004222)`; newest
+  observed physical Buddy is still `1.0.0 (20260718212803)` from device
+  `afba2915-b0a3-456f-a5f2-265bf7e8a64a`, last seen
+  `2026-07-19T00:17:23Z`.
+
 ## Final acceptance delta — 2026-07-18
 
 This delta supersedes all older current-build statements below.
@@ -194,6 +219,14 @@ from module names: saved mode pin/order, artwork and arbitrary scrub, Shelf
 capture/drop, global quick jot, Calendar month navigation, a supported
 notification boundary, Mac speech/file context, camera and microphone
 preflight, paced teleprompter, and drag-to-notch layouts.
+
+Shared Mac/iPhone/web action parity is now guarded by
+`PersonalHubBuddyParity.validate(snapshot:)`. It checks every module-level,
+item-level, and calendar selected-event action in a hub snapshot against the
+explicit Buddy route table. The authenticated remote hub lifecycle test
+validates the actual `/api/hub/snapshot` responses for Home, Work, and Code, so
+new Mac actions cannot silently appear on iPhone or the private web app without
+being classified as native, read-only, or Mac-only with a reason.
 
 Pomodoro remains the explicit exclusion Greg requested. Cross-app macOS
 Notification Center history is the other non-parity item, but for a different

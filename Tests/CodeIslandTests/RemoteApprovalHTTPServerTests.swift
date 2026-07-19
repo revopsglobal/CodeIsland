@@ -461,6 +461,11 @@ final class RemoteApprovalHTTPServerTests: XCTestCase {
             XCTAssertEqual(snapshot.requestedMode, mode)
             XCTAssertEqual(snapshot.resolvedMode, mode)
             XCTAssertEqual(snapshot.modules.map(\.id), PersonalHubCatalog.modules(for: mode))
+            XCTAssertEqual(
+                PersonalHubBuddyParity.validate(snapshot: snapshot).map(\.description),
+                [],
+                "Remote hub snapshot exposes actions without an explicit Buddy/iPhone/web parity disposition"
+            )
         }
 
         let configuredWorkRack: [PersonalHubModuleID] = [.reminders, .calendar, .downloads]

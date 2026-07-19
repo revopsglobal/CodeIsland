@@ -935,6 +935,29 @@ public struct PersonalHubBuddyRoute: Equatable, Sendable {
     }
 }
 
+public struct PersonalHubBuddyParityViolation: Equatable, CustomStringConvertible, Sendable {
+    public let moduleID: PersonalHubModuleID
+    public let actionID: String
+    public let location: String
+    public let reason: String
+
+    public init(
+        moduleID: PersonalHubModuleID,
+        actionID: String,
+        location: String,
+        reason: String
+    ) {
+        self.moduleID = moduleID
+        self.actionID = actionID
+        self.location = location
+        self.reason = reason
+    }
+
+    public var description: String {
+        "\(moduleID.rawValue).\(actionID) at \(location): \(reason)"
+    }
+}
+
 public enum PersonalHubBuddyParity {
     public static let routes: [PersonalHubBuddyRoute] = [
         .init(moduleID: .nowPlaying, actionDispositions: native("previous", "playPause", "playQueueItem", "next", "seek", "seekBack", "seekForward", "copyToDevice")),
@@ -962,6 +985,44 @@ public enum PersonalHubBuddyParity {
         routes.first(where: { $0.moduleID == moduleID })
     }
 
+    public static func validate(snapshot: PersonalHubSnapshot) -> [PersonalHubBuddyParityViolation] {
+        snapshot.modules.flatMap(validate(module:))
+    }
+
+    public static func validate(module: PersonalHubModuleSnapshot) -> [PersonalHubBuddyParityViolation] {
+        guard let route = route(for: module.id) else {
+            return allActions(in: module).map {
+                PersonalHubBuddyParityViolation(
+                    moduleID: module.id,
+                    actionID: $0.id,
+                    location: $0.location,
+                    reason: "missing Buddy route"
+                )
+            }
+        }
+
+        return allActions(in: module).compactMap { entry in
+            guard let disposition = route.actionDispositions[entry.id] else {
+                return PersonalHubBuddyParityViolation(
+                    moduleID: module.id,
+                    actionID: entry.id,
+                    location: entry.location,
+                    reason: "missing Buddy action disposition"
+                )
+            }
+            if case .macOnly(let reason) = disposition,
+               reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return PersonalHubBuddyParityViolation(
+                    moduleID: module.id,
+                    actionID: entry.id,
+                    location: entry.location,
+                    reason: "Mac-only action is missing a reason"
+                )
+            }
+            return nil
+        }
+    }
+
     private static func native(_ ids: String...) -> [String: PersonalHubBuddyActionDisposition] {
         Dictionary(uniqueKeysWithValues: ids.map { ($0, .native) })
     }
@@ -975,5 +1036,27 @@ public enum PersonalHubBuddyParity {
         reason: String
     ) -> [String: PersonalHubBuddyActionDisposition] {
         [id: .macOnly(reason: reason)]
+    }
+
+    private struct ActionEntry {
+        let id: String
+        let location: String
+    }
+
+    private static func allActions(in module: PersonalHubModuleSnapshot) -> [ActionEntry] {
+        var entries = module.actions.map { ActionEntry(id: $0.id, location: "module.actions") }
+        for item in module.items {
+            entries.append(contentsOf: item.actions.map {
+                ActionEntry(id: $0.id, location: "items[\(item.id)].actions")
+            })
+        }
+        if let calendarMonth = module.calendarMonth {
+            for item in calendarMonth.selectedEvents {
+                entries.append(contentsOf: item.actions.map {
+                    ActionEntry(id: $0.id, location: "calendarMonth.selectedEvents[\(item.id)].actions")
+                })
+            }
+        }
+        return entries
     }
 }
