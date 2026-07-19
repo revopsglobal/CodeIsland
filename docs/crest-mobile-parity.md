@@ -59,6 +59,11 @@ This delta supersedes older "current build" language below.
   timeout/max-poll limit is reached, then emits the final audit JSON. This is a
   manual/bounded acceptance helper, not a daemon or scheduler; use it when the
   physical iPhone is about to open the current TestFlight build.
+- Latest CI acceptance-script coverage now runs the standalone direct-device
+  visibility and TestFlight source-drift Bats suites in the macOS DMG workflow,
+  not only the aggregate strict/away/completion reports that consume them. That
+  keeps future signed Mac builds from silently losing the two diagnostics that
+  separate "Codex cannot see the phone" from "latest Buddy source is stale."
 - Latest away-readiness report at `2026-07-19T06:36:50Z` returned
   `status = ready-for-manual-physical-acceptance`,
   `readyForAwayManualAcceptance = true`, latest Buddy build
