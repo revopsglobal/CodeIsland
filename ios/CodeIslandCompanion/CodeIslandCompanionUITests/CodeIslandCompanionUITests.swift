@@ -217,6 +217,61 @@ final class CodeIslandCompanionUITests: XCTestCase {
     }
 
     @MainActor
+    func testNewCodingTaskUsesNativeComposerAndExplicitBoundary() throws {
+        let app = launchRemoteTaskApp("working")
+
+        let capture = app.buttons["companion.capture"]
+        XCTAssertTrue(capture.waitForExistence(timeout: 8))
+        capture.tap()
+        let newTask = app.buttons["New coding task"]
+        XCTAssertTrue(newTask.waitForExistence(timeout: 4))
+        newTask.tap()
+
+        XCTAssertTrue(findAny("task.composer", in: app).waitForExistence(timeout: 5))
+        XCTAssertTrue(app.textViews["task.prompt"].exists)
+        XCTAssertTrue(app.buttons["task.workspace"].exists)
+        XCTAssertTrue(app.segmentedControls["task.provider"].exists)
+        XCTAssertTrue(app.staticTexts["Edit & Test"].exists)
+        XCTAssertTrue(app.buttons["task.submit"].exists)
+        XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", ".*[\\u4E00-\\u9FFF].*")).firstMatch.exists)
+
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Native remote coding task composer"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    @MainActor
+    func testRemoteTaskPortfolioGroupsByMeaning() throws {
+        let app = launchRemoteTaskApp("portfolio")
+        let sessions = app.buttons["companion.destination.sessions"]
+        XCTAssertTrue(sessions.waitForExistence(timeout: 8))
+        sessions.tap()
+
+        XCTAssertTrue(findAny("task.sessions", in: app).waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["NEEDS YOU"].exists)
+        XCTAssertTrue(app.staticTexts["ACTIVE"].exists)
+        XCTAssertTrue(app.staticTexts["COMPLETED"].exists)
+        XCTAssertTrue(app.staticTexts["Finish Buddy end-to-end testing"].exists)
+        XCTAssertTrue(app.staticTexts["Polish the Mac task portfolio"].exists)
+        XCTAssertTrue(app.staticTexts["Keep notch text in English"].exists)
+
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Remote coding task portfolio"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    @MainActor
+    func testNeedsYouTaskRemainsStableAcrossPollingWindow() throws {
+        let app = launchRemoteTaskApp("needs-you")
+        XCTAssertTrue(app.staticTexts["Finish Buddy end-to-end testing"].waitForExistence(timeout: 8))
+        sleep(5)
+        XCTAssertTrue(app.staticTexts["Finish Buddy end-to-end testing"].exists)
+        XCTAssertTrue(app.staticTexts["Choose whether to upload the internal build"].exists)
+    }
+
+    @MainActor
     func testAuthenticatedTailscaleConnectionDoesNotLookLikeNearbySearch() throws {
         let app = XCUIApplication()
         app.launchArguments = ["-CodeIslandCompanionMockHub"]
@@ -623,6 +678,19 @@ final class CodeIslandCompanionUITests: XCTestCase {
     }
 
     @MainActor
+    private func launchRemoteTaskApp(_ kind: String) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-CodeIslandCompanionMockState", "idle",
+            "-CodeIslandCompanionMockHub",
+            "-CodeIslandCompanionMockHubMode", "code",
+            "-CodeIslandCompanionMockRemoteTasks", kind,
+        ]
+        app.launch()
+        return app
+    }
+
+    @MainActor
     private func assertHubModules(_ moduleIDs: [String], in app: XCUIApplication, mode: String) {
         for moduleID in moduleIDs {
             let element = findHubElement("hub.module.\(moduleID)", in: app)
@@ -661,6 +729,11 @@ final class CodeIslandCompanionUITests: XCTestCase {
             }
         }
         return element
+    }
+
+    @MainActor
+    private func findAny(_ identifier: String, in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any).matching(identifier: identifier).firstMatch
     }
 
     @MainActor

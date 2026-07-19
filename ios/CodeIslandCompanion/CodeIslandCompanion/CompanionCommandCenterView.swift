@@ -21,10 +21,18 @@ private enum CommandCenterDestination: String, CaseIterable, Identifiable {
     }
 }
 
-private enum CommandCenterSheet: String, Identifiable {
+private enum CommandCenterSheet: Identifiable {
     case more
+    case composer(String?, RemoteTaskProvider?)
+    case task(UUID)
 
-    var id: String { rawValue }
+    var id: String {
+        switch self {
+        case .more: return "more"
+        case .composer: return "composer"
+        case .task(let id): return "task:\(id.uuidString.lowercased())"
+        }
+    }
 }
 
 struct CompanionCommandCenterView: View {
@@ -38,6 +46,9 @@ struct CompanionCommandCenterView: View {
     @State private var destination = CommandCenterDestination.now
     @State private var presentedSheet: CommandCenterSheet?
     @State private var showsCaptureChoices = false
+    @State private var selectedAttentionID: String?
+    @State private var followedTaskID: UUID?
+    @State private var reviewedVerifiedTaskIDs: Set<UUID> = []
 
     var body: some View {
         ZStack {
@@ -52,6 +63,8 @@ struct CompanionCommandCenterView: View {
                     CompanionSignalBoard(
                         approvalCount: remoteApprovals.approvals.count,
                         questionCount: remoteApprovals.questions.count,
+                        urgentTaskCount: urgentTaskCount,
+                        activeTaskCount: activeTaskCount,
                         connectionState: remoteApprovals.state,
                         activeSessionStatus: connection.latestState?.status
                     )
@@ -60,7 +73,10 @@ struct CompanionCommandCenterView: View {
                     case .now:
                         nowContent
                     case .sessions:
-                        CompanionSessionsSurface()
+                        CompanionSessionsSurface(
+                            openTask: { presentedSheet = .task($0) },
+                            newTask: { presentedSheet = .composer(nil, nil) }
+                        )
                             .environmentObject(connection)
                             .environmentObject(liveActivity)
                             .environmentObject(remoteApprovals)
@@ -97,11 +113,12 @@ struct CompanionCommandCenterView: View {
             .padding(.bottom, 6)
         }
         .confirmationDialog("Capture", isPresented: $showsCaptureChoices) {
-            Button("New task") { openQuickJot(.task) }
+            Button("New coding task") { presentedSheet = .composer(nil, nil) }
+            Button("New reminder") { openQuickJot(.task) }
             Button("New note") { openQuickJot(.note) }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Add it through your private Mac connection.")
+            Text("Send coding work to your Mac or capture a personal item.")
         }
         .sheet(item: $presentedSheet) { sheet in
             switch sheet {
@@ -112,6 +129,16 @@ struct CompanionCommandCenterView: View {
                 .presentationDragIndicator(.visible)
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("companion.more.sheet")
+            case .composer(let seedText, let provider):
+                RemoteTaskComposerView(seedText: seedText, provider: provider)
+                    .environmentObject(remoteApprovals)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+            case .task(let id):
+                RemoteTaskDetailView(taskID: id)
+                    .environmentObject(remoteApprovals)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
             }
         }
         .onChange(of: remoteApprovals.highlightedHubModuleID) { _, moduleID in
@@ -121,6 +148,22 @@ struct CompanionCommandCenterView: View {
         .onChange(of: attentionCount) { oldValue, newValue in
             guard newValue > oldValue else { return }
             select(.now)
+        }
+        .onChange(of: attentionCandidates) { _, candidates in
+            selectedAttentionID = RemoteTaskPresentationModel.selection(
+                previousID: selectedAttentionID,
+                candidates: candidates
+            )
+            if followedTaskID == nil,
+               let latest = remoteApprovals.remoteTasks
+                .filter({ !$0.state.isTerminal })
+                .max(by: { $0.updatedAt < $1.updatedAt }) {
+                followedTaskID = latest.id
+            }
+        }
+        .onChange(of: remoteApprovals.remoteTaskDeepLinkDestination) { _, route in
+            guard let route else { return }
+            present(route)
         }
         .onAppear {
             if remoteApprovals.highlightedHubModuleID != nil {
@@ -137,6 +180,13 @@ struct CompanionCommandCenterView: View {
                 presentedSheet = .more
             }
 #endif
+            selectedAttentionID = RemoteTaskPresentationModel.selection(
+                previousID: selectedAttentionID,
+                candidates: attentionCandidates
+            )
+            if let route = remoteApprovals.remoteTaskDeepLinkDestination {
+                present(route)
+            }
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("companion.commandCenter")
@@ -147,7 +197,16 @@ struct CompanionCommandCenterView: View {
         RemoteApprovalSurface()
             .environmentObject(remoteApprovals)
 
-        if remoteApprovals.hasPairingCredential, attentionCount == 0 {
+        if let task = selectedTask {
+            RemoteTaskSignalCard(task: task) {
+                if task.state == .verified { reviewedVerifiedTaskIDs.insert(task.id) }
+                presentedSheet = .task(task.id)
+            }
+        } else if let draft = selectedDraft {
+            RemoteTaskWaitingCard(draft: draft)
+        }
+
+        if remoteApprovals.hasPairingCredential, attentionCandidates.isEmpty {
             CompanionTodayTimeline(
                 snapshot: remoteApprovals.hubSnapshot,
                 openSessions: { select(.sessions) },
@@ -157,7 +216,44 @@ struct CompanionCommandCenterView: View {
     }
 
     private var attentionCount: Int {
-        remoteApprovals.approvals.count + remoteApprovals.questions.count
+        attentionCandidates.filter { $0.priority >= 50 }.count
+    }
+
+    private var urgentTaskCount: Int {
+        remoteApprovals.remoteTasks.filter { $0.state == .needsYou || $0.state == .failed }.count
+    }
+
+    private var activeTaskCount: Int {
+        remoteApprovals.remoteTasks.filter { !$0.state.isTerminal }.count
+            + remoteApprovals.remoteTaskDrafts.count
+    }
+
+    private var attentionCandidates: [RemoteTaskAttentionCandidate] {
+        RemoteTaskPresentationModel.candidates(
+            approvalIDs: remoteApprovals.approvals.map(\.id),
+            questionIDs: remoteApprovals.questions.map(\.id),
+            tasks: remoteApprovals.remoteTasks,
+            drafts: remoteApprovals.remoteTaskDrafts,
+            followedTaskID: followedTaskID,
+            reviewedVerifiedTaskIDs: reviewedVerifiedTaskIDs
+        )
+    }
+
+    private var selectedTask: RemoteTaskSummary? {
+        guard let selectedAttentionID,
+              let candidate = attentionCandidates.first(where: { $0.id == selectedAttentionID }),
+              let taskID = candidate.taskID,
+              candidate.kind != .approval,
+              candidate.kind != .question
+        else { return nil }
+        return remoteApprovals.remoteTasks.first(where: { $0.id == taskID })
+    }
+
+    private var selectedDraft: RemoteTaskDraft? {
+        guard let selectedAttentionID, selectedAttentionID.hasPrefix("draft:") else { return nil }
+        return remoteApprovals.remoteTaskDrafts.first {
+            "draft:\($0.id.uuidString.lowercased())" == selectedAttentionID
+        }
     }
 
     private func select(_ newDestination: CommandCenterDestination) {
@@ -174,16 +270,30 @@ struct CompanionCommandCenterView: View {
         remoteApprovals.quickJotDestination = destination
         presentedSheet = .more
     }
+
+    private func present(_ route: RemoteTaskDeepLinkDestination) {
+        switch route {
+        case .detail(let id): presentedSheet = .task(id)
+        case .composer(let text, let provider): presentedSheet = .composer(text, provider)
+        case .needsYou:
+            select(.now)
+        case .sessions:
+            select(.sessions)
+        }
+        remoteApprovals.consumeRemoteTaskDeepLinkDestination()
+    }
 }
 
 private struct CompanionSignalBoard: View {
     let approvalCount: Int
     let questionCount: Int
+    let urgentTaskCount: Int
+    let activeTaskCount: Int
     let connectionState: RemoteApprovalClient.ConnectionState
     let activeSessionStatus: CompanionStatus?
 
     private var needsAttention: Bool {
-        approvalCount + questionCount > 0
+        approvalCount + questionCount + urgentTaskCount > 0
     }
 
     private var connectionTitle: String {
@@ -217,10 +327,10 @@ private struct CompanionSignalBoard: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(needsAttention ? "Signal is hot" : "Signal is quiet")
+                    Text(needsAttention ? "Signal is hot" : (activeTaskCount > 0 ? "Work is moving" : "Signal is quiet"))
                         .font(.system(size: 16, weight: .black, design: .rounded))
                         .foregroundStyle(Color.ciForeground)
-                    Text(needsAttention ? "Review what needs Greg before anything else." : "No approvals or questions are waiting.")
+                    Text(needsAttention ? "Review what needs Greg before anything else." : (activeTaskCount > 0 ? "Your Mac is working. Routine updates stay in place." : "No approvals, questions, or coding tasks are waiting."))
                         .font(.footnote.weight(.medium))
                         .foregroundStyle(Color.ciForeground.opacity(0.52))
                 }
@@ -249,10 +359,10 @@ private struct CompanionSignalBoard: View {
                     tint: questionCount > 0 ? Color(red: 0.34, green: 0.62, blue: 1.0) : Color.ciForeground.opacity(0.55)
                 )
                 CompanionSignalTile(
-                    title: sessionTitle,
+                    title: urgentTaskCount > 0 ? "\(urgentTaskCount) need you" : (activeTaskCount > 0 ? "\(activeTaskCount) active" : sessionTitle),
                     subtitle: connectionTitle,
-                    symbol: connectionSymbol,
-                    tint: connectionState == .connected ? .green : .orange
+                    symbol: urgentTaskCount > 0 ? "terminal.fill" : connectionSymbol,
+                    tint: urgentTaskCount > 0 ? .orange : (connectionState == .connected ? .green : .orange)
                 )
             }
         }
@@ -272,8 +382,8 @@ private struct CompanionSignalBoard: View {
         )
         .accessibilityElement(children: .contain)
         .accessibilityLabel(needsAttention
-            ? "\(approvalCount) approvals and \(questionCount) questions need attention"
-            : "Signal is quiet. No approvals or questions are waiting.")
+            ? "\(approvalCount) approvals, \(questionCount) questions, and \(urgentTaskCount) coding tasks need attention"
+            : "No approvals, questions, or urgent coding tasks are waiting.")
         .accessibilityIdentifier("companion.signalBoard")
     }
 }

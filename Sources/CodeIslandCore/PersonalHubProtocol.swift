@@ -865,7 +865,9 @@ public enum PersonalHubDeepLink: Equatable, Sendable {
     case module(PersonalHubModuleID)
     case quickJot(destination: PersonalHubQuickJotDestination, text: String?)
     case task(id: UUID)
-    case newTask(text: String?)
+    case newTask(text: String?, provider: RemoteTaskProvider? = nil)
+    case needsYou
+    case sessions
 
     public init?(url: URL) {
         guard url.scheme?.lowercased() == "codeisland",
@@ -893,9 +895,19 @@ public enum PersonalHubDeepLink: Equatable, Sendable {
             guard let rawID = path.first, let id = UUID(uuidString: rawID) else { return nil }
             self = .task(id: id)
         case "new-task":
-            let text = URLComponents(url: url, resolvingAgainstBaseURL: false)?
-                .queryItems?.first(where: { $0.name == "text" })?.value
-            self = .newTask(text: text)
+            let queryItems = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
+            let text = queryItems?.first(where: { $0.name == "text" })?.value
+            let provider = queryItems?
+                .first(where: { $0.name == "provider" })?
+                .value
+                .flatMap(RemoteTaskProvider.init(rawValue:))
+            self = .newTask(text: text, provider: provider)
+        case "needs-you":
+            guard path.isEmpty else { return nil }
+            self = .needsYou
+        case "sessions":
+            guard path.isEmpty else { return nil }
+            self = .sessions
         default:
             return nil
         }
@@ -923,11 +935,18 @@ public enum PersonalHubDeepLink: Equatable, Sendable {
         case .task(let id):
             components.host = "tasks"
             components.path = "/\(id.uuidString)"
-        case .newTask(let text):
+        case .newTask(let text, let provider):
             components.host = "new-task"
+            var items: [URLQueryItem] = []
             if let text, !text.isEmpty {
-                components.queryItems = [URLQueryItem(name: "text", value: text)]
+                items.append(URLQueryItem(name: "text", value: text))
             }
+            if let provider { items.append(URLQueryItem(name: "provider", value: provider.rawValue)) }
+            components.queryItems = items.isEmpty ? nil : items
+        case .needsYou:
+            components.host = "needs-you"
+        case .sessions:
+            components.host = "sessions"
         }
         return components.url!
     }

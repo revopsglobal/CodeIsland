@@ -11,6 +11,30 @@ public enum RemoteTaskAuthority: String, Codable, CaseIterable, Equatable, Senda
     case editAndTest = "edit-and-test"
 }
 
+/// Opaque, wire-safe workspace metadata. Absolute Mac paths never leave the
+/// host; Buddy submits only this identifier after the user picks the name.
+public struct RemoteWorkspaceSummary: Codable, Equatable, Identifiable, Sendable {
+    public let id: String
+    public let name: String
+
+    public init(id: String, name: String) {
+        self.id = id
+        self.name = name
+    }
+}
+
+public struct RemoteWorkspaceSnapshot: Codable, Equatable, Sendable {
+    public static let currentVersion = 1
+
+    public let version: Int
+    public let workspaces: [RemoteWorkspaceSummary]
+
+    public init(version: Int = Self.currentVersion, workspaces: [RemoteWorkspaceSummary]) {
+        self.version = version
+        self.workspaces = workspaces
+    }
+}
+
 public enum RemoteTaskState: String, Codable, CaseIterable, Equatable, Sendable {
     case waitingForMac = "waiting-for-mac"
     case queued

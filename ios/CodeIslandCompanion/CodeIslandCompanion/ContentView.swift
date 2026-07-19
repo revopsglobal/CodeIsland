@@ -279,6 +279,9 @@ private struct PortraitIslandView: View {
 /// the authenticated session roster. Showing both prevents remote pairing from
 /// hiding Live Activity, focus, approval, and recent-session controls.
 struct CompanionSessionsSurface: View {
+    let openTask: (UUID) -> Void
+    let newTask: () -> Void
+
     @EnvironmentObject private var connection: CompanionConnection
     @EnvironmentObject private var liveActivity: LiveActivityController
     @EnvironmentObject private var remoteApprovals: RemoteApprovalClient
@@ -287,6 +290,12 @@ struct CompanionSessionsSurface: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             if remoteApprovals.hasPairingCredential {
+                RemoteTaskSessionsView(openTask: openTask, newTask: newTask)
+                    .environmentObject(remoteApprovals)
+
+                Divider()
+                    .overlay(Color.ciForeground.opacity(0.08))
+
                 PersonalHubSessionsSurface()
                     .environmentObject(remoteApprovals)
 

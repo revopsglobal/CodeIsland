@@ -61,9 +61,65 @@ struct PrepareCodeIslandTaskIntent: AppIntent {
     static var openAppWhenRun = true
 
     @Parameter(title: "Task") var text: String?
+    @Parameter(title: "Provider") var provider: CodeIslandIntentProvider?
 
     func perform() async throws -> some IntentResult {
-        CodeIslandIntentBridge.open(.quickJot(destination: .task, text: text))
+        CodeIslandIntentBridge.open(.newTask(text: text, provider: provider?.remoteProvider))
+        return .result()
+    }
+}
+
+enum CodeIslandIntentProvider: String, AppEnum {
+    case automatic, codex, claude
+
+    static var typeDisplayRepresentation = TypeDisplayRepresentation(name: "Coding Provider")
+    static var caseDisplayRepresentations: [Self: DisplayRepresentation] = [
+        .automatic: "Automatic",
+        .codex: "Codex",
+        .claude: "Claude",
+    ]
+
+    var remoteProvider: RemoteTaskProvider {
+        switch self {
+        case .automatic: return .auto
+        case .codex: return .codex
+        case .claude: return .claude
+        }
+    }
+}
+
+struct OpenCodeIslandTaskIntent: AppIntent {
+    static var title: LocalizedStringResource = "Open CodeIsland Task"
+    static var description = IntentDescription("Opens one exact coding task in Buddy.")
+    static var openAppWhenRun = true
+
+    @Parameter(title: "Task ID") var taskID: String
+
+    func perform() async throws -> some IntentResult {
+        guard let id = UUID(uuidString: taskID) else { return .result() }
+        CodeIslandIntentBridge.open(.task(id: id))
+        return .result()
+    }
+}
+
+struct OpenCodeIslandNeedsYouIntent: AppIntent {
+    static var title: LocalizedStringResource = "Open CodeIsland Needs You"
+    static var description = IntentDescription("Opens the decisions and coding tasks waiting for you.")
+    static var openAppWhenRun = true
+
+    func perform() async throws -> some IntentResult {
+        CodeIslandIntentBridge.open(.needsYou)
+        return .result()
+    }
+}
+
+struct OpenCodeIslandSessionsIntent: AppIntent {
+    static var title: LocalizedStringResource = "Open CodeIsland Sessions"
+    static var description = IntentDescription("Opens your active coding sessions and task portfolio.")
+    static var openAppWhenRun = true
+
+    func perform() async throws -> some IntentResult {
+        CodeIslandIntentBridge.open(.sessions)
         return .result()
     }
 }
@@ -94,6 +150,18 @@ struct CodeIslandAppShortcuts: AppShortcutsProvider {
             phrases: ["Prepare a task in \(.applicationName)"],
             shortTitle: "New Task",
             systemImageName: "checklist"
+        )
+        AppShortcut(
+            intent: OpenCodeIslandNeedsYouIntent(),
+            phrases: ["Open what needs me in \(.applicationName)"],
+            shortTitle: "Needs You",
+            systemImageName: "exclamationmark.bubble.fill"
+        )
+        AppShortcut(
+            intent: OpenCodeIslandSessionsIntent(),
+            phrases: ["Open sessions in \(.applicationName)"],
+            shortTitle: "Sessions",
+            systemImageName: "terminal.fill"
         )
         AppShortcut(
             intent: PrepareCodeIslandNoteIntent(),

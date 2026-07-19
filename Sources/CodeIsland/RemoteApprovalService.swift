@@ -657,6 +657,16 @@ final class RemoteApprovalService: ObservableObject {
             }
         }
 
+        if components == ["api", "tasks", "workspaces"] {
+            guard request.method == "GET" else {
+                return .json(status: 405, object: ["error": "method not allowed"])
+            }
+            return .json(
+                status: 200,
+                encodable: RemoteWorkspaceSnapshot(workspaces: taskCoordinator.workspaces)
+            )
+        }
+
         guard components.count >= 3,
               components[0] == "api", components[1] == "tasks",
               let taskID = UUID(uuidString: components[2])

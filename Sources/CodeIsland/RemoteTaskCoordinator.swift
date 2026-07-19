@@ -146,7 +146,14 @@ final class RemoteTaskCoordinator {
 
         let resolvedProvider = selectProvider(for: request)
         let hostRequest = replacingProvider(request, with: resolvedProvider)
-        let record = try store.create(hostRequest, deviceID: deviceID)
+        let workspaceName = workspaceCatalog.entries
+            .first(where: { $0.id == hostRequest.workspaceID })?
+            .name
+        let record = try store.create(
+            hostRequest,
+            deviceID: deviceID,
+            workspaceName: workspaceName
+        )
 
         try startIfReady(taskID: record.id)
         return store.task(id: record.id) ?? record

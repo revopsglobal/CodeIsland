@@ -10,12 +10,14 @@ final class CompanionCommandCenterModelTests: XCTestCase {
         )
         XCTAssertEqual(
             RemoteTaskDeepLinkDestination(route: .newTask(text: "Fix calendar access")),
-            .composer(text: "Fix calendar access")
+            .composer(text: "Fix calendar access", provider: nil)
         )
         XCTAssertEqual(
             RemoteTaskDeepLinkDestination(route: .newTask(text: nil)),
-            .composer(text: nil)
+            .composer(text: nil, provider: nil)
         )
+        XCTAssertEqual(RemoteTaskDeepLinkDestination(route: .needsYou), .needsYou)
+        XCTAssertEqual(RemoteTaskDeepLinkDestination(route: .sessions), .sessions)
         XCTAssertNil(RemoteTaskDeepLinkDestination(route: .pendingApproval(id: nil)))
     }
 

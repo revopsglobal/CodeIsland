@@ -74,11 +74,18 @@ final class RemoteTaskProtocolTests: XCTestCase {
         let taskRoute = PersonalHubDeepLink.task(id: taskID)
         XCTAssertEqual(PersonalHubDeepLink(url: taskRoute.url), taskRoute)
 
-        let newTask = PersonalHubDeepLink.newTask(text: "Fix calendar access")
+        let newTask = PersonalHubDeepLink.newTask(text: "Fix calendar access", provider: .codex)
         XCTAssertEqual(PersonalHubDeepLink(url: newTask.url), newTask)
-        XCTAssertEqual(newTask.url.absoluteString, "codeisland://new-task?text=Fix%20calendar%20access")
+        XCTAssertEqual(
+            newTask.url.absoluteString,
+            "codeisland://new-task?text=Fix%20calendar%20access&provider=codex"
+        )
+
+        XCTAssertEqual(PersonalHubDeepLink(url: PersonalHubDeepLink.needsYou.url), .needsYou)
+        XCTAssertEqual(PersonalHubDeepLink(url: PersonalHubDeepLink.sessions.url), .sessions)
 
         XCTAssertNil(PersonalHubDeepLink(url: URL(string: "codeisland://tasks/not-a-uuid")!))
+        XCTAssertNil(PersonalHubDeepLink(url: URL(string: "codeisland://needs-you/unknown")!))
     }
 
     func testPushSummaryNeverIncludesPromptOrAttachmentName() throws {

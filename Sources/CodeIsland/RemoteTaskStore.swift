@@ -68,7 +68,11 @@ final class RemoteTaskStore: ObservableObject {
     }
 
     @discardableResult
-    func create(_ request: RemoteTaskCreateRequest, deviceID: String) throws -> RemoteTaskRecord {
+    func create(
+        _ request: RemoteTaskCreateRequest,
+        deviceID: String,
+        workspaceName: String? = nil
+    ) throws -> RemoteTaskRecord {
         if let existing = tasks.first(where: { $0.request.idempotencyKey == request.idempotencyKey }) {
             return existing
         }
@@ -87,7 +91,7 @@ final class RemoteTaskStore: ObservableObject {
                 idempotencyKey: sanitizedRequest.idempotencyKey,
                 title: Self.title(from: sanitizedRequest.prompt),
                 workspaceID: workspaceID,
-                workspaceName: workspaceID.isEmpty ? "Choose workspace" : workspaceID,
+                workspaceName: workspaceID.isEmpty ? "Choose workspace" : (workspaceName ?? workspaceID),
                 provider: sanitizedRequest.provider,
                 authority: sanitizedRequest.authority,
                 state: .queued,

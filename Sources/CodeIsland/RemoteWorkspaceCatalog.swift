@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import CodeIslandCore
 
 enum RemoteWorkspaceSource: String, Codable, Equatable, Sendable {
     case recentSession
@@ -23,12 +24,6 @@ struct RemoteWorkspaceCandidate: Equatable, Sendable {
         self.source = source
         self.lastUsedAt = lastUsedAt
     }
-}
-
-/// The wire-safe workspace representation. Absolute paths remain Mac-only.
-struct RemoteWorkspaceSummary: Codable, Equatable, Identifiable, Sendable {
-    let id: String
-    let name: String
 }
 
 struct RemoteWorkspaceEntry: Equatable, Identifiable, Sendable {

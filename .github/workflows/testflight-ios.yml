@@ -200,6 +200,7 @@ jobs:
       TEAM_ID: 44JG2Y95CH
       APP_PROFILE_NAME: CodeIsland Buddy App Store
       WIDGET_PROFILE_NAME: CodeIsland Buddy Widget App Store
+      SHARE_PROFILE_NAME: CodeIsland Buddy Share App Store
       TESTFLIGHT_PROCESSING_TIMEOUT_MINUTES: 60
 
     steps:
@@ -239,12 +240,13 @@ jobs:
           DIST_PASSWORD: ${{ secrets.APPLE_DIST_P12_PASSWORD }}
           APP_PROFILE: ${{ secrets.IOS_APPSTORE_PROFILE_BASE64 }}
           WIDGET_PROFILE: ${{ secrets.IOS_WIDGET_PROFILE_BASE64 }}
+          SHARE_PROFILE: ${{ secrets.IOS_SHARE_PROFILE_BASE64 }}
           ASC_ISSUER: ${{ secrets.ASC_ISSUER_ID }}
           ASC_KEY: ${{ secrets.ASC_KEY_ID }}
           ASC_KEY_P8: ${{ secrets.ASC_KEY_P8_BASE64 }}
         run: |
           missing=0
-          for name in DIST_P12 DIST_PASSWORD APP_PROFILE WIDGET_PROFILE ASC_ISSUER ASC_KEY ASC_KEY_P8; do
+          for name in DIST_P12 DIST_PASSWORD APP_PROFILE WIDGET_PROFILE SHARE_PROFILE ASC_ISSUER ASC_KEY ASC_KEY_P8; do
             if [ -z "${!name}" ]; then
               echo "::error::$name is required"
               missing=1
@@ -263,6 +265,7 @@ jobs:
           DIST_PASSWORD: ${{ secrets.APPLE_DIST_P12_PASSWORD }}
           APP_PROFILE: ${{ secrets.IOS_APPSTORE_PROFILE_BASE64 }}
           WIDGET_PROFILE: ${{ secrets.IOS_WIDGET_PROFILE_BASE64 }}
+          SHARE_PROFILE: ${{ secrets.IOS_SHARE_PROFILE_BASE64 }}
         run: |
           KEYCHAIN_PATH="$RUNNER_TEMP/codeisland-signing.keychain-db"
           KEYCHAIN_PASSWORD="$(uuidgen)"
@@ -279,7 +282,7 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
           mkdir -p "$PROFILES_DIR"
-          for entry in "app:$APP_PROFILE" "widget:$WIDGET_PROFILE"; do
+          for entry in "app:$APP_PROFILE" "widget:$WIDGET_PROFILE" "share:$SHARE_PROFILE"; do
             label="${entry%%:*}"
             content="${entry#*:}"
             source="$RUNNER_TEMP/$label.mobileprovision"
@@ -308,13 +311,19 @@ jobs:
         run: |
           APP="$RUNNER_TEMP/CodeIslandCompanion.xcarchive/Products/Applications/CodeIslandCompanion.app"
           WIDGET="$APP/PlugIns/CodeIslandCompanionWidget.appex"
+          SHARE="$APP/PlugIns/CodeIslandShareExtension.appex"
           test -d "$APP"
           test -d "$WIDGET"
+          test -d "$SHARE"
           codesign --verify --deep --strict --verbose=2 "$APP"
           codesign --verify --strict --verbose=2 "$WIDGET"
+          codesign --verify --strict --verbose=2 "$SHARE"
           codesign -d --entitlements :- "$APP" > "$RUNNER_TEMP/app-entitlements.plist" 2>/dev/null
+          codesign -d --entitlements :- "$SHARE" > "$RUNNER_TEMP/share-entitlements.plist" 2>/dev/null
           test "$(/usr/libexec/PlistBuddy -c 'Print :aps-environment' "$RUNNER_TEMP/app-entitlements.plist")" = production
           test "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.developer.usernotifications.time-sensitive' "$RUNNER_TEMP/app-entitlements.plist")" = true
+          test "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.application-groups:0' "$RUNNER_TEMP/app-entitlements.plist")" = group.com.revopsglobal.codeisland.buddy
+          test "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.application-groups:0' "$RUNNER_TEMP/share-entitlements.plist")" = group.com.revopsglobal.codeisland.buddy
           test "$(/usr/libexec/PlistBuddy -c 'Print :NSSupportsLiveActivities' "$APP/Info.plist")" = true
           test -n "$(/usr/libexec/PlistBuddy -c 'Print :NSCameraUsageDescription' "$APP/Info.plist")"
           test -n "$(/usr/libexec/PlistBuddy -c 'Print :NSMicrophoneUsageDescription' "$APP/Info.plist")"

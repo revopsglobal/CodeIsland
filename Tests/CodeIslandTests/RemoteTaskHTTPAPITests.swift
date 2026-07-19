@@ -21,6 +21,18 @@ final class RemoteTaskHTTPAPITests: XCTestCase {
         let unauthorized = try await send(port: port, method: "GET", path: "/api/tasks")
         XCTAssertEqual(unauthorized.status, 401)
 
+        let workspaces = try await send(
+            port: port,
+            method: "GET",
+            path: "/api/tasks/workspaces",
+            token: first.deviceToken
+        )
+        XCTAssertEqual(workspaces.status, 200)
+        XCTAssertEqual(
+            try decode(RemoteWorkspaceSnapshot.self, from: workspaces.data).workspaces.map(\.name),
+            [fixture.workspace.lastPathComponent]
+        )
+
         let created = try await send(
             port: port,
             method: "POST",

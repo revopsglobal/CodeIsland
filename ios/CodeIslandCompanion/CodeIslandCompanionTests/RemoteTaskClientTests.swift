@@ -122,6 +122,73 @@ final class RemoteTaskClientTests: XCTestCase {
             )
         }
     }
+
+    func testWorkspaceAndTaskOperationsUseAuthenticatedBoundRoutes() async throws {
+        let fixture = try ClientFixture()
+        defer { fixture.remove() }
+        let task = fixture.summary(clientTaskID: UUID(), idempotencyKey: UUID(), state: .needsYou)
+        let intent = RemoteTaskActionIntent(
+            taskID: task.id,
+            action: .commit,
+            arguments: ["message": "Finish"],
+            expectedReceiptSequence: task.lastReceiptSequence
+        )
+        let prepared = RemoteTaskPreparedAction(
+            intent: intent,
+            actionToken: "single-use-token",
+            expiresAt: Date().addingTimeInterval(60),
+            confirmationSummary: "Commit Finish"
+        )
+        fixture.transport.responses = [
+            .json(status: 200, RemoteWorkspaceSnapshot(workspaces: [
+                RemoteWorkspaceSummary(id: "workspace-a", name: "CodeIsland")
+            ])),
+            .json(status: 200, task),
+            .json(status: 200, task),
+            .json(status: 200, prepared),
+            .json(status: 200, task),
+        ]
+
+        let workspaceResult = await fixture.client.refreshWorkspaces(baseURL: fixture.baseURL, bearerToken: "secret")
+        XCTAssertEqual(workspaceResult, .success)
+        XCTAssertEqual(fixture.client.workspaces.map(\.name), ["CodeIsland"])
+        let followUpResult = await fixture.client.followUp(
+            taskID: task.id,
+            text: "Continue",
+            baseURL: fixture.baseURL,
+            bearerToken: "secret"
+        )
+        XCTAssertEqual(followUpResult, .success)
+        let cancelResult = await fixture.client.cancel(
+            taskID: task.id,
+            baseURL: fixture.baseURL,
+            bearerToken: "secret"
+        )
+        XCTAssertEqual(cancelResult, .success)
+        let receivedPrepared = try await fixture.client.prepareAction(
+            intent,
+            baseURL: fixture.baseURL,
+            bearerToken: "secret"
+        )
+        XCTAssertEqual(receivedPrepared, prepared)
+        let executeResult = await fixture.client.executeAction(
+            prepared,
+            baseURL: fixture.baseURL,
+            bearerToken: "secret"
+        )
+        XCTAssertEqual(executeResult, .success)
+
+        XCTAssertEqual(fixture.transport.requests.map { $0.url?.path }, [
+            "/api/tasks/workspaces",
+            "/api/tasks/\(task.id.uuidString.lowercased())/follow-up",
+            "/api/tasks/\(task.id.uuidString.lowercased())/cancel",
+            "/api/tasks/\(task.id.uuidString.lowercased())/actions/prepare",
+            "/api/tasks/\(task.id.uuidString.lowercased())/actions/execute",
+        ])
+        XCTAssertTrue(fixture.transport.requests.allSatisfy {
+            $0.value(forHTTPHeaderField: "Authorization") == "Bearer secret"
+        })
+    }
 }
 
 private struct ErrorPayload: Codable { let error: String }

@@ -38,6 +38,7 @@ enum RemoteTaskSyncResult: Equatable {
 @MainActor
 final class RemoteTaskClient: ObservableObject {
     @Published private(set) var tasks: [RemoteTaskSummary] = []
+    @Published private(set) var workspaces: [RemoteWorkspaceSummary] = []
     @Published private(set) var localDrafts: [RemoteTaskDraft]
     @Published private(set) var lastError: String?
     @Published private(set) var syncing = false
@@ -151,6 +152,123 @@ final class RemoteTaskClient: ObservableObject {
         nextRetryAt = .distantPast
     }
 
+    func refreshWorkspaces(baseURL: URL, bearerToken: String) async -> RemoteTaskSyncResult {
+        do {
+            let request = try authenticatedRequest(
+                baseURL: baseURL,
+                path: "/api/tasks/workspaces",
+                method: "GET",
+                bearerToken: bearerToken
+            )
+            let response = try await transport.data(for: request)
+            try validate(response)
+            workspaces = try Self.decoder.decode(RemoteWorkspaceSnapshot.self, from: response.data).workspaces
+            return .success
+        } catch ClientError.unauthorized {
+            return .pairingRequired
+        } catch ClientError.conflict {
+            return .conflict
+        } catch {
+            lastError = error.localizedDescription
+            return .offline
+        }
+    }
+
+    func followUp(
+        taskID: UUID,
+        text: String,
+        baseURL: URL,
+        bearerToken: String
+    ) async -> RemoteTaskSyncResult {
+        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return .deferred }
+        do {
+            let payload = RemoteTaskFollowUpRequest(
+                taskID: taskID,
+                idempotencyKey: UUID(),
+                text: value
+            )
+            let request = try jsonRequest(
+                baseURL: baseURL,
+                path: "/api/tasks/\(taskID.uuidString.lowercased())/follow-up",
+                method: "POST",
+                value: payload,
+                bearerToken: bearerToken
+            )
+            let response = try await transport.data(for: request)
+            try validate(response)
+            let summary = try Self.decoder.decode(RemoteTaskSummary.self, from: response.data)
+            tasks = replacing(summary, in: tasks)
+            return .success
+        } catch {
+            return result(for: error)
+        }
+    }
+
+    func cancel(taskID: UUID, baseURL: URL, bearerToken: String) async -> RemoteTaskSyncResult {
+        do {
+            let request = try authenticatedRequest(
+                baseURL: baseURL,
+                path: "/api/tasks/\(taskID.uuidString.lowercased())/cancel",
+                method: "POST",
+                body: Data(),
+                contentType: "application/json",
+                bearerToken: bearerToken
+            )
+            let response = try await transport.data(for: request)
+            try validate(response)
+            let summary = try Self.decoder.decode(RemoteTaskSummary.self, from: response.data)
+            tasks = replacing(summary, in: tasks)
+            return .success
+        } catch {
+            return result(for: error)
+        }
+    }
+
+    func prepareAction(
+        _ intent: RemoteTaskActionIntent,
+        baseURL: URL,
+        bearerToken: String
+    ) async throws -> RemoteTaskPreparedAction {
+        let request = try jsonRequest(
+            baseURL: baseURL,
+            path: "/api/tasks/\(intent.taskID.uuidString.lowercased())/actions/prepare",
+            method: "POST",
+            value: intent,
+            bearerToken: bearerToken
+        )
+        let response = try await transport.data(for: request)
+        try validate(response)
+        return try Self.decoder.decode(RemoteTaskPreparedAction.self, from: response.data)
+    }
+
+    func executeAction(
+        _ prepared: RemoteTaskPreparedAction,
+        baseURL: URL,
+        bearerToken: String
+    ) async -> RemoteTaskSyncResult {
+        do {
+            let payload = RemoteTaskActionExecutionRequest(
+                intent: prepared.intent,
+                actionToken: prepared.actionToken
+            )
+            let request = try jsonRequest(
+                baseURL: baseURL,
+                path: "/api/tasks/\(prepared.intent.taskID.uuidString.lowercased())/actions/execute",
+                method: "POST",
+                value: payload,
+                bearerToken: bearerToken
+            )
+            let response = try await transport.data(for: request)
+            try validate(response)
+            let summary = try Self.decoder.decode(RemoteTaskSummary.self, from: response.data)
+            tasks = replacing(summary, in: tasks)
+            return .success
+        } catch {
+            return result(for: error)
+        }
+    }
+
     func clearConnection() {
         lastBaseURL = nil
         lastBearerToken = nil
@@ -162,6 +280,15 @@ final class RemoteTaskClient: ObservableObject {
         guard let lastBaseURL, let lastBearerToken else { return }
         nextRetryAt = .distantPast
         _ = await sync(baseURL: lastBaseURL, bearerToken: lastBearerToken, force: true)
+    }
+
+    private func result(for error: Error) -> RemoteTaskSyncResult {
+        lastError = error.localizedDescription
+        switch error {
+        case ClientError.unauthorized: return .pairingRequired
+        case ClientError.conflict: return .conflict
+        default: return .offline
+        }
     }
 
     private func flushOutbox(baseURL: URL, bearerToken: String) async throws {

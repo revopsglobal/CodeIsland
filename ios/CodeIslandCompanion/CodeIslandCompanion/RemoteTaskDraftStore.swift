@@ -141,6 +141,10 @@ final class RemoteTaskDraftStore {
                 guard Self.validDisplayName(source.displayName), Self.validMediaType(source.mediaType) else {
                     throw StoreError.invalidAttachment
                 }
+                let accessedSecurityScope = source.url.startAccessingSecurityScopedResource()
+                defer {
+                    if accessedSecurityScope { source.url.stopAccessingSecurityScopedResource() }
+                }
                 let values = try source.url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
                 guard values.isRegularFile == true, values.isSymbolicLink != true else {
                     throw StoreError.invalidAttachment
