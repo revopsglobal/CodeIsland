@@ -120,6 +120,13 @@ web_shell_has_icon=false
 web_shell_has_questions=false
 web_shell_has_approvals=false
 web_shell_has_hub=false
+web_shell_has_mobile_viewport=false
+web_shell_has_ios_pwa=false
+web_shell_has_safe_area=false
+web_shell_has_touch_targets=false
+web_shell_has_live_feedback=false
+web_shell_has_inline_review=false
+web_shell_has_no_browser_dialogs=false
 web_shell_status="not-checked"
 web_shell_next_action="No private web shell URL was available; verify Tailscale Serve and rerun away readiness."
 
@@ -127,6 +134,7 @@ if [[ -n "$WEB_SHELL_URL" && -x "$(command -v "$CURL_BIN" 2>/dev/null || true)" 
     web_shell_checked=true
     set +e
     "$CURL_BIN" -k -L -sS --max-time 10 \
+        -A "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1" \
         -o "$web_shell_output" \
         -w '%{http_code}\n%{content_type}\n' \
         "$WEB_SHELL_URL" >"$web_shell_meta" 2>/dev/null
@@ -142,19 +150,35 @@ if [[ -n "$WEB_SHELL_URL" && -x "$(command -v "$CURL_BIN" 2>/dev/null || true)" 
         grep -q '<section id="questions"' "$web_shell_output" && web_shell_has_questions=true
         grep -q '<section id="approvals"' "$web_shell_output" && web_shell_has_approvals=true
         grep -q '<section id="hub"' "$web_shell_output" && web_shell_has_hub=true
+        grep -q 'width=device-width,initial-scale=1,viewport-fit=cover' "$web_shell_output" && web_shell_has_mobile_viewport=true
+        grep -q 'apple-mobile-web-app-capable' "$web_shell_output" && web_shell_has_ios_pwa=true
+        grep -q 'env(safe-area-inset-' "$web_shell_output" && web_shell_has_safe_area=true
+        grep -q 'min-height:44px' "$web_shell_output" && web_shell_has_touch_targets=true
+        grep -q 'role="status" aria-live="polite"' "$web_shell_output" && web_shell_has_live_feedback=true
+        grep -q 'id="reviewDialog"' "$web_shell_output" && web_shell_has_inline_review=true
+        if ! grep -Eq '\b(alert|confirm|prompt)\(' "$web_shell_output"; then
+            web_shell_has_no_browser_dialogs=true
+        fi
         if [[ "$web_shell_has_title" == "true" \
             && "$web_shell_has_tagline" == "true" \
             && "$web_shell_has_manifest" == "true" \
             && "$web_shell_has_icon" == "true" \
             && "$web_shell_has_questions" == "true" \
             && "$web_shell_has_approvals" == "true" \
-            && "$web_shell_has_hub" == "true" ]]; then
+            && "$web_shell_has_hub" == "true" \
+            && "$web_shell_has_mobile_viewport" == "true" \
+            && "$web_shell_has_ios_pwa" == "true" \
+            && "$web_shell_has_safe_area" == "true" \
+            && "$web_shell_has_touch_targets" == "true" \
+            && "$web_shell_has_live_feedback" == "true" \
+            && "$web_shell_has_inline_review" == "true" \
+            && "$web_shell_has_no_browser_dialogs" == "true" ]]; then
             web_shell_reachable=true
             web_shell_status="ready"
-            web_shell_next_action="Private web fallback shell is reachable and renders attention-first sections."
+            web_shell_next_action="Private web fallback shell is reachable with mobile/PWA markers, safe-area layout, touch targets, live feedback, and inline review sheets."
         else
             web_shell_status="marker-mismatch"
-            web_shell_next_action="Private web fallback root responded but did not contain the expected CodeIsland shell markers; inspect the served web app."
+            web_shell_next_action="Private web fallback root responded but did not contain the expected CodeIsland attention-first and mobile/PWA markers; inspect the served web app."
         fi
     else
         web_shell_status="unreachable"
@@ -189,6 +213,13 @@ away_report="$(jq -n \
     --argjson webShellHasQuestions "$web_shell_has_questions" \
     --argjson webShellHasApprovals "$web_shell_has_approvals" \
     --argjson webShellHasHub "$web_shell_has_hub" \
+    --argjson webShellHasMobileViewport "$web_shell_has_mobile_viewport" \
+    --argjson webShellHasIOSPWA "$web_shell_has_ios_pwa" \
+    --argjson webShellHasSafeArea "$web_shell_has_safe_area" \
+    --argjson webShellHasTouchTargets "$web_shell_has_touch_targets" \
+    --argjson webShellHasLiveFeedback "$web_shell_has_live_feedback" \
+    --argjson webShellHasInlineReview "$web_shell_has_inline_review" \
+    --argjson webShellHasNoBrowserDialogs "$web_shell_has_no_browser_dialogs" \
     --arg webShellNextAction "$web_shell_next_action" \
     '
     def gate($id; $status; $owner; $nextAction):
@@ -292,7 +323,14 @@ away_report="$(jq -n \
                     icon:$webShellHasIcon,
                     questions:$webShellHasQuestions,
                     approvals:$webShellHasApprovals,
-                    hub:$webShellHasHub
+                    hub:$webShellHasHub,
+                    mobileViewport:$webShellHasMobileViewport,
+                    iosPWA:$webShellHasIOSPWA,
+                    safeArea:$webShellHasSafeArea,
+                    touchTargets:$webShellHasTouchTargets,
+                    liveFeedback:$webShellHasLiveFeedback,
+                    inlineReview:$webShellHasInlineReview,
+                    noBrowserDialogs:$webShellHasNoBrowserDialogs
                 }
             }
         },

@@ -43,7 +43,7 @@ case "${TEST_WEB_SHELL_CASE:-ready}" in
     printf '200\ntext/html; charset=utf-8\n'
     printf '%s\n' '<html><title>Wrong</title></html>' > "$output"
     ;;
-  *)
+  mobile-missing)
     printf '200\ntext/html; charset=utf-8\n'
     cat > "$output" <<'HTML'
 <html>
@@ -57,6 +57,32 @@ case "${TEST_WEB_SHELL_CASE:-ready}" in
 <section id="questions"></section>
 <section id="approvals"></section>
 <section id="hub"></section>
+</body>
+</html>
+HTML
+    ;;
+  *)
+    printf '200\ntext/html; charset=utf-8\n'
+    cat > "$output" <<'HTML'
+<html>
+<head>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>CodeIsland</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/app-icon.svg">
+<style>
+main { padding:max(22px,env(safe-area-inset-top)) 16px max(28px,env(safe-area-inset-bottom)); }
+button { min-height:44px; }
+</style>
+</head>
+<body>
+<h1>Your Mac, when it needs you</h1>
+<div role="status" aria-live="polite"></div>
+<section id="questions"></section>
+<section id="approvals"></section>
+<section id="hub"></section>
+<div id="reviewDialog"></div>
 </body>
 </html>
 HTML
@@ -142,6 +168,13 @@ STUB
     .webFallback.shell.markers.questions == true and
     .webFallback.shell.markers.approvals == true and
     .webFallback.shell.markers.hub == true and
+    .webFallback.shell.markers.mobileViewport == true and
+    .webFallback.shell.markers.iosPWA == true and
+    .webFallback.shell.markers.safeArea == true and
+    .webFallback.shell.markers.touchTargets == true and
+    .webFallback.shell.markers.liveFeedback == true and
+    .webFallback.shell.markers.inlineReview == true and
+    .webFallback.shell.markers.noBrowserDialogs == true and
     .telegramFallback.enabled == false and
     .telegramFallback.controlPlane == false and
     ([.requiredGates[] | select(.id == "physical-buddy-checkin" and .owner == "greg")] | length) == 1 and
@@ -224,6 +257,28 @@ STUB
     .webFallback.reachable == true and
     .webFallback.shell.status == "marker-mismatch" and
     .webFallback.shell.reachable == false and
+    ([.requiredGates[] | select(.id == "private-web-shell" and .owner == "codex")] | length) == 1'
+}
+
+@test "blocks away readiness when private web fallback lacks mobile PWA markers" {
+  export TEST_WEB_SHELL_CASE=mobile-missing
+  write_strict_report
+
+  run "$REPO_ROOT/scripts/report-away-readiness.sh"
+
+  [ "$status" -eq 2 ]
+  printf '%s' "$output" | jq -e '
+    .status == "web-fallback-shell-unavailable" and
+    .readyForAwayManualAcceptance == false and
+    .webFallback.shell.status == "marker-mismatch" and
+    .webFallback.shell.markers.title == true and
+    .webFallback.shell.markers.hub == true and
+    .webFallback.shell.markers.mobileViewport == false and
+    .webFallback.shell.markers.iosPWA == false and
+    .webFallback.shell.markers.safeArea == false and
+    .webFallback.shell.markers.touchTargets == false and
+    .webFallback.shell.markers.liveFeedback == false and
+    .webFallback.shell.markers.inlineReview == false and
     ([.requiredGates[] | select(.id == "private-web-shell" and .owner == "codex")] | length) == 1'
 }
 
