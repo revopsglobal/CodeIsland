@@ -13,28 +13,28 @@ Sources used for the baseline:
 - <https://crestnotch.app/#modes>
 - <https://crestnotch.app/changelog>
 
-## Latest delivery delta — 2026-07-18 evening
+## Latest delivery delta — 2026-07-18 night
 
 This delta supersedes older "current build" language below.
 
-- Latest source: PR #69 merged as
-  `33fc732043fa93b132a740d478c5bcc2899c47df`, adding the shared
-  `PersonalHubBuddyParity.validate(snapshot:)` guard and authenticated
-  `/api/hub/snapshot` action-parity coverage on top of the PR #67
-  attention-only Telegram fallback.
-- Installed Mac: `1.0.53`, workflow run `29667770216`, artifact
-  `8436322662`, downloaded DMG SHA-256
-  `7109cc4a7ba2ab2f38683b4e8d87f11bffe742db24d506c97f0cd5a630ace71e`,
-  ARM64, signature valid under Team `44JG2Y95CH`, local `/health` and
+- Latest source: PR #72 merged as
+  `5ccefcd8683ad2ce22ac833f4c16e153df3df8fc`, polishing Buddy's normal
+  connection copy so Tailscale/HTTPS mechanics stay in Connection settings
+  rather than the primary command-center surface.
+- Installed Mac: `1.0.53`, workflow run `29668328492`, artifact
+  `8436497566`, downloaded DMG SHA-256
+  `320fcc5ebb42557353e0a1882549ade0fdcc8854cc635bf37b2ee6b911723be8`,
+  ARM64, signature valid under Team `44JG2Y95CH`, CDHash
+  `24cb7ea82cb63f169a23bc8f1e04476e311bd9c8`, local `/health` and
   Tailscale `/health` both running with zero pending work.
-- Latest TestFlight delivery: run `29667770858`, Buddy build
-  `1.0.0 (20260719005630)`, delivery UUID
-  `3a9151da-3662-407b-84c0-feb81de00b2f`, Apple state `VALID`, audience
+- Latest TestFlight delivery: run `29668329068`, Buddy build
+  `1.0.0 (20260719011702)`, delivery UUID
+  `c8dcbe08-5e61-4a0e-b27f-7abb19067009`, Apple state `VALID`, audience
   `APP_STORE_ELIGIBLE`, internal group `CodeIsland Internal`, artifact
-  `8436310864`, downloaded IPA SHA-256
-  `9d45a1ecbbe2b245e2d088d45e2f37665fe9f96385448ac55ef2bba2e5f0f987`.
+  `8436493328`, downloaded IPA SHA-256
+  `9e781be9b126a34ab43c1a3cfd7ae2a778d3f647efc01c3ad232aa302dbf59cd`.
 - Latest physical iPhone state is **stale**, not accepted for the newest
-  TestFlight build. Expected Buddy is `1.0.0 (20260719005630)`; newest
+  TestFlight build. Expected Buddy is `1.0.0 (20260719011702)`; newest
   observed physical Buddy is still `1.0.0 (20260718212803)` from device
   `afba2915-b0a3-456f-a5f2-265bf7e8a64a`, last seen
   `2026-07-19T00:17:23Z`.
@@ -44,11 +44,13 @@ This delta supersedes older "current build" language below.
   Buddy build, and fail closed until that exact build is opened on the physical
   iPhone.
 
-Previous current-source delivery retained for traceability: PR #68 merged as
+Previous current-source deliveries retained for traceability: PR #69 merged as
+`33fc732043fa93b132a740d478c5bcc2899c47df`; Mac workflow `29667770216` and
+TestFlight workflow `29667770858` delivered Buddy `1.0.0 (20260719005630)`,
+which was not physically observed before the newer `20260719011702` build
+superseded it. PR #68 merged as
 `f6c9455979229474e2c7575df34087f895d98716`; Mac workflow `29667371137` and
-TestFlight workflow `29667371841` delivered Buddy `1.0.0 (20260719004222)`,
-which was also not physically observed before the newer `20260719005630` build
-superseded it.
+TestFlight workflow `29667371841` delivered Buddy `1.0.0 (20260719004222)`.
 
 ## Final acceptance delta — 2026-07-18
 

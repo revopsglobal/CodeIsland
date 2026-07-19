@@ -229,3 +229,76 @@ Remaining physical-device boundary:
 Next physical acceptance step: install/open CodeIsland Buddy build
 `20260719005630` from TestFlight on the iPhone, then rerun strict physical
 acceptance with `EXPECTED_CLIENT_BUILD=20260719005630`.
+
+## Transport-copy polish delivery — 2026-07-18 night
+
+Source PR #72 merged as
+`5ccefcd8683ad2ce22ac833f4c16e153df3df8fc`. The change keeps Buddy's primary
+connection, pairing, loading, invalid-URL, and Sessions copy focused on
+`Greg's Mac` while keeping the private URL available inside Connection
+settings. This is a copy/IA polish only; it does not change the private
+Tailscale transport.
+
+Focused verification before merge:
+
+- `CodeIslandCompanionTests/LiveActivityPrivacyTests`: **10 passed, 0 failed**.
+- `CodeIslandCompanionUITests/testAuthenticatedTailscaleConnectionDoesNotLookLikeNearbySearch`:
+  **1 passed, 0 failed**.
+- Simulator: `ECC99681-C3ED-4452-B727-0F9E2C09C469`.
+- `git diff --check`.
+- `graphify update . --no-viz`.
+
+Signed Mac delivery from `main`:
+
+- Workflow: [Build macOS ARM DMG run 29668328492](https://github.com/revopsglobal/CodeIsland/actions/runs/29668328492)
+- Source commit: `5ccefcd8683ad2ce22ac833f4c16e153df3df8fc`
+- Result: **success**.
+- Artifact: `CodeIsland-macos-arm64-dmg`, artifact ID `8436497566`.
+- Uploaded artifact zip SHA-256:
+  `527c5fec329cccdb21a4a6467b5595ffdf93cfe3947dda3a24e54e0fa0496c07`.
+- Downloaded DMG SHA-256:
+  `320fcc5ebb42557353e0a1882549ade0fdcc8854cc635bf37b2ee6b911723be8`.
+- Local DMG:
+  `/Users/gregharned/Downloads/CodeIsland-main-5ccefcd-mac-29668328492-182154/CodeIsland-macos-arm64-dmg/CodeIsland.dmg`.
+- Installed app: `/Applications/CodeIsland.app`.
+- Installed version/build: `1.0.53` / `1.0.53`.
+- Installed signature: valid, TeamIdentifier `44JG2Y95CH`, CDHash
+  `24cb7ea82cb63f169a23bc8f1e04476e311bd9c8`, Authority
+  `Apple Development: Greg Harned (BD6FD6Q8AS)`.
+- Local health after launch: HTTP 200, `running: true`, `pendingCount: 0`,
+  host version `1.0.53`.
+- Tailscale health after launch: HTTP 200, `running: true`,
+  `pendingCount: 0`.
+
+Signed Buddy/TestFlight delivery from `main`:
+
+- Workflow: [Build and Upload iOS TestFlight run 29668329068](https://github.com/revopsglobal/CodeIsland/actions/runs/29668329068)
+- Source commit: `5ccefcd8683ad2ce22ac833f4c16e153df3df8fc`
+- Result: **success**.
+- Tester receipt: `gregharned@gmail.com`, state `ready`, app
+  `com.revopsglobal.codeisland.buddy`, app ID `6791897500`, group
+  `CodeIsland Internal`, group ID `8db9e637-03e3-4147-afda-895700e127c8`.
+- Buddy build: `1.0.0 (20260719011702)`.
+- Delivery UUID: `c8dcbe08-5e61-4a0e-b27f-7abb19067009`.
+- Apple state: `VALID`.
+- Audience: `APP_STORE_ELIGIBLE`.
+- Internal group access: `CodeIsland Internal` has access to all builds.
+- Artifact: `CodeIsland-Buddy-TestFlight-20260719011702`, artifact ID
+  `8436493328`.
+- Downloaded IPA SHA-256:
+  `9e781be9b126a34ab43c1a3cfd7ae2a778d3f647efc01c3ad232aa302dbf59cd`.
+- Local IPA:
+  `/Users/gregharned/Downloads/CodeIsland-main-5ccefcd-ios-29668329068-182154/CodeIsland-Buddy-TestFlight-20260719011702/CodeIslandCompanion.ipa`.
+
+Remaining physical-device boundary:
+
+- `scripts/report-latest-testflight-physical-gate.sh` exits `2` because the
+  physical iPhone has not opened the latest TestFlight build.
+- Expected physical Buddy: `1.0.0 (20260719011702)`.
+- Newest observed physical Buddy: `1.0.0 (20260718212803)`.
+- Newest observed physical device: `afba2915-b0a3-456f-a5f2-265bf7e8a64a`
+  (`iPhone`), last seen `2026-07-19T00:17:23Z`.
+
+Next physical acceptance step: install/open CodeIsland Buddy build
+`20260719011702` from TestFlight on the iPhone, then rerun strict physical
+acceptance with `EXPECTED_CLIENT_BUILD=20260719011702`.
