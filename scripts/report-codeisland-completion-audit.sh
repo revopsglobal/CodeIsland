@@ -4,6 +4,10 @@ set -euo pipefail
 
 STRICT_E2E_BIN="${STRICT_E2E_BIN:-$(dirname "$0")/report-strict-physical-e2e.sh}"
 AWAY_READINESS_BIN="${AWAY_READINESS_BIN:-$(dirname "$0")/report-away-readiness.sh}"
+CREST_PARITY_BIN="${CREST_PARITY_BIN:-}"
+SWIFT_BIN="${SWIFT_BIN:-swift}"
+CREST_PARITY_TEST_FILTER="${CREST_PARITY_TEST_FILTER:-GlancesModelTests|PersonalHubProtocolTests|RemoteApprovalHTTPServerTests/testAuthenticatedHostLifecycleOverRealListener}"
+DEVELOPER_DIR="${DEVELOPER_DIR:-/Users/gregharned/Downloads/Xcode-beta.app/Contents/Developer}"
 
 if ! command -v jq >/dev/null 2>&1; then
     echo "jq is required" >&2
@@ -64,12 +68,61 @@ away_json="$(json_or_failure \
     "Fix scripts/report-away-readiness.sh so the objective completion audit can inspect away-use readiness." \
     "$away_raw")"
 
+crest_parity_json=""
+if [[ -n "$CREST_PARITY_BIN" ]]; then
+    crest_parity_raw=""
+    set +e
+    crest_parity_raw="$("$CREST_PARITY_BIN" 2>&1)"
+    crest_parity_exit=$?
+    set -e
+    crest_parity_json="$(json_or_failure \
+        "crest-parity-source-report" \
+        "codex" \
+        "Fix the Crest/source parity verifier so the objective completion audit can inspect Mac/iPhone/web parity coverage." \
+        "$crest_parity_raw")"
+    if printf '%s' "$crest_parity_json" | jq -e '.exitCode? == null' >/dev/null 2>&1; then
+        crest_parity_json="$(printf '%s' "$crest_parity_json" | jq --argjson exitCode "$crest_parity_exit" '. + {exitCode:$exitCode}')"
+    fi
+else
+    crest_parity_log="$(mktemp -t codeisland-crest-parity)"
+    crest_parity_exit=0
+    set +e
+    DEVELOPER_DIR="$DEVELOPER_DIR" "$SWIFT_BIN" test --filter "$CREST_PARITY_TEST_FILTER" >"$crest_parity_log" 2>&1
+    crest_parity_exit=$?
+    set -e
+    crest_parity_tail="$(tail -n 80 "$crest_parity_log")"
+    crest_parity_json="$(jq -n -c \
+        --arg generatedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        --arg command "$SWIFT_BIN test --filter $CREST_PARITY_TEST_FILTER" \
+        --arg filter "$CREST_PARITY_TEST_FILTER" \
+        --argjson exitCode "$crest_parity_exit" \
+        --arg logTail "$crest_parity_tail" \
+        '{
+            generatedAt:$generatedAt,
+            checked:true,
+            status:(if $exitCode == 0 then "passed" else "failed" end),
+            complete:($exitCode == 0),
+            command:$command,
+            filter:$filter,
+            exitCode:$exitCode,
+            logTail:$logTail,
+            nextAction:(
+                if $exitCode == 0 then
+                    "Crest/source parity tests passed; continue physical E2E acceptance."
+                else
+                    "Fix Crest/source parity tests before claiming CodeIsland matches the Mac/iPhone/web parity contract."
+                end
+            )
+        }')"
+fi
+
 audit="$(jq -n \
     --arg generatedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     --argjson strict "$strict_json" \
     --argjson strictExit "$strict_exit" \
     --argjson away "$away_json" \
     --argjson awayExit "$away_exit" \
+    --argjson crestParity "$crest_parity_json" \
     '
     def bool($v): $v == true;
     def gate($id; $status; $owner; $nextAction):
@@ -113,6 +166,10 @@ audit="$(jq -n \
         ($away.webFallback.shell.markers.noBrowserDialogs == true);
     def away_surface_ready:
         ($away.readyForAwayManualAcceptance == true) and private_web_ready;
+    def crest_parity_ready:
+        ($crestParity.checked == true) and
+        ($crestParity.complete == true or $crestParity.status == "passed") and
+        ($crestParity.exitCode == 0);
     def telegram_ok:
         (($away.telegramFallback.status // "disabled") | IN("disabled","configured","incomplete"));
     def physical_e2e_complete:
@@ -149,18 +206,29 @@ audit="$(jq -n \
             "Restore the authenticated private web fallback and mobile/PWA shell markers, then rerun away readiness."
         )]
         end;
+    def missing_crest_parity_gate:
+        if crest_parity_ready then []
+        else [gate(
+            "crest-source-parity";
+            ($crestParity.status // "unknown");
+            "codex";
+            ($crestParity.nextAction // "Run and fix the focused Crest/source parity tests.")
+        )]
+        end;
     {
         generatedAt:$generatedAt,
-        complete:(signed_testflight_ready and away_surface_ready and telegram_ok and physical_e2e_complete and overclaim_guardrails_ready),
+        complete:(signed_testflight_ready and crest_parity_ready and away_surface_ready and telegram_ok and physical_e2e_complete and overclaim_guardrails_ready),
         status:(
-            if (signed_testflight_ready and away_surface_ready and telegram_ok and physical_e2e_complete and overclaim_guardrails_ready) then
+            if (signed_testflight_ready and crest_parity_ready and away_surface_ready and telegram_ok and physical_e2e_complete and overclaim_guardrails_ready) then
                 "complete"
-            elif (physical_e2e_complete | not) then
-                "physical-e2e-incomplete"
-            elif (away_surface_ready | not) then
-                "away-surface-incomplete"
             elif (signed_testflight_ready | not) then
                 "testflight-incomplete"
+            elif (crest_parity_ready | not) then
+                "crest-parity-incomplete"
+            elif (away_surface_ready | not) then
+                "away-surface-incomplete"
+            elif (physical_e2e_complete | not) then
+                "physical-e2e-incomplete"
             else
                 "incomplete"
             end
@@ -181,6 +249,22 @@ audit="$(jq -n \
                     "Continue physical iPhone acceptance on the current build."
                  else
                     "Repair TestFlight delivery/source drift before physical acceptance."
+                 end)
+            ),
+            requirement(
+                "crest-source-parity";
+                "Crest-class Mac parity and Mac/iPhone/web action contract are source-verified";
+                (if crest_parity_ready then "passed" else ($crestParity.status // "incomplete") end);
+                crest_parity_ready;
+                {
+                    command:$crestParity.command,
+                    filter:$crestParity.filter,
+                    exitCode:$crestParity.exitCode
+                };
+                (if crest_parity_ready then
+                    "Continue physical E2E acceptance on the source-verified parity contract."
+                 else
+                    ($crestParity.nextAction // "Fix Crest/source parity before claiming completion.")
                  end)
             ),
             requirement(
@@ -256,6 +340,7 @@ audit="$(jq -n \
         requiredGates:(
             []
             + missing_signed_gate
+            + missing_crest_parity_gate
             + missing_web_gate
             + strict_required
             + away_required
@@ -274,6 +359,12 @@ audit="$(jq -n \
                 status:$away.status,
                 complete:$away.complete,
                 readyForAwayManualAcceptance:$away.readyForAwayManualAcceptance
+            },
+            crestParity:{
+                exitCode:$crestParity.exitCode,
+                status:$crestParity.status,
+                complete:$crestParity.complete,
+                filter:$crestParity.filter
             }
         }
     }')"
