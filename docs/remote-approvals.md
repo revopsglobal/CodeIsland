@@ -45,8 +45,23 @@ service:
 3. Keep the topic as `com.revopsglobal.codeisland.buddy` and the team ID as
    `44JG2Y95CH`.
 
-The `.p8` key stays on the Mac. Push payloads contain only the source, tool name,
-and opaque approval ID; Buddy fetches current details over Tailscale.
+The `.p8` key stays on the Mac. Push payloads contain only opaque request
+metadata and state; Buddy fetches current details over Tailscale.
+
+## Telegram fallback
+
+Telegram is optional and outbound-only. It is not an approval executor, inbound
+bot, public relay, second queue, or durable state store. When enabled in
+**Settings → Buddy → Telegram fallback**, CodeIsland sends a redacted message
+only for a new pending approval or question:
+
+- `CodeIsland needs your approval.`
+- `CodeIsland needs your answer.`
+
+The message can include the private Tailscale HTTPS URL if CodeIsland has
+discovered one. It never includes the command, prompt, transcript, workspace,
+request ID, or tool payload. The decision still happens in Buddy or the
+authenticated private web app.
 
 ## Local security and recovery
 
@@ -60,7 +75,7 @@ and opaque approval ID; Buddy fetches current details over Tailscale.
 - Disabling remote approvals stops the loopback listener. Tailscale may retain
   the inactive Serve route, but it has no reachable local target.
 
-This direct Tailscale design is the lowest-cost primary architecture. Telegram
-is unnecessary for approval execution and would introduce another credentialed
-bot and public service boundary; it can remain an outbound notification channel
-for unrelated scheduled work.
+This direct Tailscale design remains the lowest-cost primary architecture.
+Telegram is only a personal backup alert channel for signal over noise when
+APNs, Live Activities, or TestFlight delivery are not the surface Greg sees
+first.

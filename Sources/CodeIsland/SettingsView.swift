@@ -1556,9 +1556,13 @@ private struct BuddyPage: View {
     @AppStorage(SettingsKey.remoteApprovalAPNSKeyID) private var apnsKeyID: String = SettingsDefaults.remoteApprovalAPNSKeyID
     @AppStorage(SettingsKey.remoteApprovalAPNSPrivateKeyPath) private var apnsPrivateKeyPath: String = SettingsDefaults.remoteApprovalAPNSPrivateKeyPath
     @AppStorage(SettingsKey.remoteApprovalAPNSTopic) private var apnsTopic: String = SettingsDefaults.remoteApprovalAPNSTopic
+    @AppStorage(SettingsKey.remoteApprovalTelegramEnabled) private var telegramEnabled: Bool = SettingsDefaults.remoteApprovalTelegramEnabled
+    @AppStorage(SettingsKey.remoteApprovalTelegramBotToken) private var telegramBotToken: String = SettingsDefaults.remoteApprovalTelegramBotToken
+    @AppStorage(SettingsKey.remoteApprovalTelegramChatID) private var telegramChatID: String = SettingsDefaults.remoteApprovalTelegramChatID
     @ObservedObject private var appleCompanion = AppleCompanionPublisher.shared
     @ObservedObject private var remoteApprovals = RemoteApprovalService.shared
     @ObservedObject private var apns = APNSNotificationSender.shared
+    @ObservedObject private var telegram = TelegramAttentionNotifier.shared
     @State private var refreshTick = 0
 
     private var bridge: ESP32BridgeManager { ESP32BridgeManager.shared }
@@ -2020,6 +2024,31 @@ private struct BuddyPage: View {
                 }
 
                 Text("The private key stays on this Mac. Push messages contain only an opaque request ID and state; Buddy fetches the private details over authenticated Tailscale HTTPS after you open it.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Telegram fallback") {
+                Toggle("Text me when CodeIsland needs attention", isOn: $telegramEnabled)
+
+                SecureField("Bot token", text: $telegramBotToken)
+                    .disabled(!telegramEnabled)
+                TextField("Chat ID", text: $telegramChatID)
+                    .disabled(!telegramEnabled)
+
+                if let delivered = telegram.lastDeliveryAt {
+                    Label("Last delivered \(delivered.formatted(date: .omitted, time: .shortened))", systemImage: "checkmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                }
+                if let error = telegram.lastError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .textSelection(.enabled)
+                }
+
+                Text("Optional personal backup for when APNs or Live Activities miss you. It only sends redacted approval/question alerts and your private Tailscale link; the actual decision still happens in Buddy or the CodeIsland web app.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

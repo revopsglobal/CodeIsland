@@ -127,6 +127,9 @@ enum SettingsKey {
     static let remoteApprovalAPNSKeyID = "remoteApprovalAPNSKeyID"
     static let remoteApprovalAPNSPrivateKeyPath = "remoteApprovalAPNSPrivateKeyPath"
     static let remoteApprovalAPNSTopic = "remoteApprovalAPNSTopic"
+    static let remoteApprovalTelegramEnabled = "remoteApprovalTelegramEnabled"
+    static let remoteApprovalTelegramBotToken = "remoteApprovalTelegramBotToken"
+    static let remoteApprovalTelegramChatID = "remoteApprovalTelegramChatID"
 
     // Glances utilities
     // Comma-separated EventKit reminder calendar identifiers. An empty value is
@@ -220,6 +223,9 @@ struct SettingsDefaults {
     static let remoteApprovalAPNSKeyID = ""
     static let remoteApprovalAPNSPrivateKeyPath = ""
     static let remoteApprovalAPNSTopic = "com.revopsglobal.codeisland.buddy"
+    static let remoteApprovalTelegramEnabled = false
+    static let remoteApprovalTelegramBotToken = ""
+    static let remoteApprovalTelegramChatID = ""
 
     static let glancesReminderCalendarIDs = ""
     static let glancesWeatherLocation = ""
@@ -306,6 +312,9 @@ class SettingsManager {
             SettingsKey.remoteApprovalAPNSKeyID: SettingsDefaults.remoteApprovalAPNSKeyID,
             SettingsKey.remoteApprovalAPNSPrivateKeyPath: SettingsDefaults.remoteApprovalAPNSPrivateKeyPath,
             SettingsKey.remoteApprovalAPNSTopic: SettingsDefaults.remoteApprovalAPNSTopic,
+            SettingsKey.remoteApprovalTelegramEnabled: SettingsDefaults.remoteApprovalTelegramEnabled,
+            SettingsKey.remoteApprovalTelegramBotToken: SettingsDefaults.remoteApprovalTelegramBotToken,
+            SettingsKey.remoteApprovalTelegramChatID: SettingsDefaults.remoteApprovalTelegramChatID,
             SettingsKey.glancesReminderCalendarIDs: SettingsDefaults.glancesReminderCalendarIDs,
             SettingsKey.glancesWeatherLocation: SettingsDefaults.glancesWeatherLocation,
             SettingsKey.defaultSource: SettingsDefaults.defaultSource,

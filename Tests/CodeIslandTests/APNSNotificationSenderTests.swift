@@ -139,4 +139,53 @@ final class APNSNotificationSenderTests: XCTestCase {
         let content = try XCTUnwrap(aps["content-state"] as? [String: Any])
         XCTAssertEqual(content["status"] as? String, "idle")
     }
+
+    func testTelegramFallbackMessageIsAttentionOnlyAndRedacted() throws {
+        let issuedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let envelope = RemoteAttentionPushEnvelope(
+            eventID: "event-approval",
+            kind: .approval,
+            state: .pending,
+            requestID: "opaque-approval-id",
+            issuedAt: issuedAt,
+            expiresAt: issuedAt.addingTimeInterval(600)
+        )
+
+        let message = TelegramAttentionMessageBuilder.message(
+            for: envelope,
+            remoteURL: URL(string: "https://gregs-mac.tailnet.example")
+        )
+
+        XCTAssertTrue(message.contains("CodeIsland needs your approval."))
+        XCTAssertTrue(message.contains("https://gregs-mac.tailnet.example"))
+        XCTAssertFalse(message.contains("opaque-approval-id"))
+        XCTAssertFalse(message.localizedCaseInsensitiveContains("command"))
+        XCTAssertFalse(message.localizedCaseInsensitiveContains("transcript"))
+        XCTAssertFalse(message.localizedCaseInsensitiveContains("workspace"))
+    }
+
+    func testTelegramFallbackMessageDoesNotRequireLink() throws {
+        let issuedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let envelope = RemoteAttentionPushEnvelope(
+            eventID: "event-question",
+            kind: .question,
+            state: .pending,
+            requestID: "opaque-question-id",
+            issuedAt: issuedAt,
+            expiresAt: issuedAt.addingTimeInterval(600)
+        )
+
+        let message = TelegramAttentionMessageBuilder.message(
+            for: envelope,
+            remoteURL: nil
+        )
+
+        XCTAssertEqual(
+            message,
+            """
+            CodeIsland needs your answer.
+            Open Buddy to review the private details.
+            """
+        )
+    }
 }
