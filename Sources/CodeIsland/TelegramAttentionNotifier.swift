@@ -5,6 +5,7 @@ import os.log
 @MainActor
 final class TelegramAttentionNotifier: ObservableObject {
     static let shared = TelegramAttentionNotifier()
+    private static let buddyTestFlightURL = URL(string: "itms-beta://")
 
     @Published private(set) var lastDeliveryAt: Date?
     @Published private(set) var lastError: String?
@@ -21,7 +22,8 @@ final class TelegramAttentionNotifier: ObservableObject {
         let text = TelegramAttentionMessageBuilder.message(
             for: envelope,
             remoteURL: remoteURL,
-            buddyURL: Self.buddyURL(for: envelope.kind)
+            buddyURL: Self.buddyURL(for: envelope.kind),
+            testFlightURL: Self.buddyTestFlightURL
         )
         sendInBackground(text: text)
     }
@@ -29,7 +31,8 @@ final class TelegramAttentionNotifier: ObservableObject {
     func sendTestAlert() {
         let text = TelegramAttentionMessageBuilder.testMessage(
             remoteURL: Self.remoteApprovalURL(),
-            buddyURL: Self.buddyURL(for: .question)
+            buddyURL: Self.buddyURL(for: .question),
+            testFlightURL: Self.buddyTestFlightURL
         )
         sendInBackground(text: text, reportMissingConfiguration: true)
     }
@@ -142,7 +145,11 @@ final class TelegramAttentionNotifier: ObservableObject {
 }
 
 enum TelegramAttentionMessageBuilder {
-    static func testMessage(remoteURL: URL?, buddyURL: URL? = nil) -> String {
+    static func testMessage(
+        remoteURL: URL?,
+        buddyURL: URL? = nil,
+        testFlightURL: URL? = nil
+    ) -> String {
         let now = Date()
         let envelope = RemoteAttentionPushEnvelope(
             eventID: "telegram-test-\(UUID().uuidString)",
@@ -152,13 +159,19 @@ enum TelegramAttentionMessageBuilder {
             issuedAt: now,
             expiresAt: now.addingTimeInterval(600)
         )
-        return message(for: envelope, remoteURL: remoteURL, buddyURL: buddyURL)
+        return message(
+            for: envelope,
+            remoteURL: remoteURL,
+            buddyURL: buddyURL,
+            testFlightURL: testFlightURL
+        )
     }
 
     static func message(
         for envelope: RemoteAttentionPushEnvelope,
         remoteURL: URL?,
-        buddyURL: URL? = nil
+        buddyURL: URL? = nil,
+        testFlightURL: URL? = nil
     ) -> String {
         let noun = envelope.kind == .approval ? "approval" : "answer"
         var lines = [
@@ -170,6 +183,9 @@ enum TelegramAttentionMessageBuilder {
         }
         if let remoteURL {
             lines.append("Web fallback: \(remoteURL.absoluteString)")
+        }
+        if let testFlightURL {
+            lines.append("If Buddy is stale: update CodeIsland Buddy in TestFlight \(testFlightURL.absoluteString)")
         }
         return lines.joined(separator: "\n")
     }
