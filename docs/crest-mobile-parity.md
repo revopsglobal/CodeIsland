@@ -206,22 +206,51 @@ This delta supersedes older "current build" language below.
   live
   `scripts/report-ios-direct-device-visibility.sh`, live strict E2E, `git diff
   --check`, and `graphify update . --no-viz`.
-- Latest strict E2E report at `2026-07-19T05:20:37Z` returned
+- Latest TestFlight source-drift proof source: PR #115 merged as
+  `b2915cc5499bba54a3025427a84c14321d8afddd`, adding
+  `scripts/report-testflight-source-drift.sh` and embedding its result into
+  `scripts/report-strict-physical-e2e.sh`. The strict report now distinguishes
+  a truly stale iPhone source build from non-Buddy drift in Mac/proof files, so
+  TestFlight is not churned unless Buddy-relevant source changed. Verification
+  passed the new source-drift Bats suite, the latest-TestFlight, physical,
+  direct-device, and strict E2E script suites, live strict E2E, `git diff
+  --check`, and `graphify update . --no-viz`.
+- Latest iPhone signal-board source: PR #116 merged as
+  `4b7b71ef748bd90c9c0f3b77a34b9e51ae809485`, adding a calm command-center
+  signal board below the iPhone presence header. It surfaces approval count,
+  question count, and Mac/session state without rotating routine work, keeps
+  amber reserved for real attention, and keeps Tools/Capture secondary in the
+  bottom dock. Visual proof was captured at
+  `/tmp/codeisland-signal-board-home.png`. Verification passed the companion
+  model script suite, the focused Simulator UI test
+  `CodeIslandCompanionUITests/testAttentionFirstShellKeepsToolsSecondary` on
+  Simulator `ECC99681-C3ED-4452-B727-0F9E2C09C469`, `git diff --check`, and
+  `graphify update . --no-viz`.
+- Latest TestFlight delivery after PR #116: workflow run `29675030565` from
+  `4b7b71ef748bd90c9c0f3b77a34b9e51ae809485` produced Buddy
+  `1.0.0 (20260719053349)`, delivery UUID
+  `2738f890-756f-432c-8fb8-386342651ff4`, Apple state `VALID`, audience
+  `APP_STORE_ELIGIBLE`, internal group `CodeIsland Internal`, and artifact
+  `8438605218`.
+- Latest strict E2E report at `2026-07-19T05:38:38Z` returned
   `status = physical-gate-incomplete`, `complete = false`: the Mac app is
   installed and running at `1.0.53`, local and Tailscale `/health` are HTTP
   `200` with zero pending work, Mac Settings sync expects Buddy
-  `1.0.0 (20260719042243)`, and
+  `1.0.0 (20260719053349)`, and
   `RemoteApprovalHTTPServerTests/testAuthenticatedHostLifecycleOverRealListener`
   passed. The installed Mac app is now the PR #111 DMG build running as PID
   `54512`, and the strict report identifies it by CDHash
-  `649d8672c83903d2e4c9e553c1e6c916ad0b7bf3`. The latest TestFlight gate remains stale: the physical iPhone is
+  `649d8672c83903d2e4c9e553c1e6c916ad0b7bf3`. TestFlight source drift is
+  `current` against main SHA `4b7b71ef748bd90c9c0f3b77a34b9e51ae809485`
+  with `changedFileCount = 0` and `buddyRelevantChanged = false`. The latest
+  TestFlight gate remains stale: the physical iPhone is
   still last observed on Buddy `1.0.0 (20260718212803)` instead of latest
-  TestFlight `1.0.0 (20260719042243)`. The direct-device diagnostic reports
-  `status = simulator-only`, `iosDeviceCount = 1`, `simulatorCount = 1`, and
+  TestFlight `1.0.0 (20260719053349)`. The direct-device diagnostic reports
+  `status = simulator-only`, `simulatorCount = 1`, and
   `physicalDeviceCount = 0`; the only visible iOS target is the simulated
   `OB1 Widget Proof iPhone 16` with identifier suffix `2C09C469`. Codex
   therefore cannot directly install/open the physical iPhone from this Mac; the
-  remaining required action is to open latest TestFlight build `20260719042243`
+  remaining required action is to open latest TestFlight build `20260719053349`
   on the physical iPhone, keep Tailscale connected, and rerun strict E2E.
 - Latest Buddy parity-contract source: PR #98 merged as
   `b877909bb280eedaa368feef8e669631f365a60a`, aligning the iPhone
