@@ -149,6 +149,12 @@ private struct PortraitIslandView: View {
 
                                 PersonalNowOverview(
                                     snapshot: remoteApprovals.hubSnapshot,
+                                    attentionSummary: CompanionAttentionSummary.resolve(
+                                        approvalCount: remoteApprovals.approvals.count,
+                                        questionCount: remoteApprovals.questions.count,
+                                        fallbackPendingAction: connection.latestState?.pendingAction,
+                                        fallbackWeather: remoteApprovals.hubSnapshot?.modules.first(where: { $0.id == .weather })?.summary
+                                    ),
                                     openTools: { quickJot in
                                         if let quickJot {
                                             remoteApprovals.quickJotDestination = quickJot
@@ -390,6 +396,7 @@ private struct CompanionPrimaryNavigation: View {
 
 private struct PersonalNowOverview: View {
     let snapshot: PersonalHubSnapshot?
+    let attentionSummary: CompanionAttentionSummary
     let openTools: (BuddyQuickJotDestination?) -> Void
     @Environment(\.openURL) private var openURL
 
@@ -412,32 +419,16 @@ private struct PersonalNowOverview: View {
         return Array(result.prefix(3))
     }
 
-    private var weatherSummary: String? {
-        snapshot?.modules.first(where: { $0.id == .weather })?.summary
-    }
-
-    private var hasAgentAttention: Bool {
-        rows.contains { row in
-            guard row.module.id == .agents else { return false }
-            let signal = [row.item.title, row.item.subtitle ?? ""]
-                .joined(separator: " ")
-                .lowercased()
-            return signal.contains("approval") || signal.contains("question") || signal.contains("needs")
-        }
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(hasAgentAttention ? "Needs you" : "Today")
+                    Text(attentionSummary.title)
                         .font(.system(size: 20, weight: .bold, design: .rounded))
                         .foregroundStyle(Color.ciForeground)
-                    Text(hasAgentAttention
-                        ? "An agent is waiting for a decision"
-                        : (weatherSummary ?? "Nothing else needs your attention"))
+                    Text(attentionSummary.subtitle)
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Color.ciForeground.opacity(0.5))
+                        .foregroundStyle(attentionSummary.needsAttention ? Color.orange.opacity(0.86) : Color.ciForeground.opacity(0.5))
                         .lineLimit(1)
                 }
                 Spacer(minLength: 12)
@@ -454,7 +445,7 @@ private struct PersonalNowOverview: View {
             if rows.isEmpty {
                 HStack(spacing: 10) {
                     Image(systemName: snapshot == nil ? "arrow.triangle.2.circlepath" : "checkmark.circle.fill")
-                        .foregroundStyle(snapshot == nil ? Color.orange : Color.green)
+                        .foregroundStyle(snapshot == nil || attentionSummary.needsAttention ? Color.orange : Color.green)
                     Text(snapshot == nil ? "Loading your Mac" : "You're clear for now")
                         .font(.system(size: 15, weight: .semibold, design: .rounded))
                         .foregroundStyle(Color.ciForeground.opacity(0.76))

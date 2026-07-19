@@ -2,6 +2,54 @@ import XCTest
 @testable import CodeIslandCompanion
 
 final class CompanionCommandCenterModelTests: XCTestCase {
+    func testAttentionSummaryUsesAuthoritativeRemoteQueueCounts() {
+        XCTAssertEqual(
+            CompanionAttentionSummary.resolve(
+                approvalCount: 2,
+                questionCount: 1,
+                fallbackPendingAction: nil,
+                fallbackWeather: "61° Clear"
+            ),
+            CompanionAttentionSummary(
+                needsAttention: true,
+                title: "Needs you",
+                subtitle: "2 approvals and 1 question need you"
+            )
+        )
+    }
+
+    func testAttentionSummaryFallsBackToLocalPendingActionWhenRemoteQueueIsEmpty() {
+        XCTAssertEqual(
+            CompanionAttentionSummary.resolve(
+                approvalCount: 0,
+                questionCount: 0,
+                fallbackPendingAction: .question,
+                fallbackWeather: nil
+            ),
+            CompanionAttentionSummary(
+                needsAttention: true,
+                title: "Needs you",
+                subtitle: "An agent is waiting for an answer"
+            )
+        )
+    }
+
+    func testAttentionSummaryShowsCalmWeatherWhenNothingNeedsAction() {
+        XCTAssertEqual(
+            CompanionAttentionSummary.resolve(
+                approvalCount: 0,
+                questionCount: 0,
+                fallbackPendingAction: nil,
+                fallbackWeather: "61° Clear · Ridgefield"
+            ),
+            CompanionAttentionSummary(
+                needsAttention: false,
+                title: "Today",
+                subtitle: "61° Clear · Ridgefield"
+            )
+        )
+    }
+
     func testAttentionSelectionKeepsTheVisibleItemAcrossReorderedPolls() {
         XCTAssertEqual(
             CompanionAttentionSelection.resolve(
