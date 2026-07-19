@@ -55,7 +55,7 @@ compilation.
 - Create: `Design/AppIcon/README.md`
 - Modify: `ios/CodeIslandCompanion/CodeIslandCompanion/Assets.xcassets/AppIcon.appiconset/Contents.json`
 - Replace: `ios/CodeIslandCompanion/CodeIslandCompanion/Assets.xcassets/AppIcon.appiconset/*.png`
-- Create: `Scripts/generate-app-icons.sh`
+- Create: `scripts/generate-app-icons.sh`
 - Create: `Tests/CodeIslandTests/AppIconAssetTests.swift`
 
 1. Write a failing asset test that requires 1024×1024 light, dark, and tinted
@@ -236,4 +236,3 @@ task coordinator/Buddy networking batch so the UI binds to real state rather
 than fixtures. Land A7–A8 after provider runners and coordinator events are
 stable. Task A9 is part of the final signed/physical E2E gate and cannot be
 replaced by Simulator screenshots.
-
