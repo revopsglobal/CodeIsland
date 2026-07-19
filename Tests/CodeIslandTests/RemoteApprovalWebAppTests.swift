@@ -75,4 +75,21 @@ final class RemoteApprovalWebAppTests: XCTestCase {
         XCTAssertTrue(RemoteApprovalWebApp.html.contains(#"<link rel="icon" href="/app-icon.svg""#))
         XCTAssertTrue(RemoteApprovalWebApp.iconSVG.contains(#"viewBox="0 0 1024 1024""#))
     }
+
+    func testWebFallbackRoutesReadOnlyRefreshWithoutMacActionConfirmation() throws {
+        let html = RemoteApprovalWebApp.html
+
+        XCTAssertTrue(html.contains("const readOnlyHubActions=new Set(['system.refresh','weather.refresh','agents.refresh','github.refresh','battery.refresh'])"))
+        XCTAssertTrue(html.contains("function isReadOnlyHubAction(moduleID,actionID)"))
+        XCTAssertTrue(html.contains("if(isReadOnlyHubAction(moduleID,actionID))"))
+        XCTAssertTrue(html.contains("notify(`Refreshed ${moduleNames[moduleID]||moduleID}`)"))
+
+        let readOnlyBranch = try XCTUnwrap(html.range(of: "if(isReadOnlyHubAction(moduleID,actionID))"))
+        let prepareFetch = try XCTUnwrap(html.range(of: "fetch('/api/hub/actions/prepare'"))
+        XCTAssertLessThan(
+            readOnlyBranch.lowerBound,
+            prepareFetch.lowerBound,
+            "Read-only refresh must return before the web fallback prepares a mutation confirmation"
+        )
+    }
 }
