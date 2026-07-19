@@ -75,6 +75,35 @@ This delta supersedes older "current build" language below.
   `testSessionsUsesAuthenticatedTailscaleInsteadOfNearbyDiscovery` on
   Simulator device `ECC99681-C3ED-4452-B727-0F9E2C09C469`; `git diff --check`
   passed; `graphify update . --no-viz` rebuilt the project graph.
+- Latest Buddy parity-contract source: PR #98 merged as
+  `b877909bb280eedaa368feef8e669631f365a60a`, aligning the iPhone
+  mock/demo hub with the production Buddy action vocabulary. Demo-only action
+  IDs such as task `edit` / `down`, note `edit` / `copy`, quick-toggle
+  `toggleAppearance` / `lock`, and presenter `playPause` / `slower` /
+  `faster` were replaced with the real native/read-only contract (`replace`,
+  `copyToDevice`, `moveDown`, `darkMode`, `lockMac`, `presentOnDevice`, etc.).
+  The patch also classifies read-only `refresh` actions for Agents, GitHub,
+  and Battery, and adds a DEBUG mock-snapshot validator so UI tests fail if the
+  demo surface drifts from `PersonalHubBuddyParity`. Verification passed the
+  core parity matrix test, the iOS mock-action vocabulary test, the hub
+  module-rendering UI test, task creation review/execute UI test, quick-note
+  review/execute UI test, `git diff --check`, and `graphify update . --no-viz`.
+- Latest TestFlight delivery after PR #98: workflow run `29672834271` from
+  `b877909bb280eedaa368feef8e669631f365a60a` produced Buddy
+  `1.0.0 (20260719040750)`, delivery UUID
+  `f2e4facd-7330-46bf-b812-fed6b214ec44`, Apple state `VALID`, audience
+  `APP_STORE_ELIGIBLE`, internal group `CodeIsland Internal`, artifact
+  `8437918415`, downloaded IPA SHA-256
+  `d80d79a943d7e523069b1608918e7f08110ee4e1b2e16cd410df81ca94fa1090`.
+- Latest strict E2E report at `2026-07-19T04:14:43Z` returned
+  `status = physical-gate-incomplete`, `complete = false`: the Mac app is
+  installed and running at `1.0.53`, local and Tailscale `/health` are HTTP
+  `200` with zero pending work, Mac Settings sync expects Buddy
+  `1.0.0 (20260719040750)`, and
+  `RemoteApprovalHTTPServerTests/testAuthenticatedHostLifecycleOverRealListener`
+  passed, but the physical iPhone is still stale on Buddy
+  `1.0.0 (20260718212803)` instead of latest TestFlight
+  `1.0.0 (20260719040750)`.
 - Latest TestFlight delivery after PR #96: workflow run `29672295258` from
   `a6f0b68ad69d91b0e745479cc10944bec1c8c53d` produced Buddy
   `1.0.0 (20260719034740)`, delivery UUID
