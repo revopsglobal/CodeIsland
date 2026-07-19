@@ -46,10 +46,13 @@ This delta supersedes older "current build" language below.
 - Latest objective-level completion audit source adds
   `scripts/report-codeisland-completion-audit.sh`. It composes strict physical
   E2E and away-readiness into one fail-closed report for the actual objective:
-  signed TestFlight delivery, private mobile web fallback, native iPhone away
-  readiness, optional Telegram fallback, real physical E2E, and no-overclaim
-  guardrails. It exits `2` until the latest TestFlight Buddy build has checked
-  in from the physical iPhone and strict E2E is complete.
+  signed TestFlight delivery, Crest/source parity, private mobile web fallback,
+  native iPhone away readiness, optional Telegram fallback, real physical E2E,
+  and no-overclaim guardrails. The Crest/source parity requirement runs the
+  focused Swift parity tests covering Glances/Calendar, the shared
+  Mac/iPhone/web module/action contract, and the authenticated host lifecycle.
+  It exits `2` until those tests pass and the latest TestFlight Buddy build has
+  checked in from the physical iPhone with strict E2E complete.
 - Latest away-readiness report at `2026-07-19T06:36:50Z` returned
   `status = ready-for-manual-physical-acceptance`,
   `readyForAwayManualAcceptance = true`, latest Buddy build

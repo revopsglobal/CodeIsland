@@ -5,7 +5,9 @@ setup() {
   export TEST_TMPDIR="$BATS_TEST_TMPDIR/test"
   export STRICT_E2E_BIN="$TEST_TMPDIR/strict-e2e"
   export AWAY_READINESS_BIN="$TEST_TMPDIR/away-readiness"
+  export CREST_PARITY_BIN="$TEST_TMPDIR/crest-parity"
   mkdir -p "$TEST_TMPDIR"
+  write_crest_parity_report true
 }
 
 write_strict_report() {
@@ -127,6 +129,30 @@ STUB
   chmod +x "$AWAY_READINESS_BIN"
 }
 
+write_crest_parity_report() {
+  local complete="${1:-true}"
+  local status="${2:-passed}"
+  local exit_code=0
+  if [ "$complete" != "true" ]; then
+    exit_code=2
+  fi
+  cat > "$CREST_PARITY_BIN" <<STUB
+#!/usr/bin/env bash
+jq -n '{
+  generatedAt:"2026-07-19T07:20:00Z",
+  checked:true,
+  complete:$complete,
+  status:"$status",
+  command:"swift test --filter GlancesModelTests|PersonalHubProtocolTests|RemoteApprovalHTTPServerTests/testAuthenticatedHostLifecycleOverRealListener",
+  filter:"GlancesModelTests|PersonalHubProtocolTests|RemoteApprovalHTTPServerTests/testAuthenticatedHostLifecycleOverRealListener",
+  exitCode:$exit_code,
+  nextAction:(if $complete then "Crest/source parity tests passed." else "Fix Crest/source parity tests." end)
+}'
+exit $exit_code
+STUB
+  chmod +x "$CREST_PARITY_BIN"
+}
+
 @test "fails closed while physical iPhone Buddy check-in is stale" {
   write_strict_report false physical-gate-incomplete stale
   write_away_report false false
@@ -138,6 +164,7 @@ STUB
     .complete == false and
     .status == "physical-e2e-incomplete" and
     ([.requirements[] | select(.id == "signed-testflight-delivery" and .complete == true)] | length) == 1 and
+    ([.requirements[] | select(.id == "crest-source-parity" and .complete == true)] | length) == 1 and
     ([.requirements[] | select(.id == "private-web-mobile-fallback" and .complete == true)] | length) == 1 and
     ([.requirements[] | select(.id == "real-physical-e2e" and .complete == false)] | length) == 1 and
     ([.requiredGates[] | select(.id == "physical-buddy-checkin" and .owner == "greg")] | length) == 1'
@@ -186,4 +213,19 @@ STUB
     .status == "testflight-incomplete" and
     ([.requirements[] | select(.id == "signed-testflight-delivery" and .complete == false)] | length) == 1 and
     ([.requiredGates[] | select(.id == "signed-testflight-delivery" and .owner == "codex")] | length) == 1'
+}
+
+@test "blocks completion when Crest source parity tests fail" {
+  write_strict_report true complete matched
+  write_away_report true true
+  write_crest_parity_report false failed
+
+  run "$REPO_ROOT/scripts/report-codeisland-completion-audit.sh"
+
+  [ "$status" -eq 2 ]
+  printf '%s' "$output" | jq -e '
+    .complete == false and
+    .status == "crest-parity-incomplete" and
+    ([.requirements[] | select(.id == "crest-source-parity" and .complete == false and .status == "failed")] | length) == 1 and
+    ([.requiredGates[] | select(.id == "crest-source-parity" and .owner == "codex")] | length) == 1'
 }
