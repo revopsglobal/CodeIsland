@@ -13,6 +13,10 @@
 ## Preconditions and delivery rules
 
 - Read `docs/plans/2026-07-19-iphone-edit-test-dispatch-design.md` before implementation.
+- Treat `docs/plans/2026-07-19-adaptive-native-product-design.md` and
+  `docs/plans/2026-07-19-adaptive-native-product.md` as the approved visual,
+  interaction, app-icon, accessibility, and physical-proof contract for the UI
+  and final delivery batches.
 - Treat `docs/plans/2026-07-19-crest-changelog-dmg-parity-audit.md` as the
   cross-cutting Mac utility, permission, attention, polish, and physical parity
   acceptance contract. Pomodoro and Apple Watch remain explicitly excluded.
