@@ -63,9 +63,7 @@ if ! "$GIT_BIN" rev-parse --verify "${CURRENT_SHA}^{commit}" >/dev/null 2>&1; th
     exit 0
 fi
 
-changed_files="$("$GIT_BIN" diff --name-only "${TESTFLIGHT_SHA}..${CURRENT_SHA}")"
-
-buddy_relevant_files="$(printf '%s\n' "$changed_files" | awk '
+buddy_filter='
     /^ios\/CodeIslandCompanion\// { print; next }
     /^Sources\/CodeIslandCore\// { print; next }
     /^Tests\/CodeIslandCoreTests\// { print; next }
@@ -73,10 +71,54 @@ buddy_relevant_files="$(printf '%s\n' "$changed_files" | awk '
     /^scripts\/validate-app-intent-metadata\.sh$/ { print; next }
     /^scripts\/smoke-companion.*\.sh$/ { print; next }
     /^\.github\/workflows\/testflight-ios\.yml$/ { print; next }
-')"
+'
 
-changed_count="$(printf '%s\n' "$changed_files" | sed '/^$/d' | wc -l | tr -d ' ')"
-buddy_count="$(printf '%s\n' "$buddy_relevant_files" | sed '/^$/d' | wc -l | tr -d ' ')"
+changed_files="$("$GIT_BIN" diff --name-only "${TESTFLIGHT_SHA}..${CURRENT_SHA}")"
+buddy_relevant_files="$(printf '%s\n' "$changed_files" | awk "$buddy_filter")"
+
+head_sha="$("$GIT_BIN" rev-parse HEAD 2>/dev/null || true)"
+current_resolved="$("$GIT_BIN" rev-parse "$CURRENT_SHA" 2>/dev/null || true)"
+working_tree_files=""
+working_tree_buddy_relevant_files=""
+if [[ -n "$head_sha" && -n "$current_resolved" && "$head_sha" == "$current_resolved" ]]; then
+    tracked_dirty="$(
+        {
+            "$GIT_BIN" diff --name-only
+            "$GIT_BIN" diff --name-only --cached
+        } | sed '/^$/d' | sort -u
+    )"
+    untracked_buddy_dirty="$(
+        "$GIT_BIN" ls-files --others --exclude-standard 2>/dev/null \
+            | awk "$buddy_filter" \
+            | sed '/^$/d' \
+            | sort -u
+    )"
+    working_tree_files="$(
+        {
+            printf '%s\n' "$tracked_dirty"
+            printf '%s\n' "$untracked_buddy_dirty"
+        } | sed '/^$/d' | sort -u
+    )"
+    working_tree_buddy_relevant_files="$(printf '%s\n' "$working_tree_files" | awk "$buddy_filter")"
+fi
+
+all_changed_files="$(
+    {
+        printf '%s\n' "$changed_files"
+        printf '%s\n' "$working_tree_files"
+    } | sed '/^$/d' | sort -u
+)"
+all_buddy_relevant_files="$(
+    {
+        printf '%s\n' "$buddy_relevant_files"
+        printf '%s\n' "$working_tree_buddy_relevant_files"
+    } | sed '/^$/d' | sort -u
+)"
+
+changed_count="$(printf '%s\n' "$all_changed_files" | sed '/^$/d' | wc -l | tr -d ' ')"
+buddy_count="$(printf '%s\n' "$all_buddy_relevant_files" | sed '/^$/d' | wc -l | tr -d ' ')"
+working_tree_count="$(printf '%s\n' "$working_tree_files" | sed '/^$/d' | wc -l | tr -d ' ')"
+working_tree_buddy_count="$(printf '%s\n' "$working_tree_buddy_relevant_files" | sed '/^$/d' | wc -l | tr -d ' ')"
 
 if [[ "$changed_count" == "0" ]]; then
     status="current"
@@ -96,8 +138,12 @@ jq -n \
     --arg currentSha "$CURRENT_SHA" \
     --argjson changedFileCount "$changed_count" \
     --argjson buddyRelevantChanged "$([[ "$buddy_count" == "0" ]] && echo false || echo true)" \
-    --argjson buddyRelevantFiles "$(printf '%s\n' "$buddy_relevant_files" | sed '/^$/d' | jq -R . | jq -s .)" \
-    --argjson changedFilesSample "$(printf '%s\n' "$changed_files" | sed '/^$/d' | head -n "$MAX_SAMPLE" | jq -R . | jq -s .)" \
+    --argjson buddyRelevantFiles "$(printf '%s\n' "$all_buddy_relevant_files" | sed '/^$/d' | jq -R . | jq -s .)" \
+    --argjson changedFilesSample "$(printf '%s\n' "$all_changed_files" | sed '/^$/d' | head -n "$MAX_SAMPLE" | jq -R . | jq -s .)" \
+    --argjson workingTreeDirty "$([[ "$working_tree_count" == "0" ]] && echo false || echo true)" \
+    --argjson workingTreeChangedFileCount "$working_tree_count" \
+    --argjson workingTreeBuddyRelevantChanged "$([[ "$working_tree_buddy_count" == "0" ]] && echo false || echo true)" \
+    --argjson workingTreeBuddyRelevantFiles "$(printf '%s\n' "$working_tree_buddy_relevant_files" | sed '/^$/d' | jq -R . | jq -s .)" \
     --arg nextAction "$next_action" \
     '{
         generatedAt:$generatedAt,
@@ -109,5 +155,11 @@ jq -n \
         buddyRelevantChanged:$buddyRelevantChanged,
         buddyRelevantFiles:$buddyRelevantFiles,
         changedFilesSample:$changedFilesSample,
+        workingTree:{
+            dirty:$workingTreeDirty,
+            changedFileCount:$workingTreeChangedFileCount,
+            buddyRelevantChanged:$workingTreeBuddyRelevantChanged,
+            buddyRelevantFiles:$workingTreeBuddyRelevantFiles
+        },
         nextAction:$nextAction
     }'
