@@ -4,8 +4,15 @@ setup() {
   export REPO_ROOT="$BATS_TEST_DIRNAME/../.."
   export TEST_TMPDIR="$BATS_TEST_TMPDIR/test"
   export GH_BIN="$TEST_TMPDIR/gh"
+  export DEFAULTS_BIN="$TEST_TMPDIR/defaults"
+  export DEFAULTS_LOG="$TEST_TMPDIR/defaults.log"
   export REPORT_PHYSICAL_ACCEPTANCE_BIN="$TEST_TMPDIR/report-physical"
   mkdir -p "$TEST_TMPDIR"
+  cat > "$DEFAULTS_BIN" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$DEFAULTS_LOG"
+STUB
+  chmod +x "$DEFAULTS_BIN"
 }
 
 @test "reports stale physical build against the newest successful TestFlight run" {
@@ -61,9 +68,13 @@ STUB
     .latestTestFlight.audience == "APP_STORE_ELIGIBLE" and
     .latestTestFlight.artifactID == "8436310864" and
     .physicalAcceptance.gates.physicalBuildStatus.expectedBuild == "20260719005630" and
+    .macSettingsSync.status == "synced" and
+    .macSettingsSync.expectedClientBuild == "20260719005630" and
     .gate.status == "stale" and
     .gate.complete == false and
     (.gate.nextAction | contains("Install and open CodeIsland Buddy build 20260719005630"))'
+  grep -q 'write com.codeisland.app remoteApprovalExpectedClientVersion 1.0.0' "$DEFAULTS_LOG"
+  grep -q 'write com.codeisland.app remoteApprovalExpectedClientBuild 20260719005630' "$DEFAULTS_LOG"
 }
 
 @test "passes when the newest TestFlight build is physically matched" {
@@ -95,9 +106,43 @@ STUB
   [ "$status" -eq 0 ]
   printf '%s' "$output" | jq -e '
     .latestTestFlight.buildNumber == "20260719005630" and
+    .macSettingsSync.status == "synced" and
     .gate.status == "matched" and
     .gate.complete == true and
     (.gate.nextAction | contains("strict physical E2E interaction acceptance"))'
+}
+
+@test "can disable syncing the newest TestFlight build into Mac settings" {
+  cat > "$GH_BIN" <<'STUB'
+#!/usr/bin/env bash
+if [[ "$1 $2" == "run list" ]]; then
+  cat <<'JSON'
+[
+  {"databaseId":1,"status":"completed","conclusion":"success","headSha":"abc","createdAt":"2026-07-19T00:00:00Z","url":"https://example.test/run/1"}
+]
+JSON
+  exit 0
+fi
+if [[ "$1 $2" == "run view" ]]; then
+  printf '%s\n' 'Resolve build number	Building CodeIsland Buddy 1.0.0 (20260719005630)'
+  exit 0
+fi
+exit 99
+STUB
+
+  cat > "$REPORT_PHYSICAL_ACCEPTANCE_BIN" <<'STUB'
+#!/usr/bin/env bash
+jq -n '{gates:{complete:false,physicalBuildStatus:{status:"stale",expectedBuild:env.EXPECTED_CLIENT_BUILD}}}'
+STUB
+  chmod +x "$GH_BIN" "$REPORT_PHYSICAL_ACCEPTANCE_BIN"
+
+  run env SYNC_MAC_EXPECTED_BUDDY_DEFAULTS=0 "$REPO_ROOT/scripts/report-latest-testflight-physical-gate.sh"
+
+  [ "$status" -eq 2 ]
+  printf '%s' "$output" | jq -e '
+    .latestTestFlight.buildNumber == "20260719005630" and
+    .macSettingsSync.status == "disabled"'
+  [ ! -s "$DEFAULTS_LOG" ]
 }
 
 @test "fails clearly when no successful TestFlight run exists" {

@@ -1559,6 +1559,8 @@ private struct BuddyPage: View {
     @AppStorage(SettingsKey.remoteApprovalTelegramEnabled) private var telegramEnabled: Bool = SettingsDefaults.remoteApprovalTelegramEnabled
     @AppStorage(SettingsKey.remoteApprovalTelegramBotToken) private var telegramBotToken: String = SettingsDefaults.remoteApprovalTelegramBotToken
     @AppStorage(SettingsKey.remoteApprovalTelegramChatID) private var telegramChatID: String = SettingsDefaults.remoteApprovalTelegramChatID
+    @AppStorage(SettingsKey.remoteApprovalExpectedClientVersion) private var expectedBuddyVersion: String = SettingsDefaults.remoteApprovalExpectedClientVersion
+    @AppStorage(SettingsKey.remoteApprovalExpectedClientBuild) private var expectedBuddyBuild: String = SettingsDefaults.remoteApprovalExpectedClientBuild
     @ObservedObject private var appleCompanion = AppleCompanionPublisher.shared
     @ObservedObject private var remoteApprovals = RemoteApprovalService.shared
     @ObservedObject private var apns = APNSNotificationSender.shared
@@ -1572,6 +1574,10 @@ private struct BuddyPage: View {
             && !telegram.isSending
             && !telegramBotToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !telegramChatID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var buddyBuildExpectation: RemoteBuddyBuildExpectation {
+        RemoteBuddyBuildExpectation(expectedVersion: expectedBuddyVersion, expectedBuild: expectedBuddyBuild)
     }
 
     private var localizedPowerError: String {
@@ -1977,6 +1983,16 @@ private struct BuddyPage: View {
                     }
                 }
 
+                buddyBuildStatusRow
+
+                DisclosureGroup("TestFlight acceptance target") {
+                    TextField("Expected Buddy version", text: $expectedBuddyVersion)
+                    TextField("Expected Buddy build", text: $expectedBuddyBuild)
+                    Text("The latest-build acceptance gate syncs these fields from the newest valid TestFlight upload. CodeIsland uses them to warn when a paired iPhone is still running an older Buddy build.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 Toggle("Keep this Mac awake for remote access", isOn: $remotePreventSleep)
                     .onChange(of: remotePreventSleep) { _, _ in
                         remoteApprovals.refreshSleepActivity()
@@ -2115,6 +2131,33 @@ private struct BuddyPage: View {
     private var appleCompanionStatusColor: Color {
         guard appleCompanion.enabled else { return .secondary }
         return appleCompanion.connectedPeerNames.isEmpty ? .orange : .green
+    }
+
+    @ViewBuilder
+    private var buddyBuildStatusRow: some View {
+        switch buddyBuildExpectation.status(for: remoteApprovals.pairedDevices) {
+        case .notConfigured:
+            EmptyView()
+        case .missing(_, let expectedBuild):
+            Label("Open CodeIsland Buddy \(expectedBuild) from TestFlight so this Mac can confirm the current iPhone build.", systemImage: "iphone.badge.exclamationmark")
+                .font(.caption)
+                .foregroundStyle(.orange)
+        case .matched(let deviceName, let lastSeenAt):
+            HStack(spacing: 6) {
+                Label("\(deviceName) is on the expected Buddy build", systemImage: "checkmark.circle.fill")
+                Text(lastSeenAt, style: .relative)
+            }
+            .font(.caption)
+            .foregroundStyle(.green)
+        case .stale(_, let expectedBuild, let newestDeviceName, let newestVersion, let newestBuild, let newestLastSeenAt):
+            VStack(alignment: .leading, spacing: 4) {
+                Label("\(newestDeviceName) is running an older Buddy build", systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                Text("Install/open TestFlight build \(expectedBuild). Last seen: \(newestVersion ?? "unknown") (\(newestBuild ?? "unknown")) \(newestLastSeenAt.formatted(date: .omitted, time: .shortened)).")
+                    .foregroundStyle(.secondary)
+            }
+            .font(.caption)
+        }
     }
 
     private func pairingExpiryText(at date: Date) -> String {
