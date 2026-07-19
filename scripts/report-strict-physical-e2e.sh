@@ -4,6 +4,7 @@ set -euo pipefail
 
 LATEST_GATE_BIN="${LATEST_GATE_BIN:-$(dirname "$0")/report-latest-testflight-physical-gate.sh}"
 DIRECT_DEVICE_VISIBILITY_BIN="${DIRECT_DEVICE_VISIBILITY_BIN:-$(dirname "$0")/report-ios-direct-device-visibility.sh}"
+TESTFLIGHT_SOURCE_DRIFT_BIN="${TESTFLIGHT_SOURCE_DRIFT_BIN:-$(dirname "$0")/report-testflight-source-drift.sh}"
 SWIFT_BIN="${SWIFT_BIN:-swift}"
 SWIFT_TEST_FILTER="${SWIFT_TEST_FILTER:-RemoteApprovalHTTPServerTests/testAuthenticatedHostLifecycleOverRealListener}"
 DEVELOPER_DIR="${DEVELOPER_DIR:-/Users/gregharned/Downloads/Xcode-beta.app/Contents/Developer}"
@@ -34,6 +35,31 @@ if ! printf '%s' "$latest_gate_output" | jq -e . >/dev/null 2>&1; then
 fi
 
 latest_gate_complete="$(printf '%s' "$latest_gate_output" | jq -r '.gate.complete == true')"
+latest_testflight_sha="$(printf '%s' "$latest_gate_output" | jq -r '.latestTestFlight.headSha // empty')"
+
+testflight_source_drift_output=""
+set +e
+testflight_source_drift_output="$(TESTFLIGHT_SHA="$latest_testflight_sha" "$TESTFLIGHT_SOURCE_DRIFT_BIN" 2>&1)"
+set -e
+
+if ! printf '%s' "$testflight_source_drift_output" | jq -e . >/dev/null 2>&1; then
+    testflight_source_drift_output="$(jq -n -c \
+        --arg generatedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        --arg output "$testflight_source_drift_output" \
+        '{
+            generatedAt:$generatedAt,
+            checked:false,
+            status:"source-drift-report-invalid-json",
+            testFlightHeadSha:null,
+            currentSha:null,
+            changedFileCount:null,
+            buddyRelevantChanged:null,
+            buddyRelevantFiles:[],
+            changedFilesSample:[],
+            output:$output,
+            nextAction:"The TestFlight source-drift diagnostic did not return JSON; rerun scripts/report-testflight-source-drift.sh."
+        }')"
+fi
 
 direct_device_visibility_output=""
 set +e
@@ -85,6 +111,7 @@ jq -n \
     --argjson complete "$complete" \
     --argjson latestGate "$latest_gate_output" \
     --argjson latestGateExit "$latest_gate_exit" \
+    --argjson testFlightSourceDrift "$testflight_source_drift_output" \
     --argjson directDeviceVisibility "$direct_device_visibility_output" \
     --arg swiftTestFilter "$SWIFT_TEST_FILTER" \
     --argjson interactionExit "$interaction_exit" \
@@ -101,6 +128,7 @@ jq -n \
             nextAction:$latestGate.gate.nextAction,
             report:$latestGate
         },
+        testFlightSourceDrift:$testFlightSourceDrift,
         directDeviceVisibility:$directDeviceVisibility,
         interactionContract:{
             command:"swift test --filter \($swiftTestFilter)",
