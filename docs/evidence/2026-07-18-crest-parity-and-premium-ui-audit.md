@@ -255,6 +255,16 @@ action. Put transport diagnostics behind Connection Details.
 - `swift build -c release -j 1` completed with exit code 0 in 217.22 seconds.
 - `graphify update . --no-viz` rebuilt the source graph at 4,732 nodes,
   12,357 edges, and 55 communities.
+- Follow-up transport-copy hardening on
+  `codex/attention-command-center-audit` removes normal-surface references to
+  Tailscale/HTTPS from Buddy pairing, loading, invalid-URL, and connected
+  session summary copy while keeping the private URL inside Connection
+  settings. Focused verification passed:
+  `CodeIslandCompanionTests/LiveActivityPrivacyTests` executed 10 tests with
+  zero failures, and
+  `CodeIslandCompanionUITests/testAuthenticatedTailscaleConnectionDoesNotLookLikeNearbySearch`
+  executed 1 test with zero failures on simulator
+  `ECC99681-C3ED-4452-B727-0F9E2C09C469`.
 
 The remaining gates are signed distribution and physical-device acceptance;
 they are intentionally not inferred from Simulator or source proof.

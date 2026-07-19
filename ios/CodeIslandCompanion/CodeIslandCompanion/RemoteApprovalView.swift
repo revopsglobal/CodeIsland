@@ -326,7 +326,7 @@ private struct RemotePairingCard: View {
                     Text("Connect to Greg's Mac")
                         .font(.system(size: 17, weight: .bold, design: .rounded))
                         .foregroundStyle(.ciForeground)
-                    Text("Private to your Tailscale network")
+                    Text("Private to your Mac connection")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.ciForeground.opacity(0.5))
                 }
@@ -354,7 +354,7 @@ private struct RemotePairingCard: View {
                 .accessibilityIdentifier("companion.remote.pairingCode")
 
             DisclosureGroup("Connection settings", isExpanded: $showsConnectionSettings) {
-                TextField("Tailscale HTTPS URL", text: $client.serverURLText)
+                TextField("Private HTTPS URL", text: $client.serverURLText)
                     .textInputAutocapitalization(.never)
                     .keyboardType(.URL)
                     .autocorrectionDisabled()

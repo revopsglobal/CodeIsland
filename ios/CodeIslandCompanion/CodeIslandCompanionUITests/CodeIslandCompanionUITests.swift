@@ -224,6 +224,8 @@ final class CodeIslandCompanionUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["CodeIsland UI Test Mac"].waitForExistence(timeout: 8))
         XCTAssertFalse(app.staticTexts["Searching"].exists)
         XCTAssertFalse(app.staticTexts["Searching nearby"].exists)
+        XCTAssertFalse(app.staticTexts["Private to your Tailscale network"].exists)
+        XCTAssertFalse(app.staticTexts["Fetching the selected mode over Tailscale."].exists)
     }
 
     @MainActor

@@ -33,6 +33,19 @@ final class LiveActivityPrivacyTests: XCTestCase {
         XCTAssertTrue(presentation.isBrowsing)
     }
 
+    func testNormalConnectionCopyHidesTransportDetails() {
+        XCTAssertEqual(
+            RemoteApprovalClient.connectionDetail(serverName: "Greg's MacBook Air"),
+            "Connected to Greg's MacBook Air"
+        )
+        XCTAssertEqual(
+            RemoteApprovalClient.connectionDetail(serverName: nil),
+            "Connected to Greg's Mac"
+        )
+        XCTAssertFalse(RemoteApprovalClient.invalidServerURLMessage.localizedCaseInsensitiveContains("Tailscale"))
+        XCTAssertFalse(RemoteApprovalClient.invalidServerURLMessage.localizedCaseInsensitiveContains("HTTPS"))
+    }
+
     func testBackgroundRefreshKeepsAnEstablishedConnectionStable() {
         XCTAssertEqual(
             RemoteApprovalClient.refreshStartState(hasCompletedSnapshot: false),
