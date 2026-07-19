@@ -106,6 +106,16 @@ final class PersonalHubProtocolTests: XCTestCase {
         XCTAssertEqual(PersonalHubBuddyParity.validate(snapshot: snapshot), [])
     }
 
+    func testBuddyParityIdentifiesReadOnlyRefreshActions() {
+        XCTAssertTrue(PersonalHubBuddyParity.isReadOnlyAction(moduleID: .agents, actionID: "refresh"))
+        XCTAssertTrue(PersonalHubBuddyParity.isReadOnlyAction(moduleID: .github, actionID: "refresh"))
+        XCTAssertTrue(PersonalHubBuddyParity.isReadOnlyAction(moduleID: .battery, actionID: "refresh"))
+        XCTAssertEqual(PersonalHubBuddyParity.disposition(for: .system, actionID: "refresh"), .readOnly)
+        XCTAssertEqual(PersonalHubBuddyParity.disposition(for: .downloads, actionID: "refresh"), .native)
+        XCTAssertFalse(PersonalHubBuddyParity.isReadOnlyAction(moduleID: .reminders, actionID: "complete"))
+        XCTAssertNil(PersonalHubBuddyParity.disposition(for: .calendar, actionID: "teleport"))
+    }
+
     func testBuddyParityValidatorAcceptsTaskNoteAndPresenterActionMatrix() throws {
         let noteDraft = PersonalHubNoteDraft(
             text: "Launch checklist\n- [ ] Record demo",

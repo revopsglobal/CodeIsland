@@ -284,6 +284,26 @@ final class CodeIslandCompanionUITests: XCTestCase {
     }
 
     @MainActor
+    func testReadOnlyRefreshUpdatesHubWithoutConfirmation() throws {
+        let app = launchHubApp(mode: "code")
+        XCTAssertTrue(hubSurface(in: app).waitForExistence(timeout: 8))
+
+        openHubModule("agents", in: app)
+
+        let refresh = app.buttons["Refresh"].firstMatch
+        XCTAssertTrue(refresh.waitForExistence(timeout: 4))
+        refresh.tap()
+
+        XCTAssertFalse(
+            app.otherElements["hub.action.confirmation"].waitForExistence(timeout: 2),
+            "Read-only refresh should not interrupt with a mutation confirmation sheet"
+        )
+        let message = findHubElement("hub.action.message", in: app)
+        XCTAssertTrue(message.waitForExistence(timeout: 5))
+        XCTAssertTrue(message.label.contains("Refreshed Agents"))
+    }
+
+    @MainActor
     func testCalendarMonthNavigatesAndKeepsSelectedDaySurface() throws {
         let app = launchHubApp(mode: "home")
         XCTAssertTrue(hubSurface(in: app).waitForExistence(timeout: 8))
