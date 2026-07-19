@@ -869,6 +869,18 @@ final class RemoteApprovalClient: ObservableObject {
         )
     }
 
+    static func mockHubParityViolations(
+        requestedMode: PersonalHubMode,
+        calendarReferenceDate: Date? = nil,
+        calendarSelectedDate: Date? = nil
+    ) -> [PersonalHubBuddyParityViolation] {
+        PersonalHubBuddyParity.validate(snapshot: mockHubSnapshot(
+            requestedMode: requestedMode,
+            calendarReferenceDate: calendarReferenceDate,
+            calendarSelectedDate: calendarSelectedDate
+        ))
+    }
+
     private static func mockHubModule(
         _ id: PersonalHubModuleID,
         calendarReferenceDate: Date? = nil,
@@ -965,33 +977,52 @@ final class RemoteApprovalClient: ObservableObject {
                 calendarMonth: month
             )
         case .reminders:
-            let task = PersonalHubReminderDraft(
-                title: "Finish the deck",
-                due: Date().addingTimeInterval(7_200),
-                calendarID: "mock-list"
-            )
             return .init(
                 id: id,
                 availability: ready,
-                summary: "1 open task · Personal",
+                summary: "2 open tasks · Personal",
                 items: [
                     .init(id: "list:mock-list", title: "Personal", detail: "mock-list"),
                     .init(
                         id: "task:finish-deck",
                         title: "Finish the deck",
                         subtitle: "Due today",
+                        detail: "Finish the deck",
                         actions: [
-                            .init(id: "edit", label: "Edit", targetID: "task:finish-deck", value: task.encodedActionValue()),
+                            .init(id: "copyToDevice", label: "Copy", targetID: "task:finish-deck"),
                             .init(id: "complete", label: "Complete", targetID: "task:finish-deck"),
-                            .init(id: "down", label: "Move down", targetID: "task:finish-deck"),
+                            .init(id: "moveDown", label: "Move down", targetID: "task:finish-deck"),
                             .init(id: "delete", label: "Delete", role: .destructive, targetID: "task:finish-deck"),
+                        ]
+                    ),
+                    .init(
+                        id: "task:book-flights",
+                        title: "Book flights",
+                        subtitle: "Personal",
+                        detail: "Book flights",
+                        actions: [
+                            .init(id: "copyToDevice", label: "Copy", targetID: "task:book-flights"),
+                            .init(id: "complete", label: "Complete", targetID: "task:book-flights"),
+                            .init(id: "moveUp", label: "Move up", targetID: "task:book-flights"),
+                            .init(id: "moveTop", label: "Top", targetID: "task:book-flights"),
+                            .init(id: "delete", label: "Delete", role: .destructive, targetID: "task:book-flights"),
+                        ]
+                    ),
+                    .init(
+                        id: "task:send-recap",
+                        title: "Send recap",
+                        subtitle: "Completed",
+                        detail: "Send recap",
+                        actions: [
+                            .init(id: "copyToDevice", label: "Copy", targetID: "task:send-recap"),
+                            .init(id: "restore", label: "Restore", targetID: "task:send-recap"),
+                            .init(id: "delete", label: "Delete", role: .destructive, targetID: "task:send-recap"),
                         ]
                     ),
                 ],
                 actions: [
                     .init(id: "add", label: "Add task", symbol: "plus"),
                     .init(id: "addList", label: "Add list", symbol: "folder.badge.plus"),
-                    .init(id: "showCompleted", label: "Completed", symbol: "archivebox"),
                 ]
             )
         case .notes:
@@ -1009,23 +1040,25 @@ final class RemoteApprovalClient: ObservableObject {
                         id: "note:launch",
                         title: "Launch checklist",
                         subtitle: "Work · revision 4",
+                        detail: note.text,
                         actions: [
-                            .init(id: "edit", label: "Edit", targetID: "note:launch", value: note.encodedActionValue()),
+                            .init(id: "replace", label: "Edit", targetID: "note:launch", value: note.encodedActionValue()),
                             .init(id: "append", label: "Append", targetID: "note:launch", value: note.encodedActionValue()),
-                            .init(id: "copy", label: "Copy", targetID: "note:launch", value: note.text),
+                            .init(id: "setCategory", label: "Category", targetID: "note:launch", value: note.encodedActionValue()),
+                            .init(id: "copyToDevice", label: "Copy", targetID: "note:launch"),
                             .init(
                                 id: "toggleChecklist",
                                 label: "Toggle task",
                                 targetID: "note:launch",
                                 value: PersonalHubChecklistMutation(lineIndex: 1, baseRevision: 4).encodedActionValue()
                             ),
+                            .init(id: "undo", label: "Undo", targetID: "note:launch"),
                             .init(id: "delete", label: "Delete", role: .destructive, targetID: "note:launch"),
                         ]
                     )
                 ],
                 actions: [
                     .init(id: "add", label: "Add note", symbol: "plus"),
-                    .init(id: "undo", label: "Undo", symbol: "arrow.uturn.backward"),
                 ]
             )
         case .system:
@@ -1088,7 +1121,7 @@ final class RemoteApprovalClient: ObservableObject {
                     .init(id: "volumeDown", label: "-10", symbol: "speaker.minus"),
                     .init(id: "setVolume", label: "Volume", symbol: "slider.horizontal.3", value: "42"),
                     .init(id: "volumeUp", label: "+10", symbol: "speaker.plus"),
-                    .init(id: "mute", label: "Mute", symbol: "speaker.slash"),
+                    .init(id: "openSettings", label: "Sound Settings", symbol: "gearshape"),
                 ]
             )
         case .bluetooth:
@@ -1096,7 +1129,7 @@ final class RemoteApprovalClient: ObservableObject {
         case .battery:
             return .init(id: id, availability: ready, summary: "84% · Normal", detail: "112 cycles", actions: [.init(id: "refresh", label: "Refresh")])
         case .quickToggles:
-            return .init(id: id, availability: ready, summary: "Appearance and Mac controls", actions: [.init(id: "toggleAppearance", label: "Dark / Light"), .init(id: "mute", label: "Mute"), .init(id: "lock", label: "Lock Mac")])
+            return .init(id: id, availability: ready, summary: "Appearance and Mac controls", actions: [.init(id: "darkMode", label: "Dark / Light"), .init(id: "mute", label: "Mute"), .init(id: "displaySleep", label: "Sleep display"), .init(id: "lockMac", label: "Lock Mac")])
         case .downloads:
             return .init(
                 id: id,
@@ -1127,7 +1160,24 @@ final class RemoteApprovalClient: ObservableObject {
                 actions: [.init(id: "previewLocal", label: "Preview", symbol: "camera.fill")]
             )
         case .teleprompter:
-            return .init(id: id, availability: ready, summary: "Ready · 140 WPM", detail: "Launch remarks", actions: [.init(id: "set", label: "Edit script", value: "Welcome to CodeIsland"), .init(id: "playPause", label: "Play"), .init(id: "slower", label: "Slower"), .init(id: "faster", label: "Faster")])
+            return .init(
+                id: id,
+                availability: ready,
+                summary: "Ready · 140 WPM",
+                detail: "Launch remarks",
+                items: [
+                    .init(
+                        id: "teleprompter:launch",
+                        title: "Launch remarks",
+                        detail: "Welcome to Code Island",
+                        actions: [
+                            .init(id: "presentOnDevice", label: "Present", targetID: "teleprompter:launch"),
+                            .init(id: "copyToDevice", label: "Copy", targetID: "teleprompter:launch"),
+                        ]
+                    )
+                ],
+                actions: [.init(id: "set", label: "Edit script", value: "Welcome to Code Island")]
+            )
         case .windowManager:
             return .init(id: id, availability: ready, summary: "Finder", actions: [.init(id: "left", label: "Left"), .init(id: "right", label: "Right"), .init(id: "maximize", label: "Maximize")])
         }
