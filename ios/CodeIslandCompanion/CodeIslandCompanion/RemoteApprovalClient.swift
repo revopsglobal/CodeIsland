@@ -109,7 +109,7 @@ final class RemoteApprovalClient: ObservableObject {
         if usesMockHub {
             deviceToken = "ui-test-device-token"
             state = .connected
-            serverName = "CodeIsland UI Test Mac"
+            serverName = "Code Island UI Test Mac"
             lastUpdatedAt = Date()
             hubSnapshot = Self.mockHubSnapshot(requestedMode: selectedMode)
             sessionsModule = Self.mockHubModule(.agents)
@@ -278,7 +278,7 @@ final class RemoteApprovalClient: ObservableObject {
     }
 
     private static let expiredPairingCodeMessage =
-        "That code expired. Open CodeIsland Settings → Buddy on your Mac for the current code."
+        "That code expired. Open Code Island Settings → Buddy on your Mac for the current code."
 
     func unpair() {
         Self.deleteKeychainToken()
@@ -854,7 +854,7 @@ final class RemoteApprovalClient: ObservableObject {
     ) -> PersonalHubSnapshot {
         let resolvedMode: PersonalHubMode = requestedMode == .auto ? .home : requestedMode
         return PersonalHubSnapshot(
-            serverName: "CodeIsland UI Test Mac",
+            serverName: "Code Island UI Test Mac",
             requestedMode: requestedMode,
             resolvedMode: resolvedMode,
             modules: PersonalHubCatalog.modules(for: resolvedMode).map {
