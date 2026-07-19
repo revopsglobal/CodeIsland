@@ -32,6 +32,30 @@ This delta supersedes older "current build" language below.
   `PersonalHubDataModelTests` including transport, seek clamping, absolute
   seek validation, and Music-only queue playback plans; `git diff --check`
   passed; `graphify update . --no-viz` rebuilt the project graph.
+- Latest iPhone noise-control source: PR #90 merged as
+  `3eb2ce7662761bf39beeda57742aaeb701f808aa`, replacing same-priority
+  StandBy session `updatedAt` tie-breaking with stable session identity so two
+  routine active sessions do not rotate every polling cycle. Verification
+  passed `ios/CodeIslandCompanion/scripts/run-model-tests.sh` and the iOS
+  Simulator XCTest
+  `CodeIslandCompanionTests/CompanionCommandCenterModelTests` on device
+  `ECC99681-C3ED-4452-B727-0F9E2C09C469`; `git diff --check` passed;
+  `graphify update . --no-viz` rebuilt the project graph.
+- Latest TestFlight delivery after PR #90: workflow run `29671329342` from
+  `3eb2ce7662761bf39beeda57742aaeb701f808aa` produced Buddy
+  `1.0.0 (20260719031025)`, delivery UUID
+  `dd040642-2807-4b7a-a19f-62fd82d838eb`, Apple state `VALID`, audience
+  `APP_STORE_ELIGIBLE`, internal group `CodeIsland Internal`, artifact
+  `8437440883`, downloaded IPA SHA-256
+  `2f4310403a534feefd919a16f15b052257f2c7dd4bda3b61cf417ed19607333d`.
+- Latest strict E2E report at `2026-07-19T03:16:10Z` returned
+  `status = physical-gate-incomplete`, `complete = false`: the Mac app is
+  installed and running, local and Tailscale `/health` are HTTP `200` with zero
+  pending work, and
+  `RemoteApprovalHTTPServerTests/testAuthenticatedHostLifecycleOverRealListener`
+  passed, but the physical iPhone is still stale on Buddy
+  `1.0.0 (20260718212803)` instead of latest TestFlight
+  `1.0.0 (20260719031025)`.
 - Installed Mac after PR #88: `1.0.53`, workflow run `29670971379`,
   downloaded DMG SHA-256
   `6624d69ddbacdc0eed32836a7388685d9d5203952dd0dfc8a6da58cf7cd50f3f`,
