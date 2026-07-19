@@ -41,6 +41,31 @@ This delta supersedes older "current build" language below.
   `CodeIslandCompanionTests/CompanionCommandCenterModelTests` on device
   `ECC99681-C3ED-4452-B727-0F9E2C09C469`; `git diff --check` passed;
   `graphify update . --no-viz` rebuilt the project graph.
+- Latest iPhone signal-quality source: PR #92 merged as
+  `e27cb6acfd136e8bcaca49bc6cd928aec598782d`, replacing the Now overview's
+  text-sniffed agent-attention heuristic with `CompanionAttentionSummary`.
+  The iPhone Now surface now derives **Needs you** copy from authoritative
+  remote approval/question queue counts, falls back to a local pending action
+  only when the queue is empty, and keeps the no-action state calm with weather
+  or a neutral clear message. Verification passed the iOS Simulator XCTest
+  `CodeIslandCompanionTests/CompanionCommandCenterModelTests` on device
+  `ECC99681-C3ED-4452-B727-0F9E2C09C469`; `git diff --check` passed;
+  `graphify update . --no-viz` rebuilt the project graph.
+- Latest TestFlight delivery after PR #92: workflow run `29671608588` from
+  `e27cb6acfd136e8bcaca49bc6cd928aec598782d` produced Buddy
+  `1.0.0 (20260719032043)`, delivery UUID
+  `6126f325-7989-47c9-95ae-cf18623b0d7b`, Apple state `VALID`, audience
+  `APP_STORE_ELIGIBLE`, internal group `CodeIsland Internal`, artifact
+  `8437520962`, downloaded IPA SHA-256
+  `285064f18cfee43d3ec95e55c687b21a1ce9d83227ec782efe5feb318987977c`.
+- Latest strict E2E report at `2026-07-19T03:24:44Z` returned
+  `status = physical-gate-incomplete`, `complete = false`: the Mac app is
+  installed and running, local and Tailscale `/health` are HTTP `200` with zero
+  pending work, and
+  `RemoteApprovalHTTPServerTests/testAuthenticatedHostLifecycleOverRealListener`
+  passed, but the physical iPhone is still stale on Buddy
+  `1.0.0 (20260718212803)` instead of latest TestFlight
+  `1.0.0 (20260719032043)`.
 - Latest TestFlight delivery after PR #90: workflow run `29671329342` from
   `3eb2ce7662761bf39beeda57742aaeb701f808aa` produced Buddy
   `1.0.0 (20260719031025)`, delivery UUID
