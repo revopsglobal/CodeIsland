@@ -188,6 +188,13 @@ This delta supersedes older "current build" language below.
   `/Applications/CodeIsland.app.backup-20260718221752`, and the app relaunched
   as PID `54512` with local and Tailscale `/health` both running with
   `pendingCount: 0`.
+- Latest acceptance-proof source: PR #113 merged as
+  `529abfeab8e4e9528887bd3bf4ffbbcf171c7213`, adding the installed Mac
+  app's `CDHash` to `scripts/report-physical-acceptance.sh` and therefore to
+  the strict E2E JSON. This closes a proof gap: future reports now identify
+  the exact signed Mac binary under test, not only its version and Team ID.
+  Verification passed the physical, latest-TestFlight, and strict E2E Bats
+  suites, live strict E2E, `git diff --check`, and `graphify update . --no-viz`.
 - Latest strict-gate diagnostic source: PR #105 merged as
   `f21d11728cece2e4f28fef68ee38bdb316d489e4`, adding
   `scripts/report-ios-direct-device-visibility.sh` and embedding its
@@ -199,14 +206,15 @@ This delta supersedes older "current build" language below.
   live
   `scripts/report-ios-direct-device-visibility.sh`, live strict E2E, `git diff
   --check`, and `graphify update . --no-viz`.
-- Latest strict E2E report at `2026-07-19T05:18:19Z` returned
+- Latest strict E2E report at `2026-07-19T05:20:37Z` returned
   `status = physical-gate-incomplete`, `complete = false`: the Mac app is
   installed and running at `1.0.53`, local and Tailscale `/health` are HTTP
   `200` with zero pending work, Mac Settings sync expects Buddy
   `1.0.0 (20260719042243)`, and
   `RemoteApprovalHTTPServerTests/testAuthenticatedHostLifecycleOverRealListener`
   passed. The installed Mac app is now the PR #111 DMG build running as PID
-  `54512`. The latest TestFlight gate remains stale: the physical iPhone is
+  `54512`, and the strict report identifies it by CDHash
+  `649d8672c83903d2e4c9e553c1e6c916ad0b7bf3`. The latest TestFlight gate remains stale: the physical iPhone is
   still last observed on Buddy `1.0.0 (20260718212803)` instead of latest
   TestFlight `1.0.0 (20260719042243)`. The direct-device diagnostic reports
   `status = simulator-only`, `iosDeviceCount = 1`, `simulatorCount = 1`, and
