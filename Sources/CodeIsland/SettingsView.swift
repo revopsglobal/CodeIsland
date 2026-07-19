@@ -1567,6 +1567,13 @@ private struct BuddyPage: View {
 
     private var bridge: ESP32BridgeManager { ESP32BridgeManager.shared }
 
+    private var canSendTelegramTestAlert: Bool {
+        telegramEnabled
+            && !telegram.isSending
+            && !telegramBotToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !telegramChatID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private var localizedPowerError: String {
         switch bridge.lastError {
         case "Bluetooth permission denied":
@@ -2035,6 +2042,13 @@ private struct BuddyPage: View {
                     .disabled(!telegramEnabled)
                 TextField("Chat ID", text: $telegramChatID)
                     .disabled(!telegramEnabled)
+
+                Button {
+                    telegram.sendTestAlert()
+                } label: {
+                    Label(telegram.isSending ? "Sending test alert…" : "Send test Telegram alert", systemImage: "paperplane")
+                }
+                .disabled(!canSendTelegramTestAlert)
 
                 if let delivered = telegram.lastDeliveryAt {
                     Label("Last delivered \(delivered.formatted(date: .omitted, time: .shortened))", systemImage: "checkmark.circle.fill")

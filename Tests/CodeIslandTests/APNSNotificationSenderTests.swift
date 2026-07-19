@@ -188,4 +188,18 @@ final class APNSNotificationSenderTests: XCTestCase {
             """
         )
     }
+
+    func testTelegramFallbackTestMessageUsesSameRedactedShape() throws {
+        let message = TelegramAttentionMessageBuilder.testMessage(
+            remoteURL: URL(string: "https://gregs-mac.tailnet.example")
+        )
+
+        XCTAssertTrue(message.contains("CodeIsland needs your answer."))
+        XCTAssertTrue(message.contains("Open Buddy to review the private details."))
+        XCTAssertTrue(message.contains("https://gregs-mac.tailnet.example"))
+        XCTAssertFalse(message.contains("telegram-test"))
+        XCTAssertFalse(message.localizedCaseInsensitiveContains("command"))
+        XCTAssertFalse(message.localizedCaseInsensitiveContains("transcript"))
+        XCTAssertFalse(message.localizedCaseInsensitiveContains("workspace"))
+    }
 }
