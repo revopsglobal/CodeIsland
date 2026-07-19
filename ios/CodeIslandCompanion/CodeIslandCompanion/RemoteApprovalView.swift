@@ -83,6 +83,7 @@ struct RemoteApprovalSurface: View {
     private var selectedAttention: RemoteAttentionCardItem? {
         let resolvedID = CompanionAttentionSelection.resolve(
             previousID: selectedAttentionID,
+            preferredID: preferredAttentionID,
             currentIDs: attentionIDs
         )
         return attentionItems.first(where: { $0.id == resolvedID })
@@ -98,8 +99,21 @@ struct RemoteApprovalSurface: View {
     private func synchronizeAttentionSelection() {
         selectedAttentionID = CompanionAttentionSelection.resolve(
             previousID: selectedAttentionID,
+            preferredID: preferredAttentionID,
             currentIDs: attentionIDs
         )
+    }
+
+    private var preferredAttentionID: String? {
+        if let approvalID = client.highlightedApprovalID,
+           attentionIDs.contains(approvalID) {
+            return approvalID
+        }
+        if let questionID = client.highlightedQuestionID,
+           attentionIDs.contains(questionID) {
+            return questionID
+        }
+        return nil
     }
 }
 

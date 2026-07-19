@@ -2,6 +2,13 @@ import Foundation
 
 enum CompanionAttentionSelection {
     static func resolve(previousID: String?, currentIDs: [String]) -> String? {
+        resolve(previousID: previousID, preferredID: nil, currentIDs: currentIDs)
+    }
+
+    static func resolve(previousID: String?, preferredID: String?, currentIDs: [String]) -> String? {
+        if let preferredID, currentIDs.contains(preferredID) {
+            return preferredID
+        }
         if let previousID, currentIDs.contains(previousID) {
             return previousID
         }
