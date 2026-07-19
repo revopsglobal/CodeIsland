@@ -53,6 +53,12 @@ This delta supersedes older "current build" language below.
   Mac/iPhone/web module/action contract, and the authenticated host lifecycle.
   It exits `2` until those tests pass and the latest TestFlight Buddy build has
   checked in from the physical iPhone with strict E2E complete.
+- Latest bounded completion waiter source adds
+  `scripts/wait-for-codeisland-completion.sh`. It repeatedly runs the
+  completion audit until the full objective is complete or a caller-provided
+  timeout/max-poll limit is reached, then emits the final audit JSON. This is a
+  manual/bounded acceptance helper, not a daemon or scheduler; use it when the
+  physical iPhone is about to open the current TestFlight build.
 - Latest away-readiness report at `2026-07-19T06:36:50Z` returned
   `status = ready-for-manual-physical-acceptance`,
   `readyForAwayManualAcceptance = true`, latest Buddy build
