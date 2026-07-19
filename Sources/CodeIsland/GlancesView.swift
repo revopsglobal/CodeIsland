@@ -1,5 +1,7 @@
 import SwiftUI
 import AppKit
+import CoreLocation
+import EventKit
 
 /// Glances surface — weather, next meeting (+ one-tap join), and reminders.
 /// Styled to match the notch panel: monospaced type, green accent, dark chrome.
@@ -11,6 +13,8 @@ struct GlancesView: View {
     @State private var calendarReferenceDate = Date()
     @State private var calendarSelectedDate = Date()
     @State private var calendarMonthInfo: GlancesModel.CalendarMonthInfo?
+    @AppStorage(SettingsKey.glancesWeatherLocation)
+    private var weatherLocation = SettingsDefaults.glancesWeatherLocation
     @FocusState private var reminderFieldFocused: Bool
 
     private static let accent = Color(red: 0.3, green: 0.85, blue: 0.4)
@@ -135,6 +139,9 @@ struct GlancesView: View {
                     .font(Self.monoSmall)
                     .foregroundStyle(.white.opacity(0.4))
                 Spacer()
+                if let action = weatherRecoveryAction {
+                    miniActionButton(action.title, action: action.perform)
+                }
                 settingsButton(label: "Weather settings")
             }
         }
@@ -180,6 +187,7 @@ struct GlancesView: View {
                 HStack {
                     emptyText("Calendar access needed")
                     Spacer()
+                    miniActionButton(calendarRecoveryTitle, action: performCalendarRecovery)
                     settingsButton(label: "Calendar settings")
                 }
             }
@@ -354,7 +362,12 @@ struct GlancesView: View {
             } else if model.remindersAuthorized {
                 emptyText("All clear in selected lists")
             } else {
-                emptyText("Reminders access needed")
+                HStack {
+                    emptyText("Reminders access needed")
+                    Spacer()
+                    miniActionButton(remindersRecoveryTitle, action: performRemindersRecovery)
+                    settingsButton(label: "Reminders settings")
+                }
             }
         }
     }
@@ -399,6 +412,67 @@ struct GlancesView: View {
         .buttonStyle(.plain)
         .help(label)
         .accessibilityLabel(label)
+    }
+
+    private func miniActionButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 8, weight: .black, design: .monospaced))
+                .foregroundStyle(.black)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background(
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(Self.actionAccent)
+                )
+        }
+        .buttonStyle(.plain)
+        .help(title)
+        .accessibilityLabel(title)
+    }
+
+    private var calendarRecoveryTitle: String {
+        if model.calendarAuthorizationStatus == .writeOnly { return "UPGRADE" }
+        if GlancesModel.canRequestFullCalendarAccess(model.calendarAuthorizationStatus) { return "GRANT" }
+        return "PRIVACY"
+    }
+
+    private func performCalendarRecovery() {
+        if GlancesModel.canRequestFullCalendarAccess(model.calendarAuthorizationStatus) {
+            model.requestCalendarAccess()
+        } else {
+            openPrivacySettings("Privacy_Calendars")
+        }
+    }
+
+    private var remindersRecoveryTitle: String {
+        model.remindersAuthorizationStatus == .notDetermined ? "GRANT" : "PRIVACY"
+    }
+
+    private func performRemindersRecovery() {
+        if model.remindersAuthorizationStatus == .notDetermined {
+            model.requestRemindersAccess()
+        } else {
+            openPrivacySettings("Privacy_Reminders")
+        }
+    }
+
+    private var weatherRecoveryAction: (title: String, perform: () -> Void)? {
+        let manualLocation = weatherLocation.trimmingCharacters(in: .whitespacesAndNewlines)
+        if manualLocation.isEmpty, model.locationAuthorizationStatus == .notDetermined {
+            return ("GRANT", { model.requestLocationAccess() })
+        }
+        if manualLocation.isEmpty, !model.locationAuthorized {
+            return ("PRIVACY", { openPrivacySettings("Privacy_LocationServices") })
+        }
+        return ("SET ZIP", { SettingsWindowController.shared.show(page: .glances) })
+    }
+
+    private func openPrivacySettings(_ pane: String) {
+        guard let url = URL(
+            string: "x-apple.systempreferences:com.apple.preference.security?\(pane)"
+        ) else { return }
+        NSWorkspace.shared.open(url)
     }
 
     private func downloadStatus(_ download: PersonalUtilitiesModel.DownloadInfo) -> String {

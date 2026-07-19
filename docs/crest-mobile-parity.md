@@ -43,6 +43,10 @@ This delta supersedes older "current build" language below.
   successful `testflight-ios.yml` delivery on `main`, extract the delivered
   Buddy build, and fail closed until that exact build is opened on the physical
   iPhone.
+- Follow-up source hardening on `codex/glances-inline-recovery` makes Glances
+  permission/weather recovery direct from the panel: Calendar and Reminders
+  show Grant/Upgrade/Privacy actions inline, and Weather shows Grant/Privacy
+  or Set ZIP without requiring Greg to discover the settings icon first.
 
 Previous current-source deliveries retained for traceability: PR #69 merged as
 `33fc732043fa93b132a740d478c5bcc2899c47df`; Mac workflow `29667770216` and
