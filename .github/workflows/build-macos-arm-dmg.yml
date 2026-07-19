@@ -138,6 +138,8 @@ jobs:
           bats Tests/Scripts/report-latest-testflight-physical-gate.bats
           bats Tests/Scripts/report-strict-physical-e2e.bats
           bats Tests/Scripts/report-away-readiness.bats
+          bats Tests/Scripts/report-ios-direct-device-visibility.bats
+          bats Tests/Scripts/report-testflight-source-drift.bats
           bats Tests/Scripts/report-codeisland-completion-audit.bats
           bats Tests/Scripts/wait-for-codeisland-completion.bats
 
