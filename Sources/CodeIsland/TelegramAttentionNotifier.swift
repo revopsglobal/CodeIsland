@@ -8,6 +8,7 @@ final class TelegramAttentionNotifier: ObservableObject {
 
     @Published private(set) var lastDeliveryAt: Date?
     @Published private(set) var lastError: String?
+    @Published private(set) var isSending = false
 
     private let log = Logger(subsystem: "com.codeisland", category: "telegram")
 
@@ -15,15 +16,31 @@ final class TelegramAttentionNotifier: ObservableObject {
 
     func notify(envelope: RemoteAttentionPushEnvelope) {
         guard envelope.state == .pending else { return }
-        guard let configuration = configuration() else { return }
 
         let remoteURL = Self.remoteApprovalURL()
         let text = TelegramAttentionMessageBuilder.message(
             for: envelope,
             remoteURL: remoteURL
         )
+        sendInBackground(text: text)
+    }
 
+    func sendTestAlert() {
+        let text = TelegramAttentionMessageBuilder.testMessage(remoteURL: Self.remoteApprovalURL())
+        sendInBackground(text: text, reportMissingConfiguration: true)
+    }
+
+    private func sendInBackground(text: String, reportMissingConfiguration: Bool = false) {
+        guard !isSending else { return }
+        guard let configuration = configuration() else {
+            if reportMissingConfiguration {
+                lastError = TelegramError.incompleteConfiguration.localizedDescription
+            }
+            return
+        }
+        isSending = true
         Task {
+            defer { isSending = false }
             do {
                 try await send(text: text, configuration: configuration)
                 lastDeliveryAt = Date()
@@ -112,6 +129,19 @@ final class TelegramAttentionNotifier: ObservableObject {
 }
 
 enum TelegramAttentionMessageBuilder {
+    static func testMessage(remoteURL: URL?) -> String {
+        let now = Date()
+        let envelope = RemoteAttentionPushEnvelope(
+            eventID: "telegram-test-\(UUID().uuidString)",
+            kind: .question,
+            state: .pending,
+            requestID: "telegram-test",
+            issuedAt: now,
+            expiresAt: now.addingTimeInterval(600)
+        )
+        return message(for: envelope, remoteURL: remoteURL)
+    }
+
     static func message(
         for envelope: RemoteAttentionPushEnvelope,
         remoteURL: URL?
