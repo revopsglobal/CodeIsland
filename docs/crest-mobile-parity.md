@@ -93,15 +93,37 @@ This delta supersedes older "current build" language below.
   `APP_STORE_ELIGIBLE`, internal group `CodeIsland Internal`, artifact
   `8438019701`, downloaded IPA SHA-256
   `49d630077497c5ffd59dacf177f551520330d9b40c92e30d758d761a49753379`.
-- Latest strict E2E report at `2026-07-19T04:27:14Z` returned
+- Latest private-web signal-quality source: PR #102 merged as
+  `2b8d30bf93335e2001857817377b0f08c5de0831`, aligning the authenticated web
+  fallback with native Buddy read-only routing. System, Weather, Agents,
+  GitHub, and Battery refreshes now quietly refresh/report instead of preparing
+  a Mac mutation confirmation; Downloads and Bluetooth refresh remain host
+  actions because they trigger real Mac-side scans/operations. Verification
+  passed the focused web read-only routing test, the core Buddy parity read-only
+  policy test, the full `RemoteApprovalWebAppTests` suite (8 tests), `git diff
+  --check`, and `graphify update . --no-viz`.
+- Latest Mac delivery after PR #102: workflow run `29673460310` from
+  `2b8d30bf93335e2001857817377b0f08c5de0831` completed the signed ARM64 DMG
+  build. Artifact `8438106765` (`CodeIsland-macos-arm64-dmg`) downloaded with
+  SHA-256
+  `5d2657304ed29f07ec99e809bc6e7b375004569f097c73fc9238dedf331fdddf`. The
+  mounted and installed app both passed strict codesign verification with
+  bundle `com.codeisland.app`, Team `44JG2Y95CH`, and CDHash
+  `bbf717be0ae0e1fbafa6c44e240db47f14a65050`. It was installed at
+  `/Applications/CodeIsland.app` with the previous app preserved as
+  `/Applications/CodeIsland.app.backup-20260719043929`, relaunched as PID
+  `30209`, and reported version/build `1.0.53`. Local and Tailscale `/health`
+  both returned running with `pendingCount: 0`; both local and Tailscale web
+  roots served the new `readOnlyHubActions` quiet-refresh code.
+- Latest strict E2E report at `2026-07-19T04:40:10Z` returned
   `status = physical-gate-incomplete`, `complete = false`: the Mac app is
   installed and running at `1.0.53`, local and Tailscale `/health` are HTTP
   `200` with zero pending work, Mac Settings sync expects Buddy
   `1.0.0 (20260719042243)`, and
   `RemoteApprovalHTTPServerTests/testAuthenticatedHostLifecycleOverRealListener`
-  passed, but the physical iPhone is still stale on Buddy
-  `1.0.0 (20260718212803)` instead of latest TestFlight
-  `1.0.0 (20260719042243)`.
+  passed, and the newly installed Mac app is running as PID `30209`, but the
+  physical iPhone is still stale on Buddy `1.0.0 (20260718212803)` instead of
+  latest TestFlight `1.0.0 (20260719042243)`.
 - Latest Buddy parity-contract source: PR #98 merged as
   `b877909bb280eedaa368feef8e669631f365a60a`, aligning the iPhone
   mock/demo hub with the production Buddy action vocabulary. Demo-only action
