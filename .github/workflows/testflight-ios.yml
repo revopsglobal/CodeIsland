@@ -10,6 +10,11 @@ on:
         description: Optional numeric CFBundleVersion. Defaults to a UTC timestamp.
         required: false
         type: string
+      bootstrap_share_profile_only:
+        description: Create or refresh the Share extension App Store provisioning profile without building.
+        required: false
+        default: false
+        type: boolean
       tester_email:
         description: Internal tester email to verify or invite.
         required: false
@@ -74,6 +79,72 @@ permissions:
   contents: read
 
 jobs:
+  bootstrap-share-profile:
+    name: Bootstrap Share extension App Store profile
+    if: ${{ inputs.bootstrap_share_profile_only }}
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate signing and App Store Connect secrets
+        shell: bash
+        env:
+          DIST_P12: ${{ secrets.APPLE_DIST_P12_BASE64 }}
+          DIST_PASSWORD: ${{ secrets.APPLE_DIST_P12_PASSWORD }}
+          ASC_ISSUER: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY: ${{ secrets.ASC_KEY_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8_BASE64 }}
+        run: |
+          missing=0
+          for name in DIST_P12 DIST_PASSWORD ASC_ISSUER ASC_KEY ASC_KEY_P8; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is required"
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Install App Store Connect API key
+        shell: bash
+        env:
+          ASC_KEY: ${{ secrets.ASC_KEY_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8_BASE64 }}
+        run: |
+          KEY_DIR="$HOME/.appstoreconnect/private_keys"
+          mkdir -p "$KEY_DIR"
+          printf '%s' "$ASC_KEY_P8" | base64 --decode > "$KEY_DIR/AuthKey_$ASC_KEY.p8"
+          chmod 600 "$KEY_DIR/AuthKey_$ASC_KEY.p8"
+          echo "ASC_PRIVATE_KEY_PATH=$KEY_DIR/AuthKey_$ASC_KEY.p8" >> "$GITHUB_ENV"
+
+      - name: Resolve configured distribution certificate serial
+        shell: bash
+        env:
+          DIST_P12: ${{ secrets.APPLE_DIST_P12_BASE64 }}
+          DIST_PASSWORD: ${{ secrets.APPLE_DIST_P12_PASSWORD }}
+        run: |
+          P12_PATH="$RUNNER_TEMP/codeisland-distribution.p12"
+          CERT_PATH="$RUNNER_TEMP/codeisland-distribution.pem"
+          printf '%s' "$DIST_P12" | base64 --decode > "$P12_PATH"
+          openssl pkcs12 -in "$P12_PATH" -clcerts -nokeys -passin "pass:$DIST_PASSWORD" -out "$CERT_PATH"
+          SERIAL="$(openssl x509 -in "$CERT_PATH" -noout -serial | cut -d= -f2)"
+          test -n "$SERIAL"
+          echo "DISTRIBUTION_CERTIFICATE_SERIAL=$SERIAL" >> "$GITHUB_ENV"
+
+      - name: Create or refresh Share extension profile
+        shell: bash
+        env:
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          PROFILE_OUTPUT_PATH: ${{ runner.temp }}/CodeIsland-Buddy-Share-App-Store.mobileprovision
+        run: scripts/bootstrap-ios-app-store-profile.sh
+
+      - name: Upload Share extension profile
+        uses: actions/upload-artifact@v4
+        with:
+          name: CodeIsland-Buddy-Share-App-Store-Profile
+          path: ${{ runner.temp }}/CodeIsland-Buddy-Share-App-Store.mobileprovision
+          if-no-files-found: error
+
   repair-memberships:
     name: Restore requested app and remove obsolete app
     if: ${{ inputs.repair_app_memberships_only }}
@@ -126,7 +197,7 @@ jobs:
 
   manage-tester:
     name: Verify internal TestFlight tester
-    if: ${{ !inputs.repair_app_memberships_only && !inputs.verify_uploaded_build_only && !inputs.inspect_delivery_only }}
+    if: ${{ !inputs.bootstrap_share_profile_only && !inputs.repair_app_memberships_only && !inputs.verify_uploaded_build_only && !inputs.inspect_delivery_only }}
     runs-on: macos-15
     steps:
       - name: Checkout
