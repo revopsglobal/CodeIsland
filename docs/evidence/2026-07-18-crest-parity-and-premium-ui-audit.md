@@ -234,6 +234,16 @@ action. Put transport diagnostics behind Connection Details.
   `testAttentionFirstShellKeepsToolsSecondary`,
   `testApprovalAttentionStageKeepsExactActionsProminent`, and
   `testPersonalHubModesRenderAdvertisedModules`.
+- Post-merge TestFlight delivery for this polish passed in workflow run
+  `29666698698` from merge commit
+  `cf8f829dbc87b8130cdfcc06c1728e241b0141aa`. Build
+  `1.0.0 (20260719001734)` uploaded successfully with delivery UUID
+  `644d0693-cb10-447e-b385-7ef8509b6958`; Apple reported `VALID`,
+  `APP_STORE_ELIGIBLE`, and `CodeIsland Internal` all-build access. Local IPA:
+  `/Users/gregharned/Downloads/CodeIsland-TestFlight-20260719001734-run-29666698698/CodeIslandCompanion.ipa`;
+  SHA-256
+  `b3c43a4d19c3f4290364527c0ab8c9bf7a8722e972ced1bef202b1cfe82e5480`.
+  Physical installation and registration of this exact build remain pending.
 - `scripts/smoke-companion-ui.sh` completed with a 20-second system settle
   gate and produced eight full-chrome native renders: idle, approval,
   question, multiple-attention, Sessions, Tools, light, and dark.
