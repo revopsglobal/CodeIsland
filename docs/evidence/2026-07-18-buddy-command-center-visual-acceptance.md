@@ -109,3 +109,62 @@ Verification:
 This is a source-level and unit-test receipt only. No real Telegram message was
 sent, because that would require Greg's bot token/chat ID and an explicit
 configured personal alert target.
+
+## Attention fallback delivery — 2026-07-18 evening
+
+Implementation PR: [#67](https://github.com/revopsglobal/CodeIsland/pull/67)
+merged to `main` as `c1d5cf536e3d6d7687d53a5db96542485476b566`.
+
+Source verification before merge:
+
+- `DEVELOPER_DIR=/Users/gregharned/Downloads/Xcode-beta.app/Contents/Developer swift test --filter APNSNotificationSenderTests`
+- Result: **6 passed, 0 failed**.
+- `STRICT=0 EXPECTED_MAC_VERSION=1.0.53 EXPECTED_CLIENT_VERSION=1.0.0 EXPECTED_CLIENT_BUILD=20260719001734 scripts/report-physical-acceptance.sh | jq '.gates.physicalBuildStatus'`
+- `graphify update . --no-viz`
+- `git diff --check`
+
+Signed Mac delivery from `main`:
+
+- Workflow: [Build macOS ARM DMG run 29667371137](https://github.com/revopsglobal/CodeIsland/actions/runs/29667371137)
+- Source commit: `c1d5cf536e3d6d7687d53a5db96542485476b566`
+- Result: **success**.
+- Artifact: `CodeIsland-macos-arm64-dmg`, artifact ID `8436194546`.
+- Uploaded artifact zip SHA-256: `661a6ab3240fb6c947131e8ec48239c372183d9d89d9c5d3d0cb3f5866f96378`.
+- Downloaded DMG SHA-256: `65953f22a2d44a1cd0bf2296f53a8709b1e13239c54a85791bd6ae0b585686b9`.
+- Local DMG: `/Users/gregharned/Downloads/CodeIsland-telegram-fallback-29667371137-174812/CodeIsland-macos-arm64-dmg/CodeIsland.dmg`.
+- Installed app: `/Applications/CodeIsland.app`.
+- Installed version/build: `1.0.53` / `1.0.53`.
+- Installed signature: valid, TeamIdentifier `44JG2Y95CH`, Authority `Apple Development: Greg Harned (BD6FD6Q8AS)`.
+- Local health after launch: HTTP 200, `running: true`, `pendingCount: 0`, host version `1.0.53`.
+- Tailscale health after launch: HTTP 200 at `https://gregs-macbook-air.tail62f27c.ts.net:9443/health`, `running: true`, `pendingCount: 0`.
+
+Signed Buddy/TestFlight delivery from `main`:
+
+- Workflow: [Build and Upload iOS TestFlight run 29667371841](https://github.com/revopsglobal/CodeIsland/actions/runs/29667371841)
+- Source commit: `c1d5cf536e3d6d7687d53a5db96542485476b566`
+- Result: **success**.
+- Tester receipt: `gregharned@gmail.com`, state `ready`, app `com.revopsglobal.codeisland.buddy`, app ID `6791897500`, group `CodeIsland Internal`, group ID `8db9e637-03e3-4147-afda-895700e127c8`.
+- Buddy build: `1.0.0 (20260719004222)`.
+- Delivery UUID: `3e7203b8-8dd7-4ba1-ba57-7814853dcc40`.
+- Apple state: `VALID`.
+- Audience: `APP_STORE_ELIGIBLE`.
+- Internal group access: `CodeIsland Internal` has access to all builds.
+- Artifact: `CodeIsland-Buddy-TestFlight-20260719004222`, artifact ID `8436181146`.
+- Uploaded artifact zip SHA-256: `17747254cdf38e727cc390ac2e123f4a649052f90c66f6a1335ae8423d2bc587`.
+- Downloaded IPA SHA-256: `2cd1a35a0a1bd0f8ec3dab2c8203f9cd2a1668c14e7734e10595b73a686bc14c`.
+- Local IPA: `/Users/gregharned/Downloads/CodeIsland-TestFlight-29667371841-174812/CodeIsland-Buddy-TestFlight-20260719004222/CodeIslandCompanion.ipa`.
+
+Remaining physical-device boundary:
+
+- The newest Buddy build `20260719004222` is valid in TestFlight, but it has
+  not yet been observed from Greg's physical iPhone.
+- `scripts/report-physical-acceptance.sh` currently reports physical build
+  status `stale`.
+- Expected physical Buddy: `1.0.0 (20260719004222)`.
+- Newest observed physical Buddy: `1.0.0 (20260718212803)`.
+- Newest observed physical device: `afba2915-b0a3-456f-a5f2-265bf7e8a64a`
+  (`iPhone`), last seen `2026-07-19T00:17:23Z`.
+
+Next physical acceptance step: install/open CodeIsland Buddy build
+`20260719004222` from TestFlight on the iPhone, then rerun strict physical
+acceptance with `EXPECTED_CLIENT_BUILD=20260719004222`.
