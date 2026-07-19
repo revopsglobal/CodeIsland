@@ -226,6 +226,16 @@ This delta supersedes older "current build" language below.
   `CodeIslandCompanionUITests/testAttentionFirstShellKeepsToolsSecondary` on
   Simulator `ECC99681-C3ED-4452-B727-0F9E2C09C469`, `git diff --check`, and
   `graphify update . --no-viz`.
+- Latest Telegram-to-Buddy attention routing source preserves generic Telegram
+  fallback links such as
+  `codeisland://approvals/pending` and `codeisland://questions/pending` across
+  cold Buddy opens until the first authenticated snapshot arrives. The
+  attention stage now prefers the deep-linked/highlighted item over the
+  previously visible card, while stale links fall back to the current valid
+  selection. Verification passed `ios/CodeIslandCompanion/scripts/run-model-tests.sh`
+  and the focused iOS Simulator XCTest
+  `CodeIslandCompanionTests/CompanionCommandCenterModelTests` on Simulator
+  `ECC99681-C3ED-4452-B727-0F9E2C09C469`.
 - Latest TestFlight delivery after PR #116: workflow run `29675030565` from
   `4b7b71ef748bd90c9c0f3b77a34b9e51ae809485` produced Buddy
   `1.0.0 (20260719053349)`, delivery UUID
@@ -618,7 +628,7 @@ below.
 | Weather | Physical ZIP fallback proven during the unlocked 1.0.41 run: `61° Clear · Ridgefield, Washington`; Location Services mode remains unverified | Ready implementation: mirrored remote weather and refresh | Physical location-mode, remote refresh, and offline-state runtime tests |
 | Notifications | Partial by deliberate platform boundary: CodeIsland action-required alerts are prioritized, deduped, redacted, and separated; macOS exposes no public cross-app Notification Center history API, so CodeIsland does not read private databases or request Full Disk Access | Physical proof on last observed iPhone build `20260718212803`: production APNs, ActivityKit push-to-start, and request-scoped update tokens are registered. A real question rendered the exact attention card, returned the reviewed answer, registered token for request `6ce1e9a8-e928-451d-9571-d10751ee017a`, resolved to zero active activities, and pruned that terminal token. Latest TestFlight build `20260719053349` is `VALID` but has not yet been opened on the physical iPhone. | Open latest TestFlight build `20260719053349` on the physical iPhone, then capture clean compact/expanded artwork without a competing activity and exercise stale-push behavior |
 | Claude co-pilot/voice/proposals | Ready implementation: read-only Ask and reviewed Do through authenticated local Claude Code with tools disabled, push-to-talk/continuous speech, visible listening state, bounded user-selected/drop file context, and best-effort screen-share-hidden strip with honest disclosure | Ready implementation: Ask/Do, speech recognition, proposal review, exact confirmation, and deep-linked task/note preparation | Run real Ask and multi-action Do, Mac voice/file context, and physical-iPhone dictation/task creation |
-| AI Coding sessions/approvals/questions | Signed 1.0.53 is installed, healthy, keeps the private host awake, and backed the physical question continuation | Physical build `20260718212803` is installed/opened and authenticated. A real exact question was selected, reviewed, answered `Approve`, audited, and drained without routine-content noise. Latest Buddy source now adds the command-center signal board so approvals/questions are summarized before routine sessions, but build `20260719053349` still needs physical iPhone acceptance. | Open latest build `20260719053349`, rerun exact-request replay, and complete one cellular/Tailscale approval away from local Wi-Fi |
+| AI Coding sessions/approvals/questions | Signed 1.0.53 is installed, healthy, keeps the private host awake, and backed the physical question continuation | Physical build `20260718212803` is installed/opened and authenticated. A real exact question was selected, reviewed, answered `Approve`, audited, and drained without routine-content noise. Latest Buddy source adds the command-center signal board and preserves Telegram fallback `pending` deep links through cold refresh so approvals/questions are summarized and focused before routine sessions, but build `20260719053349` still needs physical iPhone acceptance. | Open latest build `20260719053349`, rerun exact-request replay, and complete one cellular/Tailscale approval away from local Wi-Fi |
 | GitHub pull requests and CI | Ready: authenticated `gh` PR list/status/deep links | Ready: mirrored list/status/deep links | Runtime refresh/open test from iPhone |
 | Audio device switcher | Physical read proof on 1.0.43: only MacBook Air Microphone and MacBook Air Speakers carry the respective default flags; the remaining real and virtual devices no longer show false defaults. Switching, mute, and exact 0–100 output volume remain physically unverified | Unverified: mirrored device actions, ±10, and native/web volume editor | Run physical device switch, volume update, and expected failure states |
 | Bluetooth devices/connect/disconnect | Unverified: connected/remembered devices, battery, connect/disconnect | Unverified: mirrored devices and confirmed remote actions | Physical accessory connect/disconnect tests |

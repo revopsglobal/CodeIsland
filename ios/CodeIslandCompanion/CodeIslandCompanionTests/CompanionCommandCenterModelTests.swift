@@ -76,6 +76,54 @@ final class CompanionCommandCenterModelTests: XCTestCase {
         )
     }
 
+    func testAttentionSelectionPrefersDeepLinkedItemOverPreviousRoutineSelection() {
+        XCTAssertEqual(
+            CompanionAttentionSelection.resolve(
+                previousID: "approval-a",
+                preferredID: "question-b",
+                currentIDs: ["approval-a", "question-b"]
+            ),
+            "question-b",
+            "A Telegram, push, or App Intent deep link must bring the requested attention item to the stage instead of preserving the old card."
+        )
+        XCTAssertEqual(
+            CompanionAttentionSelection.resolve(
+                previousID: "approval-a",
+                preferredID: "missing-question",
+                currentIDs: ["approval-a", "question-b"]
+            ),
+            "approval-a",
+            "Stale deep links should not discard the currently visible valid attention item."
+        )
+    }
+
+    func testGenericTelegramPendingDeepLinkTargetsFirstSnapshotItemAfterColdOpen() {
+        XCTAssertEqual(
+            RemoteApprovalClient.genericPendingDeepLinkTarget(
+                kind: .approval,
+                approvalIDs: ["approval-a", "approval-b"],
+                questionIDs: ["question-a"]
+            ),
+            "approval-a"
+        )
+        XCTAssertEqual(
+            RemoteApprovalClient.genericPendingDeepLinkTarget(
+                kind: .question,
+                approvalIDs: ["approval-a"],
+                questionIDs: ["question-a", "question-b"]
+            ),
+            "question-a"
+        )
+        XCTAssertNil(
+            RemoteApprovalClient.genericPendingDeepLinkTarget(
+                kind: .approval,
+                approvalIDs: [],
+                questionIDs: ["question-a"]
+            ),
+            "Generic approval links should not jump to questions when the approval queue is empty."
+        )
+    }
+
     func testMotionPolicyKeepsRoutinePollsVisuallyInert() {
         XCTAssertFalse(CompanionMotionPolicy.animatesRoutinePoll)
         XCTAssertTrue(

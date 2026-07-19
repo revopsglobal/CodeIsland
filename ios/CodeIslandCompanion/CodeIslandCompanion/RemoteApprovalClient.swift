@@ -71,6 +71,7 @@ final class RemoteApprovalClient: ObservableObject {
     private var isActive = true
     private var clientMetadataRegisteredThisLaunch = false
     private var notificationObservers: [NSObjectProtocol] = []
+    private var pendingGenericDeepLink: RemoteAttentionKind?
     var onSnapshotReceived: ((RemoteApprovalSnapshot) -> Void)?
 
     var hasPairingCredential: Bool {
@@ -82,6 +83,19 @@ final class RemoteApprovalClient: ObservableObject {
     /// that stable presentation in place while subsequent polls run.
     nonisolated static func refreshStartState(hasCompletedSnapshot: Bool) -> ConnectionState? {
         hasCompletedSnapshot ? nil : .connecting
+    }
+
+    nonisolated static func genericPendingDeepLinkTarget(
+        kind: RemoteAttentionKind,
+        approvalIDs: [String],
+        questionIDs: [String]
+    ) -> String? {
+        switch kind {
+        case .approval:
+            return approvalIDs.first
+        case .question:
+            return questionIDs.first
+        }
     }
 
     init() {
@@ -370,6 +384,7 @@ final class RemoteApprovalClient: ObservableObject {
             let snapshot: RemoteApprovalSnapshot = try await perform(request, authenticated: true)
             approvals = snapshot.approvals
             questions = snapshot.questions
+            consumePendingGenericDeepLink()
             if let highlightedApprovalID,
                !approvals.contains(where: { $0.id == highlightedApprovalID }) {
                 self.highlightedApprovalID = nil
@@ -519,18 +534,57 @@ final class RemoteApprovalClient: ObservableObject {
         guard let route = PersonalHubDeepLink(url: url) else { return }
         switch route {
         case .pendingApproval(let id):
-            highlightedApprovalID = id ?? approvals.first?.id
+            if let id {
+                pendingGenericDeepLink = nil
+                highlightedApprovalID = id
+            } else if let firstID = approvals.first?.id {
+                pendingGenericDeepLink = nil
+                highlightedApprovalID = firstID
+            } else {
+                pendingGenericDeepLink = .approval
+                highlightedApprovalID = nil
+            }
             Task { await refresh() }
         case .pendingQuestion(let id):
-            highlightedQuestionID = id ?? questions.first?.id
+            if let id {
+                pendingGenericDeepLink = nil
+                highlightedQuestionID = id
+            } else if let firstID = questions.first?.id {
+                pendingGenericDeepLink = nil
+                highlightedQuestionID = firstID
+            } else {
+                pendingGenericDeepLink = .question
+                highlightedQuestionID = nil
+            }
             Task { await refresh() }
         case .module(let module):
+            pendingGenericDeepLink = nil
             highlightedHubModuleID = module
             selectedMode = PersonalHubCatalog.preferredMode(for: module)
         case .quickJot(let destination, let text):
+            pendingGenericDeepLink = nil
             quickJotSeedText = text
             quickJotDestination = BuddyQuickJotDestination(rawValue: destination.rawValue)
         }
+    }
+
+    private func consumePendingGenericDeepLink() {
+        guard let pendingGenericDeepLink else { return }
+        switch pendingGenericDeepLink {
+        case .approval:
+            highlightedApprovalID = Self.genericPendingDeepLinkTarget(
+                kind: .approval,
+                approvalIDs: approvals.map(\.id),
+                questionIDs: questions.map(\.id)
+            )
+        case .question:
+            highlightedQuestionID = Self.genericPendingDeepLinkTarget(
+                kind: .question,
+                approvalIDs: approvals.map(\.id),
+                questionIDs: questions.map(\.id)
+            )
+        }
+        self.pendingGenericDeepLink = nil
     }
 
     var connectionDetail: String {
