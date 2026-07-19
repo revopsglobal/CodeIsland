@@ -626,6 +626,12 @@ enum RemoteApprovalWebApp {
           return `<div class="hub-actions">${actions.map(action=>`<button class="hub-action ${action.role==='primary'?'primary':''}" data-hub-action="1" data-module="${escapeAttribute(moduleID)}" data-action="${escapeAttribute(action.id)}" data-target="${escapeAttribute(action.targetID||targetID||'')}" data-deeplink="${escapeAttribute(action.deepLink||'')}" data-payload="${escapeAttribute(payload)}" data-value="${escapeAttribute(action.value||'')}">${escapeHTML(action.label)}</button>`).join('')}</div>`;
         }
 
+        const readOnlyHubActions=new Set(['system.refresh','weather.refresh','agents.refresh','github.refresh','battery.refresh']);
+
+        function isReadOnlyHubAction(moduleID,actionID) {
+          return readOnlyHubActions.has(`${moduleID}.${actionID}`);
+        }
+
         function stopClaudeSpeech(message='Voice stopped.') {
           if(claudeInput.silenceTimer) clearTimeout(claudeInput.silenceTimer);
           claudeInput.silenceTimer=0;
@@ -732,6 +738,15 @@ enum RemoteApprovalWebApp {
           if(actionID==='copyToDevice') {
             try { await navigator.clipboard.writeText(payload); notify('Copied to this device'); }
             catch(error) { notify('Clipboard permission was denied',true); }
+            return;
+          }
+          if(isReadOnlyHubAction(moduleID,actionID)) {
+            if(actionID==='refresh') {
+              await refreshHub();
+              notify(`Refreshed ${moduleNames[moduleID]||moduleID}`);
+            } else {
+              notify(`${moduleNames[moduleID]||moduleID} updated`);
+            }
             return;
           }
           if(deepLink) { window.location.href=deepLink; return; }
