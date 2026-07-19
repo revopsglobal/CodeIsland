@@ -19,12 +19,12 @@ setup() {
 
   printf '%s\n' '#!/usr/bin/env bash' \
     'set -euo pipefail' \
-    'method="$1"; path="$2"; body="${3:-}"' \
+    'method="$1"; path="$2"; body="${3:-}"; shift 3 || true; query="$*"' \
     'jq -n -c --arg method "$method" --arg path "$path" --arg body "$body" '\''{method:$method,path:$path,body:$body}'\'' >> "$ASC_CALLS_PATH"' \
     'case "$method $path" in' \
     '  "GET /v1/bundleIds") printf '\''%s'\'' '\''{"data":[]}'\'' ;;' \
     '  "POST /v1/bundleIds") printf '\''%s'\'' '\''{"data":{"type":"bundleIds","id":"bundle-1"}}'\'' ;;' \
-    '  "GET /v1/bundleIds/bundle-1/bundleIdCapabilities") printf '\''%s'\'' '\''{"data":[]}'\'' ;;' \
+    '  "GET /v1/bundleIds/bundle-1/bundleIdCapabilities") [[ "$query" != *"limit="* ]] || exit 98; printf '\''%s'\'' '\''{"data":[]}'\'' ;;' \
     '  "POST /v1/bundleIdCapabilities") printf '\''%s'\'' '\''{"data":{"type":"bundleIdCapabilities","id":"cap-1"}}'\'' ;;' \
     '  "GET /v1/certificates") printf '\''{"data":[{"type":"certificates","id":"cert-1","attributes":{"activated":true,"serialNumber":"AABBCC"}}]}'\'' ;;' \
     '  "GET /v1/profiles") printf '\''%s'\'' '\''{"data":[]}'\'' ;;' \

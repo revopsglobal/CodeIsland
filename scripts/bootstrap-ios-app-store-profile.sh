@@ -117,8 +117,7 @@ else
 fi
 
 capabilities_response="$(asc_request GET "/v1/bundleIds/$bundle_resource_id/bundleIdCapabilities" "" \
-    "fields[bundleIdCapabilities]=capabilityType,settings" \
-    "limit=200")"
+    "fields[bundleIdCapabilities]=capabilityType,settings")"
 app_groups_capability_id="$(printf '%s' "$capabilities_response" | jq -r \
     '.data[] | select(.attributes.capabilityType == "APP_GROUPS") | .id' \
     | head -n 1)"
