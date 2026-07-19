@@ -36,6 +36,23 @@ fi
 
 latest_gate_complete="$(printf '%s' "$latest_gate_output" | jq -r '.gate.complete == true')"
 latest_testflight_sha="$(printf '%s' "$latest_gate_output" | jq -r '.latestTestFlight.headSha // empty')"
+remote_host_health_output="$(printf '%s' "$latest_gate_output" | jq -c '
+    {
+        checked:((.physicalAcceptance.health? // null) != null),
+        deliveryHealthy:(.physicalAcceptance.gates.deliveryHealthy // null),
+        macRunning:(.physicalAcceptance.mac.running // null),
+        local:(.physicalAcceptance.health.local // null),
+        tailscale:(.physicalAcceptance.health.tailscale // null),
+        nextAction:(
+            if (.physicalAcceptance.health.tailscale.running // false) then
+                "Tailscale host health is running; continue physical iPhone acceptance."
+            elif (.physicalAcceptance.health? // null) == null then
+                "Latest gate did not include host health; rerun scripts/report-physical-acceptance.sh."
+            else
+                "Tailscale host health is not running; relaunch CodeIsland on the Mac and rerun strict E2E."
+            end
+        )
+    }')"
 
 testflight_source_drift_output=""
 set +e
@@ -111,6 +128,7 @@ jq -n \
     --argjson complete "$complete" \
     --argjson latestGate "$latest_gate_output" \
     --argjson latestGateExit "$latest_gate_exit" \
+    --argjson remoteHostHealth "$remote_host_health_output" \
     --argjson testFlightSourceDrift "$testflight_source_drift_output" \
     --argjson directDeviceVisibility "$direct_device_visibility_output" \
     --arg swiftTestFilter "$SWIFT_TEST_FILTER" \
@@ -128,6 +146,7 @@ jq -n \
             nextAction:$latestGate.gate.nextAction,
             report:$latestGate
         },
+        remoteHostHealth:$remoteHostHealth,
         testFlightSourceDrift:$testFlightSourceDrift,
         directDeviceVisibility:$directDeviceVisibility,
         interactionContract:{
