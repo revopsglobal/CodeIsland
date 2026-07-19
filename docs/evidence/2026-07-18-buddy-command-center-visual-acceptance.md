@@ -302,3 +302,46 @@ Remaining physical-device boundary:
 Next physical acceptance step: install/open CodeIsland Buddy build
 `20260719011702` from TestFlight on the iPhone, then rerun strict physical
 acceptance with `EXPECTED_CLIENT_BUILD=20260719011702`.
+
+## Glances inline recovery delivery — 2026-07-18 night
+
+Source PR #74 merged as
+`b12ad84607ecf3938712d8333e877d23a367b60d`. The change makes Mac Glances
+permission and weather recovery direct from the panel: Calendar shows
+Grant/Upgrade/Privacy, Reminders shows Grant/Privacy, and Weather shows
+Grant/Privacy or Set ZIP depending on the current Location Services/manual
+location state. This preserves the full Glances Settings page while removing
+one layer of discovery from the common failure states.
+
+Focused verification before merge:
+
+- `DEVELOPER_DIR=/Users/gregharned/Downloads/Xcode-beta.app/Contents/Developer swift test --filter GlancesModelTests`
+- Result: **15 passed, 0 failed**.
+- `graphify update . --no-viz`.
+- `git diff --check`.
+
+Signed Mac delivery from `main`:
+
+- Workflow: [Build macOS ARM DMG run 29668659780](https://github.com/revopsglobal/CodeIsland/actions/runs/29668659780)
+- Source commit: `b12ad84607ecf3938712d8333e877d23a367b60d`
+- Result: **success**.
+- Artifact: `CodeIsland-macos-arm64-dmg`, artifact ID `8436600885`.
+- Uploaded artifact zip SHA-256:
+  `57b594dbd854d449482a2c0d80236dfebe50dc6e72a291c0cc70e9bb01f9dfa5`.
+- Downloaded DMG SHA-256:
+  `f25352a62d7b3d5c75dc4c0c7a01e1933b828c01f2045c5ddb5fb2f2b0b7da95`.
+- Local DMG:
+  `/Users/gregharned/Downloads/CodeIsland-main-b12ad84-mac-29668659780-183452/CodeIsland-macos-arm64-dmg/CodeIsland.dmg`.
+- Installed app: `/Applications/CodeIsland.app`.
+- Installed version/build: `1.0.53` / `1.0.53`.
+- Installed signature: valid, TeamIdentifier `44JG2Y95CH`, CDHash
+  `f026ef64aee13e297d0d5c6696bd6b109579f1ef`, Authority
+  `Apple Development: Greg Harned (BD6FD6Q8AS)`.
+- Local health after launch: HTTP 200, `running: true`, `pendingCount: 0`,
+  host version `1.0.53`.
+- Tailscale health after launch: HTTP 200, `running: true`,
+  `pendingCount: 0`.
+
+No new TestFlight build was generated for PR #74 because this was Mac-only
+Glances UI source. The latest valid Buddy build remains `20260719011702`, and
+the physical iPhone remains stale until that build is installed/opened.
