@@ -243,6 +243,16 @@ This delta supersedes older "current build" language below.
   `40484307-1a88-4e5f-860b-0728e4251932`, Apple state `VALID`, audience
   `APP_STORE_ELIGIBLE`, internal group `CodeIsland Internal`, and artifact
   `8438849799`.
+- Latest away-readiness source adds `scripts/report-away-readiness.sh`, a
+  redacted machine-readable report for the exact away-use state: current
+  TestFlight Buddy build, physical Buddy check-in, local/Tailscale private web
+  health, strict interaction contract, and optional Telegram fallback
+  configuration. Live report at `2026-07-19T06:14:16Z` returned
+  `status = ready-for-manual-physical-acceptance`,
+  `readyForAwayManualAcceptance = true`, latest Buddy build
+  `20260719060201`, web fallback reachable with Tailscale running and
+  `pendingCount = 0`, Telegram fallback disabled/optional, and the sole
+  required gate `physical-buddy-checkin`.
 - Latest strict E2E report at `2026-07-19T06:07:24Z` returned
   `status = physical-gate-incomplete`, `complete = false`: the Mac app is
   installed and running at `1.0.53`, local and Tailscale `/health` are HTTP
@@ -851,6 +861,14 @@ then exits `2` unless both pass:
 
 ```bash
 scripts/report-strict-physical-e2e.sh
+```
+
+For away-use readiness before the physical iPhone tap, use the combined
+redacted report. It keeps optional Telegram separate from required Buddy/web
+gates and exits `2` until the physical Buddy build check-in is complete:
+
+```bash
+scripts/report-away-readiness.sh
 ```
 
 1. On iPhone, open Apple's **TestFlight** app while signed in as

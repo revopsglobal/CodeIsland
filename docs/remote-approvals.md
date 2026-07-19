@@ -79,3 +79,21 @@ This direct Tailscale design remains the lowest-cost primary architecture.
 Telegram is only a personal backup alert channel for signal over noise when
 APNs, Live Activities, or TestFlight delivery are not the surface Greg sees
 first.
+
+## Away readiness report
+
+Use the strict physical report for final acceptance, and use the away readiness
+report when deciding whether Greg can safely leave the Mac and finish the last
+tap from his phone:
+
+```bash
+scripts/report-away-readiness.sh
+```
+
+The report combines the latest TestFlight/physical gate, local and Tailscale
+host health, source-drift status, and redacted Telegram fallback configuration.
+It exits `2` until physical Buddy acceptance is complete, but
+`status = ready-for-manual-physical-acceptance` means the Mac host, private web
+fallback, and current TestFlight build are ready and the remaining required gate
+is the physical iPhone opening the named Buddy build. Telegram is reported as
+an optional fallback, not as a required control plane.
