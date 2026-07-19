@@ -17,17 +17,16 @@ Sources used for the baseline:
 
 This delta supersedes older "current build" language below.
 
-- Latest source: PR #72 merged as
-  `5ccefcd8683ad2ce22ac833f4c16e153df3df8fc`, polishing Buddy's normal
-  connection copy so Tailscale/HTTPS mechanics stay in Connection settings
-  rather than the primary command-center surface.
-- Installed Mac: `1.0.53`, workflow run `29668328492`, artifact
-  `8436497566`, downloaded DMG SHA-256
-  `320fcc5ebb42557353e0a1882549ade0fdcc8854cc635bf37b2ee6b911723be8`,
+- Latest source: PR #74 merged as
+  `b12ad84607ecf3938712d8333e877d23a367b60d`, adding inline Calendar,
+  Reminders, and Weather recovery actions to the Mac Glances panel.
+- Installed Mac: `1.0.53`, workflow run `29668659780`, artifact
+  `8436600885`, downloaded DMG SHA-256
+  `f25352a62d7b3d5c75dc4c0c7a01e1933b828c01f2045c5ddb5fb2f2b0b7da95`,
   ARM64, signature valid under Team `44JG2Y95CH`, CDHash
-  `24cb7ea82cb63f169a23bc8f1e04476e311bd9c8`, local `/health` and
+  `f026ef64aee13e297d0d5c6696bd6b109579f1ef`, local `/health` and
   Tailscale `/health` both running with zero pending work.
-- Latest TestFlight delivery: run `29668329068`, Buddy build
+- Latest TestFlight delivery remains run `29668329068`, Buddy build
   `1.0.0 (20260719011702)`, delivery UUID
   `c8dcbe08-5e61-4a0e-b27f-7abb19067009`, Apple state `VALID`, audience
   `APP_STORE_ELIGIBLE`, internal group `CodeIsland Internal`, artifact
@@ -43,12 +42,15 @@ This delta supersedes older "current build" language below.
   successful `testflight-ios.yml` delivery on `main`, extract the delivered
   Buddy build, and fail closed until that exact build is opened on the physical
   iPhone.
-- Follow-up source hardening on `codex/glances-inline-recovery` makes Glances
-  permission/weather recovery direct from the panel: Calendar and Reminders
-  show Grant/Upgrade/Privacy actions inline, and Weather shows Grant/Privacy
-  or Set ZIP without requiring Greg to discover the settings icon first.
+- Follow-up source hardening on `codex/glances-inline-recovery` is now signed
+  and installed via Mac workflow `29668659780`: Calendar and Reminders show
+  Grant/Upgrade/Privacy actions inline, and Weather shows Grant/Privacy or Set
+  ZIP without requiring Greg to discover the settings icon first.
 
-Previous current-source deliveries retained for traceability: PR #69 merged as
+Previous current-source deliveries retained for traceability: PR #72 merged as
+`5ccefcd8683ad2ce22ac833f4c16e153df3df8fc`; Mac workflow `29668328492`
+delivered the Buddy connection-copy polish, and TestFlight workflow
+`29668329068` delivered Buddy `1.0.0 (20260719011702)`. PR #69 merged as
 `33fc732043fa93b132a740d478c5bcc2899c47df`; Mac workflow `29667770216` and
 TestFlight workflow `29667770858` delivered Buddy `1.0.0 (20260719005630)`,
 which was not physically observed before the newer `20260719011702` build
