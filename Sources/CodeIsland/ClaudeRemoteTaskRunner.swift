@@ -173,6 +173,34 @@ final class ClaudeRemoteTaskRunner {
         }
     }
 
+    func restore(taskID: UUID, workspaceURL: URL, sessionID: String) throws {
+        guard store.task(id: taskID) != nil else { throw RunnerError.unknownTask(taskID) }
+        guard contexts[taskID] == nil else { throw RunnerError.alreadyStarted(taskID) }
+        let workspace = RemoteCwdFilter.canonical(workspaceURL)
+        contexts[taskID] = Context(
+            taskID: taskID,
+            workspaceURL: workspace,
+            sessionID: sessionID,
+            process: nil,
+            processGeneration: 0,
+            pendingToolUses: [:],
+            sawResultForCurrentTurn: false,
+            stoppedByUser: false
+        )
+    }
+
+    func suspend() {
+        for taskID in contexts.keys {
+            guard var context = contexts[taskID] else { continue }
+            context.stoppedByUser = true
+            context.processGeneration += 1
+            context.process?.terminate()
+            context.process = nil
+            contexts[taskID] = context
+        }
+        pendingApprovals.removeAll()
+    }
+
     func followUp(taskID: UUID, text: String, attachments: [URL]) throws {
         guard var context = contexts[taskID] else { throw RunnerError.missingSession(taskID) }
         try validate(attachments: attachments, workspaceURL: context.workspaceURL)

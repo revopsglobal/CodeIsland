@@ -26,11 +26,16 @@ final class RemoteApprovalService: ObservableObject {
     private let personalHub: PersonalHubService
     private let localPortOverride: UInt16?
     private let enabledOverride: Bool?
+    private let remoteTasksEnabled: Bool
     private let tailscaleConfigurator: @Sendable (Int, Int) throws -> String
     private var pairAttemptLimiter = RemotePairAttemptLimiter()
     private var lastPendingIDs: Set<String> = []
     private var lastPendingQuestionIDs: Set<String> = []
     private var sleepActivity: NSObjectProtocol?
+    private var remoteTaskCoordinator: RemoteTaskCoordinator?
+    private var remoteTaskStore: RemoteTaskStore?
+    private var codexTaskRunner: CodexRemoteTaskRunner?
+    private var claudeTaskRunner: ClaudeRemoteTaskRunner?
 
     init(
         deviceStore: RemoteApprovalDeviceStore? = nil,
@@ -38,6 +43,7 @@ final class RemoteApprovalService: ObservableObject {
         personalHub: PersonalHubService? = nil,
         localPortOverride: UInt16? = nil,
         enabledOverride: Bool? = nil,
+        remoteTasksEnabled: Bool? = nil,
         tailscaleConfigurator: @escaping @Sendable (Int, Int) throws -> String = { localPort, tailscalePort in
             try TailscaleServeManager.configure(localPort: localPort, httpsPort: tailscalePort)
         }
@@ -47,6 +53,8 @@ final class RemoteApprovalService: ObservableObject {
         self.personalHub = personalHub ?? .shared
         self.localPortOverride = localPortOverride
         self.enabledOverride = enabledOverride
+        self.remoteTasksEnabled = remoteTasksEnabled
+            ?? (localPortOverride == nil && enabledOverride == nil)
         self.tailscaleConfigurator = tailscaleConfigurator
         syncPublishedState()
     }
@@ -99,6 +107,7 @@ final class RemoteApprovalService: ObservableObject {
                     case .success:
                         self.running = true
                         self.lastError = nil
+                        self.startRemoteTaskCoordinatorIfNeeded()
                         self.refreshSleepActivity()
                         self.configureTailscaleServe()
                     case .failure(let error):
@@ -116,10 +125,79 @@ final class RemoteApprovalService: ObservableObject {
     }
 
     func stop() {
+        remoteTaskCoordinator?.shutdown()
+        remoteTaskCoordinator = nil
+        remoteTaskStore = nil
+        codexTaskRunner = nil
+        claudeTaskRunner = nil
+        appState?.codexRemoteTaskRunner = nil
         server?.stop()
         server = nil
         running = false
         endSleepActivity()
+    }
+
+    private func startRemoteTaskCoordinatorIfNeeded() {
+        guard remoteTasksEnabled, remoteTaskCoordinator == nil, let appState else { return }
+
+        appState.startCodexAppServerWatcher()
+        let recent = appState.sessions.values.compactMap { session -> RemoteWorkspaceCandidate? in
+            guard let cwd = session.cwd, !cwd.isEmpty else { return nil }
+            return RemoteWorkspaceCandidate(
+                url: URL(fileURLWithPath: cwd, isDirectory: true),
+                source: .recentSession,
+                lastUsedAt: session.lastActivity
+            )
+        }
+        let saved = UserDefaults.standard
+            .stringArray(forKey: "CodeIslandRemoteTaskWorkspaceRoots")?
+            .map {
+                RemoteWorkspaceCandidate(
+                    url: URL(fileURLWithPath: $0, isDirectory: true),
+                    source: .saved
+                )
+            } ?? []
+        let candidates = recent + saved
+        let allowedRoots = candidates.map(\.url)
+        let catalog = RemoteWorkspaceCatalog(
+            allowedRoots: allowedRoots,
+            candidates: candidates
+        )
+        let store = RemoteTaskStore()
+        let attachments = RemoteTaskAttachmentStore()
+
+        var codexAdapter: RemoteTaskProviderRunner?
+        if let client = appState.codexAppServerClient {
+            let runner = CodexRemoteTaskRunner(sender: client, store: store)
+            codexTaskRunner = runner
+            appState.codexRemoteTaskRunner = runner
+            codexAdapter = runner.providerAdapter { [weak appState] in
+                appState?.codexAppServerClient != nil
+            }
+        }
+
+        let claude = ClaudeRemoteTaskRunner(store: store)
+        claudeTaskRunner = claude
+        let coordinator = RemoteTaskCoordinator(
+            store: store,
+            workspaceCatalog: catalog,
+            attachmentStore: attachments,
+            codex: codexAdapter,
+            claude: claude.providerAdapter {
+                ClaudeExecutableLocator.resolve(
+                    explicitPath: UserDefaults.standard.string(
+                        forKey: ClaudeExecutableLocator.defaultsKey
+                    )
+                ) != nil
+            }
+        )
+        remoteTaskStore = store
+        remoteTaskCoordinator = coordinator
+        do {
+            try coordinator.recover()
+        } catch {
+            lastError = "Remote task recovery failed: \(error.localizedDescription)"
+        }
     }
 
     func restart() {

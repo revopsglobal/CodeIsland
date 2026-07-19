@@ -100,6 +100,26 @@ final class CodexRemoteTaskRunner {
         )
     }
 
+    func restore(taskID: UUID, workspaceURL: URL, threadID: String) throws {
+        guard store.task(id: taskID) != nil else { throw RunnerError.unknownTask(taskID) }
+        guard contexts[taskID] == nil else { throw RunnerError.alreadyStarted(taskID) }
+        let canonicalWorkspace = RemoteCwdFilter.canonical(workspaceURL)
+        contexts[taskID] = Context(
+            taskID: taskID,
+            workspaceURL: canonicalWorkspace,
+            threadID: threadID,
+            activeTurnID: nil
+        )
+        taskIDsByThread[threadID] = taskID
+    }
+
+    func suspend() {
+        contexts.removeAll()
+        taskIDsByThread.removeAll()
+        pendingRequests.removeAll()
+        pendingApprovals.removeAll()
+    }
+
     func followUp(taskID: UUID, text: String, attachments: [URL]) throws {
         guard let context = contexts[taskID], let threadID = context.threadID else {
             throw RunnerError.missingThread(taskID)
