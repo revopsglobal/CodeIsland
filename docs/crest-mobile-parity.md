@@ -115,15 +115,32 @@ This delta supersedes older "current build" language below.
   `30209`, and reported version/build `1.0.53`. Local and Tailscale `/health`
   both returned running with `pendingCount: 0`; both local and Tailscale web
   roots served the new `readOnlyHubActions` quiet-refresh code.
-- Latest strict E2E report at `2026-07-19T04:40:10Z` returned
+- Latest strict-gate diagnostic source: PR #105 merged as
+  `f21d11728cece2e4f28fef68ee38bdb316d489e4`, adding
+  `scripts/report-ios-direct-device-visibility.sh` and embedding its
+  privacy-safe `devicectl` result into `scripts/report-strict-physical-e2e.sh`.
+  The strict report now separates "latest TestFlight build has not checked in"
+  from "Codex cannot directly install/open the iPhone from this Mac because no
+  physical iOS device is visible." Verification passed the combined Bats suite
+  for `report-ios-direct-device-visibility` and `report-strict-physical-e2e`,
+  live
+  `scripts/report-ios-direct-device-visibility.sh`, live strict E2E, `git diff
+  --check`, and `graphify update . --no-viz`.
+- Latest strict E2E report at `2026-07-19T04:49:11Z` returned
   `status = physical-gate-incomplete`, `complete = false`: the Mac app is
   installed and running at `1.0.53`, local and Tailscale `/health` are HTTP
   `200` with zero pending work, Mac Settings sync expects Buddy
   `1.0.0 (20260719042243)`, and
   `RemoteApprovalHTTPServerTests/testAuthenticatedHostLifecycleOverRealListener`
-  passed, and the newly installed Mac app is running as PID `30209`, but the
-  physical iPhone is still stale on Buddy `1.0.0 (20260718212803)` instead of
-  latest TestFlight `1.0.0 (20260719042243)`.
+  passed. The latest TestFlight gate remains stale: the physical iPhone is
+  still last observed on Buddy `1.0.0 (20260718212803)` instead of latest
+  TestFlight `1.0.0 (20260719042243)`. The direct-device diagnostic reports
+  `status = simulator-only`, `iosDeviceCount = 1`, `simulatorCount = 1`, and
+  `physicalDeviceCount = 0`; the only visible iOS target is the simulated
+  `OB1 Widget Proof iPhone 16` with identifier suffix `2C09C469`. Codex
+  therefore cannot directly install/open the physical iPhone from this Mac; the
+  remaining required action is to open latest TestFlight build `20260719042243`
+  on the physical iPhone, keep Tailscale connected, and rerun strict E2E.
 - Latest Buddy parity-contract source: PR #98 merged as
   `b877909bb280eedaa368feef8e669631f365a60a`, aligning the iPhone
   mock/demo hub with the production Buddy action vocabulary. Demo-only action
