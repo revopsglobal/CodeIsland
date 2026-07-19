@@ -184,6 +184,37 @@ struct CompanionSessionPreview: Codable, Identifiable, Hashable {
     }
 }
 
+enum CompanionSessionOrdering {
+    static func ordered(_ sessions: [CompanionSessionPreview]) -> [CompanionSessionPreview] {
+        sessions.sorted { lhs, rhs in
+            if lhs.status.priority != rhs.status.priority {
+                return lhs.status.priority > rhs.status.priority
+            }
+
+            let leftKey = stableKey(for: lhs)
+            let rightKey = stableKey(for: rhs)
+            if leftKey != rightKey {
+                return leftKey < rightKey
+            }
+
+            return lhs.updatedAt > rhs.updatedAt
+        }
+    }
+
+    private static func stableKey(for session: CompanionSessionPreview) -> String {
+        [
+            session.sessionId,
+            session.source,
+            session.workspaceName,
+            session.toolName,
+            session.message,
+        ]
+        .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+        .filter { !$0.isEmpty }
+        .joined(separator: "|")
+    }
+}
+
 struct CompanionDownloadStatus: Codable, Hashable {
     let name: String
     let bytesReceived: Int64

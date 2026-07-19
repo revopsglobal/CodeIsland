@@ -53,4 +53,42 @@ final class CompanionCommandCenterModelTests: XCTestCase {
             )
         )
     }
+
+    func testSessionOrderingDoesNotRotateRoutineHeartbeatUpdates() {
+        let olderRunning = session(id: "codex", status: .running, updatedAt: 100)
+        let newerRunning = session(id: "claude", status: .running, updatedAt: 200)
+
+        XCTAssertEqual(
+            CompanionSessionOrdering.ordered([newerRunning, olderRunning]).map(\.id),
+            ["claude", "codex"]
+        )
+        XCTAssertEqual(
+            CompanionSessionOrdering.ordered([olderRunning, newerRunning]).map(\.id),
+            ["claude", "codex"],
+            "Same-priority routine sessions must keep stable identity ordering instead of flipping when heartbeats alternate"
+        )
+    }
+
+    func testSessionOrderingStillPrioritizesActionRequiredWork() {
+        let running = session(id: "claude", status: .running, updatedAt: 300)
+        let question = session(id: "question", status: .waitingQuestion, updatedAt: 100)
+        let approval = session(id: "approval", status: .waitingApproval, updatedAt: 50)
+
+        XCTAssertEqual(
+            CompanionSessionOrdering.ordered([running, question, approval]).map(\.id),
+            ["approval", "question", "claude"]
+        )
+    }
+
+    private func session(id: String, status: CompanionStatus, updatedAt: TimeInterval) -> CompanionSessionPreview {
+        CompanionSessionPreview(
+            sessionId: id,
+            source: id,
+            status: status,
+            toolName: nil,
+            workspaceName: "ob1-app",
+            message: nil,
+            updatedAt: Date(timeIntervalSince1970: updatedAt)
+        )
+    }
 }

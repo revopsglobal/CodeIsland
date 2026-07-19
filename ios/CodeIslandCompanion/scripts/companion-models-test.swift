@@ -137,4 +137,41 @@ do {
     check("legacy remote snapshot defaults questions", snapshot.questions.isEmpty)
 } catch { check("legacy remote snapshot still decodes", false) }
 
+let codexRunning = CompanionSessionPreview(
+    sessionId: "codex",
+    source: "codex",
+    status: .running,
+    toolName: nil,
+    workspaceName: "ob1-app",
+    message: nil,
+    updatedAt: Date(timeIntervalSince1970: 100)
+)
+let claudeRunning = CompanionSessionPreview(
+    sessionId: "claude",
+    source: "claude",
+    status: .running,
+    toolName: nil,
+    workspaceName: "ob1-app",
+    message: nil,
+    updatedAt: Date(timeIntervalSince1970: 200)
+)
+let approval = CompanionSessionPreview(
+    sessionId: "approval",
+    source: "claude",
+    status: .waitingApproval,
+    toolName: nil,
+    workspaceName: "ob1-app",
+    message: nil,
+    updatedAt: Date(timeIntervalSince1970: 50)
+)
+check(
+    "routine session ordering is stable across heartbeat updates",
+    CompanionSessionOrdering.ordered([codexRunning, claudeRunning]).map(\.id)
+        == CompanionSessionOrdering.ordered([claudeRunning, codexRunning]).map(\.id)
+)
+check(
+    "action-required session ordering still wins over routine work",
+    CompanionSessionOrdering.ordered([codexRunning, approval, claudeRunning]).first?.id == "approval"
+)
+
 print("ALL PASS")
