@@ -77,7 +77,7 @@ struct AcceptedIntent: AppIntent {
 }
 SWIFT
   cat > "$fixture_dir/CodeIslandCompanion.app/Metadata.appintents/extract.actionsdata" <<'JSON'
-{"actions":{"AcceptedIntent":{"descriptionMetadata":{"descriptionText":{"key":"Opens the task editor."}}}}}
+{"actions":{"PrepareCodeIslandTaskIntent":{"descriptionMetadata":{"descriptionText":{"key":"Prepares a task for your paired computer."}}},"OpenCodeIslandTaskIntent":{"descriptionMetadata":{"descriptionText":{"key":"Opens the task editor."}}},"OpenCodeIslandNeedsYouIntent":{"descriptionMetadata":{"descriptionText":{"key":"Opens items that need you."}}},"OpenCodeIslandSessionsIntent":{"descriptionMetadata":{"descriptionText":{"key":"Opens your sessions."}}}}}
 JSON
 
   run "$validator" "$fixture_dir/source" "$fixture_dir/CodeIslandCompanion.app"

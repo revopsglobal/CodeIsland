@@ -66,7 +66,7 @@ STUB
 }
 
 @test "classifies Mac and proof-only drift as non-Buddy" {
-  export CHANGED_FILES=$'Sources/CodeIsland/AppDelegate.swift\nscripts/report-strict-physical-e2e.sh\nTests/Scripts/report-strict-physical-e2e.bats\nREADME.md'
+  export CHANGED_FILES=$'Sources/CodeIsland/AppDelegate.swift\nscripts/report-strict-physical-e2e.sh\nTests/Scripts/report-strict-physical-e2e.bats\nTests/Scripts/validate-app-intent-metadata.bats\nREADME.md'
 
   run "$REPO_ROOT/scripts/report-testflight-source-drift.sh"
 
@@ -74,7 +74,7 @@ STUB
   printf '%s' "$output" | jq -e '
     .checked == true and
     .status == "source-drift-non-buddy" and
-    .changedFileCount == 4 and
+    .changedFileCount == 5 and
     .buddyRelevantChanged == false and
     .workingTree.dirty == false and
     (.changedFilesSample | index("Sources/CodeIsland/AppDelegate.swift")) and

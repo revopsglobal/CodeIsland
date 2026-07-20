@@ -4,8 +4,9 @@ set -euo pipefail
 
 REPO="${REPO:-revopsglobal/CodeIsland}"
 WORKFLOW="${WORKFLOW:-testflight-ios.yml}"
+MAC_WORKFLOW="${MAC_WORKFLOW:-build-macos-arm-dmg.yml}"
 BRANCH="${BRANCH:-main}"
-EXPECTED_MAC_VERSION="${EXPECTED_MAC_VERSION:-1.0.53}"
+EXPECTED_MAC_VERSION="${EXPECTED_MAC_VERSION:-}"
 EXPECTED_CLIENT_VERSION="${EXPECTED_CLIENT_VERSION:-1.0.0}"
 SYNC_MAC_EXPECTED_BUDDY_DEFAULTS="${SYNC_MAC_EXPECTED_BUDDY_DEFAULTS:-1}"
 MAC_DEFAULTS_DOMAIN="${MAC_DEFAULTS_DOMAIN:-com.codeisland.app}"
@@ -46,6 +47,30 @@ fi
 
 run_id="$(printf '%s' "$latest_run" | jq -r '.databaseId')"
 run_log="$("$GH_BIN" run view "$run_id" --repo "$REPO" --log)"
+
+latest_mac_run='null'
+mac_version_source="explicit"
+if [[ -z "$EXPECTED_MAC_VERSION" ]]; then
+    mac_version_source="unavailable"
+    latest_mac_run_candidate="$("$GH_BIN" run list \
+        --repo "$REPO" \
+        --workflow "$MAC_WORKFLOW" \
+        --branch "$BRANCH" \
+        --limit 20 \
+        --json databaseId,status,conclusion,headSha,createdAt,url \
+        | jq -c '[.[] | select(.status == "completed" and .conclusion == "success")] | first // empty')"
+    if [[ -n "$latest_mac_run_candidate" ]]; then
+        latest_mac_run="$latest_mac_run_candidate"
+        mac_run_id="$(printf '%s' "$latest_mac_run" | jq -r '.databaseId')"
+        mac_run_log="$("$GH_BIN" run view "$mac_run_id" --repo "$REPO" --log)"
+        EXPECTED_MAC_VERSION="$(printf '%s\n' "$mac_run_log" \
+            | sed -nE 's/.*==> Building CodeIsland ([0-9]+\.[0-9]+\.[0-9]+) \(arm64\).*/\1/p' \
+            | tail -n 1)"
+        if [[ -n "$EXPECTED_MAC_VERSION" ]]; then
+            mac_version_source="latest-successful-workflow"
+        fi
+    fi
+fi
 
 build_number="$(printf '%s\n' "$run_log" \
     | sed -nE 's/.*Building CodeIsland Buddy 1\.0\.0 \(([0-9]+)\).*/\1/p' \
@@ -145,6 +170,10 @@ jq -n \
     --arg appleState "$apple_state" \
     --arg audience "$audience" \
     --arg artifactID "$artifact_id" \
+    --arg macWorkflow "$MAC_WORKFLOW" \
+    --argjson latestMacRun "$latest_mac_run" \
+    --arg expectedMacVersion "$EXPECTED_MAC_VERSION" \
+    --arg macVersionSource "$mac_version_source" \
     --argjson macSettingsSync "$mac_settings_sync" \
     --argjson acceptance "$acceptance_report" \
     --arg status "$physical_status" \
@@ -161,6 +190,13 @@ jq -n \
             audience:($audience | select(length > 0) // null),
             artifactID:($artifactID | select(length > 0) // null)
         }),
+        macDelivery:(
+            (if $latestMacRun == null then {} else $latestMacRun end) + {
+                workflow:$macWorkflow,
+                expectedVersion:($expectedMacVersion | select(length > 0) // null),
+                versionSource:$macVersionSource
+            }
+        ),
         macSettingsSync:$macSettingsSync,
         physicalAcceptance:$acceptance,
         installGuide:{
