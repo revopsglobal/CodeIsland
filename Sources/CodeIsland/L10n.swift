@@ -383,6 +383,7 @@ final class L10n: ObservableObject {
         "status_idle": "Idle",
         // Attention bands (expanded session list)
         "band_needs_you": "Needs you",
+        "needs_you": "needs you",
         "age_blocked": "Blocked",
         "band_working": "Working",
         "band_idle": "Idle",
@@ -735,6 +736,7 @@ final class L10n: ObservableObject {
         "status_idle": "Inaktiv",
         // Attention bands (expanded session list)
         "band_needs_you": "Braucht dich",
+        "needs_you": "braucht dich",
         "age_blocked": "Blockiert",
         "band_working": "Arbeitet",
         "band_idle": "Inaktiv",
@@ -1089,6 +1091,7 @@ final class L10n: ObservableObject {
         "band_needs_you": "需要你",
         "band_working": "工作中",
         "band_idle": "空闲",
+        "needs_you": "需要你",
         "empty_no_agents": "没有运行中的 Agent",
         "empty_no_agents_hint": "在终端启动 Claude Code 或 Codex，会话会自动出现在这里。",
         "age_blocked": "阻塞",
@@ -1442,6 +1445,7 @@ final class L10n: ObservableObject {
         "band_working": "工作中",
         "band_idle": "閒置",
         "empty_no_agents": "沒有執行中的 Agent",
+        "needs_you": "需要你",
         "empty_no_agents_hint": "在終端機啟動 Claude Code 或 Codex，工作階段會自動出現在這裡。",
         "age_blocked": "阻塞",
         "other": "其他",
@@ -1791,6 +1795,7 @@ final class L10n: ObservableObject {
         "status_idle": "待機",
         // Attention bands (expanded session list)
         "band_needs_you": "対応が必要",
+        "needs_you": "対応が必要",
         "age_blocked": "停止中",
         "band_working": "作業中",
         "band_idle": "待機",
@@ -2143,6 +2148,7 @@ final class L10n: ObservableObject {
         "status_idle": "유휴",
         // Attention bands (expanded session list)
         "band_needs_you": "확인 필요",
+        "needs_you": "확인 필요",
         "age_blocked": "대기 중",
         "band_working": "작업 중",
         "band_idle": "유휴",
@@ -2495,6 +2501,7 @@ final class L10n: ObservableObject {
         "status_idle": "Boşta",
         // Attention bands (expanded session list)
         "band_needs_you": "Seni bekliyor",
+        "needs_you": "seni bekliyor",
         "age_blocked": "Bekliyor",
         "band_working": "Çalışıyor",
         "band_idle": "Boşta",

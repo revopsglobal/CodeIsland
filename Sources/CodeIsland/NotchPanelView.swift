@@ -164,7 +164,10 @@ struct NotchPanelView: View {
         // Immediate hover acknowledgement: a slight widen while the expand delay runs
         let prehoverExtra: CGFloat = shouldShowPrehover ? NotchHoverInteraction.prehoverWidthDelta : 0
         let personalExtra: CGFloat = personalUtilities.hasCompactStatus ? 58 : 0
-        return nw + wing * 2 + extra + toolExtra + prehoverExtra + personalExtra
+        // Room for the named attention pill, which replaced a bare bell glyph.
+        let attentionExtra: CGFloat = (appState.status == .waitingApproval
+            || appState.status == .waitingQuestion) ? 92 : 0
+        return nw + wing * 2 + extra + toolExtra + prehoverExtra + personalExtra + attentionExtra
     }
 
     var body: some View {
@@ -659,6 +662,35 @@ private struct CompactRightWing: View {
     @AppStorage(SettingsKey.quietHoursEnd) private var quietHoursEnd = SettingsDefaults.quietHoursEnd
     @ObservedObject private var personalUtilities = PersonalUtilitiesModel.shared
 
+    /// The one session that needs a decision, named. Uses the same router that
+    /// orders the expanded list, so the collapsed bar and the panel never
+    /// disagree about which request is most urgent — and prefers the session
+    /// blocked longest, not the one that arrived last.
+    private var pendingAttention: (label: String, tooltip: String)? {
+        let waiting = appState.sessions.filter {
+            $0.value.status == .waitingApproval || $0.value.status == .waitingQuestion
+        }
+        guard !waiting.isEmpty else { return nil }
+
+        let ordered = SessionAttentionRouter.orderedSessionIDs(
+            waiting.map { id, session in
+                SessionAttentionCandidate(
+                    id: id,
+                    status: session.status,
+                    lastActivity: session.lastActivity
+                )
+            }
+        )
+        guard let first = ordered.first, let session = appState.sessions[first] else { return nil }
+
+        let project = session.displayName
+        let label = waiting.count > 1 ? "\(project) +\(waiting.count - 1)" : project
+        let tooltip = waiting.count > 1
+            ? "\(project) \(l10n["needs_you"]) · \(waiting.count) \(l10n["status_waiting"].lowercased())"
+            : "\(project) \(l10n["needs_you"])"
+        return (label, tooltip)
+    }
+
     /// Re-evaluated on every re-render; the compact bar redraws often enough
     /// that the moon appears/disappears close to the window edges.
     private var inQuietHours: Bool {
@@ -709,12 +741,22 @@ private struct CompactRightWing: View {
                         .shadow(color: Color(red: 0.4, green: 1.0, blue: 0.5).opacity(0.7), radius: 3)
                 }
 
-                // Pending approval/question badge
-                if appState.status == .waitingApproval || appState.status == .waitingQuestion {
-                    Image(systemName: "bell.fill")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(Color(red: 1.0, green: 0.7, blue: 0.28))
-                        .symbolEffect(.pulse, options: .repeating)
+                // Pending approval/question. A bare bell said something was
+                // waiting but never what, whose, or how many — so the panel had
+                // to be expanded before the signal meant anything.
+                if let pending = pendingAttention {
+                    HStack(spacing: 4) {
+                        Image(systemName: "bell.fill")
+                            .font(.system(size: 8, weight: .bold))
+                            .symbolEffect(.pulse, options: .repeating)
+                        Text(pending.label)
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                    .foregroundStyle(Color(red: 1.0, green: 0.7, blue: 0.28))
+                    .frame(maxWidth: 108, alignment: .trailing)
+                    .help(pending.tooltip)
                 }
 
                 if let download = personalUtilities.primaryDownload {
