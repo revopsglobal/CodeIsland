@@ -1092,6 +1092,13 @@ final class RemoteApprovalClient: ObservableObject {
                 title: "Finish Buddy end-to-end testing",
                 summary: "Choose whether to upload the internal build"
             )])
+        case "failed":
+            return ([workspace], [task(
+                "20000000-0000-0000-0000-000000000004",
+                state: .failed,
+                title: "Recover the interrupted build",
+                summary: "Codex app-server failed"
+            )])
         case "portfolio":
             return ([workspace], [
                 task("20000000-0000-0000-0000-000000000001", state: .needsYou, title: "Finish Buddy end-to-end testing", summary: "Choose whether to upload the internal build"),

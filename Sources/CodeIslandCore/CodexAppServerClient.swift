@@ -359,14 +359,22 @@ public final class CodexAppServerClient: CodexAppServerSending, @unchecked Senda
         try writeEnvelope(body)
     }
 
-    /// Send `initialize` with a minimal ClientInfo payload. Codex always expects
-    /// this before any other thread / turn calls will work.
+    static func initializeParameters(clientName: String, clientVersion: String) -> [String: Any] {
+        [
+            "clientInfo": ["name": clientName, "version": clientVersion],
+            "capabilities": ["experimentalApi": true],
+        ]
+    }
+
+    /// Send `initialize` with the capabilities required by CodeIsland's
+    /// workspace-bounded thread and turn requests. Codex always expects this
+    /// before any other thread / turn calls will work.
     @discardableResult
     public func initializeHandshake(clientName: String, clientVersion: String) throws -> CodexRequestID {
-        return try sendRequest(method: "initialize", params: [
-            "clientInfo": ["name": clientName, "version": clientVersion],
-            "capabilities": NSNull()
-        ])
+        try sendRequest(
+            method: "initialize",
+            params: Self.initializeParameters(clientName: clientName, clientVersion: clientVersion)
+        )
     }
 
     private func writeEnvelope(_ body: [String: Any]) throws {

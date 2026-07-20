@@ -5,6 +5,22 @@ import ImageIO
 @preconcurrency import ScreenCaptureKit
 import UniformTypeIdentifiers
 
+private struct ShelfScreenshotCandidate: Sendable {
+    let url: URL
+    let signature: String
+}
+
+/// Foundation documents FileManager's shared methods as thread-safe. The box
+/// makes that contract explicit when the watcher moves directory reads away
+/// from the main actor.
+private final class ShelfFileManagerBox: @unchecked Sendable {
+    let value: FileManager
+
+    init(_ value: FileManager) {
+        self.value = value
+    }
+}
+
 /// Owns every file that appears in Shelf. User-selected files, dropped files,
 /// screenshots, and recordings are copied into one private Application Support
 /// directory before they are exposed to Buddy or the web client.
@@ -53,7 +69,10 @@ final class ShelfCaptureController: NSObject, ObservableObject {
     private let screenshotDirectory: URL
     private let fileManager: FileManager
     private let now: () -> Date
+    private let screenshotCandidateLoader: @Sendable () -> [URL]
     private var screenshotTimer: Timer?
+    private var screenshotScanInFlight = false
+    private var screenshotWatchGeneration = 0
     private var seenScreenshotSignatures: Set<String> = []
     private var pendingCaptureSource: Source?
     private var pickerObserverRegistered = false
@@ -70,17 +89,26 @@ final class ShelfCaptureController: NSObject, ObservableObject {
         storageDirectory: URL? = nil,
         screenshotDirectory: URL? = nil,
         fileManager: FileManager = .default,
-        now: @escaping () -> Date = Date.init
+        now: @escaping () -> Date = Date.init,
+        screenshotCandidateLoader: (@Sendable () -> [URL])? = nil
     ) {
         let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support", isDirectory: true)
-        self.storageDirectory = (storageDirectory
-            ?? appSupport.appendingPathComponent("CodeIsland/Shelf", isDirectory: true)).standardizedFileURL
-        self.screenshotDirectory = (screenshotDirectory
+        let resolvedScreenshotDirectory = (screenshotDirectory
             ?? fileManager.urls(for: .desktopDirectory, in: .userDomainMask).first
             ?? fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Desktop", isDirectory: true)).standardizedFileURL
+        self.storageDirectory = (storageDirectory
+            ?? appSupport.appendingPathComponent("CodeIsland/Shelf", isDirectory: true)).standardizedFileURL
+        self.screenshotDirectory = resolvedScreenshotDirectory
         self.fileManager = fileManager
         self.now = now
+        let backgroundFileManager = ShelfFileManagerBox(fileManager)
+        self.screenshotCandidateLoader = screenshotCandidateLoader ?? {
+            Self.screenshotCandidates(
+                in: resolvedScreenshotDirectory,
+                fileManager: backgroundFileManager.value
+            )
+        }
         super.init()
     }
 
@@ -164,15 +192,23 @@ final class ShelfCaptureController: NSObject, ObservableObject {
 
     func startWatchingScreenshots() {
         guard screenshotTimer == nil else { return }
-        primeScreenshotDirectory()
+        screenshotWatchGeneration += 1
+        let generation = screenshotWatchGeneration
         screenshotTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.scanForNewScreenshots() }
+            Task { @MainActor in
+                self?.scheduleBackgroundScreenshotScan(
+                    importingNewFiles: true,
+                    generation: generation
+                )
+            }
         }
+        scheduleBackgroundScreenshotScan(importingNewFiles: false, generation: generation)
     }
 
     func stopWatchingScreenshots() {
         screenshotTimer?.invalidate()
         screenshotTimer = nil
+        screenshotWatchGeneration += 1
     }
 
     func presentSelectionCapture() {
@@ -352,7 +388,54 @@ final class ShelfCaptureController: NSObject, ObservableObject {
         return "\(prefix) \(formatter.string(from: now())).\(ext)"
     }
 
+    private func scheduleBackgroundScreenshotScan(
+        importingNewFiles: Bool,
+        generation: Int
+    ) {
+        guard !screenshotScanInFlight else { return }
+        screenshotScanInFlight = true
+        let loader = screenshotCandidateLoader
+        let scanTask = Task.detached(priority: .utility) {
+            loader().map { url in
+                ShelfScreenshotCandidate(
+                    url: url,
+                    signature: Self.screenshotSignature(for: url)
+                )
+            }
+        }
+
+        Task { @MainActor [weak self] in
+            let candidates = await scanTask.value
+            guard let self else { return }
+            self.screenshotScanInFlight = false
+            guard self.screenshotTimer != nil,
+                  self.screenshotWatchGeneration == generation else { return }
+
+            if !importingNewFiles {
+                self.seenScreenshotSignatures = Set(candidates.map(\.signature))
+                return
+            }
+
+            for candidate in candidates {
+                guard !self.seenScreenshotSignatures.contains(candidate.signature) else { continue }
+                self.seenScreenshotSignatures.insert(candidate.signature)
+                guard let imported = try? self.importFile(
+                    at: candidate.url,
+                    source: .automaticScreenshot
+                ) else { continue }
+                self.onStoredFile?(imported)
+            }
+        }
+    }
+
     private func screenshotCandidates() -> [URL] {
+        screenshotCandidateLoader()
+    }
+
+    nonisolated private static func screenshotCandidates(
+        in screenshotDirectory: URL,
+        fileManager: FileManager
+    ) -> [URL] {
         let keys: [URLResourceKey] = [.isRegularFileKey, .contentModificationDateKey, .fileSizeKey]
         let urls = (try? fileManager.contentsOfDirectory(
             at: screenshotDirectory,
@@ -369,6 +452,10 @@ final class ShelfCaptureController: NSObject, ObservableObject {
     }
 
     private func screenshotSignature(_ url: URL) -> String {
+        Self.screenshotSignature(for: url)
+    }
+
+    nonisolated private static func screenshotSignature(for url: URL) -> String {
         let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
         let modified = values?.contentModificationDate?.timeIntervalSinceReferenceDate ?? 0
         return "\(url.standardizedFileURL.path)#\(modified)#\(values?.fileSize ?? 0)"

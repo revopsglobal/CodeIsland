@@ -257,6 +257,17 @@ final class RemoteTaskCoordinator {
 
     func cancel(taskID: UUID) throws {
         guard let record = store.task(id: taskID) else { throw CoordinatorError.unknownTask(taskID) }
+        if record.summary.state == .failed {
+            try append(
+                taskID: taskID,
+                kind: .cancelled,
+                state: .cancelled,
+                summary: "Failure dismissed",
+                provider: record.summary.provider,
+                providerSessionID: record.summary.providerSessionID
+            )
+            return
+        }
         guard !record.summary.state.isTerminal else { return }
         if let runner = runners[record.summary.provider], runner.isAvailable {
             try runner.cancel(taskID: taskID)
