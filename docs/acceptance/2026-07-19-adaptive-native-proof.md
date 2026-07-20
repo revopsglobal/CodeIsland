@@ -4,6 +4,7 @@
 - Implementation branch: `codex/completion-hardening-20260719`
 - Proof branch: `codex/completion-proof-20260719`
 - Merged implementation: PR #138, `b0217291fba7ec57544880ca7c4f7a5d7704a94c`
+- Privacy diagnostics: PR #140, `a3e07e40fc792fd22ffa2ae03d0a0bb0e51ddb0f`
 
 This record keeps implementation, signed delivery, installed runtime, and
 physical-device proof separate. Simulator or source-level evidence is never
@@ -30,7 +31,7 @@ treated as physical iPhone acceptance.
 
 | Surface | Result | Evidence |
 | --- | --- | --- |
-| Mac app XCTest | 581 passed, 2 intentional skips, 0 failed | `/private/tmp/codeisland-swift-full-tests.log` |
+| Mac app XCTest | 583 passed, 2 intentional skips, 0 failed | `/private/tmp/codeisland-eventkit-health-full-tests.log` |
 | Shared core XCTest | 238 passed, 0 failed | `/private/tmp/codeisland-swift-full-tests.log` |
 | Acceptance scripts | 69 passed, 0 failed | `/private/tmp/codeisland-all-bats.log` |
 | Companion model checks | 25 passed, 0 failed | `/private/tmp/codeisland-model-tests.log` |
@@ -64,26 +65,26 @@ ad-hoc signed and not notarized; it is build proof, not the install artifact.
 
 ## Signed Mac delivery and installed runtime
 
-The internal ARM64 workflow completed successfully from the exact merged
-implementation commit:
+The current internal ARM64 workflow completed successfully from the merged
+privacy-diagnostics commit:
 
-- Workflow run: <https://github.com/revopsglobal/CodeIsland/actions/runs/29722590130>
-- Source SHA: `b0217291fba7ec57544880ca7c4f7a5d7704a94c`
-- Artifact: `CodeIsland-macos-arm64-dmg`, ID `8453076714`
-- Artifact digest: `sha256:3e5c621dd2bf90019f83c7a93c26b101c198353d69143e594d3e163e56ae4b70`
-- Downloaded DMG SHA-256: `ce1ec9720efe8fd8896975631454c4d6cf61650a70df12827b9c42be8a8c15a0`
+- Workflow run: <https://github.com/revopsglobal/CodeIsland/actions/runs/29724433337>
+- Source SHA: `a3e07e40fc792fd22ffa2ae03d0a0bb0e51ddb0f`
+- Artifact: `CodeIsland-macos-arm64-dmg`, ID `8453746230`
+- Artifact digest: `sha256:8421bf0a861d135b7bf9d039a04e78852cdf88c7fef5594905de33f9f2338c77`
+- Downloaded DMG SHA-256: `2aeeb20b358888fdf90f70b949d4d42cef039a645fef1e9fa417a735798c3a2e`
 
 The downloaded DMG was mounted and checked before installation. The packaged
-app is version `1.0.56`, ARM64, signed by Apple Development team
+app is version `1.0.57`, ARM64, signed by Apple Development team
 `44JG2Y95CH`, and passes strict nested signature verification. The packaged
 entitlements include camera, audio input, Bluetooth, calendar access, and the
 hardened-runtime library-validation exception used by the app.
 
-Version `1.0.56` was then installed at `/Applications/CodeIsland.app`. The
-previous `1.0.55` app bundle was preserved at
-`/private/tmp/CodeIsland.app.backup-1.0.55-20260719` before replacement.
+Version `1.0.57` was then installed at `/Applications/CodeIsland.app`. The
+previous `1.0.56` app bundle was preserved at
+`/private/tmp/CodeIsland.app.backup-1.0.56-20260720` before replacement.
 
-The installed runtime has process ID `43869` and returns `hostVersion:1.0.56`
+The installed runtime has process ID `95087` and returns `hostVersion:1.0.57`
 from both private endpoints:
 
 - `http://127.0.0.1:43891/health` - HTTP 200
@@ -92,7 +93,7 @@ from both private endpoints:
 Tailscale Serve remains configured as a tailnet-only reverse proxy from port
 `9443` to `127.0.0.1:43891`.
 
-A stability soak sampled the same installed process 23 times from
+A stability soak on version `1.0.56` sampled the same installed process 23 times from
 `2026-07-20T06:58:42Z` through `2026-07-20T07:09:52Z`. Every sample retained
 process ID `43869`, version `1.0.56`, loopback HTTP 200, and Tailscale HTTP 200.
 The process uptime was `12:43` at the final sample. In the native iPhone UI
@@ -101,18 +102,30 @@ suite, `testMultipleAttentionItemsDoNotRotateAutomatically` and
 reported four-second content-flash cause rather than relying only on process
 uptime.
 
+Version `1.0.57` adds read-only privacy diagnostics to the same private health
+response. Both loopback and Tailscale report Calendar `fullAccess`, Reminders
+`fullAccess`, manual weather fallback configured, and a selected reminder-list
+filter configured. System Location remains `notDetermined`, which does not
+block weather because the manual fallback is active. No calendar or reminder
+content is exposed by the health response.
+
+A seven-sample post-install soak ran from `2026-07-20T07:30:24Z` through
+`2026-07-20T07:33:27Z`. Every sample retained process ID `95087`, HTTP 200 on
+both private routes, `hostVersion:1.0.57`, both EventKit statuses at
+`fullAccess`, and both fallback-configuration flags at `true`.
+
 ## Internal TestFlight delivery
 
-The internal TestFlight workflow completed successfully from the same merged
-commit:
+The current internal TestFlight workflow completed successfully from the same
+merged privacy-diagnostics commit:
 
-- Workflow run: <https://github.com/revopsglobal/CodeIsland/actions/runs/29722591215>
-- Build: `1.0.0 (20260720064612)`
+- Workflow run: <https://github.com/revopsglobal/CodeIsland/actions/runs/29724514209>
+- Build: `1.0.0 (20260720072452)`
 - Apple processing state: `VALID`
 - Audience: `APP_STORE_ELIGIBLE`
-- Delivery UUID: `20521ae4-82cd-4153-b6fe-449b9c47d4f3`
-- IPA artifact: `CodeIsland-Buddy-TestFlight-20260720064612`, ID `8453005021`
-- Artifact digest: `sha256:88d513210c9aa328edb5593d049e046fe5684fe148c958efab59351ea6e8cb49`
+- Delivery UUID: `a2ccaa76-b5bc-4924-aebe-d176e88cacc1`
+- IPA artifact: `CodeIsland-Buddy-TestFlight-20260720072452`, ID `8453792602`
+- Artifact digest: `sha256:9dd0a8007cd163fe0ab4f32c78534f4305eafae76f1a741e8fff975932f68b47`
 
 The `CodeIsland Internal` group has all-build access. Its tester receipt shows
 `gregharned@gmail.com` active for app ID `6791897500`, bundle
@@ -121,13 +134,13 @@ The `CodeIsland Internal` group has all-build access. Its tester receipt shows
 `4510ab81-87ea-4967-bde4-47d3f2e083af`.
 
 The downloaded IPA has SHA-256
-`b4afb396ce725adf9f26d744260049347baa6984719335d8b04725c1ebc8f9ec`.
+`35adef0b69ecca592b090592569520ae341c765b795a356ac4b5f6925d68ea3d`.
 Its main app and both extensions pass strict signature verification. The main
 app is signed for production APNs, time-sensitive notifications, the private
 app group, and App Store beta reporting; `NSSupportsLiveActivities` is enabled.
 The compiled `120x120` and `152x152` App Store icon assets are present, and the
 main app, Live Activity/widget extension, and share extension all carry build
-`20260720064612`.
+`20260720072452`.
 
 ## Live private transport proof
 
@@ -138,7 +151,7 @@ app was running, both endpoints returned HTTP 200 with `running:true`:
 - `http://127.0.0.1:43891/health`
 - `https://gregs-macbook-air.tail62f27c.ts.net:9443/health`
 
-The same checks now pass after installing signed version `1.0.56`; the private
+The same checks now pass after installing signed version `1.0.57`; the private
 route therefore proves the delivered runtime rather than only the previous
 installation.
 
@@ -168,15 +181,16 @@ as fully delivered:
 | Gate | Current state | Required proof |
 | --- | --- | --- |
 | Pull request and CI | Complete | PR #138 merged at `b0217291fba7ec57544880ca7c4f7a5d7704a94c` after green checks |
-| Signed Mac artifact | Complete | Run `29722590130`; downloaded, signature-checked, installed, launched, and healthy through loopback and Tailscale |
-| Internal TestFlight build | Complete | Run `29722591215`; Apple `VALID`, tester receipt ready, exact build `20260720064612` |
-| Physical iPhone acceptance | Waiting for exact-build check-in | The paired production iPhone last reported build `20260720031027` at `2026-07-20T06:38:37Z`; install/open `20260720064612` for at least ten seconds and rerun strict acceptance |
+| Signed Mac artifact | Complete | Run `29724433337`; version `1.0.57` downloaded, signature-checked, installed, launched, and healthy through loopback and Tailscale |
+| Mac Calendar and Reminders access | Complete | Installed `1.0.57` reports `fullAccess` for both through the private diagnostic response |
+| Internal TestFlight build | Complete | Run `29724514209`; Apple `VALID`, tester receipt ready, exact build `20260720072452` |
+| Physical iPhone acceptance | Waiting for exact-build check-in | The paired production iPhone reported old build `20260720031027` at `2026-07-20T07:28:45Z`; install/open `20260720072452` for at least ten seconds and rerun strict acceptance |
 | Direct-device visual proof | Optional and currently occluded | Unobscured iPhone Mirroring or a physical device visible to `devicectl` |
 
 The paired production iPhone already has a production APNs token, Live
 Activity push-to-start token, per-activity update token, and a recorded Live
 Activity receipt. Those establish the previously shipped physical channel,
-but do not substitute for the exact-build `20260720064612` check-in. The Mac
+but do not substitute for the exact-build `20260720072452` check-in. The Mac
 was locked and iPhone Mirroring reported `Connection Paused`; `devicectl`
 listed only simulators. The strict report therefore correctly remains
 `physical-gate-incomplete` instead of converting simulator or stale-device
