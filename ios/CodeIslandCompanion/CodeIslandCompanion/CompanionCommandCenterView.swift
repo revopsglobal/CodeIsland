@@ -711,6 +711,14 @@ private struct CompanionTodayTimeline: View {
         snapshot?.modules.first(where: { $0.id == .weather })?.summary
     }
 
+    /// The Mac already composes an agents summary ("2 running · no decisions
+    /// waiting"); reuse it so the empty state reports live work instead of
+    /// repeating the headline. Falls back only when the module is absent.
+    private var idleSummary: String {
+        snapshot?.modules.first(where: { $0.id == .agents })?.summary
+            ?? "Nothing has needed you recently."
+    }
+
     private var hasAgentAttention: Bool {
         rows.contains { row in
             guard row.moduleID == .agents else { return false }
@@ -724,12 +732,16 @@ private struct CompanionTodayTimeline: View {
         }
     }
 
+    /// Attention outranks weather — R5 (finding I1). main returned weather
+    /// first, which reintroduced the bug where "an agent is waiting" was
+    /// unreachable whenever the Mac reported any weather. Keeps main's
+    /// "Next: <upcoming item>" resting line for the idle case.
     private var headlineSubtitle: String {
-        if let weatherSummary {
-            return weatherSummary
-        }
         if hasAgentAttention {
             return "An agent is waiting for your decision."
+        }
+        if let weatherSummary {
+            return weatherSummary
         }
         if let first = rows.first {
             let subtitle = first.item.subtitle?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -744,7 +756,9 @@ private struct CompanionTodayTimeline: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 5) {
-                Text("Today")
+                // The headline states the answer (R5, finding I1) rather than
+                // the date, in main's refreshed type treatment.
+                Text(hasAgentAttention ? "Needs you" : "All clear")
                     .font(.system(size: 36, weight: .black, design: .rounded))
                     .foregroundStyle(Color.ciForeground)
                 Text(headlineSubtitle)
@@ -763,10 +777,13 @@ private struct CompanionTodayTimeline: View {
                 .frame(minHeight: 52)
             } else if rows.isEmpty {
                 HStack(spacing: 12) {
-                    Image(systemName: "checkmark.circle.fill")
+                    Image(systemName: "checkmark.circle")
                         .font(.title3)
                         .foregroundStyle(.green)
-                    Text("Nothing needs you right now.")
+                    // Says something the headline and subhead do not: how many
+                    // sessions are quietly running, so "all clear" reads as
+                    // informed rather than empty.
+                    Text(idleSummary)
                         .font(.body.weight(.semibold))
                         .foregroundStyle(Color.ciForeground.opacity(0.72))
                 }

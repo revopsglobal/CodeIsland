@@ -1,0 +1,84 @@
+[mcp_servers.chrome-devtools]
+command = "npx"
+args = [
+    "-y",
+    "chrome-devtools-mcp",
+    "--autoConnect",
+]
+
+[mcp_servers.context7]
+command = "npx"
+args = [
+    "-y",
+    "@upstash/context7-mcp",
+]
+
+[mcp_servers.fathom]
+command = "/Users/gregharned/.nvm/versions/node/v24.13.1/bin/node"
+args = ["/Users/gregharned/work/team-brain/mcps/fathom/index.js"]
+env_vars = ["FATHOM_API_KEY"]
+
+[mcp_servers.figma-desktop]
+url = "http://127.0.0.1:3845/mcp"
+
+[mcp_servers.gemini]
+command = "/Users/gregharned/.nvm/versions/node/v24.13.1/bin/node"
+args = ["/Users/gregharned/work/team-brain/mcps/gemini/index.js"]
+env_vars = ["GEMINI_API_KEY"]
+
+[mcp_servers.gmail]
+command = "/Users/gregharned/.nvm/versions/node/v24.13.1/bin/node"
+args = ["/Users/gregharned/work/team-brain/mcps/gmail/dist/index.js"]
+env_vars = [
+    "GMAIL_CREDENTIALS_PATH",
+    "GMAIL_TOKEN_PATH",
+]
+
+[mcp_servers.hetzner]
+command = "/Users/gregharned/.nvm/versions/node/v24.13.1/bin/node"
+args = ["/Users/gregharned/work/team-brain/mcps/hetzner/dist/index.js"]
+env_vars = ["HETZNER_API_TOKEN"]
+
+[mcp_servers.heygen]
+command = "/Users/gregharned/.nvm/versions/node/v24.13.1/bin/node"
+args = ["/Users/gregharned/work/team-brain/mcps/heygen/index.js"]
+
+[mcp_servers.mistral-tts]
+command = "/Users/gregharned/.nvm/versions/node/v24.13.1/bin/node"
+args = ["/Users/gregharned/work/team-brain/mcps/mistral-tts/server.js"]
+env_vars = ["MISTRAL_API_KEY"]
+
+[mcp_servers.orchestrator]
+command = "/Users/gregharned/.nvm/versions/node/v24.13.1/bin/node"
+args = ["/Users/gregharned/work/team-brain/mcps/orchestrator/dist/index.js"]
+
+[mcp_servers.playwright]
+command = "npx"
+args = [
+    "@playwright/mcp@latest",
+    "--cdp-endpoint",
+    "http://localhost:9222",
+]
+
+[mcp_servers.vercel]
+command = "/Users/gregharned/.nvm/versions/node/v24.13.1/bin/node"
+args = ["/Users/gregharned/work/team-brain/mcps/vercel/dist/index.js"]
+env_vars = ["VERCEL_TOKEN"]
+
+[mcp_servers.wpengine]
+command = "/Users/gregharned/.nvm/versions/node/v24.13.1/bin/node"
+args = ["/Users/gregharned/work/team-brain/mcps/wpengine/dist/index.js"]
+env_vars = [
+    "WPENGINE_USER_ID",
+    "WPENGINE_PASSWORD",
+]
+
+[mcp_servers.zoom]
+command = "/Users/gregharned/.nvm/versions/node/v24.13.1/bin/node"
+args = ["/Users/gregharned/work/team-brain/mcps/zoom/dist/index.js"]
+env_vars = [
+    "ZOOM_ACCOUNT_ID",
+    "ZOOM_CLIENT_ID",
+    "ZOOM_CLIENT_SECRET",
+    "ZOOM_USER_ID",
+]

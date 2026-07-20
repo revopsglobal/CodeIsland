@@ -214,11 +214,17 @@ final class CodeIslandCompanionUITests: XCTestCase {
     func testMultipleAttentionItemsDoNotRotateAutomatically() throws {
         let app = launchAttentionApp("multiple")
 
+        // The approval is the expanded decision; the NEEDS YOU band reports the
+        // queue size, which replaced the old "1 of N" dropdown. The other item
+        // is a compact row below, never auto-promoted into the card.
         XCTAssertTrue(app.staticTexts["Run release build"].waitForExistence(timeout: 8))
-        XCTAssertTrue(app.buttons["1 of 2"].exists)
+        XCTAssertTrue(app.staticTexts["NEEDS YOU"].exists)
         sleep(5)
+        // The expanded card must not have swapped to the question on its own:
+        // the approval's action is still present, the question's submit is not.
         XCTAssertTrue(app.staticTexts["Run release build"].exists)
-        XCTAssertFalse(app.staticTexts["Ship the signed build tonight?"].exists)
+        XCTAssertTrue(app.buttons["Approve once"].exists)
+        XCTAssertFalse(app.buttons["Send answer"].exists)
     }
 
     @MainActor

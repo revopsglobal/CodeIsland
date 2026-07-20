@@ -1338,7 +1338,14 @@ final class RemoteApprovalCoordinator {
                 workspace: workspace,
                 createdAt: request.createdAt,
                 actionToken: action.rawValue,
-                actionExpiresAt: action.expiresAt
+                actionExpiresAt: action.expiresAt,
+                // Classified on the Mac, where the full tool input lives. The
+                // phone only ever receives the verdict, never the raw command,
+                // which keeps the existing payload-minimisation property.
+                risk: CommandRiskClassifier.classify(
+                    toolName: request.event.toolName,
+                    toolInput: (request.event.toolInput ?? [:]).mapValues { String(describing: $0) }
+                )
             )
         }
         let questions = appState.questionQueue.map { request -> RemoteQuestionItem in

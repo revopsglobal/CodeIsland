@@ -54,6 +54,55 @@ final class SessionAttentionRouterTests: XCTestCase {
         )
     }
 
+    func testBandedOrderingPutsWaitingFirstAndKeepsIdleSessions() {
+        let candidates = [
+            SessionAttentionCandidate(id: "idle", status: .idle, lastActivity: now),
+            SessionAttentionCandidate(id: "running", status: .running, lastActivity: now),
+            SessionAttentionCandidate(id: "approval", status: .waitingApproval, lastActivity: now),
+        ]
+
+        let bands = SessionAttentionRouter.bandedSessionIDs(candidates)
+
+        XCTAssertEqual(bands.map(\.band), [.needsYou, .working, .idle])
+        XCTAssertEqual(bands.map(\.ids), [["approval"], ["running"], ["idle"]])
+    }
+
+    /// The stalest blocked request is the one at risk of being forgotten, so it
+    /// must outrank a decision that arrived seconds ago.
+    func testLongestBlockedRequestSortsAboveFresherOne() {
+        let candidates = [
+            SessionAttentionCandidate(id: "fresh", status: .waitingApproval, lastActivity: now),
+            SessionAttentionCandidate(id: "stale", status: .waitingApproval, lastActivity: now.addingTimeInterval(-1800)),
+        ]
+
+        let bands = SessionAttentionRouter.bandedSessionIDs(candidates)
+
+        XCTAssertEqual(bands.first?.ids, ["stale", "fresh"])
+    }
+
+    /// Routine work keeps most-recent-first, where freshness is the useful signal.
+    func testRoutineWorkStaysMostRecentFirst() {
+        let candidates = [
+            SessionAttentionCandidate(id: "older", status: .running, lastActivity: now.addingTimeInterval(-600)),
+            SessionAttentionCandidate(id: "newer", status: .running, lastActivity: now),
+        ]
+
+        let bands = SessionAttentionRouter.bandedSessionIDs(candidates)
+
+        XCTAssertEqual(bands.first?.ids, ["newer", "older"])
+    }
+
+    func testEmptyBandsAreOmittedEntirely() {
+        let candidates = [
+            SessionAttentionCandidate(id: "only", status: .idle, lastActivity: now),
+        ]
+
+        let bands = SessionAttentionRouter.bandedSessionIDs(candidates)
+
+        XCTAssertEqual(bands.count, 1)
+        XCTAssertEqual(bands.first?.band, .idle)
+    }
+
     func testSelectedRoutineSessionIsUsedAfterAttentionItemResolves() {
         let candidates = [
             SessionAttentionCandidate(id: "codex", status: .running, lastActivity: now),

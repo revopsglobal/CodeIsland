@@ -119,7 +119,6 @@ struct NotchPanelView: View {
     /// Delayed hover: prevents accidental expansion when mouse passes through
     @State private var hoverTimer: Timer?
     @State private var isHovered = false
-    @State private var idleHovered = false
     /// Three-stage hover: collapsed → prehover (immediate ack) → expanded (after delay)
     @State private var hoverPhase: NotchHoverPhase = .collapsed
     /// Curtain animation for tool status toggle
@@ -134,9 +133,6 @@ struct NotchPanelView: View {
     /// The old CodeIsland shell used a non-expandable idle marker when no agents
     /// were running. This personal build keeps the real bar available so Glances
     /// and local utilities remain reachable all day.
-    private var showIdleIndicator: Bool {
-        false
-    }
     /// Whether the bar content should be visible (respects hideWhenNoSession)
     private var showBar: Bool {
         if !isActive { return hasPersonalStatus || !hideWhenNoSession }
@@ -170,7 +166,6 @@ struct NotchPanelView: View {
     private var panelWidth: CGFloat {
         let nw = effectiveNotchW
         let maxWidth = min(620, screenWidth - 40)
-        if showIdleIndicator { return idleHovered ? nw + compactWingWidth * 2 + 80 : nw + compactWingWidth * 2 }
         if shouldShowExpanded { return min(max(nw + 200, 580), maxWidth) }
         if !isActive && !hasPersonalStatus { return nw + compactWingWidth * 2 }
         let wing = compactWingWidth
@@ -180,7 +175,10 @@ struct NotchPanelView: View {
         // Immediate hover acknowledgement: a slight widen while the expand delay runs
         let prehoverExtra: CGFloat = shouldShowPrehover ? NotchHoverInteraction.prehoverWidthDelta : 0
         let personalExtra: CGFloat = personalUtilities.hasCompactStatus ? 58 : 0
-        return nw + wing * 2 + extra + toolExtra + prehoverExtra + personalExtra
+        // Room for the named attention pill, which replaced a bare bell glyph.
+        let attentionExtra: CGFloat = (appState.status == .waitingApproval
+            || appState.status == .waitingQuestion) ? 92 : 0
+        return nw + wing * 2 + extra + toolExtra + prehoverExtra + personalExtra + attentionExtra
     }
 
     var body: some View {
@@ -201,15 +199,6 @@ struct NotchPanelView: View {
                         CompactRightWing(appState: appState, expanded: shouldShowExpanded, hasNotch: hasNotch)
                     }
                     .frame(height: notchHeight)
-                } else if showIdleIndicator {
-                    IdleIndicatorBar(
-                        mascotSize: mascotSize,
-                        compactWingWidth: compactWingWidth,
-                        notchW: effectiveNotchW,
-                        notchHeight: notchHeight,
-                        hasNotch: hasNotch,
-                        hovered: idleHovered
-                    )
                 } else {
                     // Idle: just the notch shell
                     Spacer()
@@ -332,23 +321,6 @@ struct NotchPanelView: View {
             .scaleEffect(shouldShowPrehover ? NotchHoverInteraction.prehoverScale : 1, anchor: .top)
             .contentShape(Rectangle())
             .onHover { hovering in
-                // Idle indicator hover — delay un-hover to prevent oscillation when
-                // the animated width change crosses the mouse position (#52).
-                if showIdleIndicator {
-                    if hovering {
-                        hoverTimer?.invalidate()
-                        hoverTimer = nil
-                        withAnimation(NotchAnimation.micro) { idleHovered = true }
-                    } else {
-                        hoverTimer?.invalidate()
-                        hoverTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: false) { _ in
-                            Task { @MainActor in
-                                withAnimation(NotchAnimation.micro) { idleHovered = false }
-                            }
-                        }
-                    }
-                    return
-                }
                 switch appState.surface {
                 case .approvalCard, .questionCard: return
                 case .completionCard:
@@ -675,6 +647,35 @@ private struct CompactRightWing: View {
     @AppStorage(SettingsKey.quietHoursEnd) private var quietHoursEnd = SettingsDefaults.quietHoursEnd
     @ObservedObject private var personalUtilities = PersonalUtilitiesModel.shared
 
+    /// The one session that needs a decision, named. Uses the same router that
+    /// orders the expanded list, so the collapsed bar and the panel never
+    /// disagree about which request is most urgent — and prefers the session
+    /// blocked longest, not the one that arrived last.
+    private var pendingAttention: (label: String, tooltip: String)? {
+        let waiting = appState.sessions.filter {
+            $0.value.status == .waitingApproval || $0.value.status == .waitingQuestion
+        }
+        guard !waiting.isEmpty else { return nil }
+
+        let ordered = SessionAttentionRouter.orderedSessionIDs(
+            waiting.map { id, session in
+                SessionAttentionCandidate(
+                    id: id,
+                    status: session.status,
+                    lastActivity: session.lastActivity
+                )
+            }
+        )
+        guard let first = ordered.first, let session = appState.sessions[first] else { return nil }
+
+        let project = session.displayName
+        let label = waiting.count > 1 ? "\(project) +\(waiting.count - 1)" : project
+        let tooltip = waiting.count > 1
+            ? "\(project) \(l10n["needs_you"]) · \(waiting.count) \(l10n["status_waiting"].lowercased())"
+            : "\(project) \(l10n["needs_you"])"
+        return (label, tooltip)
+    }
+
     /// Re-evaluated on every re-render; the compact bar redraws often enough
     /// that the moon appears/disappears close to the window edges.
     private var inQuietHours: Bool {
@@ -725,12 +726,22 @@ private struct CompactRightWing: View {
                         .shadow(color: Color(red: 0.4, green: 1.0, blue: 0.5).opacity(0.7), radius: 3)
                 }
 
-                // Pending approval/question badge
-                if appState.status == .waitingApproval || appState.status == .waitingQuestion {
-                    Image(systemName: "bell.fill")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(Color(red: 1.0, green: 0.7, blue: 0.28))
-                        .symbolEffect(.pulse, options: .repeating)
+                // Pending approval/question. A bare bell said something was
+                // waiting but never what, whose, or how many — so the panel had
+                // to be expanded before the signal meant anything.
+                if let pending = pendingAttention {
+                    HStack(spacing: 4) {
+                        Image(systemName: "bell.fill")
+                            .font(.system(size: 8, weight: .bold))
+                            .symbolEffect(.pulse, options: .repeating)
+                        Text(pending.label)
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                    .foregroundStyle(Color(red: 1.0, green: 0.7, blue: 0.28))
+                    .frame(maxWidth: 108, alignment: .trailing)
+                    .help(pending.tooltip)
                 }
 
                 if let download = personalUtilities.primaryDownload {
@@ -943,58 +954,6 @@ private struct NotchIconButton: View {
     }
 }
 
-// MARK: - Idle Indicator Bar
-
-private struct IdleIndicatorBar: View {
-    let mascotSize: CGFloat
-    let compactWingWidth: CGFloat
-    let notchW: CGFloat
-    let notchHeight: CGFloat
-    let hasNotch: Bool
-    let hovered: Bool
-    @ObservedObject private var l10n = L10n.shared
-    @AppStorage(SettingsKey.soundEnabled) private var soundEnabled = SettingsDefaults.soundEnabled
-    @AppStorage(SettingsKey.defaultSource) private var defaultSource = SettingsDefaults.defaultSource
-
-    var body: some View {
-        HStack(spacing: 0) {
-            // Left: mascot
-            HStack(spacing: 6) {
-                MascotView(source: defaultSource, status: .idle, size: mascotSize)
-                    .opacity(hovered ? 0.9 : 0.5)
-            }
-            .padding(.leading, 6)
-
-            Spacer(minLength: hasNotch ? notchW : 0)
-
-            // Right: expanded shows text + buttons, collapsed shows nothing
-            if hovered {
-                HStack(spacing: 8) {
-                    Text("0")
-                        .font(.system(size: 13, weight: .bold, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.4))
-
-                    HStack(spacing: 4) {
-                        NotchIconButton(icon: soundEnabled ? "speaker.wave.2" : "speaker.slash", tooltip: soundEnabled ? l10n["mute"] : l10n["enable_sound_tooltip"]) {
-                            soundEnabled.toggle()
-                        }
-                        NotchIconButton(icon: "gearshape", tooltip: l10n["settings"]) {
-                            SettingsWindowController.shared.show()
-                        }
-                        NotchIconButton(icon: "power", tint: Color(red: 1.0, green: 0.4, blue: 0.4), tooltip: l10n["quit"]) {
-                            NSApplication.shared.terminate(nil)
-                        }
-                    }
-                }
-                .padding(.trailing, 6)
-                .transition(.opacity)
-            }
-        }
-        .frame(height: notchHeight)
-        .animation(NotchAnimation.micro, value: hovered)
-    }
-}
-
 // MARK: - Approval Bar (below notch, auto-expanded)
 
 private struct ApprovalToolDetailView: View {
@@ -1160,6 +1119,16 @@ private struct ApprovalToolDetailView: View {
 }
 
 private struct ApprovalBar: View {
+    /// Recomputed on the Swift side because the shim's verdict never crosses
+    /// the hook boundary. Values are stringified so a non-string payload
+    /// (numbers, arrays) still gets pattern-matched rather than dropped.
+    private var risk: CommandRisk {
+        CommandRiskClassifier.classify(
+            toolName: tool,
+            toolInput: (toolInput ?? [:]).mapValues { String(describing: $0) }
+        )
+    }
+
     let tool: String
     let toolInput: [String: Any]?
     let queuePosition: Int
@@ -1200,6 +1169,30 @@ private struct ApprovalBar: View {
                 Text(tool)
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(Color(red: 1.0, green: 0.7, blue: 0.28))
+                // Risk tier. The classifier existed only in the hook shims and
+                // was discarded at the boundary, so `rm -rf` and reading a
+                // config file rendered identically on the one screen where a
+                // wrong click is unrecoverable.
+                if risk == .destructive {
+                    Text(L10n.shared["risk_destructive"].uppercased())
+                        .font(.system(size: 8, weight: .black, design: .monospaced))
+                        .tracking(0.6)
+                        .foregroundStyle(Color(red: 0.16, green: 0.03, blue: 0.02))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Color(red: 1.0, green: 0.42, blue: 0.37))
+                        .clipShape(RoundedRectangle(cornerRadius: 3))
+                }
+                // Which project this lands in. Across parallel worktrees
+                // "Bash · rm -rf ./dist" is not a decidable question without it;
+                // the question card already showed this, the approval card
+                // never did.
+                if let project = session?.displayName {
+                    Text(project)
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.85))
+                        .lineLimit(1)
+                }
                 if let server = serverName {
                     Text("(\(server))")
                         .font(.system(size: 9))
@@ -1502,6 +1495,12 @@ private struct QuestionBar: View {
                 }
             }
             .padding(.horizontal, 14)
+            // The rendered "1." "2." "3." prefixes implied shortcuts that were
+            // never wired to anything. onKeyPress rather than keyboardShortcut
+            // so digits still reach the free-text and "Other" fields.
+            .onKeyPress(phases: .down) { press in
+                selectOption(byDigit: press.characters, options: opts, multiSelect: item.multiSelect)
+            }
         } else {
             // No options — text input only
             HStack(spacing: 6) {
@@ -1573,6 +1572,32 @@ private struct QuestionBar: View {
             }
         }
         .padding(.horizontal, 14)
+    }
+
+    /// Maps a digit keypress onto an option. Ignored while any text field holds
+    /// focus so typing "1" into an answer stays typing, not selecting.
+    private func selectOption(
+        byDigit characters: String,
+        options: [String],
+        multiSelect: Bool
+    ) -> KeyPress.Result {
+        guard !showOtherInput, !isFocused, !otherFocused else { return .ignored }
+        guard let character = characters.first,
+              let position = Int(String(character)),
+              position >= 1, position <= options.count else { return .ignored }
+
+        let index = position - 1
+        if multiSelect {
+            if selectedIndices.contains(index) {
+                selectedIndices.remove(index)
+            } else {
+                selectedIndices.insert(index)
+            }
+        } else {
+            selectedIndex = index
+            advanceWithAnswer(options[index])
+        }
+        return .handled
     }
 
     // MARK: - "Other" option row
@@ -1855,7 +1880,14 @@ private struct PixelButton: View {
             .padding(.vertical, 7)
             .background(
                 RoundedRectangle(cornerRadius: 4)
-                    .fill(hovering ? bg.opacity(1.5) : bg)
+                    // `bg.opacity(1.5)` clamped to 1.0 on these opaque fills, so
+                    // hover never changed the button at all. Lighten toward
+                    // white instead, which reads on every button colour.
+                    .fill(bg)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(.white.opacity(hovering ? 0.14 : 0))
+                    )
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 4)
@@ -1877,9 +1909,24 @@ private struct SessionListView: View {
     @AppStorage(SettingsKey.maxVisibleSessions) private var maxVisibleSessions = SettingsDefaults.maxVisibleSessions
     @AppStorage(SettingsKey.showUsageStats) private var showUsageStats = SettingsDefaults.showUsageStats
 
-    private var groupedSessions: [(header: String, source: String?, ids: [String])] {
+    /// Ordered by attention, not by identifier. `SessionAttentionRouter` already
+    /// computed this ranking for the collapsed bar; the expanded list — the
+    /// surface actually used to triage — now reads from the same source.
+    private var attentionBands: [(band: SessionAttentionBand, ids: [String])] {
+        SessionAttentionRouter.bandedSessionIDs(
+            appState.sessions.map { id, session in
+                SessionAttentionCandidate(
+                    id: id,
+                    status: session.status,
+                    lastActivity: session.lastActivity
+                )
+            }
+        )
+    }
+
+    private var groupedSessions: [(header: String, source: String?, ids: [String], band: SessionAttentionBand?)] {
         if let only = onlySessionId, appState.sessions[only] != nil {
-            return [("", nil, [only])]
+            return [("", nil, [only], nil)]
         }
 
         let sorted = appState.sessions.keys.sorted()
@@ -1887,20 +1934,22 @@ private struct SessionListView: View {
         switch groupingMode {
         case "status":
             let l10n = L10n.shared
+            // Waiting outranks running: a session that needs a decision must
+            // never sort below one that needs nothing.
             let groups: [(Set<AgentStatus>, String)] = [
-                ([.running], l10n["status_running"]),
                 ([.waitingApproval, .waitingQuestion], l10n["status_waiting"]),
+                ([.running], l10n["status_running"]),
                 ([.processing], l10n["status_processing"]),
                 ([.idle], l10n["status_idle"]),
             ]
-            var result: [(String, String?, [String])] = []
+            var result: [(String, String?, [String], SessionAttentionBand?)] = []
             for (statuses, label) in groups {
                 let ids = sorted.filter { id in
                     guard let s = appState.sessions[id] else { return false }
                     return statuses.contains(s.status)
                 }
                 if !ids.isEmpty {
-                    result.append(("\(label) (\(ids.count))", nil, ids))
+                    result.append(("\(label) (\(ids.count))", nil, ids, nil))
                 }
             }
             return result
@@ -1934,7 +1983,7 @@ private struct SessionListView: View {
                 ("cline", "Cline"),
                 ("zcode", "ZCode"),
             ]
-            var result: [(String, String?, [String])] = []
+            var result: [(String, String?, [String], SessionAttentionBand?)] = []
             var seen = Set<String>()
             for cli in cliOrder {
                 let ids = sorted.filter { id in
@@ -1947,17 +1996,35 @@ private struct SessionListView: View {
                 }
                 ids.forEach { seen.insert($0) }
                 if !ids.isEmpty {
-                    result.append(("\(cli.name) (\(ids.count))", cli.source, ids))
+                    result.append(("\(cli.name) (\(ids.count))", cli.source, ids, nil))
                 }
             }
             let remaining = sorted.filter { !seen.contains($0) }
             if !remaining.isEmpty {
-                result.append(("\(L10n.shared["other"]) (\(remaining.count))", nil, remaining))
+                result.append(("\(L10n.shared["other"]) (\(remaining.count))", nil, remaining, nil))
             }
             return result
 
-        default: // "all"
-            return [("", nil, sorted)]
+        default: // "all" — attention-ordered bands
+            let bands = attentionBands
+            // A single band is not worth a header; the list is self-evident.
+            guard bands.count > 1 else {
+                return [("", nil, bands.first?.ids ?? sorted, nil)]
+            }
+            return bands.map { band, ids in
+                (band.localizedLabel, nil, ids, band)
+            }
+        }
+    }
+
+    /// Only the band that needs a human is allowed the signal colour; routine
+    /// and idle bands stay neutral so the accent keeps meaning something.
+    private func bandLabelColor(_ band: SessionAttentionBand?) -> Color {
+        switch band {
+        case .needsYou: return Color(red: 1.0, green: 0.6, blue: 0.2)
+        case .working: return .white.opacity(0.42)
+        case .idle: return .white.opacity(0.3)
+        case nil: return .white.opacity(0.5)
         }
     }
 
@@ -1967,6 +2034,12 @@ private struct SessionListView: View {
         let totalSessionCount = groups.reduce(0) { $0 + $1.ids.count }
         let needsScroll = onlySessionId == nil && totalSessionCount > maxVisibleSessions
         let content = VStack(spacing: 6) {
+            // Zero sessions previously rendered nothing at all: header, rule,
+            // then blank panel. That is the first screen a new user sees.
+            if totalSessionCount == 0 {
+                SessionListEmptyState()
+            }
+
             ForEach(groups, id: \.header) { group in
                 if !group.header.isEmpty {
                     HStack(spacing: 6) {
@@ -1975,10 +2048,21 @@ private struct SessionListView: View {
                                 .resizable()
                                 .frame(width: 14, height: 14)
                         }
-                        Text(group.header)
-                            .font(.system(size: 11, weight: .medium, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.5))
-                        Spacer()
+                        Text(group.band == nil ? group.header : group.header.uppercased())
+                            .font(.system(size: 11, weight: group.band == nil ? .medium : .bold, design: .monospaced))
+                            .tracking(group.band == nil ? 0 : 1.2)
+                            .foregroundStyle(bandLabelColor(group.band))
+                        if group.band != nil {
+                            Text("\(group.ids.count)")
+                                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                .foregroundStyle(.white.opacity(0.32))
+                            // A hairline carries the grouping without another
+                            // filled surface competing with the rows.
+                            Rectangle()
+                                .fill(bandLabelColor(group.band).opacity(0.2))
+                                .frame(height: 1)
+                        }
+                        Spacer(minLength: 0)
                     }
                     .padding(.horizontal, 12)
                     .padding(.top, 6)
@@ -1990,8 +2074,7 @@ private struct SessionListView: View {
                         SessionCard(
                             appState: appState,
                             sessionId: sessionId,
-                            session: session,
-                            isCompletion: onlySessionId != nil
+                            session: session
                         )
                     }
                 }
@@ -2310,7 +2393,6 @@ private struct SessionCard: View {
     var appState: AppState
     let sessionId: String
     let session: SessionSnapshot
-    var isCompletion: Bool = false
     @State private var hovering = false
     @State private var failureShakeOffset: CGFloat = 0
     @State private var jumpValidationTask: Task<Void, Never>?
@@ -2416,7 +2498,7 @@ private struct SessionCard: View {
                         if session.isYoloMode == true {
                             SessionTag("YOLO", color: Color(red: 1.0, green: 0.35, blue: 0.35))
                         }
-                        SessionTag(timeAgo(session.startTime))
+                        SessionTag(ageLabel, color: ageColor)
                         TerminalBadge(session: session)
                     }
                 }
@@ -2439,6 +2521,18 @@ private struct SessionCard: View {
                             enabled: true,
                             action: { withAnimation(NotchAnimation.micro) { showApprovalDetails.toggle() } }
                         )
+                        // Deny leads, matching the auto-expanded card. The two
+                        // surfaces previously ordered the same irreversible
+                        // decision in opposite directions — destructive first
+                        // on the card, last here — so muscle memory built on
+                        // one misfired on the other.
+                        inlineActionButton(
+                            L10n.shared["deny"],
+                            fg: .white,
+                            bg: Color(red: 0.85, green: 0.3, blue: 0.3),
+                            enabled: isActiveApproval,
+                            action: { appState.denyPermission() }
+                        )
                         inlineActionButton(
                             L10n.shared["allow_once"],
                             fg: .white,
@@ -2452,13 +2546,6 @@ private struct SessionCard: View {
                             bg: Color(red: 0.25, green: 0.55, blue: 0.85),
                             enabled: isActiveApproval,
                             action: { appState.approvePermission(always: true) }
-                        )
-                        inlineActionButton(
-                            L10n.shared["deny"],
-                            fg: .white,
-                            bg: Color(red: 0.85, green: 0.3, blue: 0.3),
-                            enabled: isActiveApproval,
-                            action: { appState.denyPermission() }
                         )
                     }
 
@@ -2630,6 +2717,28 @@ private struct SessionCard: View {
         if seconds < 3600 { return "\(seconds / 60)m" }
         if seconds < 86400 { return "\(seconds / 3600)h" }
         return "\(seconds / 86400)d"
+    }
+
+    /// Measured from last activity, not session start. "How long has this been
+    /// waiting on me" is the decision-relevant number; session age only looked
+    /// like it was answering that question.
+    private var ageLabel: String {
+        let elapsed = timeAgo(session.lastActivity)
+        switch session.status {
+        case .waitingApproval, .waitingQuestion:
+            return "\(L10n.shared["age_blocked"]) \(elapsed)"
+        default:
+            return elapsed
+        }
+    }
+
+    private var ageColor: Color {
+        switch session.status {
+        case .waitingApproval, .waitingQuestion:
+            return Color(red: 1.0, green: 0.6, blue: 0.2)
+        default:
+            return .white.opacity(0.7)
+        }
     }
 }
 
@@ -3055,6 +3164,39 @@ private func monogramIcon(for source: String, size: CGFloat) -> NSImage {
     }
     image.size = NSSize(width: size, height: size)
     return image
+}
+
+/// Shown when no agent sessions exist. The panel used to render a bare black
+/// rectangle here, while the secondary Glances surface already shipped six
+/// considered empty strings.
+private struct SessionListEmptyState: View {
+    var body: some View {
+        VStack(spacing: 7) {
+            Image(systemName: "terminal")
+                .font(.system(size: 15, weight: .regular))
+                .foregroundStyle(.white.opacity(0.28))
+                .frame(width: 34, height: 34)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .stroke(.white.opacity(0.14), lineWidth: 1)
+                )
+                .padding(.bottom, 3)
+
+            Text(L10n.shared["empty_no_agents"])
+                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.78))
+
+            Text(L10n.shared["empty_no_agents_hint"])
+                .font(.system(size: 10.5, weight: .regular, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.38))
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 280)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 30)
+        .padding(.horizontal, 16)
+    }
 }
 
 private struct SessionTag: View {

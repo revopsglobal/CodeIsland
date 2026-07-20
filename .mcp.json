@@ -1,0 +1,250 @@
+{
+  "mcpServers": {
+    "rgos": {
+      "command": "/Users/gregharned/.nvm/versions/node/v24.13.1/bin/node",
+      "args": [
+        "/Users/gregharned/work/team-brain/platform/rgos-mcp-server/dist/index.js"
+      ],
+      "env": {
+        "SUPABASE_URL": "https://yyizocyaehmqrottmnaz.supabase.co",
+        "SUPABASE_SERVICE_ROLE_KEY": "${SUPABASE_RGOS_SERVICE_KEY}"
+      }
+    },
+    "supabase": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@supabase/mcp-server-supabase@latest",
+        "--access-token",
+        "${SUPABASE_ACCESS_TOKEN}"
+      ]
+    },
+    "open-brain": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://hubauzvpxuparrvqjytt.supabase.co/functions/v1/open-brain-mcp",
+        "--header",
+        "x-brain-key:${OPEN_BRAIN_KEY}"
+      ]
+    },
+    "orchestrator": {
+      "command": "/Users/gregharned/.nvm/versions/node/v24.13.1/bin/node",
+      "args": [
+        "/Users/gregharned/work/team-brain/mcps/orchestrator/dist/index.js"
+      ]
+    },
+    "knowledge": {
+      "command": "/Users/gregharned/.nvm/versions/node/v24.13.1/bin/node",
+      "args": [
+        "/Users/gregharned/work/team-brain/mcps/knowledge/index.js"
+      ],
+      "env": {
+        "SUPABASE_URL": "https://yyizocyaehmqrottmnaz.supabase.co",
+        "SUPABASE_SERVICE_ROLE_KEY": "${SUPABASE_RGOS_SERVICE_KEY}"
+      }
+    },
+    "hubspot": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@hubspot/mcp-server"
+      ],
+      "env": {
+        "PRIVATE_APP_ACCESS_TOKEN": "${HUBSPOT_ACCESS_TOKEN}"
+      }
+    },
+    "magic": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@21st-dev/magic@latest"
+      ],
+      "env": {
+        "API_KEY": "${MAGIC_API_KEY}"
+      }
+    },
+    "figma-desktop": {
+      "type": "http",
+      "url": "http://127.0.0.1:3845/mcp"
+    },
+    "gemini": {
+      "command": "/Users/gregharned/.nvm/versions/node/v24.13.1/bin/node",
+      "args": [
+        "/Users/gregharned/work/team-brain/mcps/gemini/index.js"
+      ],
+      "env": {
+        "GEMINI_API_KEY": "${GEMINI_API_KEY}"
+      }
+    },
+    "mistral-tts": {
+      "command": "/Users/gregharned/.nvm/versions/node/v24.13.1/bin/node",
+      "args": [
+        "/Users/gregharned/work/team-brain/mcps/mistral-tts/server.js"
+      ],
+      "env": {
+        "MISTRAL_API_KEY": "${MISTRAL_API_KEY}"
+      }
+    },
+    "heygen": {
+      "command": "/Users/gregharned/.nvm/versions/node/v24.13.1/bin/node",
+      "args": [
+        "/Users/gregharned/work/team-brain/mcps/heygen/index.js"
+      ]
+    },
+    "fathom": {
+      "command": "/Users/gregharned/.nvm/versions/node/v24.13.1/bin/node",
+      "args": [
+        "/Users/gregharned/work/team-brain/mcps/fathom/index.js"
+      ],
+      "env": {
+        "FATHOM_API_KEY": "${FATHOM_API_KEY}"
+      }
+    },
+    "slack": {
+      "command": "/Users/gregharned/.nvm/versions/node/v24.13.1/bin/node",
+      "args": [
+        "/Users/gregharned/work/team-brain/mcps/slack/index.js"
+      ],
+      "env": {
+        "SUPABASE_URL": "https://yyizocyaehmqrottmnaz.supabase.co",
+        "SUPABASE_SERVICE_ROLE_KEY": "${SUPABASE_RGOS_SERVICE_KEY}",
+        "SLACK_WORKSPACES": "${SLACK_WORKSPACES}"
+      }
+    },
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "@playwright/mcp@latest",
+        "--cdp-endpoint",
+        "http://localhost:9222"
+      ]
+    },
+    "context7": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp"
+      ]
+    },
+    "ob1-family": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://hubauzvpxuparrvqjytt.supabase.co/functions/v1/family-calendar-mcp/mcp",
+        "--header",
+        "x-access-key:${OB1_ACCESS_KEY}"
+      ]
+    },
+    "ob1-household": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://hubauzvpxuparrvqjytt.supabase.co/functions/v1/household-knowledge-mcp/mcp",
+        "--header",
+        "x-access-key:${OB1_ACCESS_KEY}"
+      ]
+    },
+    "ob1-maintenance": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://hubauzvpxuparrvqjytt.supabase.co/functions/v1/home-maintenance-mcp/mcp",
+        "--header",
+        "x-access-key:${OB1_ACCESS_KEY}"
+      ]
+    },
+    "gmail": {
+      "command": "/Users/gregharned/.nvm/versions/node/v24.13.1/bin/node",
+      "args": [
+        "/Users/gregharned/work/team-brain/mcps/gmail/dist/index.js"
+      ],
+      "env": {
+        "GMAIL_CREDENTIALS_PATH": "${GMAIL_CREDENTIALS_PATH}",
+        "GMAIL_TOKEN_PATH": "${GMAIL_TOKEN_PATH}"
+      }
+    },
+    "superhuman": {
+      "command": "/Users/gregharned/.nvm/versions/node/v24.13.1/bin/node",
+      "args": [
+        "/Users/gregharned/work/team-brain/mcps/superhuman/dist/index.js"
+      ],
+      "env": {
+        "SUPERHUMAN_TOKENS_PATH": "${HOME}/.config/superhuman-cli/tokens.json"
+      }
+    },
+    "wpengine": {
+      "command": "/Users/gregharned/.nvm/versions/node/v24.13.1/bin/node",
+      "args": [
+        "/Users/gregharned/work/team-brain/mcps/wpengine/dist/index.js"
+      ],
+      "env": {
+        "WPENGINE_USER_ID": "${WPENGINE_USER_ID}",
+        "WPENGINE_PASSWORD": "${WPENGINE_PASSWORD}"
+      }
+    },
+    "zoom": {
+      "command": "/Users/gregharned/.nvm/versions/node/v24.13.1/bin/node",
+      "args": [
+        "/Users/gregharned/work/team-brain/mcps/zoom/dist/index.js"
+      ],
+      "env": {
+        "ZOOM_ACCOUNT_ID": "${ZOOM_ACCOUNT_ID}",
+        "ZOOM_CLIENT_ID": "${ZOOM_CLIENT_ID}",
+        "ZOOM_CLIENT_SECRET": "${ZOOM_CLIENT_SECRET}",
+        "ZOOM_USER_ID": "${ZOOM_USER_ID}"
+      }
+    },
+    "ob1-meals": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://hubauzvpxuparrvqjytt.supabase.co/functions/v1/meal-planning-mcp/mcp",
+        "--header",
+        "x-access-key:${OB1_ACCESS_KEY}"
+      ]
+    },
+    "chrome-devtools": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "chrome-devtools-mcp",
+        "--autoConnect"
+      ]
+    },
+    "vercel": {
+      "command": "/Users/gregharned/.nvm/versions/node/v24.13.1/bin/node",
+      "args": [
+        "/Users/gregharned/work/team-brain/mcps/vercel/dist/index.js"
+      ],
+      "env": {
+        "VERCEL_TOKEN": "${VERCEL_TOKEN}"
+      }
+    },
+    "hetzner": {
+      "command": "/Users/gregharned/.nvm/versions/node/v24.13.1/bin/node",
+      "args": [
+        "/Users/gregharned/work/team-brain/mcps/hetzner/dist/index.js"
+      ],
+      "env": {
+        "HETZNER_API_TOKEN": "${HETZNER_API_TOKEN}"
+      }
+    },
+    "builtwith": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://api.builtwith.com/mcp",
+        "--header",
+        "Authorization:Bearer ${BUILTWITH_API_KEY}"
+      ]
+    }
+  }
+}
