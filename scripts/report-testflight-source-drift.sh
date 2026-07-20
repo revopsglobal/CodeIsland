@@ -67,7 +67,6 @@ buddy_filter='
     /^ios\/CodeIslandCompanion\// { print; next }
     /^Sources\/CodeIslandCore\// { print; next }
     /^Tests\/CodeIslandCoreTests\// { print; next }
-    /^Tests\/Scripts\/validate-app-intent-metadata\.bats$/ { print; next }
     /^scripts\/validate-app-intent-metadata\.sh$/ { print; next }
     /^scripts\/smoke-companion.*\.sh$/ { print; next }
     /^\.github\/workflows\/testflight-ios\.yml$/ { print; next }

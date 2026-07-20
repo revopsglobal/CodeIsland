@@ -130,7 +130,7 @@ audit="$(jq -n \
     def strict_required:
         [
             ($strict.remainingGates // [])[]
-            | select((.required // true) == true)
+            | select(.required != false)
             | {id,status,owner,nextAction}
         ];
     def away_required:

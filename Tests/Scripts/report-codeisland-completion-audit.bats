@@ -35,7 +35,7 @@ jq -n '{
     iphoneMirroring:{status:"iphone-in-use"}
   },
   remainingGates:(
-    if $complete then []
+    (if $complete then []
     else [
       {
         id:"physical-buddy-checkin",
@@ -43,7 +43,8 @@ jq -n '{
         required:true,
         owner:"greg",
         nextAction:"Open latest Buddy from TestFlight."
-      },
+      }
+    ] end) + [
       {
         id:"direct-device-visibility",
         status:"simulator-only",
@@ -52,7 +53,6 @@ jq -n '{
         nextAction:"Lock iPhone and connect iPhone Mirroring."
       }
     ]
-    end
   )
 }'
 exit $(if [ "$complete" = "true" ]; then printf 0; else printf 2; fi)

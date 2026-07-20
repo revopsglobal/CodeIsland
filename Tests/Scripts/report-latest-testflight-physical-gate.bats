@@ -116,6 +116,48 @@ STUB
     (.gate.nextAction | contains("strict physical E2E interaction acceptance"))'
 }
 
+@test "derives the expected Mac version from the newest successful DMG workflow" {
+  cat > "$GH_BIN" <<'STUB'
+#!/usr/bin/env bash
+if [[ "$1 $2" == "run list" && " $* " == *" --workflow testflight-ios.yml "* ]]; then
+  printf '%s\n' '[{"databaseId":1,"status":"completed","conclusion":"success","headSha":"abc","createdAt":"2026-07-19T00:00:00Z","url":"https://example.test/run/1"}]'
+  exit 0
+fi
+if [[ "$1 $2" == "run list" && " $* " == *" --workflow build-macos-arm-dmg.yml "* ]]; then
+  printf '%s\n' '[{"databaseId":2,"status":"completed","conclusion":"success","headSha":"abc","createdAt":"2026-07-19T00:01:00Z","url":"https://example.test/run/2"}]'
+  exit 0
+fi
+if [[ "$1 $2 $3" == "run view 1" ]]; then
+  printf '%s\n' 'Resolve build number\tBuilding CodeIsland Buddy 1.0.0 (20260719005630)'
+  exit 0
+fi
+if [[ "$1 $2 $3" == "run view 2" ]]; then
+  printf '%s\n' 'Build ARM64 DMG\t==> Building CodeIsland 1.0.55 (arm64)'
+  exit 0
+fi
+exit 99
+STUB
+
+  cat > "$REPORT_PHYSICAL_ACCEPTANCE_BIN" <<'STUB'
+#!/usr/bin/env bash
+jq -n \
+  --arg expectedMacVersion "$EXPECTED_MAC_VERSION" \
+  '{expectedMacVersionSeen:$expectedMacVersion,gates:{complete:($expectedMacVersion == "1.0.55"),physicalBuildStatus:{status:"matched",expectedBuild:env.EXPECTED_CLIENT_BUILD}}}'
+STUB
+  chmod +x "$GH_BIN" "$REPORT_PHYSICAL_ACCEPTANCE_BIN"
+
+  run "$REPO_ROOT/scripts/report-latest-testflight-physical-gate.sh"
+
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | jq -e '
+    .macDelivery.workflow == "build-macos-arm-dmg.yml" and
+    .macDelivery.databaseId == 2 and
+    .macDelivery.expectedVersion == "1.0.55" and
+    .macDelivery.versionSource == "latest-successful-workflow" and
+    .physicalAcceptance.expectedMacVersionSeen == "1.0.55" and
+    .gate.complete == true'
+}
+
 @test "can disable syncing the newest TestFlight build into Mac settings" {
   cat > "$GH_BIN" <<'STUB'
 #!/usr/bin/env bash

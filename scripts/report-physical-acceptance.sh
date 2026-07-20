@@ -130,14 +130,20 @@ fi
 expected_client_configured=false
 physical_match_count=0
 newest_physical_device='null'
+eligible_production_device_count=0
+ignored_non_production_build_device_count=0
 if [[ -n "$EXPECTED_CLIENT_VERSION" && -n "$EXPECTED_CLIENT_BUILD" ]]; then
     expected_client_configured=true
+    eligible_production_device_count="$(printf '%s' "$devices" | jq \
+        '[.[] | select(.pushEnvironment == "production")] | length')"
+    ignored_non_production_build_device_count="$(printf '%s' "$devices" | jq \
+        '[.[] | select(.pushEnvironment != "production") | select((.clientVersion // "") != "" or (.clientBuild // "") != "")] | length')"
     physical_match_count="$(printf '%s' "$devices" | jq \
         --arg version "$EXPECTED_CLIENT_VERSION" \
         --arg build "$EXPECTED_CLIENT_BUILD" \
-        '[.[] | select(.clientVersion == $version and .clientBuild == $build)] | length')"
+        '[.[] | select(.pushEnvironment == "production") | select(.clientVersion == $version and .clientBuild == $build)] | length')"
     newest_physical_device="$(printf '%s' "$devices" | jq -c \
-        '[.[] | select((.clientVersion // "") != "" or (.clientBuild // "") != "")] |
+        '[.[] | select(.pushEnvironment == "production") | select((.clientVersion // "") != "" or (.clientBuild // "") != "")] |
         sort_by(.lastSeenAt // "") |
         last // null')"
 fi
@@ -152,10 +158,14 @@ physical_build_status="$(jq -n -c \
     --arg expectedClientBuild "$EXPECTED_CLIENT_BUILD" \
     --argjson expectedClientConfigured "$(bool_json "$expected_client_configured")" \
     --argjson physicalMatchCount "$physical_match_count" \
+    --argjson eligibleProductionDeviceCount "$eligible_production_device_count" \
+    --argjson ignoredNonProductionBuildDeviceCount "$ignored_non_production_build_device_count" \
     --argjson newestPhysicalDevice "$newest_physical_device" \
     '{
         expectedVersion:$expectedClientVersion,
         expectedBuild:$expectedClientBuild,
+        eligibleProductionDeviceCount:$eligibleProductionDeviceCount,
+        ignoredNonProductionBuildDeviceCount:$ignoredNonProductionBuildDeviceCount,
         newestObservedVersion:($newestPhysicalDevice.clientVersion // null),
         newestObservedBuild:($newestPhysicalDevice.clientBuild // null),
         newestObservedDeviceID:($newestPhysicalDevice.id // null),
