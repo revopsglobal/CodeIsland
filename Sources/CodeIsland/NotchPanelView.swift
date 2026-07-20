@@ -1486,6 +1486,12 @@ private struct QuestionBar: View {
                 }
             }
             .padding(.horizontal, 14)
+            // The rendered "1." "2." "3." prefixes implied shortcuts that were
+            // never wired to anything. onKeyPress rather than keyboardShortcut
+            // so digits still reach the free-text and "Other" fields.
+            .onKeyPress(phases: .down) { press in
+                selectOption(byDigit: press.characters, options: opts, multiSelect: item.multiSelect)
+            }
         } else {
             // No options — text input only
             HStack(spacing: 6) {
@@ -1557,6 +1563,32 @@ private struct QuestionBar: View {
             }
         }
         .padding(.horizontal, 14)
+    }
+
+    /// Maps a digit keypress onto an option. Ignored while any text field holds
+    /// focus so typing "1" into an answer stays typing, not selecting.
+    private func selectOption(
+        byDigit characters: String,
+        options: [String],
+        multiSelect: Bool
+    ) -> KeyPress.Result {
+        guard !showOtherInput, !isFocused, !otherFocused else { return .ignored }
+        guard let character = characters.first,
+              let position = Int(String(character)),
+              position >= 1, position <= options.count else { return .ignored }
+
+        let index = position - 1
+        if multiSelect {
+            if selectedIndices.contains(index) {
+                selectedIndices.remove(index)
+            } else {
+                selectedIndices.insert(index)
+            }
+        } else {
+            selectedIndex = index
+            advanceWithAnswer(options[index])
+        }
+        return .handled
     }
 
     // MARK: - "Other" option row
@@ -1986,6 +2018,12 @@ private struct SessionListView: View {
         let totalSessionCount = groups.reduce(0) { $0 + $1.ids.count }
         let needsScroll = onlySessionId == nil && totalSessionCount > maxVisibleSessions
         let content = VStack(spacing: 6) {
+            // Zero sessions previously rendered nothing at all: header, rule,
+            // then blank panel. That is the first screen a new user sees.
+            if totalSessionCount == 0 {
+                SessionListEmptyState()
+            }
+
             ForEach(groups, id: \.header) { group in
                 if !group.header.isEmpty {
                     HStack(spacing: 6) {
@@ -3107,6 +3145,39 @@ private func monogramIcon(for source: String, size: CGFloat) -> NSImage {
     }
     image.size = NSSize(width: size, height: size)
     return image
+}
+
+/// Shown when no agent sessions exist. The panel used to render a bare black
+/// rectangle here, while the secondary Glances surface already shipped six
+/// considered empty strings.
+private struct SessionListEmptyState: View {
+    var body: some View {
+        VStack(spacing: 7) {
+            Image(systemName: "terminal")
+                .font(.system(size: 15, weight: .regular))
+                .foregroundStyle(.white.opacity(0.28))
+                .frame(width: 34, height: 34)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .stroke(.white.opacity(0.14), lineWidth: 1)
+                )
+                .padding(.bottom, 3)
+
+            Text(L10n.shared["empty_no_agents"])
+                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.78))
+
+            Text(L10n.shared["empty_no_agents_hint"])
+                .font(.system(size: 10.5, weight: .regular, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.38))
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 280)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 30)
+        .padding(.horizontal, 16)
+    }
 }
 
 private struct SessionTag: View {
