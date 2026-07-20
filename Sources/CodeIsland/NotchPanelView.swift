@@ -1861,9 +1861,24 @@ private struct SessionListView: View {
     @AppStorage(SettingsKey.maxVisibleSessions) private var maxVisibleSessions = SettingsDefaults.maxVisibleSessions
     @AppStorage(SettingsKey.showUsageStats) private var showUsageStats = SettingsDefaults.showUsageStats
 
-    private var groupedSessions: [(header: String, source: String?, ids: [String])] {
+    /// Ordered by attention, not by identifier. `SessionAttentionRouter` already
+    /// computed this ranking for the collapsed bar; the expanded list — the
+    /// surface actually used to triage — now reads from the same source.
+    private var attentionBands: [(band: SessionAttentionBand, ids: [String])] {
+        SessionAttentionRouter.bandedSessionIDs(
+            appState.sessions.map { id, session in
+                SessionAttentionCandidate(
+                    id: id,
+                    status: session.status,
+                    lastActivity: session.lastActivity
+                )
+            }
+        )
+    }
+
+    private var groupedSessions: [(header: String, source: String?, ids: [String], band: SessionAttentionBand?)] {
         if let only = onlySessionId, appState.sessions[only] != nil {
-            return [("", nil, [only])]
+            return [("", nil, [only], nil)]
         }
 
         let sorted = appState.sessions.keys.sorted()
@@ -1871,20 +1886,22 @@ private struct SessionListView: View {
         switch groupingMode {
         case "status":
             let l10n = L10n.shared
+            // Waiting outranks running: a session that needs a decision must
+            // never sort below one that needs nothing.
             let groups: [(Set<AgentStatus>, String)] = [
-                ([.running], l10n["status_running"]),
                 ([.waitingApproval, .waitingQuestion], l10n["status_waiting"]),
+                ([.running], l10n["status_running"]),
                 ([.processing], l10n["status_processing"]),
                 ([.idle], l10n["status_idle"]),
             ]
-            var result: [(String, String?, [String])] = []
+            var result: [(String, String?, [String], SessionAttentionBand?)] = []
             for (statuses, label) in groups {
                 let ids = sorted.filter { id in
                     guard let s = appState.sessions[id] else { return false }
                     return statuses.contains(s.status)
                 }
                 if !ids.isEmpty {
-                    result.append(("\(label) (\(ids.count))", nil, ids))
+                    result.append(("\(label) (\(ids.count))", nil, ids, nil))
                 }
             }
             return result
@@ -1918,7 +1935,7 @@ private struct SessionListView: View {
                 ("cline", "Cline"),
                 ("zcode", "ZCode"),
             ]
-            var result: [(String, String?, [String])] = []
+            var result: [(String, String?, [String], SessionAttentionBand?)] = []
             var seen = Set<String>()
             for cli in cliOrder {
                 let ids = sorted.filter { id in
@@ -1931,17 +1948,35 @@ private struct SessionListView: View {
                 }
                 ids.forEach { seen.insert($0) }
                 if !ids.isEmpty {
-                    result.append(("\(cli.name) (\(ids.count))", cli.source, ids))
+                    result.append(("\(cli.name) (\(ids.count))", cli.source, ids, nil))
                 }
             }
             let remaining = sorted.filter { !seen.contains($0) }
             if !remaining.isEmpty {
-                result.append(("\(L10n.shared["other"]) (\(remaining.count))", nil, remaining))
+                result.append(("\(L10n.shared["other"]) (\(remaining.count))", nil, remaining, nil))
             }
             return result
 
-        default: // "all"
-            return [("", nil, sorted)]
+        default: // "all" — attention-ordered bands
+            let bands = attentionBands
+            // A single band is not worth a header; the list is self-evident.
+            guard bands.count > 1 else {
+                return [("", nil, bands.first?.ids ?? sorted, nil)]
+            }
+            return bands.map { band, ids in
+                (band.localizedLabel, nil, ids, band)
+            }
+        }
+    }
+
+    /// Only the band that needs a human is allowed the signal colour; routine
+    /// and idle bands stay neutral so the accent keeps meaning something.
+    private func bandLabelColor(_ band: SessionAttentionBand?) -> Color {
+        switch band {
+        case .needsYou: return Color(red: 1.0, green: 0.6, blue: 0.2)
+        case .working: return .white.opacity(0.42)
+        case .idle: return .white.opacity(0.3)
+        case nil: return .white.opacity(0.5)
         }
     }
 
@@ -1959,10 +1994,21 @@ private struct SessionListView: View {
                                 .resizable()
                                 .frame(width: 14, height: 14)
                         }
-                        Text(group.header)
-                            .font(.system(size: 11, weight: .medium, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.5))
-                        Spacer()
+                        Text(group.band == nil ? group.header : group.header.uppercased())
+                            .font(.system(size: 11, weight: group.band == nil ? .medium : .bold, design: .monospaced))
+                            .tracking(group.band == nil ? 0 : 1.2)
+                            .foregroundStyle(bandLabelColor(group.band))
+                        if group.band != nil {
+                            Text("\(group.ids.count)")
+                                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                .foregroundStyle(.white.opacity(0.32))
+                            // A hairline carries the grouping without another
+                            // filled surface competing with the rows.
+                            Rectangle()
+                                .fill(bandLabelColor(group.band).opacity(0.2))
+                                .frame(height: 1)
+                        }
+                        Spacer(minLength: 0)
                     }
                     .padding(.horizontal, 12)
                     .padding(.top, 6)
@@ -2400,7 +2446,7 @@ private struct SessionCard: View {
                         if session.isYoloMode == true {
                             SessionTag("YOLO", color: Color(red: 1.0, green: 0.35, blue: 0.35))
                         }
-                        SessionTag(timeAgo(session.startTime))
+                        SessionTag(ageLabel, color: ageColor)
                         TerminalBadge(session: session)
                     }
                 }
@@ -2614,6 +2660,28 @@ private struct SessionCard: View {
         if seconds < 3600 { return "\(seconds / 60)m" }
         if seconds < 86400 { return "\(seconds / 3600)h" }
         return "\(seconds / 86400)d"
+    }
+
+    /// Measured from last activity, not session start. "How long has this been
+    /// waiting on me" is the decision-relevant number; session age only looked
+    /// like it was answering that question.
+    private var ageLabel: String {
+        let elapsed = timeAgo(session.lastActivity)
+        switch session.status {
+        case .waitingApproval, .waitingQuestion:
+            return "\(L10n.shared["age_blocked"]) \(elapsed)"
+        default:
+            return elapsed
+        }
+    }
+
+    private var ageColor: Color {
+        switch session.status {
+        case .waitingApproval, .waitingQuestion:
+            return Color(red: 1.0, green: 0.6, blue: 0.2)
+        default:
+            return .white.opacity(0.7)
+        }
     }
 }
 
