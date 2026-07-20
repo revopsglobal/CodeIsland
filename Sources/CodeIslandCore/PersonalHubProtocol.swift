@@ -864,6 +864,10 @@ public enum PersonalHubDeepLink: Equatable, Sendable {
     case pendingQuestion(id: String?)
     case module(PersonalHubModuleID)
     case quickJot(destination: PersonalHubQuickJotDestination, text: String?)
+    case task(id: UUID)
+    case newTask(text: String?, provider: RemoteTaskProvider? = nil)
+    case needsYou
+    case sessions
 
     public init?(url: URL) {
         guard url.scheme?.lowercased() == "codeisland",
@@ -887,6 +891,23 @@ public enum PersonalHubDeepLink: Equatable, Sendable {
             let text = URLComponents(url: url, resolvingAgainstBaseURL: false)?
                 .queryItems?.first(where: { $0.name == "text" })?.value
             self = .quickJot(destination: destination, text: text)
+        case "tasks":
+            guard let rawID = path.first, let id = UUID(uuidString: rawID) else { return nil }
+            self = .task(id: id)
+        case "new-task":
+            let queryItems = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
+            let text = queryItems?.first(where: { $0.name == "text" })?.value
+            let provider = queryItems?
+                .first(where: { $0.name == "provider" })?
+                .value
+                .flatMap(RemoteTaskProvider.init(rawValue:))
+            self = .newTask(text: text, provider: provider)
+        case "needs-you":
+            guard path.isEmpty else { return nil }
+            self = .needsYou
+        case "sessions":
+            guard path.isEmpty else { return nil }
+            self = .sessions
         default:
             return nil
         }
@@ -911,6 +932,21 @@ public enum PersonalHubDeepLink: Equatable, Sendable {
             if let text, !text.isEmpty {
                 components.queryItems = [URLQueryItem(name: "text", value: text)]
             }
+        case .task(let id):
+            components.host = "tasks"
+            components.path = "/\(id.uuidString)"
+        case .newTask(let text, let provider):
+            components.host = "new-task"
+            var items: [URLQueryItem] = []
+            if let text, !text.isEmpty {
+                items.append(URLQueryItem(name: "text", value: text))
+            }
+            if let provider { items.append(URLQueryItem(name: "provider", value: provider.rawValue)) }
+            components.queryItems = items.isEmpty ? nil : items
+        case .needsYou:
+            components.host = "needs-you"
+        case .sessions:
+            components.host = "sessions"
         }
         return components.url!
     }
@@ -935,6 +971,29 @@ public struct PersonalHubBuddyRoute: Equatable, Sendable {
     }
 }
 
+public struct PersonalHubBuddyParityViolation: Equatable, CustomStringConvertible, Sendable {
+    public let moduleID: PersonalHubModuleID
+    public let actionID: String
+    public let location: String
+    public let reason: String
+
+    public init(
+        moduleID: PersonalHubModuleID,
+        actionID: String,
+        location: String,
+        reason: String
+    ) {
+        self.moduleID = moduleID
+        self.actionID = actionID
+        self.location = location
+        self.reason = reason
+    }
+
+    public var description: String {
+        "\(moduleID.rawValue).\(actionID) at \(location): \(reason)"
+    }
+}
+
 public enum PersonalHubBuddyParity {
     public static let routes: [PersonalHubBuddyRoute] = [
         .init(moduleID: .nowPlaying, actionDispositions: native("previous", "playPause", "playQueueItem", "next", "seek", "seekBack", "seekForward", "copyToDevice")),
@@ -946,11 +1005,11 @@ public enum PersonalHubBuddyParity {
         .init(moduleID: .weather, actionDispositions: readOnly("refresh")),
         .init(moduleID: .notifications, actionDispositions: ["view": .readOnly]),
         .init(moduleID: .claude, actionDispositions: native("ask", "plan", "applyProposal", "copyToDevice")),
-        .init(moduleID: .agents, actionDispositions: ["view": .readOnly]),
-        .init(moduleID: .github, actionDispositions: native("open")),
+        .init(moduleID: .agents, actionDispositions: readOnly("refresh", "view")),
+        .init(moduleID: .github, actionDispositions: native("open").merging(readOnly("refresh"), uniquingKeysWith: { first, _ in first })),
         .init(moduleID: .audio, actionDispositions: native("volumeDown", "setVolume", "volumeUp", "setInput", "setOutput", "openSettings")),
         .init(moduleID: .bluetooth, actionDispositions: native("refresh", "connect", "disconnect")),
-        .init(moduleID: .battery, actionDispositions: ["view": .readOnly]),
+        .init(moduleID: .battery, actionDispositions: readOnly("refresh", "view")),
         .init(moduleID: .quickToggles, actionDispositions: native("darkMode", "mute", "displaySleep", "lockMac", "setModeRack", "setDashboard")),
         .init(moduleID: .downloads, actionDispositions: native("refresh", "downloadToDevice").merging(macOnly("reveal", reason: "Reveals the download in Finder on the Mac"), uniquingKeysWith: { first, _ in first })),
         .init(moduleID: .camera, actionDispositions: native("previewLocal")),
@@ -960,6 +1019,58 @@ public enum PersonalHubBuddyParity {
 
     public static func route(for moduleID: PersonalHubModuleID) -> PersonalHubBuddyRoute? {
         routes.first(where: { $0.moduleID == moduleID })
+    }
+
+    public static func disposition(
+        for moduleID: PersonalHubModuleID,
+        actionID: String
+    ) -> PersonalHubBuddyActionDisposition? {
+        route(for: moduleID)?.actionDispositions[actionID]
+    }
+
+    public static func isReadOnlyAction(
+        moduleID: PersonalHubModuleID,
+        actionID: String
+    ) -> Bool {
+        disposition(for: moduleID, actionID: actionID) == .readOnly
+    }
+
+    public static func validate(snapshot: PersonalHubSnapshot) -> [PersonalHubBuddyParityViolation] {
+        snapshot.modules.flatMap(validate(module:))
+    }
+
+    public static func validate(module: PersonalHubModuleSnapshot) -> [PersonalHubBuddyParityViolation] {
+        guard let route = route(for: module.id) else {
+            return allActions(in: module).map {
+                PersonalHubBuddyParityViolation(
+                    moduleID: module.id,
+                    actionID: $0.id,
+                    location: $0.location,
+                    reason: "missing Buddy route"
+                )
+            }
+        }
+
+        return allActions(in: module).compactMap { entry in
+            guard let disposition = route.actionDispositions[entry.id] else {
+                return PersonalHubBuddyParityViolation(
+                    moduleID: module.id,
+                    actionID: entry.id,
+                    location: entry.location,
+                    reason: "missing Buddy action disposition"
+                )
+            }
+            if case .macOnly(let reason) = disposition,
+               reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return PersonalHubBuddyParityViolation(
+                    moduleID: module.id,
+                    actionID: entry.id,
+                    location: entry.location,
+                    reason: "Mac-only action is missing a reason"
+                )
+            }
+            return nil
+        }
     }
 
     private static func native(_ ids: String...) -> [String: PersonalHubBuddyActionDisposition] {
@@ -975,5 +1086,27 @@ public enum PersonalHubBuddyParity {
         reason: String
     ) -> [String: PersonalHubBuddyActionDisposition] {
         [id: .macOnly(reason: reason)]
+    }
+
+    private struct ActionEntry {
+        let id: String
+        let location: String
+    }
+
+    private static func allActions(in module: PersonalHubModuleSnapshot) -> [ActionEntry] {
+        var entries = module.actions.map { ActionEntry(id: $0.id, location: "module.actions") }
+        for item in module.items {
+            entries.append(contentsOf: item.actions.map {
+                ActionEntry(id: $0.id, location: "items[\(item.id)].actions")
+            })
+        }
+        if let calendarMonth = module.calendarMonth {
+            for item in calendarMonth.selectedEvents {
+                entries.append(contentsOf: item.actions.map {
+                    ActionEntry(id: $0.id, location: "calendarMonth.selectedEvents[\(item.id)].actions")
+                })
+            }
+        }
+        return entries
     }
 }

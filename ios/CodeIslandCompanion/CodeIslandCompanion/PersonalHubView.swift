@@ -9,6 +9,8 @@ enum HubTheme {
     static let foreground = Color.ciForeground
     static let surface = Color.ciSurface
     static let border = Color.ciForeground.opacity(0.08)
+    static let iconForeground = Color.ciForeground.opacity(0.68)
+    static let iconBackground = Color.ciForeground.opacity(0.045)
 }
 
 typealias BuddyQuickJotDestination = PersonalHubQuickJotDestination
@@ -290,9 +292,9 @@ struct PersonalHubDirectorySurface: View {
         return HStack(spacing: 14) {
             Image(systemName: definition.symbol)
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(HubTheme.accent)
+                .foregroundStyle(HubTheme.iconForeground)
                 .frame(width: 38, height: 38)
-                .background(HubTheme.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                .background(HubTheme.iconBackground, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(definition.title)
@@ -509,7 +511,7 @@ struct PersonalHubSurface: View {
                 hubEmptyState(
                     symbol: "iphone.and.arrow.forward",
                     title: "Pair with your Mac",
-                    detail: "Use the six-digit code in CodeIsland Settings → Buddy."
+                    detail: "Use the six-digit code in Code Island Settings → Buddy."
                 )
             } else if let error = client.hubError {
                 hubEmptyState(
@@ -522,7 +524,7 @@ struct PersonalHubSurface: View {
                 hubEmptyState(
                     symbol: "arrow.triangle.2.circlepath",
                     title: "Loading your Mac",
-                    detail: "Fetching the selected mode over Tailscale."
+                    detail: "Fetching the selected workspace from your Mac."
                 )
             }
 
@@ -1008,6 +1010,8 @@ private struct PersonalHubModuleCard: View {
                                     outputVolume = Double(action.value ?? "") ?? 50
                                 }
                                 withAnimation(.easeOut(duration: 0.16)) { showsComposer.toggle() }
+                            } else if handleReadOnly(action) {
+                                return
                             } else {
                                 prepare(action)
                             }
@@ -1090,6 +1094,21 @@ private struct PersonalHubModuleCard: View {
                 value: action.value
             ))
         }
+    }
+
+    private func handleReadOnly(_ action: PersonalHubAction) -> Bool {
+        guard PersonalHubBuddyParity.isReadOnlyAction(moduleID: module.id, actionID: action.id) else {
+            return false
+        }
+        if action.id == "refresh" {
+            Task {
+                await client.refreshHub()
+                client.reportHubClientAction("Refreshed \(definition.title)")
+            }
+        } else {
+            client.reportHubClientAction("\(definition.title) updated")
+        }
+        return true
     }
 
     @ViewBuilder
@@ -1765,6 +1784,18 @@ private struct PersonalHubItemRow: View {
                 Spacer(minLength: 4)
             }
 
+            if moduleID == .claude,
+               let detail = item.detail?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !detail.isEmpty {
+                Text(detail)
+                    .font(.system(size: 12, weight: .regular, design: .rounded))
+                    .foregroundStyle(HubTheme.foreground.opacity(0.78))
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+                    .accessibilityIdentifier("hub.item.detail.\(moduleID.rawValue).\(item.id)")
+            }
+
             if let progress = item.progress {
                 ProgressView(value: progress).tint(HubTheme.accent)
             }
@@ -1841,6 +1872,8 @@ private struct PersonalHubItemRow: View {
                                 client.reportHubClientAction("Copied to iPhone")
                             } else if let deepLink = action.deepLink {
                                 openURL(deepLink)
+                            } else if handleReadOnly(action) {
+                                return
                             } else {
                                 Task {
                                     await client.prepareHubAction(.init(
@@ -1885,6 +1918,22 @@ private struct PersonalHubItemRow: View {
     private func playbackTime(_ seconds: TimeInterval) -> String {
         let whole = max(Int(seconds.rounded()), 0)
         return String(format: "%d:%02d", whole / 60, whole % 60)
+    }
+
+    private func handleReadOnly(_ action: PersonalHubAction) -> Bool {
+        guard PersonalHubBuddyParity.isReadOnlyAction(moduleID: moduleID, actionID: action.id) else {
+            return false
+        }
+        let title = PersonalHubCatalog.definition(for: moduleID).title
+        if action.id == "refresh" {
+            Task {
+                await client.refreshHub()
+                client.reportHubClientAction("Refreshed \(title)")
+            }
+        } else {
+            client.reportHubClientAction("\(title) updated")
+        }
+        return true
     }
 }
 

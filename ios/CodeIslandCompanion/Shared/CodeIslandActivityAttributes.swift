@@ -27,6 +27,33 @@ struct CodeIslandSessionActivityPreview: Codable, Hashable, Identifiable {
     var sourceLabel: String {
         source.isEmpty ? "CodeIsland" : source.uppercased()
     }
+
+    var isActionRequired: Bool {
+        status == "waitingApproval" || status == "waitingQuestion"
+    }
+
+    var displayPriority: Int {
+        switch status {
+        case "waitingApproval": return 5
+        case "waitingQuestion": return 4
+        case "running": return 3
+        case "processing": return 2
+        default: return 0
+        }
+    }
+
+    var stableSortKey: String {
+        [
+            sessionId,
+            source,
+            workspaceName,
+            toolName,
+            message,
+        ]
+        .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+        .filter { !$0.isEmpty }
+        .joined(separator: "|")
+    }
 }
 
 struct CodeIslandActivityAttributes: ActivityAttributes {
@@ -38,6 +65,8 @@ struct CodeIslandActivityAttributes: ActivityAttributes {
         var workspaceName: String?
         var message: String?
         var pendingAction: String?
+        var taskID: String? = nil
+        var taskState: String? = nil
         var questionText: String?
         var questionHeader: String?
         var questionProgress: String?
@@ -45,6 +74,18 @@ struct CodeIslandActivityAttributes: ActivityAttributes {
         var updatedAt: Date
 
         var statusLabel: String {
+            if let taskState {
+                switch taskState {
+                case "waiting-for-mac": return "Waiting for Mac"
+                case "queued": return "Queued"
+                case "working": return "Working"
+                case "needs-you": return "Needs You"
+                case "verified": return "Verified"
+                case "failed": return "Failed"
+                case "cancelled": return "Cancelled"
+                default: break
+                }
+            }
             switch status {
             case "processing": return "Processing"
             case "running": return "Running"
@@ -59,6 +100,18 @@ struct CodeIslandActivityAttributes: ActivityAttributes {
         }
 
         var compactStatusLabel: String {
+            if let taskState {
+                switch taskState {
+                case "waiting-for-mac": return "Mac offline"
+                case "queued": return "Queued"
+                case "working": return "Working"
+                case "needs-you": return "Needs You"
+                case "verified": return "Verified"
+                case "failed": return "Failed"
+                case "cancelled": return "Cancelled"
+                default: break
+                }
+            }
             switch status {
             case "waitingApproval": return "Approve?"
             case "waitingQuestion": return "Answer?"
@@ -70,6 +123,28 @@ struct CodeIslandActivityAttributes: ActivityAttributes {
 
         var activeSessionCount: Int {
             sessions.filter { $0.status != "idle" }.count
+        }
+
+        var actionRequiredSessionCount: Int {
+            orderedSessions.filter(\.isActionRequired).count
+        }
+
+        var orderedSessions: [CodeIslandSessionActivityPreview] {
+            Self.orderedSessions(sessions)
+        }
+
+        var isTaskActivity: Bool { taskID != nil }
+
+        static func orderedSessions(_ sessions: [CodeIslandSessionActivityPreview]) -> [CodeIslandSessionActivityPreview] {
+            sessions.sorted { lhs, rhs in
+                if lhs.displayPriority != rhs.displayPriority {
+                    return lhs.displayPriority > rhs.displayPriority
+                }
+                if lhs.stableSortKey != rhs.stableSortKey {
+                    return lhs.stableSortKey < rhs.stableSortKey
+                }
+                return lhs.updatedAt > rhs.updatedAt
+            }
         }
     }
 

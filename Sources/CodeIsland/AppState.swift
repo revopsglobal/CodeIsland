@@ -120,6 +120,10 @@ final class AppState {
     /// Codex Desktop isn't running. See AppState+CodexAppServer.
     @ObservationIgnored
     var codexAppServerClient: CodexAppServerClient?
+    /// Optional remote-task router sharing the same app-server transport. The
+    /// coordinator installs it after the durable remote-task store is ready.
+    @ObservationIgnored
+    var codexRemoteTaskRunner: CodexRemoteTaskRunner?
     /// NSWorkspace launch/terminate observers tracking Codex Desktop.
     @ObservationIgnored
     var codexAppServerObservers: [NSObjectProtocol]?
@@ -858,9 +862,10 @@ final class AppState {
         Task.detached(priority: .utility) {
             var cache = cacheCopy
             let snapshot = ClaudeUsageScanner.scan(cache: &cache)
+            let refreshedCache = cache
             await MainActor.run { [weak self] in
                 self?.claudeUsage = snapshot
-                self?.usageFileCache = cache
+                self?.usageFileCache = refreshedCache
                 self?.usageScanInFlight = false
             }
         }

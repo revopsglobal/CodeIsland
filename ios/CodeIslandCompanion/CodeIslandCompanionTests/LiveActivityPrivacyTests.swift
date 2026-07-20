@@ -33,6 +33,19 @@ final class LiveActivityPrivacyTests: XCTestCase {
         XCTAssertTrue(presentation.isBrowsing)
     }
 
+    func testNormalConnectionCopyHidesTransportDetails() {
+        XCTAssertEqual(
+            RemoteApprovalClient.connectionDetail(serverName: "Greg's MacBook Air"),
+            "Connected to Greg's MacBook Air"
+        )
+        XCTAssertEqual(
+            RemoteApprovalClient.connectionDetail(serverName: nil),
+            "Connected to Greg's Mac"
+        )
+        XCTAssertFalse(RemoteApprovalClient.invalidServerURLMessage.localizedCaseInsensitiveContains("Tailscale"))
+        XCTAssertFalse(RemoteApprovalClient.invalidServerURLMessage.localizedCaseInsensitiveContains("HTTPS"))
+    }
+
     func testBackgroundRefreshKeepsAnEstablishedConnectionStable() {
         XCTAssertEqual(
             RemoteApprovalClient.refreshStartState(hasCompletedSnapshot: false),
@@ -42,6 +55,55 @@ final class LiveActivityPrivacyTests: XCTestCase {
             RemoteApprovalClient.refreshStartState(hasCompletedSnapshot: true),
             "A routine poll must not replace stable content with a transient connecting state"
         )
+    }
+
+    func testTransientRefreshFailuresKeepEstablishedContentStable() {
+        XCTAssertEqual(
+            RemoteApprovalClient.refreshFailureState(
+                hasCompletedSnapshot: false,
+                consecutiveFailures: 1,
+                message: "network unavailable"
+            ),
+            .offline("network unavailable"),
+            "Before the first authenticated snapshot, a failed refresh must still show the actionable connection error."
+        )
+        XCTAssertNil(
+            RemoteApprovalClient.refreshFailureState(
+                hasCompletedSnapshot: true,
+                consecutiveFailures: 1,
+                message: "network unavailable"
+            ),
+            "A single routine poll miss after content has loaded must not flash the whole Now surface to offline."
+        )
+        XCTAssertNil(
+            RemoteApprovalClient.refreshFailureState(
+                hasCompletedSnapshot: true,
+                consecutiveFailures: 2,
+                message: "network unavailable"
+            ),
+            "Two routine poll misses should keep the established signal board stable instead of alternating every 4 seconds."
+        )
+        XCTAssertEqual(
+            RemoteApprovalClient.refreshFailureState(
+                hasCompletedSnapshot: true,
+                consecutiveFailures: 3,
+                message: "network unavailable"
+            ),
+            .offline("network unavailable"),
+            "Three consecutive misses indicate the Mac is probably unavailable, so the offline recovery controls should appear."
+        )
+    }
+
+    @MainActor
+    func testMockHubUsesOnlyProductionBuddyActionVocabulary() {
+        for mode in PersonalHubMode.allCases {
+            let violations = RemoteApprovalClient.mockHubParityViolations(requestedMode: mode)
+            XCTAssertEqual(
+                violations.map(\.description),
+                [],
+                "\(mode.rawValue) mock hub exposes an action that the real Buddy contract does not classify"
+            )
+        }
     }
 
     func testStatusPulseIsReservedForActionRequiredStates() {
@@ -78,6 +140,21 @@ final class LiveActivityPrivacyTests: XCTestCase {
             LiveActivityTokenMailbox.pendingReceipts().map(\.eventId),
             [receipts[1].eventId]
         )
+    }
+
+    @MainActor
+    func testLiveActivityUpdateTokenMailboxDeduplicatesTheSameToken() throws {
+        UserDefaults.standard.removeObject(forKey: LiveActivityTokenMailbox.updateTokensKey)
+        defer { UserDefaults.standard.removeObject(forKey: LiveActivityTokenMailbox.updateTokensKey) }
+
+        XCTAssertTrue(LiveActivityTokenMailbox.storeUpdateToken(Data([0x01, 0x02]), requestID: "request-id"))
+        XCTAssertFalse(LiveActivityTokenMailbox.storeUpdateToken(Data([0x01, 0x02]), requestID: "request-id"))
+        XCTAssertTrue(LiveActivityTokenMailbox.storeUpdateToken(Data([0x03, 0x04]), requestID: "request-id"))
+
+        let tokens = try XCTUnwrap(
+            UserDefaults.standard.dictionary(forKey: LiveActivityTokenMailbox.updateTokensKey) as? [String: String]
+        )
+        XCTAssertEqual(tokens, ["request-id": "0304"])
     }
 
     func testLockScreenStateRedactsPromptTranscriptAndWorkspace() throws {
@@ -174,5 +251,56 @@ final class LiveActivityPrivacyTests: XCTestCase {
         XCTAssertFalse(text.contains("SecretWorkspace"))
         XCTAssertFalse(text.contains("secret-token"))
         XCTAssertTrue(text.contains("open Buddy privately"))
+    }
+
+    func testLiveActivityOrdersActionRequiredSessionsBeforeRoutineActivity() {
+        let state = CodeIslandActivityAttributes.ContentState(
+            sequence: 7,
+            source: "codeisland",
+            status: "running",
+            toolName: nil,
+            workspaceName: nil,
+            message: nil,
+            pendingAction: nil,
+            questionText: nil,
+            questionHeader: nil,
+            questionProgress: nil,
+            sessions: [
+                liveActivitySession(id: "running", source: "codex", status: "running", updatedAt: 300),
+                liveActivitySession(id: "approval", source: "claude", status: "waitingApproval", updatedAt: 100),
+                liveActivitySession(id: "question", source: "codex", status: "waitingQuestion", updatedAt: 200),
+            ],
+            updatedAt: Date(timeIntervalSince1970: 400)
+        )
+
+        XCTAssertEqual(state.actionRequiredSessionCount, 2)
+        XCTAssertEqual(state.orderedSessions.map(\.id), ["approval", "question", "running"])
+    }
+
+    func testLiveActivityRoutineSessionsUseStableIdentityInsteadOfHeartbeatOrder() {
+        let olderRunning = liveActivitySession(id: "codex", source: "codex", status: "running", updatedAt: 100)
+        let newerRunning = liveActivitySession(id: "claude", source: "claude", status: "running", updatedAt: 200)
+
+        XCTAssertEqual(
+            CodeIslandActivityAttributes.ContentState.orderedSessions([olderRunning, newerRunning]).map(\.id),
+            CodeIslandActivityAttributes.ContentState.orderedSessions([newerRunning, olderRunning]).map(\.id)
+        )
+    }
+
+    private func liveActivitySession(
+        id: String,
+        source: String,
+        status: String,
+        updatedAt: TimeInterval
+    ) -> CodeIslandSessionActivityPreview {
+        CodeIslandSessionActivityPreview(
+            sessionId: id,
+            source: source,
+            status: status,
+            toolName: nil,
+            workspaceName: "CodeIsland",
+            message: nil,
+            updatedAt: Date(timeIntervalSince1970: updatedAt)
+        )
     }
 }

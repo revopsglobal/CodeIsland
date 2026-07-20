@@ -68,6 +68,16 @@ if [ -n "$compiled_app" ]; then
     printf '%s\n' "$matches"
     exit 1
   fi
+  for required_action in \
+    PrepareCodeIslandTaskIntent \
+    OpenCodeIslandTaskIntent \
+    OpenCodeIslandNeedsYouIntent \
+    OpenCodeIslandSessionsIntent; do
+    if ! jq --exit-status --arg name "$required_action" '.actions[$name] != null' "$metadata_file" >/dev/null; then
+      echo "::error::Required App Intent metadata is missing: $required_action"
+      exit 2
+    fi
+  done
 fi
 
 echo "App Intent metadata validation passed."

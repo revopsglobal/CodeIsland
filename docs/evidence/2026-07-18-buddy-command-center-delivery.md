@@ -12,7 +12,8 @@ iPhone acceptance as separate proof states.
 - Release-regression pull request: `revopsglobal/CodeIsland#49`.
 - Login-launch reliability pull requests: `revopsglobal/CodeIsland#51` and
   `revopsglobal/CodeIsland#52`.
-- Current `main`: `bf69f80f64ffbd9115cc433bf7d44854da3ee3a5`.
+- Installed-runtime source: `bf69f80f64ffbd9115cc433bf7d44854da3ee3a5`.
+- Current `main`: `22bfdc6da74064380a63e7bfb95fb74feea06ac5`.
 - Native iPhone Simulator scheme: 39 passed, 0 failed, 0 skipped, and 0
   runtime warnings.
 - Result bundle: `/tmp/CodeIsland-premium-full-final-20260718-0415.xcresult`.
@@ -82,36 +83,72 @@ submitted.
 
 ## Physical iPhone proof
 
-Confirmed after the Mac upgrade:
+Confirmed on the unlocked physical pair:
 
-- the existing paired iPhone record remained present;
-- the production APNs token remained registered;
-- a privacy-preserving silent resolved-state probe was accepted by APNs;
-- the physical iPhone returned a lifecycle receipt at `2026-07-18T10:40:31Z`;
-- the receipt reached the newly installed Mac runtime.
+- TestFlight showed CodeIsland Buddy `1.0.0 (20260718112841)` as installed and
+  opened it on Greg's physical iPhone.
+- The paired-device record immediately advanced to
+  `lastSeenAt = 2026-07-18T17:05:55Z` with `clientVersion = 1.0.0` and
+  `clientBuild = 20260718112841`. Strict
+  `scripts/report-physical-acceptance.sh` then passed
+  every gate with `physicalMatchCount = 1`, `physicalBuildConfirmed = true`,
+  and `complete = true`.
+- Three settled captures at 0, 8, and 16 seconds showed the same Now surface;
+  only the system clock changed. The former four-second full-surface flash did
+  not recur.
+- Sessions rendered authenticated host data (`2 running`, later `1 running`)
+  and `no decisions waiting`; it did not substitute Bluetooth discovery or a
+  reconnect/loading card.
+- The physical Calendar module read Greg's real July 2026 store, `40 upcoming`,
+  the month grid, and the selected-day `Tutu at coast` event. The Now surface
+  also rendered `66 degrees, Clear, Ridgefield, Washington`.
+- Work Tools rendered the real Tasks count (`10 open`), Notes, Prompter,
+  Camera, Shelf (`20 recent items`), Notifications, and Downloads (`12 recent
+  downloads`). The New Task route opened its focused quick-jot composer and
+  accepted typed text; that acceptance draft was intentionally cancelled so it
+  did not leave test data. The earlier physical add/store/cleanup receipt still
+  proves the actual Reminders write path.
+- The current build completed the Notes add path: the iPhone entered
+  `CodeIIslandPhysicalNoteTestDeleteMe`, displayed the exact reviewed action,
+  required the separate `Do it` confirmation, and then rendered the stored note
+  as revision 1. The uniquely named test note was removed from the host's notes
+  store, CodeIsland was restarted as PID `31748`, both health endpoints returned
+  HTTP 200 with `pendingCount = 0`, strict physical acceptance still reported
+  `complete = true`, and the iPhone refreshed to `No notes yet`. This proves add
+  and cross-device visibility; in-app note delete remains a separate gate.
 
-Not yet confirmed:
+The production attention lifecycle also passed on this exact build:
 
-- `clientVersion` and `clientBuild` remain absent from the paired-device record;
-- therefore the physical iPhone is **not** proven to have installed build
-  `20260718112841`;
-- the Mac was locked, and computer-use could not open iPhone Mirroring or
-  TestFlight without bypassing that lock;
-- Calendar full-access status could not be read from TCC while the Mac was
-  locked, although the signed entitlement and explicit grant/recovery UI are
-  present.
+- A real hook-socket `AskUserQuestion` produced physical request
+  `decbb81a-45a0-4edf-9e0c-eda2e6aef703`. Buddy replaced routine content with
+  one `Decision needed` card showing the exact prompt and choices.
+- The iPhone selected `Continue`, displayed the single-use review confirmation,
+  and returned `behavior: allow` with the exact answer through the blocked Unix
+  socket.
+- ActivityKit reported `activeActivityCount = 1`, `activityState = active`, and
+  `source = activityStarted` at `2026-07-18T17:13:52Z`, then
+  `activeActivityCount = 0`, `state = resolved`, and `source = notification` at
+  `2026-07-18T17:15:22Z` after the answer.
+- A second visual probe, request
+  `28b8bdcf-dff7-4981-b3ca-2b15c686e637`, again reached active ActivityKit
+  state and then `activityState = dismissed` with zero active activities at
+  `2026-07-18T17:16:55Z` after its socket was cancelled. No pending request or
+  test data remained.
+
+iPhone Mirroring rendered the Home-screen Dynamic Island as the plain black
+hardware cutout even while ActivityKit reported the request active. That is
+valid physical lifecycle proof, but not visual acceptance of CodeIsland's
+compact or expanded Dynamic Island artwork. The device still has no per-
+activity update token, so token-based remote update remains a separate gate.
 
 ## Remaining physical acceptance
 
-After unlocking the Mac or iPhone:
-
-1. Open TestFlight and update CodeIsland Buddy to build `20260718112841`.
-2. Launch Buddy once and verify the Mac records `clientVersion = 1.0.0` and
-   `clientBuild = 20260718112841`.
-3. Observe the Now surface for longer than the former four-second polling
-   interval and confirm that content does not flash or rotate.
-4. Exercise a real approval and question, then verify task/note creation,
-   Calendar and selected-list Reminders, one-click meeting join, and a complete
-   Live Activity/Dynamic Island start-to-resolution lifecycle.
-5. Repeat one approval away from local Wi-Fi over Tailscale/cellular before
-   declaring full remote E2E acceptance.
+1. Observe the compact and expanded Dynamic Island or Lock Screen artwork
+   directly on the physical phone, outside iPhone Mirroring, and capture a per-
+   activity update token plus token-based update/end.
+2. Repeat one approval away from local Wi-Fi over Tailscale/cellular. Changing
+   Wi-Fi/VPN state is intentionally left for an explicit network-setting test.
+3. Run the remaining real-data mutation matrices: Calendar add/edit/delete,
+   recurrence, and Join; selected-list Reminders lifecycle; Notes in-app delete,
+   edit/conflict, checklist, and undo; Shelf/Downloads transfer; and
+   device-control modules.

@@ -32,7 +32,7 @@ STUB
 if [[ " $* " == *" --verify "* ]]; then
   exit 0
 fi
-printf '%s\n' 'Identifier=com.codeisland.app' 'TeamIdentifier=44JG2Y95CH' >&2
+printf '%s\n' 'Identifier=com.codeisland.app' 'CDHash=abc123def456' 'TeamIdentifier=44JG2Y95CH' >&2
 STUB
 
   cat > "$LIPO_BIN" <<'STUB'
@@ -59,10 +59,13 @@ JSON
   printf '%s' "$output" | jq -e '
     .mac.version == "1.0.46" and
     .mac.signatureValid == true and
+    .mac.cdhash == "abc123def456" and
     .health.local.running == true and
     .health.tailscale.running == true and
     .gates.deliveryHealthy == true and
     .gates.physicalMatchCount == 1 and
+    .gates.physicalBuildStatus.status == "matched" and
+    .gates.physicalBuildStatus.newestObservedBuild == "20260718112841" and
     .gates.physicalBuildConfirmed == true and
     .gates.complete == true and
     .pairing.devices[0].hasPushToken == true and
@@ -71,6 +74,48 @@ JSON
   [[ "$output" != *"secret-push-token"* ]]
   [[ "$output" != *"secret-start-token"* ]]
   [[ "$output" != *"secret-update-token"* ]]
+}
+
+@test "reports stale physical client when an older Buddy build last checked in" {
+  cat > "$DEVICE_STORE" <<'JSON'
+{"devices":[{"id":"device-1","name":"iPhone","lastSeenAt":"2026-07-18T12:00:00Z","clientVersion":"1.0.0","clientBuild":"20260718112840","pushEnvironment":"production","pushToken":"secret-push-token"},{"id":"device-2","name":"CodeIsland web acceptance","lastSeenAt":"2026-07-18T12:05:00Z","clientVersion":null,"clientBuild":null}]}
+JSON
+  export STRICT=1
+
+  run "$REPO_ROOT/scripts/report-physical-acceptance.sh"
+
+  [ "$status" -eq 2 ]
+  printf '%s' "$output" | jq -e '
+    .gates.deliveryHealthy == true and
+    .gates.physicalBuildConfirmed == false and
+    .gates.physicalBuildStatus.status == "stale" and
+    .gates.physicalBuildStatus.expectedBuild == "20260718112841" and
+    .gates.physicalBuildStatus.newestObservedDeviceID == "device-1" and
+    .gates.physicalBuildStatus.newestObservedBuild == "20260718112840" and
+    .gates.complete == false'
+  [[ "$output" != *"secret-push-token"* ]]
+}
+
+@test "does not let a newer development Simulator satisfy or overshadow TestFlight evidence" {
+  cat > "$DEVICE_STORE" <<'JSON'
+{"devices":[{"id":"physical-iphone","name":"iPhone","lastSeenAt":"2026-07-18T12:00:00Z","clientVersion":"1.0.0","clientBuild":"20260718112840","pushEnvironment":"production","pushToken":"physical-token"},{"id":"newer-simulator","name":"iPhone 16 Simulator","lastSeenAt":"2026-07-18T12:05:00Z","clientVersion":"1.0.0","clientBuild":"20260718112841","pushEnvironment":"development","pushToken":"simulator-token"}]}
+JSON
+  export STRICT=1
+
+  run "$REPO_ROOT/scripts/report-physical-acceptance.sh"
+
+  [ "$status" -eq 2 ]
+  printf '%s' "$output" | jq -e '
+    .gates.physicalMatchCount == 0 and
+    .gates.physicalBuildConfirmed == false and
+    .gates.physicalBuildStatus.status == "stale" and
+    .gates.physicalBuildStatus.newestObservedDeviceID == "physical-iphone" and
+    .gates.physicalBuildStatus.newestObservedBuild == "20260718112840" and
+    .gates.physicalBuildStatus.eligibleProductionDeviceCount == 1 and
+    .gates.physicalBuildStatus.ignoredNonProductionBuildDeviceCount == 1 and
+    .gates.complete == false'
+  [[ "$output" != *"physical-token"* ]]
+  [[ "$output" != *"simulator-token"* ]]
 }
 
 @test "keeps delivery healthy while failing an absent physical build in strict mode" {
@@ -84,6 +129,7 @@ JSON
   [ "$status" -eq 2 ]
   printf '%s' "$output" | jq -e '
     .gates.deliveryHealthy == true and
+    .gates.physicalBuildStatus.status == "missing" and
     .gates.physicalBuildConfirmed == false and
     .gates.complete == false'
   [[ "$output" != *"secret-push-token"* ]]

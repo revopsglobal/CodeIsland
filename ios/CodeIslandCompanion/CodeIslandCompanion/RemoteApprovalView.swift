@@ -40,6 +40,7 @@ struct RemoteApprovalSurface: View {
                                     .frame(height: 1)
                             }
                             .padding(.horizontal, 4)
+                            .dynamicTypeSize(.xSmall ... .xxxLarge)
                         }
 
                         if let selectedAttention {
@@ -131,6 +132,7 @@ struct RemoteApprovalSurface: View {
     private var selectedAttention: RemoteAttentionCardItem? {
         let resolvedID = CompanionAttentionSelection.resolve(
             previousID: selectedAttentionID,
+            preferredID: preferredAttentionID,
             currentIDs: attentionIDs
         )
         return attentionItems.first(where: { $0.id == resolvedID })
@@ -146,8 +148,21 @@ struct RemoteApprovalSurface: View {
     private func synchronizeAttentionSelection() {
         selectedAttentionID = CompanionAttentionSelection.resolve(
             previousID: selectedAttentionID,
+            preferredID: preferredAttentionID,
             currentIDs: attentionIDs
         )
+    }
+
+    private var preferredAttentionID: String? {
+        if let approvalID = client.highlightedApprovalID,
+           attentionIDs.contains(approvalID) {
+            return approvalID
+        }
+        if let questionID = client.highlightedQuestionID,
+           attentionIDs.contains(questionID) {
+            return questionID
+        }
+        return nil
     }
 }
 
@@ -253,6 +268,7 @@ private struct RemoteQuestionCard: View {
                     .font(.caption)
                     .foregroundStyle(.ciForeground.opacity(0.42))
             }
+            .dynamicTypeSize(.xSmall ... .xxxLarge)
 
             HStack(spacing: 6) {
                 Text(question.source)
@@ -263,6 +279,7 @@ private struct RemoteQuestionCard: View {
             }
             .font(.caption.weight(.semibold))
             .foregroundStyle(Color.ciForeground.opacity(0.52))
+            .dynamicTypeSize(.xSmall ... .xxxLarge)
 
             if question.requiresLocalResponse {
                 Label("Sensitive question waiting on Mac", systemImage: "eye.slash.fill")
@@ -411,13 +428,13 @@ private struct RemotePairingCard: View {
                     Text("Connect to Greg's Mac")
                         .font(.system(size: 17, weight: .bold, design: .rounded))
                         .foregroundStyle(.ciForeground)
-                    Text("Private to your Tailscale network")
+                    Text("Private to your Mac connection")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.ciForeground.opacity(0.5))
                 }
             }
 
-            Label("On your Mac: CodeIsland Settings → Buddy", systemImage: "1.circle.fill")
+            Label("On your Mac: Code Island Settings → Buddy", systemImage: "1.circle.fill")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.ciForeground.opacity(0.7))
 
@@ -439,7 +456,7 @@ private struct RemotePairingCard: View {
                 .accessibilityIdentifier("companion.remote.pairingCode")
 
             DisclosureGroup("Connection settings", isExpanded: $showsConnectionSettings) {
-                TextField("Tailscale HTTPS URL", text: $client.serverURLText)
+                TextField("Private HTTPS URL", text: $client.serverURLText)
                     .textInputAutocapitalization(.never)
                     .keyboardType(.URL)
                     .autocorrectionDisabled()
@@ -554,6 +571,7 @@ private struct RemoteApprovalStatusStrip: View {
 private struct RemoteApprovalCard: View {
     let approval: RemoteApprovalItem
     @EnvironmentObject private var client: RemoteApprovalClient
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var selection: DecisionSelection?
 
     private struct DecisionSelection: Identifiable {
@@ -572,6 +590,7 @@ private struct RemoteApprovalCard: View {
                     .font(.caption)
                     .foregroundStyle(.ciForeground.opacity(0.42))
             }
+            .dynamicTypeSize(.xSmall ... .xxxLarge)
 
             HStack(spacing: 6) {
                 Text(approval.source)
@@ -582,6 +601,7 @@ private struct RemoteApprovalCard: View {
             }
             .font(.caption.weight(.semibold))
             .foregroundStyle(Color.ciForeground.opacity(0.52))
+            .dynamicTypeSize(.xSmall ... .xxxLarge)
 
             Text(approval.tool)
                 .font(.title3.weight(.bold))
@@ -593,6 +613,7 @@ private struct RemoteApprovalCard: View {
                     Label("Requested action", systemImage: "terminal")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.ciForeground.opacity(0.5))
+                        .dynamicTypeSize(.xSmall ... .xxxLarge)
                     Text(detail)
                         .font(.system(.callout, design: .monospaced, weight: .medium))
                         .foregroundStyle(.ciForeground.opacity(0.78))
@@ -604,10 +625,7 @@ private struct RemoteApprovalCard: View {
                 .background(Color.ciForeground.opacity(0.045), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
 
-            HStack(spacing: 10) {
-                remoteAction("Deny", icon: "xmark", decision: .deny)
-                remoteAction("Approve once", icon: "checkmark", decision: .approve)
-            }
+            approvalActions
         }
         .padding(20)
         .background(
@@ -643,6 +661,21 @@ private struct RemoteApprovalCard: View {
             Text("CodeIsland will re-check the request ID and single-use token on your Mac before executing this decision.")
         }
         .accessibilityIdentifier("companion.remote.approval.\(approval.id)")
+    }
+
+    @ViewBuilder
+    private var approvalActions: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(spacing: 10) {
+                remoteAction("Deny", icon: "xmark", decision: .deny)
+                remoteAction("Approve once", icon: "checkmark", decision: .approve)
+            }
+        } else {
+            HStack(spacing: 10) {
+                remoteAction("Deny", icon: "xmark", decision: .deny)
+                remoteAction("Approve once", icon: "checkmark", decision: .approve)
+            }
+        }
     }
 
     @ViewBuilder
@@ -691,8 +724,12 @@ private struct RemoteApprovalCard: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.88)
                 .frame(
-                    minWidth: isEmphasised(decision) ? 0 : 116,
-                    maxWidth: isEmphasised(decision) ? .infinity : 128,
+                    // Accessibility text sizes force full width (from main);
+                    // otherwise the emphasised action — which follows risk, not
+                    // decision — takes the full-width fill and the other is
+                    // fixed-width.
+                    minWidth: dynamicTypeSize.isAccessibilitySize ? 0 : (isEmphasised(decision) ? 0 : 116),
+                    maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : (isEmphasised(decision) ? .infinity : 128),
                     minHeight: 48
                 )
         }

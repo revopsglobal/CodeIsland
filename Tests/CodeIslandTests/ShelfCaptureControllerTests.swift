@@ -72,6 +72,24 @@ final class ShelfCaptureControllerTests: XCTestCase {
         XCTAssertTrue(controller.scanForNewScreenshots().isEmpty)
     }
 
+    func testStartingScreenshotWatcherDoesNotBlockRemoteRequestActorOnDirectoryIO() throws {
+        let controller = ShelfCaptureController(
+            storageDirectory: storageDirectory,
+            screenshotDirectory: screenshotDirectory,
+            screenshotCandidateLoader: {
+                Thread.sleep(forTimeInterval: 0.25)
+                return []
+            }
+        )
+
+        let startedAt = CFAbsoluteTimeGetCurrent()
+        controller.startWatchingScreenshots()
+        let elapsed = CFAbsoluteTimeGetCurrent() - startedAt
+
+        XCTAssertLessThan(elapsed, 0.1, "Starting Shelf must not block Buddy's remote request actor")
+        controller.stopWatchingScreenshots()
+    }
+
     func testCompletedSelectionAndRecordingCaptureNotifyExactlyOnce() throws {
         let controller = makeController()
         var captures: [ShelfCaptureController.StoredFile] = []

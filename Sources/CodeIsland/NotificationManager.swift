@@ -23,7 +23,7 @@ final class NotificationManager: NSObject {
     var onOpenSession: ((String) -> Void)?
 
     private static let categoryId = "codeisland.approval"
-    private static let sessionKey = "sessionId"
+    nonisolated private static let sessionKey = "sessionId"
 
     func start() {
         let center = UNUserNotificationCenter.current()

@@ -129,6 +129,21 @@ jobs:
       - name: Test iPhone companion models
         run: ios/CodeIslandCompanion/scripts/run-model-tests.sh
 
+      - name: Test acceptance scripts
+        run: |
+          if ! command -v bats >/dev/null 2>&1; then
+            HOMEBREW_NO_AUTO_UPDATE=1 brew install bats-core
+          fi
+          bats Tests/Scripts/report-physical-acceptance.bats
+          bats Tests/Scripts/report-latest-testflight-physical-gate.bats
+          bats Tests/Scripts/report-strict-physical-e2e.bats
+          bats Tests/Scripts/report-away-readiness.bats
+          bats Tests/Scripts/report-ios-direct-device-visibility.bats
+          bats Tests/Scripts/report-testflight-source-drift.bats
+          bats Tests/Scripts/testflight-signing-contract.bats
+          bats Tests/Scripts/report-codeisland-completion-audit.bats
+          bats Tests/Scripts/wait-for-codeisland-completion.bats
+
       - name: Build iPhone Buddy for Simulator
         run: |
           xcodebuild \

@@ -1,6 +1,29 @@
+import Combine
 import Foundation
 import Security
 import UIKit
+
+enum RemoteTaskDeepLinkDestination: Equatable, Sendable {
+    case detail(UUID)
+    case composer(text: String?, provider: RemoteTaskProvider?)
+    case needsYou
+    case sessions
+
+    init?(route: PersonalHubDeepLink) {
+        switch route {
+        case .task(let id):
+            self = .detail(id)
+        case .newTask(let text, let provider):
+            self = .composer(text: text, provider: provider)
+        case .needsYou:
+            self = .needsYou
+        case .sessions:
+            self = .sessions
+        case .pendingApproval, .pendingQuestion, .module, .quickJot:
+            return nil
+        }
+    }
+}
 
 @MainActor
 final class RemoteApprovalClient: ObservableObject {
@@ -40,6 +63,11 @@ final class RemoteApprovalClient: ObservableObject {
     @Published var preparedAction: PersonalHubPreparedAction?
     @Published var quickJotDestination: BuddyQuickJotDestination?
     @Published var quickJotSeedText: String?
+    @Published private(set) var remoteTaskDeepLinkDestination: RemoteTaskDeepLinkDestination?
+    @Published private(set) var remoteTasks: [RemoteTaskSummary] = []
+    @Published private(set) var remoteTaskWorkspaces: [RemoteWorkspaceSummary] = []
+    @Published private(set) var remoteTaskDrafts: [RemoteTaskDraft] = []
+    @Published private(set) var remoteTaskError: String?
     @Published var selectedMode: PersonalHubMode {
         didSet {
             UserDefaults.standard.set(selectedMode.rawValue, forKey: Self.selectedModeKey)
@@ -62,6 +90,7 @@ final class RemoteApprovalClient: ObservableObject {
     private static let pendingApprovalIDKey = "codeisland.remote.pendingApprovalID"
     private static let pendingQuestionIDKey = "codeisland.remote.pendingQuestionID"
     private static let selectedModeKey = "codeisland.hub.selectedMode.v1"
+    static let invalidServerURLMessage = "Check the Mac connection URL in Connection settings"
 
     private let usesMockHub: Bool
     private let usesMockPairing: Bool
@@ -69,8 +98,13 @@ final class RemoteApprovalClient: ObservableObject {
     private var pollTask: Task<Void, Never>?
     private var isActive = true
     private var clientMetadataRegisteredThisLaunch = false
+    private var consecutiveApprovalRefreshFailures = 0
     private var notificationObservers: [NSObjectProtocol] = []
+    private var pendingGenericDeepLink: RemoteAttentionKind?
+    private let remoteTaskClient = RemoteTaskClient()
+    private var remoteTaskCancellables: Set<AnyCancellable> = []
     var onSnapshotReceived: ((RemoteApprovalSnapshot) -> Void)?
+    var onRemoteTasksReceived: (([RemoteTaskSummary]) -> Void)?
 
     var hasPairingCredential: Bool {
         deviceToken != nil
@@ -83,7 +117,32 @@ final class RemoteApprovalClient: ObservableObject {
         hasCompletedSnapshot ? nil : .connecting
     }
 
+    nonisolated static func refreshFailureState(
+        hasCompletedSnapshot: Bool,
+        consecutiveFailures: Int,
+        message: String
+    ) -> ConnectionState? {
+        guard hasCompletedSnapshot else { return .offline(message) }
+        return consecutiveFailures >= 3 ? .offline(message) : nil
+    }
+
+    nonisolated static func genericPendingDeepLinkTarget(
+        kind: RemoteAttentionKind,
+        approvalIDs: [String],
+        questionIDs: [String]
+    ) -> String? {
+        switch kind {
+        case .approval:
+            return approvalIDs.first
+        case .question:
+            return questionIDs.first
+        case .task:
+            return nil
+        }
+    }
+
     init() {
+        remoteTaskDrafts = remoteTaskClient.localDrafts
 #if DEBUG
         usesMockHub = ProcessInfo.processInfo.arguments.contains("-CodeIslandCompanionMockHub")
         usesMockPairing = ProcessInfo.processInfo.arguments.contains("-CodeIslandCompanionMockPairing")
@@ -98,6 +157,7 @@ final class RemoteApprovalClient: ObservableObject {
         selectedMode = launchMode ?? PersonalHubMode(
             rawValue: UserDefaults.standard.string(forKey: Self.selectedModeKey) ?? ""
         ) ?? .auto
+        bindRemoteTaskClient()
 
 #if DEBUG
         if usesMockPairing {
@@ -108,12 +168,15 @@ final class RemoteApprovalClient: ObservableObject {
         if usesMockHub {
             deviceToken = "ui-test-device-token"
             state = .connected
-            serverName = "CodeIsland UI Test Mac"
+            serverName = "Code Island UI Test Mac"
             lastUpdatedAt = Date()
             hubSnapshot = Self.mockHubSnapshot(requestedMode: selectedMode)
             sessionsModule = Self.mockHubModule(.agents)
             approvals = mockAttention.approvals
             questions = mockAttention.questions
+            let remoteTaskFixture = Self.mockRemoteTasksFromLaunchArguments()
+            remoteTaskWorkspaces = remoteTaskFixture.workspaces
+            remoteTasks = remoteTaskFixture.tasks
             if let url = Self.mockDeepLinkFromLaunchArguments() {
                 openDeepLink(url)
             }
@@ -163,6 +226,8 @@ final class RemoteApprovalClient: ObservableObject {
                     self.highlightedApprovalID = nil
                 } else if kind == .question, self.highlightedQuestionID == requestID {
                     self.highlightedQuestionID = nil
+                } else if kind == .task, let requestID, let id = UUID(uuidString: requestID) {
+                    self.remoteTaskDeepLinkDestination = .detail(id)
                 }
                 await self.refresh()
             }
@@ -227,6 +292,7 @@ final class RemoteApprovalClient: ObservableObject {
         isActive = active
         if active {
             consumePendingIntentRoute()
+            remoteTaskClient.resetForActivation()
             Task { await refresh() }
         }
     }
@@ -239,7 +305,7 @@ final class RemoteApprovalClient: ObservableObject {
             return false
         }
         guard let requestURL = endpoint("/api/pair") else {
-            state = .offline("Enter a valid Tailscale HTTPS URL")
+            state = .offline(Self.invalidServerURLMessage)
             return false
         }
         state = .connecting
@@ -260,6 +326,7 @@ final class RemoteApprovalClient: ObservableObject {
             try Self.saveKeychainToken(response.deviceToken)
             deviceToken = response.deviceToken
             serverName = response.serverName
+            consecutiveApprovalRefreshFailures = 0
             UserDefaults.standard.set(normalizedServerURL?.absoluteString, forKey: Self.serverURLKey)
             state = .connected
             await registerPendingPushToken()
@@ -277,11 +344,12 @@ final class RemoteApprovalClient: ObservableObject {
     }
 
     private static let expiredPairingCodeMessage =
-        "That code expired. Open CodeIsland Settings → Buddy on your Mac for the current code."
+        "That code expired. Open Code Island Settings → Buddy on your Mac for the current code."
 
     func unpair() {
         Self.deleteKeychainToken()
         deviceToken = nil
+        remoteTaskClient.clearConnection()
         approvals = []
         questions = []
         serverName = nil
@@ -290,7 +358,28 @@ final class RemoteApprovalClient: ObservableObject {
         sessionsError = nil
         hubError = nil
         preparedAction = nil
+        consecutiveApprovalRefreshFailures = 0
+        remoteTasks = []
+        remoteTaskDrafts = remoteTaskClient.localDrafts
         state = .unpaired
+    }
+
+    private func bindRemoteTaskClient() {
+        remoteTaskClient.$tasks
+            .sink { [weak self] tasks in
+                self?.remoteTasks = tasks
+                self?.onRemoteTasksReceived?(tasks)
+            }
+            .store(in: &remoteTaskCancellables)
+        remoteTaskClient.$localDrafts
+            .sink { [weak self] in self?.remoteTaskDrafts = $0 }
+            .store(in: &remoteTaskCancellables)
+        remoteTaskClient.$workspaces
+            .sink { [weak self] in self?.remoteTaskWorkspaces = $0 }
+            .store(in: &remoteTaskCancellables)
+        remoteTaskClient.$lastError
+            .sink { [weak self] in self?.remoteTaskError = $0 }
+            .store(in: &remoteTaskCancellables)
     }
 
     func resolve(_ approval: RemoteApprovalItem, decision: RemoteApprovalDecision) async {
@@ -351,10 +440,11 @@ final class RemoteApprovalClient: ObservableObject {
             state = .unpaired
             approvals = []
             questions = []
+            consecutiveApprovalRefreshFailures = 0
             return
         }
         guard let url = endpoint("/api/approvals") else {
-            state = .offline("Enter a valid Tailscale HTTPS URL")
+            state = .offline(Self.invalidServerURLMessage)
             return
         }
         if let refreshStartState = Self.refreshStartState(
@@ -367,8 +457,10 @@ final class RemoteApprovalClient: ObservableObject {
             request.httpMethod = "GET"
             request.cachePolicy = .reloadIgnoringLocalCacheData
             let snapshot: RemoteApprovalSnapshot = try await perform(request, authenticated: true)
+            consecutiveApprovalRefreshFailures = 0
             approvals = snapshot.approvals
             questions = snapshot.questions
+            consumePendingGenericDeepLink()
             if let highlightedApprovalID,
                !approvals.contains(where: { $0.id == highlightedApprovalID }) {
                 self.highlightedApprovalID = nil
@@ -382,11 +474,83 @@ final class RemoteApprovalClient: ObservableObject {
             state = .connected
             onSnapshotReceived?(snapshot)
             await refreshHub()
+            await refreshRemoteTasks()
         } catch RemoteClientError.unauthorized {
             unpair()
         } catch {
-            state = .offline(error.localizedDescription)
+            consecutiveApprovalRefreshFailures += 1
+            if let failureState = Self.refreshFailureState(
+                hasCompletedSnapshot: lastUpdatedAt != nil,
+                consecutiveFailures: consecutiveApprovalRefreshFailures,
+                message: error.localizedDescription
+            ) {
+                state = failureState
+            }
         }
+    }
+
+    @discardableResult
+    func enqueueRemoteTask(_ input: RemoteTaskDraftInput) async throws -> RemoteTaskDraft {
+        let draft = try remoteTaskClient.enqueue(input)
+        remoteTaskDrafts = remoteTaskClient.localDrafts
+        await refreshRemoteTasks(force: true)
+        return draft
+    }
+
+    func refreshRemoteTasks(force: Bool = false) async {
+#if DEBUG
+        if usesMockHub { return }
+#endif
+        guard let deviceToken, let baseURL = normalizedServerURL else {
+            remoteTaskDrafts = remoteTaskClient.localDrafts
+            return
+        }
+        let result = await remoteTaskClient.sync(
+            baseURL: baseURL,
+            bearerToken: deviceToken,
+            force: force
+        )
+        remoteTasks = remoteTaskClient.tasks
+        remoteTaskDrafts = remoteTaskClient.localDrafts
+        remoteTaskError = remoteTaskClient.lastError
+        if remoteTaskClient.workspaces.isEmpty {
+            _ = await remoteTaskClient.refreshWorkspaces(baseURL: baseURL, bearerToken: deviceToken)
+        }
+        switch result {
+        case .pairingRequired:
+            unpair()
+        case .offline:
+            if lastUpdatedAt == nil {
+                state = .offline(remoteTaskClient.lastError ?? "Mac offline")
+            }
+        case .success, .conflict, .deferred:
+            break
+        }
+    }
+
+    func followUpRemoteTask(taskID: UUID, text: String) async {
+        guard let deviceToken, let baseURL = normalizedServerURL else { return }
+        let result = await remoteTaskClient.followUp(
+            taskID: taskID,
+            text: text,
+            baseURL: baseURL,
+            bearerToken: deviceToken
+        )
+        if result == .pairingRequired { unpair() }
+    }
+
+    func cancelRemoteTask(taskID: UUID) async {
+        guard let deviceToken, let baseURL = normalizedServerURL else { return }
+        let result = await remoteTaskClient.cancel(
+            taskID: taskID,
+            baseURL: baseURL,
+            bearerToken: deviceToken
+        )
+        if result == .pairingRequired { unpair() }
+    }
+
+    func consumeRemoteTaskDeepLinkDestination() {
+        remoteTaskDeepLinkDestination = nil
     }
 
     func refreshHub() async {
@@ -406,7 +570,7 @@ final class RemoteApprovalClient: ObservableObject {
             return
         }
         guard let url = endpoint("/api/hub/snapshot") else {
-            hubError = "Enter a valid Tailscale HTTPS URL"
+            hubError = Self.invalidServerURLMessage
             return
         }
         do {
@@ -446,7 +610,7 @@ final class RemoteApprovalClient: ObservableObject {
             return
         }
         guard let url = endpoint("/api/hub/snapshot") else {
-            sessionsError = "Enter a valid Tailscale HTTPS URL"
+            sessionsError = Self.invalidServerURLMessage
             return
         }
         do {
@@ -518,27 +682,75 @@ final class RemoteApprovalClient: ObservableObject {
         guard let route = PersonalHubDeepLink(url: url) else { return }
         switch route {
         case .pendingApproval(let id):
-            highlightedApprovalID = id ?? approvals.first?.id
+            if let id {
+                pendingGenericDeepLink = nil
+                highlightedApprovalID = id
+            } else if let firstID = approvals.first?.id {
+                pendingGenericDeepLink = nil
+                highlightedApprovalID = firstID
+            } else {
+                pendingGenericDeepLink = .approval
+                highlightedApprovalID = nil
+            }
             Task { await refresh() }
         case .pendingQuestion(let id):
-            highlightedQuestionID = id ?? questions.first?.id
+            if let id {
+                pendingGenericDeepLink = nil
+                highlightedQuestionID = id
+            } else if let firstID = questions.first?.id {
+                pendingGenericDeepLink = nil
+                highlightedQuestionID = firstID
+            } else {
+                pendingGenericDeepLink = .question
+                highlightedQuestionID = nil
+            }
             Task { await refresh() }
         case .module(let module):
+            pendingGenericDeepLink = nil
             highlightedHubModuleID = module
             selectedMode = PersonalHubCatalog.preferredMode(for: module)
         case .quickJot(let destination, let text):
+            pendingGenericDeepLink = nil
             quickJotSeedText = text
             quickJotDestination = BuddyQuickJotDestination(rawValue: destination.rawValue)
+        case .task, .newTask, .needsYou, .sessions:
+            pendingGenericDeepLink = nil
+            remoteTaskDeepLinkDestination = RemoteTaskDeepLinkDestination(route: route)
         }
     }
 
+    private func consumePendingGenericDeepLink() {
+        guard let pendingGenericDeepLink else { return }
+        switch pendingGenericDeepLink {
+        case .approval:
+            highlightedApprovalID = Self.genericPendingDeepLinkTarget(
+                kind: .approval,
+                approvalIDs: approvals.map(\.id),
+                questionIDs: questions.map(\.id)
+            )
+        case .question:
+            highlightedQuestionID = Self.genericPendingDeepLinkTarget(
+                kind: .question,
+                approvalIDs: approvals.map(\.id),
+                questionIDs: questions.map(\.id)
+            )
+        case .task:
+            break
+        }
+        self.pendingGenericDeepLink = nil
+    }
+
     var connectionDetail: String {
-        let host = normalizedServerURL?.host ?? serverURLText
-        let transport = host.lowercased().hasSuffix(".ts.net") ? "Tailscale HTTPS" : "Private HTTPS"
-        return [serverName, host, transport].compactMap { value in
-            guard let value, !value.isEmpty else { return nil }
-            return value
-        }.joined(separator: " · ")
+        Self.connectionDetail(serverName: serverName)
+    }
+
+    nonisolated static func connectionDetail(serverName: String?) -> String {
+        guard let serverName = serverName?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !serverName.isEmpty
+        else {
+            return "Connected to Greg's Mac"
+        }
+        return "Connected to \(serverName)"
     }
 
     func clearQuickJotSeed() {
@@ -842,6 +1054,67 @@ final class RemoteApprovalClient: ObservableObject {
         }
     }
 
+    private static func mockRemoteTasksFromLaunchArguments() -> (
+        workspaces: [RemoteWorkspaceSummary],
+        tasks: [RemoteTaskSummary]
+    ) {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let index = arguments.firstIndex(of: "-CodeIslandCompanionMockRemoteTasks"),
+              arguments.indices.contains(index + 1)
+        else { return ([], []) }
+
+        let workspace = RemoteWorkspaceSummary(id: "ui-test-codeisland", name: "CodeIsland")
+        let now = Date()
+        func task(_ id: String, state: RemoteTaskState, title: String, summary: String) -> RemoteTaskSummary {
+            let uuid = UUID(uuidString: id)!
+            return RemoteTaskSummary(
+                id: uuid,
+                clientTaskID: uuid,
+                idempotencyKey: UUID(),
+                title: title,
+                workspaceID: workspace.id,
+                workspaceName: workspace.name,
+                provider: .codex,
+                authority: .editAndTest,
+                state: state,
+                createdAt: now.addingTimeInterval(-600),
+                updatedAt: now,
+                lastReceiptSequence: 2,
+                latestSummary: summary
+            )
+        }
+
+        switch arguments[index + 1].lowercased() {
+        case "needs-you":
+            return ([workspace], [task(
+                "20000000-0000-0000-0000-000000000001",
+                state: .needsYou,
+                title: "Finish Buddy end-to-end testing",
+                summary: "Choose whether to upload the internal build"
+            )])
+        case "failed":
+            return ([workspace], [task(
+                "20000000-0000-0000-0000-000000000004",
+                state: .failed,
+                title: "Recover the interrupted build",
+                summary: "Codex app-server failed"
+            )])
+        case "portfolio":
+            return ([workspace], [
+                task("20000000-0000-0000-0000-000000000001", state: .needsYou, title: "Finish Buddy end-to-end testing", summary: "Choose whether to upload the internal build"),
+                task("20000000-0000-0000-0000-000000000002", state: .working, title: "Polish the Mac task portfolio", summary: "Running focused UI checks"),
+                task("20000000-0000-0000-0000-000000000003", state: .verified, title: "Keep notch text in English", summary: "English-boundary checks passed"),
+            ])
+        default:
+            return ([workspace], [task(
+                "20000000-0000-0000-0000-000000000002",
+                state: .working,
+                title: "Polish the Mac task portfolio",
+                summary: "Running focused UI checks"
+            )])
+        }
+    }
+
     private static func mockHubSnapshot(
         requestedMode: PersonalHubMode,
         calendarReferenceDate: Date? = nil,
@@ -849,7 +1122,7 @@ final class RemoteApprovalClient: ObservableObject {
     ) -> PersonalHubSnapshot {
         let resolvedMode: PersonalHubMode = requestedMode == .auto ? .home : requestedMode
         return PersonalHubSnapshot(
-            serverName: "CodeIsland UI Test Mac",
+            serverName: "Code Island UI Test Mac",
             requestedMode: requestedMode,
             resolvedMode: resolvedMode,
             modules: PersonalHubCatalog.modules(for: resolvedMode).map {
@@ -862,6 +1135,18 @@ final class RemoteApprovalClient: ObservableObject {
             configuration: .default,
             dayProgress: 0.5
         )
+    }
+
+    static func mockHubParityViolations(
+        requestedMode: PersonalHubMode,
+        calendarReferenceDate: Date? = nil,
+        calendarSelectedDate: Date? = nil
+    ) -> [PersonalHubBuddyParityViolation] {
+        PersonalHubBuddyParity.validate(snapshot: mockHubSnapshot(
+            requestedMode: requestedMode,
+            calendarReferenceDate: calendarReferenceDate,
+            calendarSelectedDate: calendarSelectedDate
+        ))
     }
 
     private static func mockHubModule(
@@ -960,33 +1245,52 @@ final class RemoteApprovalClient: ObservableObject {
                 calendarMonth: month
             )
         case .reminders:
-            let task = PersonalHubReminderDraft(
-                title: "Finish the deck",
-                due: Date().addingTimeInterval(7_200),
-                calendarID: "mock-list"
-            )
             return .init(
                 id: id,
                 availability: ready,
-                summary: "1 open task · Personal",
+                summary: "2 open tasks · Personal",
                 items: [
                     .init(id: "list:mock-list", title: "Personal", detail: "mock-list"),
                     .init(
                         id: "task:finish-deck",
                         title: "Finish the deck",
                         subtitle: "Due today",
+                        detail: "Finish the deck",
                         actions: [
-                            .init(id: "edit", label: "Edit", targetID: "task:finish-deck", value: task.encodedActionValue()),
+                            .init(id: "copyToDevice", label: "Copy", targetID: "task:finish-deck"),
                             .init(id: "complete", label: "Complete", targetID: "task:finish-deck"),
-                            .init(id: "down", label: "Move down", targetID: "task:finish-deck"),
+                            .init(id: "moveDown", label: "Move down", targetID: "task:finish-deck"),
                             .init(id: "delete", label: "Delete", role: .destructive, targetID: "task:finish-deck"),
+                        ]
+                    ),
+                    .init(
+                        id: "task:book-flights",
+                        title: "Book flights",
+                        subtitle: "Personal",
+                        detail: "Book flights",
+                        actions: [
+                            .init(id: "copyToDevice", label: "Copy", targetID: "task:book-flights"),
+                            .init(id: "complete", label: "Complete", targetID: "task:book-flights"),
+                            .init(id: "moveUp", label: "Move up", targetID: "task:book-flights"),
+                            .init(id: "moveTop", label: "Top", targetID: "task:book-flights"),
+                            .init(id: "delete", label: "Delete", role: .destructive, targetID: "task:book-flights"),
+                        ]
+                    ),
+                    .init(
+                        id: "task:send-recap",
+                        title: "Send recap",
+                        subtitle: "Completed",
+                        detail: "Send recap",
+                        actions: [
+                            .init(id: "copyToDevice", label: "Copy", targetID: "task:send-recap"),
+                            .init(id: "restore", label: "Restore", targetID: "task:send-recap"),
+                            .init(id: "delete", label: "Delete", role: .destructive, targetID: "task:send-recap"),
                         ]
                     ),
                 ],
                 actions: [
                     .init(id: "add", label: "Add task", symbol: "plus"),
                     .init(id: "addList", label: "Add list", symbol: "folder.badge.plus"),
-                    .init(id: "showCompleted", label: "Completed", symbol: "archivebox"),
                 ]
             )
         case .notes:
@@ -1004,23 +1308,25 @@ final class RemoteApprovalClient: ObservableObject {
                         id: "note:launch",
                         title: "Launch checklist",
                         subtitle: "Work · revision 4",
+                        detail: note.text,
                         actions: [
-                            .init(id: "edit", label: "Edit", targetID: "note:launch", value: note.encodedActionValue()),
+                            .init(id: "replace", label: "Edit", targetID: "note:launch", value: note.encodedActionValue()),
                             .init(id: "append", label: "Append", targetID: "note:launch", value: note.encodedActionValue()),
-                            .init(id: "copy", label: "Copy", targetID: "note:launch", value: note.text),
+                            .init(id: "setCategory", label: "Category", targetID: "note:launch", value: note.encodedActionValue()),
+                            .init(id: "copyToDevice", label: "Copy", targetID: "note:launch"),
                             .init(
                                 id: "toggleChecklist",
                                 label: "Toggle task",
                                 targetID: "note:launch",
                                 value: PersonalHubChecklistMutation(lineIndex: 1, baseRevision: 4).encodedActionValue()
                             ),
+                            .init(id: "undo", label: "Undo", targetID: "note:launch"),
                             .init(id: "delete", label: "Delete", role: .destructive, targetID: "note:launch"),
                         ]
                     )
                 ],
                 actions: [
                     .init(id: "add", label: "Add note", symbol: "plus"),
-                    .init(id: "undo", label: "Undo", symbol: "arrow.uturn.backward"),
                 ]
             )
         case .system:
@@ -1048,13 +1354,29 @@ final class RemoteApprovalClient: ObservableObject {
                 id: id,
                 availability: ready,
                 summary: "Your Claude Code subscription · tools disabled",
+                items: [
+                    .init(
+                        id: "latest",
+                        title: "What CodeIsland version is running on my Mac?",
+                        subtitle: "Claude Code · read-only",
+                        detail: "CodeIsland 1.0.49 is running on your Mac.",
+                        symbol: "sparkles",
+                        actions: [.init(id: "copyToDevice", label: "Copy", symbol: "doc.on.doc")]
+                    )
+                ],
                 actions: [
                     .init(id: "ask", label: "Ask", symbol: "questionmark.bubble"),
                     .init(id: "plan", label: "Do", symbol: "checkmark.circle"),
                 ]
             )
         case .agents:
-            return .init(id: id, availability: ready, summary: "2 active sessions", items: [.init(id: "agent:codex", title: "Codex", subtitle: "Waiting for approval")], actions: [.init(id: "refresh", label: "Refresh")])
+            return .init(
+                id: id,
+                availability: ready,
+                summary: "2 active sessions",
+                items: [.init(id: "agent:codex", title: "Codex", subtitle: "Running in ob1-app")],
+                actions: [.init(id: "refresh", label: "Refresh")]
+            )
         case .github:
             return .init(id: id, availability: ready, summary: "1 pull request", items: [.init(id: "pr:8", title: "#8 Crest parity", subtitle: "Merged", actions: [.init(id: "open", label: "Open", deepLink: URL(string: "https://github.com/revopsglobal/CodeIsland/pull/8"))])], actions: [.init(id: "refresh", label: "Refresh")])
         case .audio:
@@ -1067,7 +1389,7 @@ final class RemoteApprovalClient: ObservableObject {
                     .init(id: "volumeDown", label: "-10", symbol: "speaker.minus"),
                     .init(id: "setVolume", label: "Volume", symbol: "slider.horizontal.3", value: "42"),
                     .init(id: "volumeUp", label: "+10", symbol: "speaker.plus"),
-                    .init(id: "mute", label: "Mute", symbol: "speaker.slash"),
+                    .init(id: "openSettings", label: "Sound Settings", symbol: "gearshape"),
                 ]
             )
         case .bluetooth:
@@ -1075,7 +1397,7 @@ final class RemoteApprovalClient: ObservableObject {
         case .battery:
             return .init(id: id, availability: ready, summary: "84% · Normal", detail: "112 cycles", actions: [.init(id: "refresh", label: "Refresh")])
         case .quickToggles:
-            return .init(id: id, availability: ready, summary: "Appearance and Mac controls", actions: [.init(id: "toggleAppearance", label: "Dark / Light"), .init(id: "mute", label: "Mute"), .init(id: "lock", label: "Lock Mac")])
+            return .init(id: id, availability: ready, summary: "Appearance and Mac controls", actions: [.init(id: "darkMode", label: "Dark / Light"), .init(id: "mute", label: "Mute"), .init(id: "displaySleep", label: "Sleep display"), .init(id: "lockMac", label: "Lock Mac")])
         case .downloads:
             return .init(
                 id: id,
@@ -1106,7 +1428,24 @@ final class RemoteApprovalClient: ObservableObject {
                 actions: [.init(id: "previewLocal", label: "Preview", symbol: "camera.fill")]
             )
         case .teleprompter:
-            return .init(id: id, availability: ready, summary: "Ready · 140 WPM", detail: "Launch remarks", actions: [.init(id: "set", label: "Edit script", value: "Welcome to CodeIsland"), .init(id: "playPause", label: "Play"), .init(id: "slower", label: "Slower"), .init(id: "faster", label: "Faster")])
+            return .init(
+                id: id,
+                availability: ready,
+                summary: "Ready · 140 WPM",
+                detail: "Launch remarks",
+                items: [
+                    .init(
+                        id: "teleprompter:launch",
+                        title: "Launch remarks",
+                        detail: "Welcome to Code Island",
+                        actions: [
+                            .init(id: "presentOnDevice", label: "Present", targetID: "teleprompter:launch"),
+                            .init(id: "copyToDevice", label: "Copy", targetID: "teleprompter:launch"),
+                        ]
+                    )
+                ],
+                actions: [.init(id: "set", label: "Edit script", value: "Welcome to Code Island")]
+            )
         case .windowManager:
             return .init(id: id, availability: ready, summary: "Finder", actions: [.init(id: "left", label: "Left"), .init(id: "right", label: "Right"), .init(id: "maximize", label: "Maximize")])
         }

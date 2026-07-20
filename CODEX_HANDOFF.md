@@ -3,6 +3,40 @@
 Last updated: 2026-07-18. This supersedes the original v1.0.30 / no-local-Xcode
 handoff.
 
+## Final 1.0.52 acceptance delta
+
+This is the current source, installed-runtime, iPhone, and private-web truth.
+
+- PR #58 merged web action-attribute escaping and EventKit Calendar target
+  resolution as `5f616bd6926894389d4309aa0e2e3c0f4a2e7e07`. PR #59 merged terminal
+  Live Activity summary ordering as
+  `4449955791a91ac17c16f9a9c58e6452778a5a8d`.
+- Local proof is green: 493 CodeIsland app tests with two intentional opt-in
+  skips, 223 core tests, the production ARM64 build, and Graphify update.
+- `/Applications/CodeIsland.app` is signed `1.0.52`, PID `44925`, Team
+  `44JG2Y95CH`, CDHash `c890f8c2fc11bcec9819019365f778ead3862dc4`.
+  Source run `29658378890`; artifact `8433603147`; DMG SHA-256
+  `60945033ddbfe84507c2dfb4c0436c97617c77131318ac2fbb53dbc1c898e02c`.
+  Loopback and Tailscale health both return HTTP 200 with zero pending work and
+  Launch at Login enabled.
+- The physical iPhone runs TestFlight `1.0.0 (20260718183055)`. Strict
+  physical acceptance passes against host `1.0.52`; production APNs and
+  ActivityKit push-to-start tokens are present. Physical Claude Ask rendered
+  its answer and the current build stayed visually stable over nine seconds.
+- Final ActivityKit request `93aa1d8a-2527-4fd1-bb14-b362cf203852` reached one
+  active question, then resolved and dismissed with zero active activities.
+  The fixed persisted summary remains terminal and nothing is pending.
+- Authenticated private web acceptance from a live headless browser client
+  passed real mode racks, confirmed System refresh, exact-byte Downloads
+  handoff, and Calendar add/edit/trusted Join/delete. Download SHA-256:
+  `7195bd5c9ad10c43760f135dafdb68b3686034f6e0caacd241c48f283a471664`.
+  Calendar is restored to `40 upcoming`; no temporary `delete me` data remains.
+- Do not claim a physical-iPhone browser pass, the cellular-only gate, or direct
+  Dynamic Island/Lock Screen artwork yet. iPhone Mirroring is unavailable
+  while the Mac/phone surface is locked, and no per-activity update token has
+  registered. Those are the exact remaining physical checks; they are not
+  implementation gaps.
+
 ## Premium command-center delivery delta
 
 This section supersedes every older build, installed-runtime, and current-head
@@ -28,8 +62,9 @@ statement below. Older sections remain as an evidence history.
   PR #51 adds automatic Launch at Login with a permanent explicit opt-out and
   machine-readable host availability; PR #52 recovers the macOS 27
   `SMAppService.mainApp.status == .notFound` state by attempting registration
-  and exposing any exact ServiceManagement error. Current `main` is
-  `bf69f80f64ffbd9115cc433bf7d44854da3ee3a5`.
+  and exposing any exact ServiceManagement error. The installed runtime source
+  is `bf69f80f64ffbd9115cc433bf7d44854da3ee3a5`; current `main` is
+  `22bfdc6da74064380a63e7bfb95fb74feea06ac5`.
 - Signed run `29644344626` produced artifact `8429617233` from that source. The
   downloaded DMG SHA-256 is
   `ad666a75dff15ac51cae16551602eaab8b13098c128dd8628dd8a77f74ab9982`.
@@ -46,18 +81,34 @@ statement below. Older sections remain as an evidence history.
   the expanded release selection passed again in run `29644344626`.
 - PR #46 merged the exact current delivery receipt as
   `53c420047d3e75159ae9da040e17e476d3beb229`.
-- Physical acceptance is still open. The paired iPhone record has production
-  APNs and ActivityKit push-to-start tokens, but `clientVersion` and
-  `clientBuild` remain absent and its last authenticated lifecycle receipt is
-  from `2026-07-18T10:40:31Z`. Therefore build `20260718112841` is not yet
-  proven installed or opened. The Mac is locked, so iPhone Mirroring cannot be
-  operated until Greg manually unlocks the Mac.
-- `scripts/report-physical-acceptance.sh` now produces a sanitized delivery and
-  pairing report. Against the current `1.0.49` runtime it passes every Mac/signature/
-  health gate and fails only `physicalBuildConfirmed`; strict mode exits `2`
-  until the exact iPhone version/build registers. Its Bats coverage verifies
-  both the passing and absent-client cases and proves raw push tokens are never
-  printed.
+- Physical acceptance for this exact build is now real. TestFlight showed
+  `1.0.0 (20260718112841)` installed and opened on Greg's physical iPhone. The
+  paired record advanced to `clientVersion = 1.0.0` and
+  `clientBuild = 20260718112841`; strict
+  `scripts/report-physical-acceptance.sh` passed every
+  Mac, signature, health, delivery, and physical-build gate.
+- Three captures over 16 seconds showed a stable premium Now surface with no
+  four-second flash. Sessions rendered authenticated host data (`2 running`,
+  later `1 running`) and `no decisions waiting`. Calendar rendered Greg's real
+  July store and `40 upcoming`; Work Tools rendered Tasks, Notes, Prompter,
+  Camera, Shelf, Notifications, and Downloads from the paired Mac.
+- The current build also completed the Notes add path: it showed the reviewed
+  action, required a separate `Do it`, persisted the exact test note as revision
+  1, and refreshed it back to `No notes yet` after scoped cleanup. The host was
+  restarted as PID `31748`; local/Tailscale health, pairing, and strict physical
+  acceptance remained green. In-app note delete/edit/checklist/undo are still
+  distinct gates.
+- A real physical `AskUserQuestion` request
+  `decbb81a-45a0-4edf-9e0c-eda2e6aef703` rendered one exact `Decision needed`
+  card, selected and explicitly reviewed `Continue`, resumed the blocked hook
+  socket with `behavior: allow`, started one ActivityKit activity, and resolved
+  to zero active activities. A second probe also reached active and then
+  dismissed state without leaving a pending request.
+- iPhone Mirroring displayed the Dynamic Island as the plain black hardware
+  cutout while ActivityKit reported the request active. Therefore the physical
+  lifecycle is accepted, but compact/expanded or Lock Screen artwork is not
+  visually accepted. No per-activity update token registered. Cellular/
+  Tailscale action and the remaining real-data mutation matrices are also open.
 
 ## Final signed lifecycle-receipt delta
 

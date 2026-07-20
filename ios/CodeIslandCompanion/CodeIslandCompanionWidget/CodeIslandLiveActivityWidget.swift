@@ -37,6 +37,13 @@ private func activityAttentionURL(
     attributes: CodeIslandActivityAttributes,
     state: CodeIslandActivityAttributes.ContentState
 ) -> URL? {
+    if let taskID = state.taskID, UUID(uuidString: taskID) != nil {
+        var components = URLComponents()
+        components.scheme = "codeisland"
+        components.host = "tasks"
+        components.path = "/\(taskID)"
+        return components.url
+    }
     guard state.pendingAction == "approval" || state.pendingAction == "question" else { return nil }
     var components = URLComponents()
     components.scheme = "codeisland"
@@ -144,7 +151,11 @@ private struct MultiSessionLockScreenActivityView: View {
                 }
 
                 Spacer(minLength: 8)
-                CompactSessionCountPill(count: sessions.count, activeCount: state.activeSessionCount)
+                CompactSessionCountPill(
+                    count: sessions.count,
+                    activeCount: state.activeSessionCount,
+                    attentionCount: state.actionRequiredSessionCount
+                )
             }
 
             VStack(spacing: 5) {
@@ -158,6 +169,9 @@ private struct MultiSessionLockScreenActivityView: View {
     }
 
     private var sessionSummary: String {
+        if state.actionRequiredSessionCount > 0 {
+            return "\(state.actionRequiredSessionCount) need you"
+        }
         if state.activeSessionCount > 0 {
             return "\(sessions.count) sessions · \(state.activeSessionCount) active"
         }
@@ -181,11 +195,12 @@ private struct MultiSessionOverviewBadge: View {
 private struct CompactSessionCountPill: View {
     let count: Int
     let activeCount: Int
+    let attentionCount: Int
 
     var body: some View {
         HStack(spacing: 5) {
-            StatusDot(status: activeCount > 0 ? "running" : "idle", size: 7)
-            Text(activeCount > 0 ? "\(activeCount) active" : "\(count) sessions")
+            StatusDot(status: attentionCount > 0 ? "waitingApproval" : (activeCount > 0 ? "running" : "idle"), size: 7)
+            Text(summaryText)
                 .font(.system(size: 11, weight: .black, design: .rounded))
                 .foregroundStyle(.white)
                 .lineLimit(1)
@@ -193,7 +208,13 @@ private struct CompactSessionCountPill: View {
         }
         .padding(.horizontal, 9)
         .padding(.vertical, 5)
-        .background(Color.white.opacity(0.10), in: Capsule())
+        .background((attentionCount > 0 ? statusColor("waitingApproval") : Color.white).opacity(attentionCount > 0 ? 0.18 : 0.10), in: Capsule())
+    }
+
+    private var summaryText: String {
+        if attentionCount > 0 { return "\(attentionCount) need you" }
+        if activeCount > 0 { return "\(activeCount) active" }
+        return "\(count) sessions"
     }
 }
 
@@ -301,13 +322,13 @@ private struct ExpandedSessionOverview: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                Text("\(sessions.count) sessions")
+                Text(state.actionRequiredSessionCount > 0 ? "\(state.actionRequiredSessionCount) need you" : "\(sessions.count) sessions")
                     .font(.caption2.weight(.black))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 7)
                     .padding(.vertical, 3)
-                    .background(Color.white.opacity(0.12), in: Capsule())
-                if state.activeSessionCount > 0 {
+                    .background((state.actionRequiredSessionCount > 0 ? statusColor("waitingApproval") : Color.white).opacity(state.actionRequiredSessionCount > 0 ? 0.18 : 0.12), in: Capsule())
+                if state.actionRequiredSessionCount == 0, state.activeSessionCount > 0 {
                     Text("\(state.activeSessionCount) active")
                         .font(.caption2.weight(.black))
                         .foregroundStyle(.green)
@@ -363,7 +384,11 @@ private struct ExpandedTrailingStatus: View {
 
     var body: some View {
         if displaySessions(state).count > 1 {
-            SessionCountPill(count: displaySessions(state).count, activeCount: state.activeSessionCount)
+            SessionCountPill(
+                count: displaySessions(state).count,
+                activeCount: state.activeSessionCount,
+                attentionCount: state.actionRequiredSessionCount
+            )
         } else {
             ExpandedStatusDot(state: state)
         }
@@ -376,7 +401,9 @@ private struct CompactStatusView: View {
     var body: some View {
         HStack(spacing: 3) {
             StatusDot(status: state.status, size: 6)
-            Text(displaySessions(state).count > 1 ? "Sessions" : state.compactStatusLabel)
+            Text(displaySessions(state).count > 1
+                ? (state.actionRequiredSessionCount > 0 ? "Needs you" : "Sessions")
+                : state.compactStatusLabel)
                 .font(.system(size: 9, weight: .black, design: .rounded))
                 .foregroundStyle(.white)
                 .lineLimit(1)
@@ -413,17 +440,24 @@ private struct AgentBadge: View {
 private struct SessionCountPill: View {
     let count: Int
     let activeCount: Int
+    let attentionCount: Int
 
     var body: some View {
         HStack(spacing: 6) {
-            StatusDot(status: activeCount > 0 ? "running" : "idle", size: 8)
-            Text(activeCount > 0 ? "\(activeCount) active" : "\(count) sessions")
+            StatusDot(status: attentionCount > 0 ? "waitingApproval" : (activeCount > 0 ? "running" : "idle"), size: 8)
+            Text(summaryText)
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.white)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(Color.white.opacity(0.10), in: Capsule())
+        .background((attentionCount > 0 ? statusColor("waitingApproval") : Color.white).opacity(attentionCount > 0 ? 0.18 : 0.10), in: Capsule())
+    }
+
+    private var summaryText: String {
+        if attentionCount > 0 { return "\(attentionCount) need you" }
+        if activeCount > 0 { return "\(activeCount) active" }
+        return "\(count) sessions"
     }
 }
 
@@ -583,7 +617,7 @@ private func displaySessions(_ state: CodeIslandActivityAttributes.ContentState)
             )
         ]
     }
-    return state.sessions
+    return state.orderedSessions
 }
 
 private func sessionText(_ session: CodeIslandSessionActivityPreview) -> String {
@@ -613,6 +647,12 @@ private func statusColor(_ status: String) -> Color {
         return Color(red: 1.0, green: 0.74, blue: 0.25)
     case "processing", "running":
         return Color(red: 0.30, green: 0.72, blue: 1.0)
+    case "taskVerified":
+        return Color(red: 0.30, green: 0.84, blue: 0.48)
+    case "taskFailed":
+        return Color(red: 1.0, green: 0.34, blue: 0.32)
+    case "taskWaiting":
+        return Color(red: 1.0, green: 0.62, blue: 0.24)
     default:
         return Color(red: 0.55, green: 0.60, blue: 0.68)
     }

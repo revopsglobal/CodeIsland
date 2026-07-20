@@ -9,12 +9,12 @@ class SoundManager {
 
     /// Map event names to 8-bit WAV file names (without extension)
     static let eventSounds: [(event: String, sound: String, key: String, label: String)] = [
-        ("SessionStart",      "8bit_start",    SettingsKey.soundSessionStart,   "会话开始"),
-        ("TaskRoundComplete", "8bit_complete",  SettingsKey.soundTaskComplete,   "任务完成"),
-        ("Stop",              "8bit_complete",  SettingsKey.soundTaskComplete,   "任务完成"),
-        ("PostToolUseFailure","8bit_error",     SettingsKey.soundTaskError,      "任务错误"),
-        ("PermissionRequest", "8bit_approval",  SettingsKey.soundApprovalNeeded, "需要审批"),
-        ("UserPromptSubmit",  "8bit_submit",    SettingsKey.soundPromptSubmit,   "任务确认"),
+        ("SessionStart",      "8bit_start",    SettingsKey.soundSessionStart,   "Session started"),
+        ("TaskRoundComplete", "8bit_complete",  SettingsKey.soundTaskComplete,   "Task complete"),
+        ("Stop",              "8bit_complete",  SettingsKey.soundTaskComplete,   "Task complete"),
+        ("PostToolUseFailure","8bit_error",     SettingsKey.soundTaskError,      "Task error"),
+        ("PermissionRequest", "8bit_approval",  SettingsKey.soundApprovalNeeded, "Approval needed"),
+        ("UserPromptSubmit",  "8bit_submit",    SettingsKey.soundPromptSubmit,   "Task confirmed"),
     ]
 
     private var soundCache: [String: NSSound] = [:]

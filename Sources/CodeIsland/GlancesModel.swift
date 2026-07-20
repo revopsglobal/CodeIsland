@@ -86,7 +86,7 @@ final class GlancesModel: NSObject, ObservableObject {
     private let log = Logger(subsystem: "com.codeisland", category: "Glances")
     private var lastRefresh: Date = .distantPast
     private var refreshing = false
-    private static let reminderOrderKey = "codeisland.glances.reminderOrder.v1"
+    nonisolated private static let reminderOrderKey = "codeisland.glances.reminderOrder.v1"
 
     private override init() {
         super.init()
@@ -113,6 +113,12 @@ final class GlancesModel: NSObject, ObservableObject {
         updateAuthorizationStatuses()
         if calendarAuthorized { loadUpcomingEvents() }
         if remindersAuthorized { loadReminderCalendarsAndReminders() }
+    }
+
+    /// Refresh only the privacy state for diagnostics. Unlike
+    /// `refreshPermissions`, this does not read calendar or reminder content.
+    func refreshAuthorizationStatuses() {
+        updateAuthorizationStatuses()
     }
 
     // MARK: - EventKit authorization
@@ -189,6 +195,28 @@ final class GlancesModel: NSObject, ObservableObject {
         status == .notDetermined || status == .writeOnly
     }
 
+    nonisolated static func eventKitAuthorizationStatusName(_ status: EKAuthorizationStatus) -> String {
+        switch status {
+        case .notDetermined: "notDetermined"
+        case .restricted: "restricted"
+        case .denied: "denied"
+        case .fullAccess: "fullAccess"
+        case .writeOnly: "writeOnly"
+        @unknown default: "unknown"
+        }
+    }
+
+    nonisolated static func locationAuthorizationStatusName(_ status: CLAuthorizationStatus) -> String {
+        switch status {
+        case .notDetermined: "notDetermined"
+        case .restricted: "restricted"
+        case .denied: "denied"
+        case .authorizedAlways: "authorized"
+        case .authorized: "authorized"
+        @unknown default: "unknown"
+        }
+    }
+
     nonisolated private static func hasLocationAccess(_ status: CLAuthorizationStatus) -> Bool {
         status == .authorized || status == .authorizedAlways
     }
@@ -225,6 +253,10 @@ final class GlancesModel: NSObject, ObservableObject {
 
     nonisolated static func eventInstanceID(eventIdentifier: String, start: Date) -> String {
         "\(eventIdentifier)#\(Int64((start.timeIntervalSinceReferenceDate * 1_000).rounded()))"
+    }
+
+    nonisolated static func event(forSourceID sourceID: String, in events: [EventInfo]) -> EventInfo? {
+        events.first { $0.sourceID == sourceID }
     }
 
     func calendarMonth(

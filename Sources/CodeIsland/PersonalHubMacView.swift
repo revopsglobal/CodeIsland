@@ -61,6 +61,17 @@ struct PersonalHubMacView: View {
                     .buttonStyle(.plain)
                     .foregroundStyle(accent)
                     .help("Edit \(snapshot.resolvedMode.rawValue.capitalized) rack")
+                    if snapshot.resolvedMode == .code {
+                        Button {
+                            RemoteTasksWindowController.shared.show(appState: appState)
+                        } label: {
+                            Label("Remote Tasks", systemImage: "terminal")
+                                .font(.system(size: 10, weight: .semibold))
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(accent)
+                        .help("Open the full coding task portfolio")
+                    }
                 }
                 .padding(.horizontal, 12)
 
@@ -680,6 +691,17 @@ private struct MacHubModuleCard: View {
                     }
                 }
                 Spacer()
+            }
+            if module.id == .claude,
+               let detail = item.detail?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !detail.isEmpty {
+                Text(detail)
+                    .font(.system(size: 9, weight: .regular, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.68))
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+                    .accessibilityIdentifier("hub.item.detail.\(module.id.rawValue).\(item.id)")
             }
             if let progress = item.progress {
                 ProgressView(value: progress).tint(.orange)

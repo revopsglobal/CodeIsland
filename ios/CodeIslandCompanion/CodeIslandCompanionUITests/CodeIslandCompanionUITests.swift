@@ -125,7 +125,7 @@ final class CodeIslandCompanionUITests: XCTestCase {
 
         XCTAssertTrue(
             app.staticTexts[
-                "That code expired. Open CodeIsland Settings → Buddy on your Mac for the current code."
+                "That code expired. Open Code Island Settings → Buddy on your Mac for the current code."
             ].waitForExistence(timeout: 3)
         )
         XCTAssertTrue(app.staticTexts["Connect to Greg's Mac"].exists)
@@ -141,8 +141,9 @@ final class CodeIslandCompanionUITests: XCTestCase {
         ]
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["CodeIsland"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Code Island"].waitForExistence(timeout: 8))
         XCTAssertTrue(app.buttons["companion.presence.menu"].exists)
+        XCTAssertTrue(app.otherElements["companion.signalBoard"].exists)
         let now = app.buttons["companion.destination.now"]
         let sessions = app.buttons["companion.destination.sessions"]
         let capture = app.buttons["companion.capture"]
@@ -185,15 +186,28 @@ final class CodeIslandCompanionUITests: XCTestCase {
         let app = launchAttentionApp("question")
 
         XCTAssertTrue(app.staticTexts["Decision needed"].waitForExistence(timeout: 8))
+        XCTAssertFalse(
+            app.otherElements["companion.signalBoard"].exists,
+            "The generic signal summary must not precede an exact decision that needs Greg"
+        )
         XCTAssertTrue(app.staticTexts["Ship the signed build tonight?"].exists)
         let option = app.buttons["Ship tonight"]
         XCTAssertTrue(option.exists)
         option.tap()
 
         let submit = app.buttons["Send answer"]
-        XCTAssertTrue(submit.exists)
-        XCTAssertTrue(submit.isEnabled)
+        XCTAssertTrue(submit.waitForExistence(timeout: 4))
+        let enabled = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "enabled == true"),
+            object: submit
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [enabled], timeout: 4),
+            .completed,
+            "Selecting an answer must enable submission after SwiftUI commits the selection"
+        )
         XCTAssertGreaterThanOrEqual(submit.frame.height, 44)
+        XCTAssertTrue(submit.isHittable, "The primary decision action must remain above the dock")
     }
 
     @MainActor
@@ -214,14 +228,152 @@ final class CodeIslandCompanionUITests: XCTestCase {
     }
 
     @MainActor
+    func testNewCodingTaskUsesNativeComposerAndExplicitBoundary() throws {
+        let app = launchRemoteTaskApp("working")
+
+        let capture = app.buttons["companion.capture"]
+        XCTAssertTrue(capture.waitForExistence(timeout: 8))
+        capture.tap()
+        let newTask = app.buttons["New coding task"]
+        XCTAssertTrue(newTask.waitForExistence(timeout: 4))
+        newTask.tap()
+
+        XCTAssertTrue(findAny("task.composer", in: app).waitForExistence(timeout: 5))
+        XCTAssertTrue(app.textViews["task.prompt"].exists)
+        XCTAssertTrue(app.buttons["task.workspace"].exists)
+        XCTAssertTrue(app.segmentedControls["task.provider"].exists)
+        XCTAssertTrue(app.staticTexts["Edit & Test"].exists)
+        XCTAssertTrue(app.buttons["task.submit"].exists)
+        XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", ".*[\\u4E00-\\u9FFF].*")).firstMatch.exists)
+
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Native remote coding task composer"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    @MainActor
+    func testLivePairedMacCompletesBoundedCodexTask() throws {
+        guard ProcessInfo.processInfo.environment["CODEISLAND_LIVE_E2E"] == "1" else {
+            throw XCTSkip("Set CODEISLAND_LIVE_E2E=1 in the Xcode test environment to run against the paired Mac.")
+        }
+
+        let title = "Simulator live E2E handshake \(UUID().uuidString.prefix(8))"
+        let app = XCUIApplication()
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["Greg’s MacBook Air"].waitForExistence(timeout: 20))
+
+        let capture = app.buttons["companion.capture"]
+        XCTAssertTrue(capture.waitForExistence(timeout: 8))
+        capture.tap()
+
+        let newTask = app.buttons["New coding task"]
+        XCTAssertTrue(newTask.waitForExistence(timeout: 5))
+        newTask.tap()
+
+        let prompt = app.textViews["task.prompt"]
+        XCTAssertTrue(prompt.waitForExistence(timeout: 8))
+        prompt.tap()
+        prompt.typeText("\(title)\nReport the current git branch and make no file changes. Finish with exact text CODEISLAND_E2E_OK.")
+
+        let submit = app.buttons["task.submit"]
+        XCTAssertTrue(submit.waitForExistence(timeout: 8))
+        let enabled = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "enabled == true"),
+            object: submit
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 10), .completed)
+        submit.tap()
+
+        let sessions = app.buttons["companion.destination.sessions"]
+        XCTAssertTrue(sessions.waitForExistence(timeout: 15))
+        sessions.tap()
+
+        let taskTitle = app.staticTexts[title]
+        XCTAssertTrue(taskTitle.waitForExistence(timeout: 25))
+        taskTitle.tap()
+
+        let success = app.staticTexts["Verified by checks reported from your Mac."]
+        if !success.waitForExistence(timeout: 150) {
+            let screenshot = XCTAttachment(screenshot: app.screenshot())
+            screenshot.name = "live-paired-task-did-not-complete"
+            screenshot.lifetime = .keepAlways
+            add(screenshot)
+            print(app.debugDescription)
+        }
+        XCTAssertTrue(success.exists, "The paired Mac did not return the expected completion receipt.")
+    }
+
+    @MainActor
+    func testRemoteTaskPortfolioGroupsByMeaning() throws {
+        let app = launchRemoteTaskApp("portfolio")
+        let sessions = app.buttons["companion.destination.sessions"]
+        XCTAssertTrue(sessions.waitForExistence(timeout: 8))
+        sessions.tap()
+
+        XCTAssertTrue(findAny("task.sessions", in: app).waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["NEEDS YOU"].exists)
+        XCTAssertTrue(app.staticTexts["ACTIVE"].exists)
+        XCTAssertTrue(app.staticTexts["COMPLETED"].exists)
+        XCTAssertTrue(app.staticTexts["Finish Buddy end-to-end testing"].exists)
+        XCTAssertTrue(app.staticTexts["Polish the Mac task portfolio"].exists)
+        XCTAssertTrue(app.staticTexts["Keep notch text in English"].exists)
+
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Remote coding task portfolio"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    @MainActor
+    func testNeedsYouTaskRemainsStableAcrossPollingWindow() throws {
+        let app = launchRemoteTaskApp("needs-you")
+        XCTAssertTrue(app.staticTexts["Finish Buddy end-to-end testing"].waitForExistence(timeout: 8))
+        sleep(5)
+        XCTAssertTrue(app.staticTexts["Finish Buddy end-to-end testing"].exists)
+        XCTAssertTrue(app.staticTexts["Choose whether to upload the internal build"].exists)
+    }
+
+    @MainActor
+    func testTaskDetailCanOwnTheSingleFollowedLiveActivity() throws {
+        let app = launchRemoteTaskApp("needs-you")
+        let row = findAny("task.signal.20000000-0000-0000-0000-000000000001", in: app)
+        XCTAssertTrue(row.waitForExistence(timeout: 8))
+        row.tap()
+        XCTAssertTrue(findAny("task.detail.20000000-0000-0000-0000-000000000001", in: app).waitForExistence(timeout: 5))
+        let follow = app.buttons["task.follow"]
+        XCTAssertTrue(follow.waitForExistence(timeout: 5))
+        XCTAssertTrue(follow.label.localizedCaseInsensitiveContains("Follow in Dynamic Island"))
+        follow.tap()
+        let following = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label CONTAINS[c] %@", "Stop following"),
+            object: follow
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [following], timeout: 5), .completed)
+    }
+
+    @MainActor
+    func testFailedTaskOffersExplicitDismissWithoutDeletingHistory() throws {
+        let app = launchRemoteTaskApp("failed")
+        XCTAssertTrue(app.staticTexts["Recover the interrupted build"].waitForExistence(timeout: 8))
+        app.staticTexts["Recover the interrupted build"].tap()
+
+        XCTAssertTrue(app.staticTexts["Keep this failure in task history, but remove it from Needs You."].waitForExistence(timeout: 5))
+        XCTAssertTrue(findAny("task.dismiss-failure", in: app).exists)
+    }
+
+    @MainActor
     func testAuthenticatedTailscaleConnectionDoesNotLookLikeNearbySearch() throws {
         let app = XCUIApplication()
         app.launchArguments = ["-CodeIslandCompanionMockHub"]
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["CodeIsland UI Test Mac"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Code Island UI Test Mac"].waitForExistence(timeout: 8))
         XCTAssertFalse(app.staticTexts["Searching"].exists)
         XCTAssertFalse(app.staticTexts["Searching nearby"].exists)
+        XCTAssertFalse(app.staticTexts["Private to your Tailscale network"].exists)
+        XCTAssertFalse(app.staticTexts["Fetching the selected mode over Tailscale."].exists)
     }
 
     @MainActor
@@ -238,7 +390,7 @@ final class CodeIslandCompanionUITests: XCTestCase {
         sessions.tap()
 
         XCTAssertTrue(app.otherElements["companion.remote.sessions"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["CodeIsland UI Test Mac"].exists)
+        XCTAssertTrue(app.staticTexts["Code Island UI Test Mac"].exists)
         XCTAssertFalse(app.staticTexts["Waiting for Mac"].exists)
         XCTAssertFalse(app.otherElements["companion.discoveryCard"].exists)
     }
@@ -277,6 +429,26 @@ final class CodeIslandCompanionUITests: XCTestCase {
             assertHubModules(expectation.modules, in: app, mode: expectation.mode)
             app.terminate()
         }
+    }
+
+    @MainActor
+    func testReadOnlyRefreshUpdatesHubWithoutConfirmation() throws {
+        let app = launchHubApp(mode: "code")
+        XCTAssertTrue(hubSurface(in: app).waitForExistence(timeout: 8))
+
+        openHubModule("agents", in: app)
+
+        let refresh = app.buttons["Refresh"].firstMatch
+        XCTAssertTrue(refresh.waitForExistence(timeout: 4))
+        refresh.tap()
+
+        XCTAssertFalse(
+            app.otherElements["hub.action.confirmation"].waitForExistence(timeout: 2),
+            "Read-only refresh should not interrupt with a mutation confirmation sheet"
+        )
+        let message = findHubElement("hub.action.message", in: app)
+        XCTAssertTrue(message.waitForExistence(timeout: 5))
+        XCTAssertTrue(message.label.contains("Refreshed Agents"))
     }
 
     @MainActor
@@ -409,6 +581,19 @@ final class CodeIslandCompanionUITests: XCTestCase {
         XCTAssertEqual(field.value as? String, "Call the bank")
         XCTAssertTrue(app.buttons["Review"].exists)
         XCTAssertFalse(app.buttons["Do it"].exists)
+    }
+
+    @MainActor
+    func testClaudeAskResponseBodyIsVisible() throws {
+        let app = launchHubApp(mode: "code")
+        XCTAssertTrue(hubSurface(in: app).waitForExistence(timeout: 8))
+
+        openHubModule("claude", in: app)
+
+        XCTAssertTrue(
+            app.staticTexts["CodeIsland 1.0.49 is running on your Mac."].waitForExistence(timeout: 4),
+            "Claude Ask must render the answer body, not only echo the original question"
+        )
     }
 
     @MainActor
@@ -585,6 +770,20 @@ final class CodeIslandCompanionUITests: XCTestCase {
     }
 
     @MainActor
+    private func launchRemoteTaskApp(_ kind: String) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-CodeIslandCompanionMockState", "idle",
+            "-CodeIslandCompanionMockHub",
+            "-CodeIslandCompanionMockHubMode", "code",
+            "-CodeIslandCompanionMockRemoteTasks", kind,
+            "-CodeIslandCompanionResetFollowedTask",
+        ]
+        app.launch()
+        return app
+    }
+
+    @MainActor
     private func assertHubModules(_ moduleIDs: [String], in app: XCUIApplication, mode: String) {
         for moduleID in moduleIDs {
             let element = findHubElement("hub.module.\(moduleID)", in: app)
@@ -623,6 +822,11 @@ final class CodeIslandCompanionUITests: XCTestCase {
             }
         }
         return element
+    }
+
+    @MainActor
+    private func findAny(_ identifier: String, in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any).matching(identifier: identifier).firstMatch
     }
 
     @MainActor

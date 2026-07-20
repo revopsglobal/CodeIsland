@@ -1,22 +1,27 @@
 import ActivityKit
 import Foundation
+import UserNotifications
 
 @MainActor
 final class LiveActivityController: ObservableObject {
     private static let layoutVersionKey = "CodeIslandLiveActivityLayoutVersion"
     private static let currentLayoutVersion = "2026-07-17-private-lifecycle-v4"
+    private static let followedTaskKey = "codeisland.liveActivity.followedTask.v1"
 
     @Published private(set) var activityID: String?
     @Published private(set) var lastError: String?
     @Published private(set) var existingActivityCount = 0
+    @Published private(set) var followedTaskID: UUID?
 
     private var activity: Activity<CodeIslandActivityAttributes>?
     private var lastContentState: CodeIslandActivityAttributes.ContentState?
     private var lifecycleCursor: LiveActivityLifecycleCursor?
     private var activityStateTask: Task<Void, Never>?
     private var activityPushTokenTask: Task<Void, Never>?
+    private var activityPushTokenPollingTask: Task<Void, Never>?
     private var activityDiscoveryTask: Task<Void, Never>?
     private var pushToStartTokenTask: Task<Void, Never>?
+    private var hostLossNotified = false
 
     var isRunning: Bool {
         activity != nil
@@ -25,11 +30,18 @@ final class LiveActivityController: ObservableObject {
     deinit {
         activityStateTask?.cancel()
         activityPushTokenTask?.cancel()
+        activityPushTokenPollingTask?.cancel()
         activityDiscoveryTask?.cancel()
         pushToStartTokenTask?.cancel()
     }
 
     init() {
+#if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-CodeIslandCompanionResetFollowedTask") {
+            UserDefaults.standard.removeObject(forKey: Self.followedTaskKey)
+        }
+#endif
+        followedTaskID = UserDefaults.standard.string(forKey: Self.followedTaskKey).flatMap(UUID.init(uuidString:))
         observeRemoteStartTokens()
         observeActivitiesStartedByPush()
         Task {
@@ -41,6 +53,7 @@ final class LiveActivityController: ObservableObject {
 
     func updateIfRunning(with payload: CompanionStatePayload) {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
+        guard followedTaskID == nil else { return }
 
         Task {
             let shouldRecreate = await migrateLiveActivityLayoutIfNeeded()
@@ -59,6 +72,75 @@ final class LiveActivityController: ObservableObject {
         } else {
             updateIfRunning(with: payload)
         }
+    }
+
+    func isFollowing(taskID: UUID) -> Bool {
+        followedTaskID == taskID
+    }
+
+    func follow(_ task: RemoteTaskSummary) {
+        followedTaskID = task.id
+        UserDefaults.standard.set(task.id.uuidString.lowercased(), forKey: Self.followedTaskKey)
+        Task { await applyTask(task, createIfNeeded: true) }
+    }
+
+    func unfollowTask() {
+        followedTaskID = nil
+        UserDefaults.standard.removeObject(forKey: Self.followedTaskKey)
+        stopAll()
+    }
+
+    func syncRemoteTasks(_ tasks: [RemoteTaskSummary]) {
+        guard let followedTaskID else { return }
+        guard let task = tasks.first(where: { $0.id == followedTaskID }) else {
+            unfollowTask()
+            return
+        }
+        Task {
+            await applyTask(task, createIfNeeded: true)
+            if task.state.isTerminal {
+                try? await Task.sleep(for: .seconds(8))
+                guard self.followedTaskID == task.id else { return }
+                self.followedTaskID = nil
+                UserDefaults.standard.removeObject(forKey: Self.followedTaskKey)
+                self.stopAll()
+            }
+        }
+    }
+
+    func hostAvailabilityChanged(isAvailable: Bool) {
+        if isAvailable {
+            hostLossNotified = false
+            return
+        }
+        guard followedTaskID != nil, !hostLossNotified else { return }
+        hostLossNotified = true
+        if var state = lastContentState, state.taskID != nil {
+            state.status = "taskWaiting"
+            state.taskState = RemoteTaskState.waitingForMac.rawValue
+            state.message = "Waiting for your Mac to reconnect"
+            state.updatedAt = Date()
+            lastContentState = state
+            Task {
+                if let activity {
+                    await activity.update(ActivityContent(
+                        state: state,
+                        staleDate: Date().addingTimeInterval(300),
+                        relevanceScore: 1
+                    ))
+                }
+            }
+        }
+        let content = UNMutableNotificationContent()
+        content.title = "CodeIsland lost your Mac"
+        content.body = "Open Buddy to reconnect the followed coding task."
+        content.sound = .default
+        let request = UNNotificationRequest(
+            identifier: "codeisland.followed-task.host-loss",
+            content: content,
+            trigger: nil
+        )
+        Task { try? await UNUserNotificationCenter.current().add(request) }
     }
 
     static func shouldAutoStart(for status: CompanionStatus) -> Bool {
@@ -84,6 +166,8 @@ final class LiveActivityController: ObservableObject {
     }
 
     func stop() {
+        followedTaskID = nil
+        UserDefaults.standard.removeObject(forKey: Self.followedTaskKey)
         stopAll()
     }
 
@@ -95,6 +179,86 @@ final class LiveActivityController: ObservableObject {
             clearActivity(id: activityID, resetCursor: true)
             existingActivityCount = 0
             lastError = nil
+        }
+    }
+
+    private func applyTask(_ task: RemoteTaskSummary, createIfNeeded: Bool) async {
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else {
+            lastError = "This iPhone doesn't have Live Activities enabled."
+            return
+        }
+        do {
+            await recoverExistingActivity(endingDuplicates: true)
+            let taskID = task.id.uuidString.lowercased()
+            if let activity, activity.attributes.sessionId != taskID {
+                await activity.end(nil, dismissalPolicy: .immediate)
+                clearActivity(id: activity.id, resetCursor: true)
+            }
+            let contentState = CodeIslandActivityAttributes.ContentState(
+                sequence: task.lastReceiptSequence,
+                source: task.provider == .auto ? "codeisland" : task.provider.rawValue,
+                status: Self.activityStatus(for: task.state),
+                toolName: nil,
+                workspaceName: task.workspaceName,
+                message: Self.taskSummary(for: task.state),
+                pendingAction: task.state == .needsYou ? RemoteAttentionKind.task.rawValue : nil,
+                taskID: taskID,
+                taskState: task.state.rawValue,
+                questionText: nil,
+                questionHeader: nil,
+                questionProgress: nil,
+                sessions: [],
+                updatedAt: task.updatedAt
+            )
+            let content = ActivityContent(
+                state: contentState,
+                staleDate: Date().addingTimeInterval(180),
+                relevanceScore: task.state == .needsYou || task.state == .failed ? 1 : 0.75
+            )
+            if let activity {
+                await activity.update(content)
+            } else if createIfNeeded {
+                let attributes = CodeIslandActivityAttributes(sessionId: taskID)
+                let created: Activity<CodeIslandActivityAttributes>
+                do {
+                    created = try Activity.request(attributes: attributes, content: content, pushType: .token)
+                } catch {
+                    created = try Activity.request(attributes: attributes, content: content, pushType: nil)
+                }
+                activity = created
+                activityID = created.id
+                observeState(of: created)
+                observePushToken(of: created)
+            }
+            lastContentState = contentState
+            existingActivityCount = Activity<CodeIslandActivityAttributes>.activities.count
+            lastError = nil
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    private static func activityStatus(for state: RemoteTaskState) -> String {
+        switch state {
+        case .waitingForMac: return "taskWaiting"
+        case .queued: return "processing"
+        case .working: return "running"
+        case .needsYou: return "waitingApproval"
+        case .verified: return "taskVerified"
+        case .failed: return "taskFailed"
+        case .cancelled: return "idle"
+        }
+    }
+
+    private static func taskSummary(for state: RemoteTaskState) -> String {
+        switch state {
+        case .waitingForMac: return "Waiting for your Mac to reconnect"
+        case .queued: return "Queued on your Mac"
+        case .working: return "Editing and running checks"
+        case .needsYou: return "A decision is waiting in Buddy"
+        case .verified: return "Reported checks passed"
+        case .failed: return "Review the failure in Buddy"
+        case .cancelled: return "Task cancelled"
         }
     }
 
@@ -318,16 +482,43 @@ final class LiveActivityController: ObservableObject {
 
     private func observePushToken(of activity: Activity<CodeIslandActivityAttributes>) {
         activityPushTokenTask?.cancel()
+        activityPushTokenPollingTask?.cancel()
         guard let requestID = activity.attributes.sessionId, !requestID.isEmpty else { return }
-        if let token = activity.pushToken {
-            LiveActivityTokenMailbox.storeUpdateToken(token, requestID: requestID)
-        }
+
+        let capturedInitialToken = capturePushToken(of: activity, requestID: requestID)
         activityPushTokenTask = Task {
             for await token in activity.pushTokenUpdates {
                 guard !Task.isCancelled else { return }
                 LiveActivityTokenMailbox.storeUpdateToken(token, requestID: requestID)
             }
         }
+
+        // ActivityKit documents pushTokenUpdates as the primary source, but
+        // remote push-to-start activities can expose pushToken slightly later
+        // without yielding the first value promptly on some OS releases. Keep
+        // the async listener above and add a bounded foreground/background-
+        // runtime retry so the Mac can still remotely update and end the exact
+        // activity. This task stops as soon as a token is available.
+        guard !capturedInitialToken else { return }
+        activityPushTokenPollingTask = Task {
+            for _ in 0..<30 {
+                guard !Task.isCancelled else { return }
+                if capturePushToken(of: activity, requestID: requestID) {
+                    return
+                }
+                try? await Task.sleep(for: .seconds(2))
+            }
+        }
+    }
+
+    @discardableResult
+    private func capturePushToken(
+        of activity: Activity<CodeIslandActivityAttributes>,
+        requestID: String
+    ) -> Bool {
+        guard let token = activity.pushToken else { return false }
+        LiveActivityTokenMailbox.storeUpdateToken(token, requestID: requestID)
+        return true
     }
 
     @available(iOS 17.2, *)
@@ -346,6 +537,8 @@ final class LiveActivityController: ObservableObject {
         activityStateTask = nil
         activityPushTokenTask?.cancel()
         activityPushTokenTask = nil
+        activityPushTokenPollingTask?.cancel()
+        activityPushTokenPollingTask = nil
     }
 
     private func relevanceScore(for status: CompanionStatus) -> Double {
@@ -374,11 +567,15 @@ enum LiveActivityTokenMailbox {
         NotificationCenter.default.post(name: .codeIslandLiveActivityTokenAvailable, object: nil)
     }
 
-    static func storeUpdateToken(_ token: Data, requestID: String) {
+    @discardableResult
+    static func storeUpdateToken(_ token: Data, requestID: String) -> Bool {
         var tokens = UserDefaults.standard.dictionary(forKey: updateTokensKey) as? [String: String] ?? [:]
-        tokens[requestID] = token.hexString
+        let value = token.hexString
+        guard tokens[requestID] != value else { return false }
+        tokens[requestID] = value
         UserDefaults.standard.set(tokens, forKey: updateTokensKey)
         NotificationCenter.default.post(name: .codeIslandLiveActivityTokenAvailable, object: nil)
+        return true
     }
 
     static func storeSnapshot() {

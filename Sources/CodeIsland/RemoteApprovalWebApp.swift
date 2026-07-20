@@ -32,7 +32,7 @@ enum RemoteApprovalWebApp {
     """#
 
     static let serviceWorker = #"""
-    const CACHE = 'codeisland-personal-hub-v3';
+    const CACHE = 'codeisland-personal-hub-v4';
     self.addEventListener('install', event => {
       event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(['/', '/manifest.webmanifest', '/app-icon.svg'])));
       self.skipWaiting();
@@ -91,6 +91,17 @@ enum RemoteApprovalWebApp {
         .secondary { background:#1a221c; color:#dce3dd; box-shadow:inset 0 0 0 1px #344037; }
         input { width:100%; min-height:50px; border:1px solid #344037; border-radius:12px; padding:0 13px; color:#f4f7f4; background:#080c09; font-size:16px; outline:none; }
         input:focus { border-color:var(--green); box-shadow:0 0 0 3px #4dd96b22; }
+        textarea,select { width:100%; min-height:50px; border:1px solid #344037; border-radius:12px; padding:12px 13px; color:#f4f7f4; background:#080c09; font:16px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif; outline:none; }
+        textarea { min-height:112px; resize:vertical; }
+        textarea:focus,select:focus { border-color:var(--amber); box-shadow:0 0 0 3px #ffb34722; }
+        .task-compose-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+        .task-card { border-color:#31433a; }
+        .task-card.needs-you { border-color:#8a5e22; box-shadow:0 16px 48px #0005,0 0 0 1px #ffb34722; }
+        .task-card.failed { border-color:#743337; }
+        .task-state { margin-left:auto; color:var(--green); font:800 10px ui-monospace,SFMono-Regular,Menlo,monospace; text-transform:uppercase; }
+        .task-card.needs-you .task-state { color:var(--amber); }
+        .task-card.failed .task-state { color:var(--red); }
+        .task-evidence { margin-top:10px; padding:10px; border-radius:11px; background:#050806; color:#9eaaa0; font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; white-space:pre-wrap; overflow-wrap:anywhere; }
         label { display:block; color:#aeb8b0; font-size:12px; font-weight:650; margin:12px 0 6px; }
         .empty { text-align:center; padding:34px 18px; }
         .empty strong { display:block; font-size:17px; margin-bottom:6px; }
@@ -109,6 +120,7 @@ enum RemoteApprovalWebApp {
         .hub-item { margin-top:8px; padding:9px; border-radius:10px; background:#050806; }
         .hub-item-title { font-size:12px; font-weight:700; overflow-wrap:anywhere; }
         .hub-item-subtitle { margin-top:2px; color:#78847a; font-size:10px; }
+        .hub-item-detail { margin-top:8px; color:#c6cec8; font-size:12px; line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere; }
         .media-item-head { display:flex; align-items:center; gap:9px; }
         .media-art { width:52px; height:52px; flex:0 0 52px; border-radius:11px; object-fit:cover; box-shadow:0 8px 22px #0009,inset 0 0 0 1px #ffffff18; }
         .media-copy { min-width:0; flex:1; }
@@ -156,6 +168,21 @@ enum RemoteApprovalWebApp {
         .claude-composer-controls button,.claude-file-label { min-height:44px; display:inline-flex; align-items:center; padding:0 12px; border-radius:10px; background:#1b241e; color:#dce3dd; font-size:12px; font-weight:750; box-shadow:inset 0 0 0 1px #344037; cursor:pointer; }
         .claude-contexts { color:#aeb8b0; font:650 10px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; }
         .claude-disclosure { margin-top:10px; color:#718075; font-size:11px; line-height:1.4; }
+        .review-dialog { position:fixed; inset:0; z-index:120; display:grid; place-items:end center; padding:18px; background:#010201cc; backdrop-filter:blur(18px); }
+        .review-card { width:min(520px,100%); padding:18px; border:1px solid #ffffff1f; border-radius:24px; background:linear-gradient(145deg,#f7f8f5,#e9ece6); color:#101510; box-shadow:0 30px 90px #000d; }
+        @media (prefers-color-scheme:dark) { .review-card { background:linear-gradient(145deg,#171c18,#0d110e); color:#f4f7f4; } }
+        .review-title { margin:5px 0 6px; font-size:20px; font-weight:800; letter-spacing:-.03em; text-wrap:balance; }
+        .review-message { margin:0 0 13px; color:#687268; font-size:14px; line-height:1.45; white-space:pre-wrap; overflow-wrap:anywhere; }
+        .review-field { margin-top:12px; }
+        .review-field input,.review-field textarea { width:100%; border:1px solid #c9d0c7; border-radius:14px; padding:12px 13px; color:#101510; background:#ffffffcc; font:16px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif; outline:none; }
+        .review-field textarea { min-height:116px; resize:vertical; }
+        @media (prefers-color-scheme:dark) {
+          .review-message { color:#9ca79f; }
+          .review-field input,.review-field textarea { border-color:#344037; color:#f4f7f4; background:#050806; }
+        }
+        .review-field input:focus,.review-field textarea:focus { border-color:var(--amber); box-shadow:0 0 0 3px #ffb34724; }
+        .review-actions { display:grid; grid-template-columns:1fr 1.35fr; gap:10px; margin-top:15px; }
+        .review-actions button { min-height:50px; }
         .hidden { display:none !important; }
         #error { color:#ff9da0; font-size:13px; margin-top:10px; white-space:pre-wrap; }
         .notice { position:sticky; top:max(8px,env(safe-area-inset-top)); z-index:20; margin:0 0 12px; padding:12px 14px; border:1px solid #4a5a4d; border-radius:13px; background:#151d17f2; color:#e8eee9; box-shadow:0 14px 44px #0008; font-size:13px; line-height:1.4; }
@@ -193,6 +220,38 @@ enum RemoteApprovalWebApp {
         <section id="empty" class="card empty hidden">
           <strong>You're clear for now</strong>
           <span class="muted">CodeIsland checks your Mac every four seconds.</span>
+        </section>
+
+        <div id="taskTitle" class="section-title hidden">Coding tasks · edit &amp; test</div>
+        <section id="taskComposer" class="card hidden">
+          <div class="eyebrow">Dispatch to your Mac</div>
+          <div class="tool">New coding task</div>
+          <label for="taskPrompt">What should the agent edit and test?</label>
+          <textarea id="taskPrompt" placeholder="Describe one bounded outcome"></textarea>
+          <div class="task-compose-grid">
+            <div><label for="taskWorkspace">Workspace</label><select id="taskWorkspace"></select></div>
+            <div><label for="taskProvider">Agent</label><select id="taskProvider"><option value="auto">Auto</option><option value="codex">Codex</option><option value="claude">Claude</option></select></div>
+          </div>
+          <div class="actions" style="grid-template-columns:1fr"><button id="taskCreate" class="approve">Review &amp; dispatch</button></div>
+          <p class="muted">Authority is limited to editing the selected workspace and running tests. Commits, pushes, deploys, external access, and destructive actions still stop for approval.</p>
+        </section>
+        <section id="tasks"></section>
+
+        <section id="reviewDialog" class="review-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="reviewTitle">
+          <form id="reviewForm" class="review-card">
+            <div id="reviewEyebrow" class="eyebrow">Review</div>
+            <div id="reviewTitle" class="review-title">Confirm action</div>
+            <p id="reviewMessage" class="review-message"></p>
+            <label id="reviewLabel" class="review-field hidden">
+              <span id="reviewLabelText">Value</span>
+              <input id="reviewInput" autocomplete="off">
+              <textarea id="reviewTextarea"></textarea>
+            </label>
+            <div class="review-actions">
+              <button id="reviewCancel" type="button" class="secondary">Cancel</button>
+              <button id="reviewConfirm" type="submit" class="approve">Continue</button>
+            </div>
+          </form>
         </section>
 
         <nav id="modes" class="modes hidden" aria-label="Context">
@@ -254,6 +313,13 @@ enum RemoteApprovalWebApp {
         const pair = document.getElementById('pair');
         const approvals = document.getElementById('approvals');
         const questions = document.getElementById('questions');
+        const tasks = document.getElementById('tasks');
+        const taskTitle = document.getElementById('taskTitle');
+        const taskComposer = document.getElementById('taskComposer');
+        const taskPrompt = document.getElementById('taskPrompt');
+        const taskWorkspace = document.getElementById('taskWorkspace');
+        const taskProvider = document.getElementById('taskProvider');
+        const taskCreate = document.getElementById('taskCreate');
         const empty = document.getElementById('empty');
         const status = document.getElementById('status');
         const dot = document.getElementById('dot');
@@ -265,6 +331,17 @@ enum RemoteApprovalWebApp {
         const approvalTitle = document.getElementById('approvalTitle');
         const questionTitle = document.getElementById('questionTitle');
         const notice = document.getElementById('notice');
+        const reviewDialog = document.getElementById('reviewDialog');
+        const reviewForm = document.getElementById('reviewForm');
+        const reviewEyebrow = document.getElementById('reviewEyebrow');
+        const reviewTitle = document.getElementById('reviewTitle');
+        const reviewMessage = document.getElementById('reviewMessage');
+        const reviewLabel = document.getElementById('reviewLabel');
+        const reviewLabelText = document.getElementById('reviewLabelText');
+        const reviewInput = document.getElementById('reviewInput');
+        const reviewTextarea = document.getElementById('reviewTextarea');
+        const reviewCancel = document.getElementById('reviewCancel');
+        const reviewConfirm = document.getElementById('reviewConfirm');
         const mediaPreflight = document.getElementById('mediaPreflight');
         const mediaPreflightVideo = document.getElementById('mediaPreflightVideo');
         const mediaPreflightStatus = document.getElementById('mediaPreflightStatus');
@@ -278,6 +355,7 @@ enum RemoteApprovalWebApp {
         const claudeSpeechStatus = document.getElementById('claudeSpeechStatus');
         const claudeHold = document.getElementById('claudeHold');
         const claudeContinuous = document.getElementById('claudeContinuous');
+        const reviewState = { resolve:null, multiline:false, priorFocus:null };
 
         const moduleNames = {
           nowPlaying:'Now Playing',shelf:'Shelf',calendar:'Calendar',reminders:'Tasks',notes:'Notes',
@@ -294,9 +372,45 @@ enum RemoteApprovalWebApp {
           noticeTimer.value=setTimeout(()=>notice.classList.add('hidden'),5000);
         }
         function escapeHTML(value='') { const e=document.createElement('div'); e.textContent=value; return e.innerHTML; }
+        function escapeAttribute(value='') {
+          return String(value).replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll("'",'&#39;').replaceAll('<','&lt;').replaceAll('>','&gt;');
+        }
         function relativeTime(value) {
           const seconds=Math.max(0,Math.round((Date.now()-new Date(value).getTime())/1000));
           if(seconds<60) return `${seconds}s ago`; if(seconds<3600) return `${Math.floor(seconds/60)}m ago`; return `${Math.floor(seconds/3600)}h ago`;
+        }
+
+        function closeReviewDialog(result) {
+          reviewDialog.classList.add('hidden');
+          document.querySelector('main').inert=false;
+          if(reviewState.priorFocus&&typeof reviewState.priorFocus.focus==='function') reviewState.priorFocus.focus();
+          reviewState.priorFocus=null;
+          const resolve=reviewState.resolve; reviewState.resolve=null;
+          if(resolve) resolve(result);
+        }
+
+        function reviewSheet({title='Confirm action',message='',eyebrow='Review',label='',value='',placeholder='',confirmLabel='Continue',destructive=false,multiline=false,required=false}={}) {
+          if(reviewState.resolve) closeReviewDialog(null);
+          reviewState.multiline=multiline; reviewState.priorFocus=document.activeElement;
+          reviewEyebrow.textContent=eyebrow; reviewTitle.textContent=title; reviewMessage.textContent=message;
+          reviewConfirm.textContent=confirmLabel; reviewConfirm.className=destructive?'deny':'approve';
+          reviewLabel.classList.toggle('hidden',!label);
+          reviewLabelText.textContent=label||'Value';
+          reviewInput.classList.toggle('hidden',multiline); reviewTextarea.classList.toggle('hidden',!multiline);
+          const field=multiline?reviewTextarea:reviewInput;
+          field.value=value||''; field.placeholder=placeholder||''; field.required=required;
+          reviewDialog.classList.remove('hidden'); document.querySelector('main').inert=true;
+          setTimeout(()=>label?field.focus():reviewConfirm.focus(),0);
+          return new Promise(resolve=>{reviewState.resolve=resolve;});
+        }
+
+        async function confirmSheet(message,{title='Confirm action',confirmLabel='Continue',destructive=false}={}) {
+          return await reviewSheet({title,message,confirmLabel,destructive})===true;
+        }
+
+        async function promptSheet(title,{label='Value',value='',placeholder='',message='',multiline=false,required=true,confirmLabel='Continue'}={}) {
+          const result=await reviewSheet({title,message,label,value,placeholder,multiline,required,confirmLabel});
+          return typeof result==='string'?result:null;
         }
 
         async function pairDevice() {
@@ -314,7 +428,7 @@ enum RemoteApprovalWebApp {
         async function decide(id, actionToken, decision) {
           if(busy.has(id)) return;
           const verb=decision==='approve'?'Approve':'Deny';
-          if(!confirm(`${verb} this exact request?`)) return;
+          if(!await confirmSheet(`${verb} this exact request?`,{title:`${verb} once`,confirmLabel:verb,destructive:decision!=='approve'})) return;
           busy.add(id); renderLast();
           try {
             const response=await fetch(`/api/approvals/${encodeURIComponent(id)}/decision`,{method:'POST',headers:{...authHeaders(),'Content-Type':'application/json'},body:JSON.stringify({decision,actionToken})});
@@ -327,6 +441,8 @@ enum RemoteApprovalWebApp {
 
         let lastItems=[];
         let lastQuestions=[];
+        let lastTasks=[];
+        let taskWorkspaces=[];
         function render(items) {
           lastItems=items; renderLast();
         }
@@ -337,8 +453,8 @@ enum RemoteApprovalWebApp {
             <div class="meta"><span class="chip">${escapeHTML(item.workspace||'Session')}</span><span class="chip">#${escapeHTML(item.sessionId.slice(-8))}</span></div>
             ${item.detail?`<div class="detail">${escapeHTML(item.detail)}</div>`:''}
             <div class="actions">
-              <button class="deny" ${busy.has(item.id)?'disabled':''} data-id="${escapeHTML(item.id)}" data-token="${escapeHTML(item.actionToken)}" data-decision="deny">Deny</button>
-              <button class="approve" ${busy.has(item.id)?'disabled':''} data-id="${escapeHTML(item.id)}" data-token="${escapeHTML(item.actionToken)}" data-decision="approve">Approve once</button>
+              <button class="deny" ${busy.has(item.id)?'disabled':''} data-id="${escapeAttribute(item.id)}" data-token="${escapeAttribute(item.actionToken)}" data-decision="deny">Deny</button>
+              <button class="approve" ${busy.has(item.id)?'disabled':''} data-id="${escapeAttribute(item.id)}" data-token="${escapeAttribute(item.actionToken)}" data-decision="approve">Approve once</button>
             </div>
           </article>`).join('');
           approvals.querySelectorAll('button[data-decision]').forEach(button=>button.addEventListener('click',()=>decide(button.dataset.id,button.dataset.token,button.dataset.decision)));
@@ -348,16 +464,16 @@ enum RemoteApprovalWebApp {
 
         function renderQuestions(items) {
           lastQuestions=items;
-          questions.innerHTML=items.map(item=>`<article class="card approval" data-question-id="${escapeHTML(item.id)}">
+          questions.innerHTML=items.map(item=>`<article class="card approval" data-question-id="${escapeAttribute(item.id)}">
             <div class="eyebrow">${escapeHTML(item.source)} · QUESTION · ${relativeTime(item.createdAt)}</div>
             ${item.requiresLocalResponse
               ? `<div class="tool">Sensitive question waiting on Mac</div><div class="muted">Its text and choices are intentionally never sent to this device.</div>`
               : (item.prompts||[]).map((prompt,promptIndex)=>`<div class="question-prompt" data-prompt-index="${promptIndex}">
                   ${prompt.header?`<div class="eyebrow">${escapeHTML(prompt.header)}</div>`:''}
                   <div class="tool">${escapeHTML(prompt.question)}</div>
-                  ${(prompt.options||[]).map(option=>`<label class="hub-item"><input class="question-option" type="${prompt.allowsMultipleSelection?'checkbox':'radio'}" name="question-${escapeHTML(item.id)}-${promptIndex}" value="${escapeHTML(option)}"> ${escapeHTML(option)}</label>`).join('')}
+                  ${(prompt.options||[]).map(option=>`<label class="hub-item"><input class="question-option" type="${prompt.allowsMultipleSelection?'checkbox':'radio'}" name="question-${escapeAttribute(item.id)}-${promptIndex}" value="${escapeAttribute(option)}"> ${escapeHTML(option)}</label>`).join('')}
                   <input class="question-custom" placeholder="${prompt.options&&prompt.options.length?'Or type a custom answer':'Type your answer'}">
-                </div>`).join('') + `<div class="actions" style="grid-template-columns:1fr"><button class="approve question-send" data-id="${escapeHTML(item.id)}" data-token="${escapeHTML(item.actionToken||'')}">Send answer</button></div>`}
+                </div>`).join('') + `<div class="actions" style="grid-template-columns:1fr"><button class="approve question-send" data-id="${escapeAttribute(item.id)}" data-token="${escapeAttribute(item.actionToken||'')}">Send answer</button></div>`}
           </article>`).join('');
           questions.querySelectorAll('button.question-send').forEach(button=>button.addEventListener('click',()=>answerQuestion(button)));
           questionTitle.classList.toggle('hidden',items.length===0);
@@ -377,7 +493,7 @@ enum RemoteApprovalWebApp {
             return selected.join(', ');
           });
           if(answers.some(answer=>!answer)) { notify('Answer every prompt first.',true); return; }
-          if(!confirm('Send this answer to the exact waiting agent request?')) return;
+          if(!await confirmSheet('Send this answer to the exact waiting agent request?',{title:'Send exact answer',confirmLabel:'Send answer'})) return;
           busy.add(id); button.disabled=true;
           try {
             const response=await fetch(`/api/questions/${encodeURIComponent(id)}/answer`,{method:'POST',headers:{...authHeaders(),'Content-Type':'application/json'},body:JSON.stringify({answers,actionToken:button.dataset.token})});
@@ -385,6 +501,89 @@ enum RemoteApprovalWebApp {
             await refresh();
           } catch(error) { notify(error.message,true); await refresh(); }
           finally { busy.delete(id); }
+        }
+
+        function taskStateLabel(state) {
+          return ({'waiting-for-mac':'Waiting for Mac',queued:'Queued',working:'Working','needs-you':'Needs You',verified:'Verified',failed:'Failed',cancelled:'Cancelled'})[state]||state;
+        }
+
+        function taskEvidence(task) {
+          const evidence=task.evidence; if(!evidence) return '';
+          const lines=[];
+          if(evidence.branch) lines.push(`Branch: ${evidence.branch}`);
+          lines.push(`Source: ${evidence.sourceState||'unchanged'}`);
+          (evidence.changedFiles||[]).forEach(file=>lines.push(`${file.kind}: ${file.path}`));
+          (evidence.checks||[]).forEach(check=>lines.push(`${check.exitCode===0?'PASS':'FAIL'}: ${check.summary}`));
+          (evidence.warnings||[]).forEach(warning=>lines.push(`Warning: ${warning}`));
+          return lines.join('\n');
+        }
+
+        function renderTasks(snapshot) {
+          lastTasks=(snapshot.tasks||[]).slice().sort((a,b)=>{
+            const rank={'needs-you':0,failed:1,working:2,queued:3,'waiting-for-mac':4,verified:5,cancelled:6};
+            return (rank[a.state]??9)-(rank[b.state]??9)||new Date(b.updatedAt)-new Date(a.updatedAt);
+          });
+          taskTitle.classList.remove('hidden'); taskComposer.classList.remove('hidden');
+          tasks.innerHTML=lastTasks.map(task=>{
+            const terminal=['verified','failed','cancelled'].includes(task.state); const evidence=taskEvidence(task);
+            return `<article class="card task-card ${escapeAttribute(task.state)}" data-task-id="${escapeAttribute(task.id)}">
+              <div class="module-head"><div class="eyebrow">${escapeHTML(task.provider.toUpperCase())} · ${escapeHTML(task.workspaceName)} · ${relativeTime(task.updatedAt)}</div><div class="task-state">${escapeHTML(taskStateLabel(task.state))}</div></div>
+              <div class="tool">${escapeHTML(task.title)}</div>
+              ${task.latestSummary?`<div class="muted">${escapeHTML(task.latestSummary)}</div>`:''}
+              ${evidence?`<details><summary class="muted">Completion evidence</summary><div class="task-evidence">${escapeHTML(evidence)}</div></details>`:''}
+              ${terminal?'':`<div class="actions"><button class="deny" data-task-cancel="1">Cancel</button><button class="secondary" data-task-followup="1">Add follow-up</button></div>`}
+            </article>`;
+          }).join('')||'<section class="card empty"><strong>No coding tasks yet</strong><span class="muted">Dispatch a bounded edit-and-test task above.</span></section>';
+          tasks.querySelectorAll('[data-task-followup]').forEach(button=>button.addEventListener('click',()=>followUpTask(button.closest('[data-task-id]').dataset.taskId)));
+          tasks.querySelectorAll('[data-task-cancel]').forEach(button=>button.addEventListener('click',()=>cancelTask(button.closest('[data-task-id]').dataset.taskId)));
+        }
+
+        async function refreshTasks() {
+          const [workspaceResponse,taskResponse]=await Promise.all([
+            fetch('/api/tasks/workspaces',{headers:authHeaders(),cache:'no-store'}),
+            fetch('/api/tasks',{headers:authHeaders(),cache:'no-store'})
+          ]);
+          if(workspaceResponse.status===401||taskResponse.status===401) throw new Error('unauthorized');
+          const workspaceBody=await workspaceResponse.json(); const taskBody=await taskResponse.json();
+          if(!workspaceResponse.ok) throw new Error(workspaceBody.error||'Workspaces unavailable');
+          if(!taskResponse.ok) throw new Error(taskBody.error||'Coding tasks unavailable');
+          taskWorkspaces=workspaceBody.workspaces||[];
+          const prior=taskWorkspace.value;
+          taskWorkspace.innerHTML=taskWorkspaces.map(workspace=>`<option value="${escapeAttribute(workspace.id)}">${escapeHTML(workspace.name)}</option>`).join('');
+          if(taskWorkspaces.some(workspace=>workspace.id===prior)) taskWorkspace.value=prior;
+          taskCreate.disabled=taskWorkspaces.length===0;
+          renderTasks(taskBody);
+        }
+
+        async function createTask() {
+          const prompt=taskPrompt.value.trim(); const workspaceID=taskWorkspace.value; const provider=taskProvider.value;
+          if(!prompt) { taskPrompt.focus(); return; }
+          const workspace=taskWorkspaces.find(item=>item.id===workspaceID); if(!workspace) { notify('Choose an available workspace',true); return; }
+          if(!await confirmSheet(`${prompt}\n\nWorkspace: ${workspace.name}\nAgent: ${provider}\nAuthority: Edit & Test`,{title:'Dispatch this exact task?',confirmLabel:'Dispatch'})) return;
+          taskCreate.disabled=true;
+          try {
+            const response=await fetch('/api/tasks',{method:'POST',headers:{...authHeaders(),'Content-Type':'application/json'},body:JSON.stringify({version:1,clientTaskID:crypto.randomUUID(),idempotencyKey:crypto.randomUUID(),prompt,workspaceID,provider,authority:'edit-and-test',attachments:[],requestedProof:'Run focused tests and report exact evidence',createdAt:new Date().toISOString()})});
+            const body=await response.json(); if(!response.ok) throw new Error(body.error||'Task dispatch failed');
+            taskPrompt.value=''; notify('Coding task dispatched'); await refreshTasks();
+          } catch(error) { notify(error.message,true); }
+          finally { taskCreate.disabled=taskWorkspaces.length===0; }
+        }
+
+        async function followUpTask(taskID) {
+          const text=await promptSheet('Add task follow-up',{label:'Detail or answer',multiline:true,confirmLabel:'Review'}); if(!text||!text.trim()) return;
+          if(!await confirmSheet(text.trim(),{title:'Send to this exact task?',confirmLabel:'Send follow-up'})) return;
+          try {
+            const response=await fetch(`/api/tasks/${encodeURIComponent(taskID)}/follow-up`,{method:'POST',headers:{...authHeaders(),'Content-Type':'application/json'},body:JSON.stringify({version:1,taskID,idempotencyKey:crypto.randomUUID(),text:text.trim(),attachments:[],createdAt:new Date().toISOString()})});
+            const body=await response.json(); if(!response.ok) throw new Error(body.error||'Follow-up failed'); notify('Follow-up sent'); await refreshTasks();
+          } catch(error) { notify(error.message,true); }
+        }
+
+        async function cancelTask(taskID) {
+          if(!await confirmSheet('Stop this exact coding task? Existing source edits are preserved.',{title:'Cancel task?',confirmLabel:'Cancel task',destructive:true})) return;
+          try {
+            const response=await fetch(`/api/tasks/${encodeURIComponent(taskID)}/cancel`,{method:'POST',headers:{...authHeaders(),'Content-Type':'application/json'},body:'{}'});
+            const body=await response.json(); if(!response.ok) throw new Error(body.error||'Cancellation failed'); notify('Task cancelled'); await refreshTasks();
+          } catch(error) { notify(error.message,true); }
         }
 
         function renderHub(snapshot) {
@@ -419,9 +618,10 @@ enum RemoteApprovalWebApp {
         function renderHubItem(moduleID,item) {
           const artwork=typeof item.artworkDataURL==='string'&&/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(item.artworkDataURL)?item.artworkDataURL:'';
           const position=Number(item.mediaPosition); const duration=Number(item.mediaDuration);
+          const visibleDetail=moduleID==='claude'&&item.detail?`<div class="hub-item-detail">${escapeHTML(item.detail)}</div>`:'';
           const seek=Number.isFinite(position)&&Number.isFinite(duration)&&duration>0
-            ? `<input class="media-seek" type="range" min="0" max="${duration}" step="0.1" value="${Math.min(Math.max(position,0),duration)}" data-media-seek="1" data-target="${escapeHTML(item.id)}" aria-label="Playback position"><div class="media-times"><span data-media-current>${playbackTime(position)}</span><span>${playbackTime(duration)}</span></div>`:'';
-          return `<div class="hub-item"><div class="media-item-head">${artwork?`<img class="media-art" src="${escapeHTML(artwork)}" alt="">`:''}<div class="media-copy"><div class="hub-item-title">${escapeHTML(item.title)}</div>${item.subtitle?`<div class="hub-item-subtitle">${escapeHTML(item.subtitle)}</div>`:''}</div></div>${item.progress!==null&&item.progress!==undefined?`<progress value="${Number(item.progress)}" max="1"></progress>`:''}${seek}${renderHubActions(moduleID,item.actions||[],item.id,item.detail||'')}</div>`;
+            ? `<input class="media-seek" type="range" min="0" max="${duration}" step="0.1" value="${Math.min(Math.max(position,0),duration)}" data-media-seek="1" data-target="${escapeAttribute(item.id)}" aria-label="Playback position"><div class="media-times"><span data-media-current>${playbackTime(position)}</span><span>${playbackTime(duration)}</span></div>`:'';
+          return `<div class="hub-item"><div class="media-item-head">${artwork?`<img class="media-art" src="${escapeAttribute(artwork)}" alt="">`:''}<div class="media-copy"><div class="hub-item-title">${escapeHTML(item.title)}</div>${item.subtitle?`<div class="hub-item-subtitle">${escapeHTML(item.subtitle)}</div>`:''}</div></div>${visibleDetail}${item.progress!==null&&item.progress!==undefined?`<progress value="${Number(item.progress)}" max="1"></progress>`:''}${seek}${renderHubActions(moduleID,item.actions||[],item.id,item.detail||'')}</div>`;
         }
 
         function playbackTime(seconds) {
@@ -487,7 +687,7 @@ enum RemoteApprovalWebApp {
           const days=(month.days||[]).map(day=>{
             const date=new Date(day.date); const selected=date.toDateString()===selectedDay;
             const classes=['calendar-day',day.isInDisplayedMonth?'':'adjacent',selected?'selected':'',day.isToday?'today':''].filter(Boolean).join(' ');
-            return `<button class="${classes}" data-calendar-date="${escapeHTML(day.date)}" aria-label="${escapeHTML(date.toLocaleDateString(undefined,{dateStyle:'full'}))}, ${Number(day.eventCount)||0} events">${date.getDate()}${day.eventCount?'<span class="calendar-count"></span>':''}</button>`;
+            return `<button class="${classes}" data-calendar-date="${escapeAttribute(day.date)}" aria-label="${escapeAttribute(date.toLocaleDateString(undefined,{dateStyle:'full'}))}, ${Number(day.eventCount)||0} events">${date.getDate()}${day.eventCount?'<span class="calendar-count"></span>':''}</button>`;
           }).join('');
           const selectedEvents=(month.selectedEvents||[]).map(item=>renderHubItem(module.id,item)).join('');
           return `<div class="calendar-month"><div class="calendar-head"><button class="calendar-nav" data-calendar-nav="previous" aria-label="Previous month">‹</button><button class="calendar-nav" data-calendar-nav="today">Today</button><div class="calendar-title">${escapeHTML(title)}</div><button class="calendar-nav" data-calendar-nav="next" aria-label="Next month">›</button></div><div class="calendar-grid">${weekdays.map(day=>`<div class="calendar-weekday">${day}</div>`).join('')}${days}</div><div class="calendar-selected">${selectedEvents||'<div class="hub-item-subtitle">No events on the selected day</div>'}</div></div>`;
@@ -530,7 +730,7 @@ enum RemoteApprovalWebApp {
 
         async function editRack(snapshot,currentModules) {
           const catalog=Object.keys(moduleNames);
-          const answer=prompt(`Enter ${snapshot.resolvedMode.toUpperCase()} modules in order, separated by commas.\n\nAvailable: ${catalog.join(', ')}`,currentModules.join(', '));
+          const answer=await promptSheet(`Edit ${snapshot.resolvedMode.toUpperCase()} rack`,{label:'Modules, separated by commas',value:currentModules.join(', '),message:`Available: ${catalog.join(', ')}`,confirmLabel:'Save rack'});
           if(answer===null) return;
           const reverseNames=Object.fromEntries(Object.entries(moduleNames).map(([id,title])=>[title.toLowerCase(),id]));
           const modules=answer.split(',').map(value=>value.trim()).filter(Boolean).map(value=>catalog.includes(value)?value:reverseNames[value.toLowerCase()]).filter(Boolean);
@@ -541,7 +741,13 @@ enum RemoteApprovalWebApp {
 
         function renderHubActions(moduleID,actions,targetID,payload) {
           if(!actions.length) return '';
-          return `<div class="hub-actions">${actions.map(action=>`<button class="hub-action ${action.role==='primary'?'primary':''}" data-hub-action="1" data-module="${escapeHTML(moduleID)}" data-action="${escapeHTML(action.id)}" data-target="${escapeHTML(action.targetID||targetID||'')}" data-deeplink="${escapeHTML(action.deepLink||'')}" data-payload="${escapeHTML(payload)}" data-value="${escapeHTML(action.value||'')}">${escapeHTML(action.label)}</button>`).join('')}</div>`;
+          return `<div class="hub-actions">${actions.map(action=>`<button class="hub-action ${action.role==='primary'?'primary':''}" data-hub-action="1" data-module="${escapeAttribute(moduleID)}" data-action="${escapeAttribute(action.id)}" data-target="${escapeAttribute(action.targetID||targetID||'')}" data-deeplink="${escapeAttribute(action.deepLink||'')}" data-payload="${escapeAttribute(payload)}" data-value="${escapeAttribute(action.value||'')}">${escapeHTML(action.label)}</button>`).join('')}</div>`;
+        }
+
+        const readOnlyHubActions=new Set(['system.refresh','weather.refresh','agents.refresh','github.refresh','battery.refresh']);
+
+        function isReadOnlyHubAction(moduleID,actionID) {
+          return readOnlyHubActions.has(`${moduleID}.${actionID}`);
         }
 
         function stopClaudeSpeech(message='Voice stopped.') {
@@ -652,66 +858,76 @@ enum RemoteApprovalWebApp {
             catch(error) { notify('Clipboard permission was denied',true); }
             return;
           }
+          if(isReadOnlyHubAction(moduleID,actionID)) {
+            if(actionID==='refresh') {
+              await refreshHub();
+              notify(`Refreshed ${moduleNames[moduleID]||moduleID}`);
+            } else {
+              notify(`${moduleNames[moduleID]||moduleID} updated`);
+            }
+            return;
+          }
           if(deepLink) { window.location.href=deepLink; return; }
           let value=actionValue||null;
           if((moduleID==='reminders'||moduleID==='notes')&&actionID==='add') {
-            value=prompt(moduleID==='notes'?'New note':'New task'); if(!value||!value.trim()) return; value=value.trim();
+            value=await promptSheet(moduleID==='notes'?'New note':'New task',{label:moduleID==='notes'?'Note':'Task',multiline:moduleID==='notes',confirmLabel:'Review'}); if(!value||!value.trim()) return; value=value.trim();
             if(moduleID==='reminders') {
               const reminderModule=(lastHubSnapshot.value?.modules||[]).find(module=>module.id==='reminders');
               const lists=(reminderModule?.items||[]).filter(item=>String(item.id).startsWith('list:'));
               let calendarID=null;
               if(lists.length) {
                 const choices=lists.map((item,index)=>`${index+1}. ${item.title}`).join('\n');
-                const answer=prompt(`Choose list number:\n${choices}`,'1'); if(answer===null) return;
+                const answer=await promptSheet('Choose Reminders list',{label:'List number',value:'1',message:choices,confirmLabel:'Continue'}); if(answer===null) return;
                 const index=Number(answer)-1; if(!Number.isInteger(index)||index<0||index>=lists.length) { notify('Choose a valid list',true); return; }
                 calendarID=lists[index].detail||null;
               }
-              const dueText=(prompt('Due time (optional: YYYY-MM-DD HH:MM)','')||'').trim();
+              const dueText=(await promptSheet('Optional due time',{label:'Due time',placeholder:'YYYY-MM-DD HH:MM',required:false,confirmLabel:'Continue'})||'').trim();
               let due=null;
               if(dueText) { const parsed=new Date(dueText.replace(' ','T')); if(Number.isNaN(parsed.getTime())) { notify('Enter a valid due time',true); return; } due=parsed.toISOString(); }
               value=JSON.stringify({title:value,due,calendarID});
             }
           }
           if(moduleID==='reminders'&&actionID==='addList') {
-            value=prompt('New Reminders list name'); if(!value||!value.trim()) return; value=value.trim();
+            value=await promptSheet('New Reminders list',{label:'List name',confirmLabel:'Review'}); if(!value||!value.trim()) return; value=value.trim();
           }
           if(moduleID==='calendar'&&actionID==='add') {
-            const title=prompt('Event title'); if(!title||!title.trim()) return;
+            const title=await promptSheet('New calendar event',{label:'Event title',confirmLabel:'Continue'}); if(!title||!title.trim()) return;
             const suggested=new Date(Date.now()+3600000); suggested.setMinutes(0,0,0);
             const pad=n=>String(n).padStart(2,'0');
             const local=`${suggested.getFullYear()}-${pad(suggested.getMonth()+1)}-${pad(suggested.getDate())} ${pad(suggested.getHours())}:${pad(suggested.getMinutes())}`;
-            const startText=prompt('Start (YYYY-MM-DD HH:MM)',local); if(!startText) return;
+            const startText=await promptSheet('Event start',{label:'Start',value:local,placeholder:'YYYY-MM-DD HH:MM',confirmLabel:'Continue'}); if(!startText) return;
             const start=new Date(startText.replace(' ','T')); if(Number.isNaN(start.getTime())) { notify('Enter a valid start time',true); return; }
-            const minutes=Number(prompt('Duration in minutes','60')); if(!Number.isFinite(minutes)||minutes<=0) { notify('Enter a valid duration',true); return; }
-            const link=(prompt('Meeting link (optional)','')||'').trim();
-            const notes=(prompt('Notes (optional)','')||'').trim();
+            const durationText=await promptSheet('Event duration',{label:'Minutes',value:'60',confirmLabel:'Continue'});
+            const minutes=Number(durationText); if(!Number.isFinite(minutes)||minutes<=0) { notify('Enter a valid duration',true); return; }
+            const link=((await promptSheet('Optional meeting link',{label:'Link',required:false,confirmLabel:'Continue'}))||'').trim();
+            const notes=((await promptSheet('Optional notes',{label:'Notes',multiline:true,required:false,confirmLabel:'Review'}))||'').trim();
             value=JSON.stringify({title:title.trim(),start:start.toISOString(),end:new Date(start.getTime()+minutes*60000).toISOString(),joinURL:link||null,notes:notes||null});
           }
           if(moduleID==='calendar'&&actionID==='edit') {
             let draft; try { draft=JSON.parse(actionValue||''); } catch(error) { notify('This event changed. Refresh and try again.',true); return; }
-            const title=prompt('Event title',draft.title||''); if(!title||!title.trim()) return;
+            const title=await promptSheet('Edit event',{label:'Event title',value:draft.title||'',confirmLabel:'Continue'}); if(!title||!title.trim()) return;
             const toLocal=value=>{ const date=new Date(value); const pad=n=>String(n).padStart(2,'0'); return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`; };
-            const startText=prompt('Start (YYYY-MM-DD HH:MM)',toLocal(draft.start)); if(!startText) return;
-            const endText=prompt('End (YYYY-MM-DD HH:MM)',toLocal(draft.end)); if(!endText) return;
+            const startText=await promptSheet('Event start',{label:'Start',value:toLocal(draft.start),confirmLabel:'Continue'}); if(!startText) return;
+            const endText=await promptSheet('Event end',{label:'End',value:toLocal(draft.end),confirmLabel:'Continue'}); if(!endText) return;
             const start=new Date(startText.replace(' ','T')); const end=new Date(endText.replace(' ','T'));
             if(Number.isNaN(start.getTime())||Number.isNaN(end.getTime())||end<=start) { notify('Enter a valid time range',true); return; }
-            const link=(prompt('Meeting link (optional)',draft.joinURL||'')||'').trim();
-            const notes=(prompt('Notes (optional)',draft.notes||'')||'').trim();
+            const link=((await promptSheet('Optional meeting link',{label:'Link',value:draft.joinURL||'',required:false,confirmLabel:'Continue'}))||'').trim();
+            const notes=((await promptSheet('Optional notes',{label:'Notes',value:draft.notes||'',multiline:true,required:false,confirmLabel:'Review'}))||'').trim();
             value=JSON.stringify({title:title.trim(),start:start.toISOString(),end:end.toISOString(),joinURL:link||null,notes:notes||null});
           }
           if(moduleID==='teleprompter'&&actionID==='set') {
-            value=prompt('Teleprompter script'); if(!value||!value.trim()) return; value=value.trim();
+            value=await promptSheet('Teleprompter script',{label:'Script',multiline:true,confirmLabel:'Review'}); if(!value||!value.trim()) return; value=value.trim();
           }
           if(moduleID==='notes'&&(actionID==='append'||actionID==='replace')) {
             let seed;
             if(actionID==='replace') { try { seed=JSON.parse(actionValue||''); } catch(error) { seed=null; } }
-            value=prompt(actionID==='append'?'Append to note':'Edit note',actionID==='replace'?(seed?.text||payload):'');
+            value=await promptSheet(actionID==='append'?'Append to note':'Edit note',{label:'Note',value:actionID==='replace'?(seed?.text||payload):'',multiline:true,confirmLabel:'Review'});
             if(!value||!value.trim()) return; value=value.trim();
             if(actionID==='replace') value=JSON.stringify({text:value,category:seed?.category||null,baseRevision:seed?.baseRevision||null});
           }
           if(moduleID==='notes'&&actionID==='setCategory') {
             let seed; try { seed=JSON.parse(actionValue||''); } catch(error) { notify('This note changed. Refresh and try again.',true); return; }
-            const category=(prompt('Category (leave blank to clear)',seed.category||'')||'').trim();
+            const category=((await promptSheet('Note category',{label:'Category',value:seed.category||'',required:false,confirmLabel:'Review'}))||'').trim();
             if(category.length>40) { notify('Category is too long',true); return; }
             value=JSON.stringify({text:seed.text,category:category||null,baseRevision:seed.baseRevision});
           }
@@ -719,14 +935,14 @@ enum RemoteApprovalWebApp {
             const draft=await collectClaudeDraft(actionID); if(!draft) return; value=JSON.stringify(draft);
           }
           if(moduleID==='audio'&&actionID==='setVolume') {
-            const requested=prompt('Mac output volume (0–100)',actionValue||'50'); if(requested===null) return;
+            const requested=await promptSheet('Mac output volume',{label:'Volume, 0–100',value:actionValue||'50',confirmLabel:'Review'}); if(requested===null) return;
             const volume=Number(requested); if(!Number.isInteger(volume)||volume<0||volume>100) { notify('Choose a whole number from 0 to 100',true); return; }
             value=String(volume);
           }
           try {
             const preparedResponse=await fetch('/api/hub/actions/prepare',{method:'POST',headers:{...authHeaders(),'Content-Type':'application/json'},body:JSON.stringify({intent:{moduleID,actionID,targetID,value}})});
             const prepared=await preparedResponse.json(); if(!preparedResponse.ok) throw new Error(prepared.error||'Action is unavailable');
-            if(!confirm(prepared.preview)) return;
+            if(!await confirmSheet(prepared.preview,{title:'Review Mac action',confirmLabel:'Do it'})) return;
             const executeResponse=await fetch('/api/hub/actions/execute',{method:'POST',headers:{...authHeaders(),'Content-Type':'application/json'},body:JSON.stringify({intent:prepared.intent,actionToken:prepared.actionToken})});
             const result=await executeResponse.json(); if(!executeResponse.ok) throw new Error(result.error||'Action failed');
             notify(result.message); await refreshHub();
@@ -748,12 +964,12 @@ enum RemoteApprovalWebApp {
         }
 
         async function refresh() {
-          if(!deviceToken) { pair.classList.remove('hidden'); approvals.innerHTML=''; questions.innerHTML=''; hub.innerHTML=''; hubConfig.innerHTML=''; hubConfig.classList.add('hidden'); modes.classList.add('hidden'); hubTitle.classList.add('hidden'); approvalTitle.classList.add('hidden'); questionTitle.classList.add('hidden'); empty.classList.add('hidden'); setStatus('Pairing required'); return; }
+          if(!deviceToken) { pair.classList.remove('hidden'); approvals.innerHTML=''; questions.innerHTML=''; tasks.innerHTML=''; taskComposer.classList.add('hidden'); taskTitle.classList.add('hidden'); hub.innerHTML=''; hubConfig.innerHTML=''; hubConfig.classList.add('hidden'); modes.classList.add('hidden'); hubTitle.classList.add('hidden'); approvalTitle.classList.add('hidden'); questionTitle.classList.add('hidden'); empty.classList.add('hidden'); setStatus('Pairing required'); return; }
           try {
             const response=await fetch('/api/approvals',{headers:authHeaders(),cache:'no-store'});
             if(response.status===401) { deviceToken=''; localStorage.removeItem(tokenKey); pair.classList.remove('hidden'); setStatus('Pairing required'); return; }
             const body=await response.json(); if(!response.ok) throw new Error(body.error||'Mac unavailable');
-            pair.classList.add('hidden'); render(body.approvals||[]); renderQuestions(body.questions||[]); await refreshHub(); setStatus(`${(body.approvals||[]).length+(body.questions||[]).length} waiting`,true);
+            pair.classList.add('hidden'); render(body.approvals||[]); renderQuestions(body.questions||[]); await Promise.all([refreshTasks(),refreshHub()]); setStatus(`${(body.approvals||[]).length+(body.questions||[]).length} waiting`,true);
           } catch(error) { setStatus('Mac offline'); }
         }
 
@@ -762,12 +978,14 @@ enum RemoteApprovalWebApp {
           return Boolean(
             claudeInput.resolve
             || mediaSeekState.active
+            || !reviewDialog.classList.contains('hidden')
             || (active&&active.matches('input:not([type="range"]),textarea,select,[contenteditable="true"]'))
           );
         }
 
         document.getElementById('pairButton').addEventListener('click',pairDevice);
         document.getElementById('code').addEventListener('keydown',event=>{if(event.key==='Enter')pairDevice();});
+        taskCreate.addEventListener('click',createTask);
         modes.querySelectorAll('[data-mode]').forEach(button=>button.addEventListener('click',()=>setMode(button.dataset.mode)));
         mediaPreflightDone.addEventListener('click',closeMediaPreflight);
         claudeHold.addEventListener('pointerdown',event=>{event.preventDefault();claudeHold.setPointerCapture?.(event.pointerId);startClaudeSpeech(false);});
@@ -782,10 +1000,20 @@ enum RemoteApprovalWebApp {
           const prompt=claudePrompt.value.trim(); if(!prompt) { claudePrompt.focus(); return; }
           closeClaudeComposer({prompt,contexts:claudeInput.contexts});
         });
+        reviewCancel.addEventListener('click',()=>closeReviewDialog(null));
+        reviewForm.addEventListener('submit',event=>{
+          event.preventDefault();
+          if(reviewLabel.classList.contains('hidden')) { closeReviewDialog(true); return; }
+          const field=reviewState.multiline?reviewTextarea:reviewInput;
+          if(field.required&&!field.value.trim()) { field.focus(); return; }
+          closeReviewDialog(field.value);
+        });
+        reviewDialog.addEventListener('click',event=>{if(event.target===reviewDialog)closeReviewDialog(null);});
+        document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!reviewDialog.classList.contains('hidden'))closeReviewDialog(null);});
         if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
         refresh(); setInterval(()=>{if(document.visibilityState==='visible'&&!userIsEditing())refresh();},4000);
-        document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){closeMediaPreflight();closeClaudeComposer(null);}else refresh();});
-        window.addEventListener('pagehide',()=>{releaseLocalMedia();closeClaudeComposer(null);});
+        document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){closeMediaPreflight();closeClaudeComposer(null);closeReviewDialog(null);}else refresh();});
+        window.addEventListener('pagehide',()=>{releaseLocalMedia();closeClaudeComposer(null);closeReviewDialog(null);});
       </script>
     </body>
     </html>

@@ -22,6 +22,207 @@ final class PersonalHubProtocolTests: XCTestCase {
         }
     }
 
+    func testBuddyParityValidatorRejectsUnclassifiedSnapshotActions() {
+        let snapshot = PersonalHubSnapshot(
+            serverName: "Greg's Mac",
+            requestedMode: .work,
+            resolvedMode: .work,
+            modules: [
+                PersonalHubModuleSnapshot(
+                    id: .calendar,
+                    availability: .ready,
+                    summary: "Today",
+                    items: [
+                        PersonalHubItem(
+                            id: "event-1",
+                            title: "Standup",
+                            actions: [.init(id: "join", label: "Join")]
+                        )
+                    ],
+                    actions: [.init(id: "teleport", label: "Teleport")],
+                    calendarMonth: PersonalHubCalendarMonth(
+                        displayedMonth: Date(timeIntervalSince1970: 1_800_000_000),
+                        selectedDate: Date(timeIntervalSince1970: 1_800_000_000),
+                        days: [],
+                        selectedEvents: [
+                            PersonalHubItem(
+                                id: "event-2",
+                                title: "Review",
+                                actions: [.init(id: "unknownCalendarAction", label: "Mystery")]
+                            )
+                        ]
+                    )
+                )
+            ]
+        )
+
+        let violations = PersonalHubBuddyParity.validate(snapshot: snapshot)
+        XCTAssertEqual(violations.count, 2)
+        XCTAssertTrue(violations.contains {
+            $0.moduleID == .calendar
+                && $0.actionID == "teleport"
+                && $0.location == "module.actions"
+                && $0.reason == "missing Buddy action disposition"
+        })
+        XCTAssertTrue(violations.contains {
+            $0.moduleID == .calendar
+                && $0.actionID == "unknownCalendarAction"
+                && $0.location == "calendarMonth.selectedEvents[event-2].actions"
+                && $0.reason == "missing Buddy action disposition"
+        })
+    }
+
+    func testBuddyParityValidatorAcceptsKnownNativeReadOnlyAndMacOnlyActions() {
+        let snapshot = PersonalHubSnapshot(
+            serverName: "Greg's Mac",
+            requestedMode: .code,
+            resolvedMode: .code,
+            modules: [
+                PersonalHubModuleSnapshot(
+                    id: .downloads,
+                    availability: .ready,
+                    summary: "Recent downloads",
+                    items: [
+                        PersonalHubItem(
+                            id: "download-1",
+                            title: "deck.pdf",
+                            actions: [
+                                .init(id: "downloadToDevice", label: "Download"),
+                                .init(id: "reveal", label: "Reveal on Mac")
+                            ]
+                        )
+                    ],
+                    actions: [.init(id: "refresh", label: "Refresh")]
+                ),
+                PersonalHubModuleSnapshot(
+                    id: .system,
+                    availability: .ready,
+                    summary: "Healthy",
+                    actions: [.init(id: "refresh", label: "Refresh")]
+                )
+            ]
+        )
+
+        XCTAssertEqual(PersonalHubBuddyParity.validate(snapshot: snapshot), [])
+    }
+
+    func testBuddyParityIdentifiesReadOnlyRefreshActions() {
+        XCTAssertTrue(PersonalHubBuddyParity.isReadOnlyAction(moduleID: .agents, actionID: "refresh"))
+        XCTAssertTrue(PersonalHubBuddyParity.isReadOnlyAction(moduleID: .github, actionID: "refresh"))
+        XCTAssertTrue(PersonalHubBuddyParity.isReadOnlyAction(moduleID: .battery, actionID: "refresh"))
+        XCTAssertEqual(PersonalHubBuddyParity.disposition(for: .system, actionID: "refresh"), .readOnly)
+        XCTAssertEqual(PersonalHubBuddyParity.disposition(for: .downloads, actionID: "refresh"), .native)
+        XCTAssertFalse(PersonalHubBuddyParity.isReadOnlyAction(moduleID: .reminders, actionID: "complete"))
+        XCTAssertNil(PersonalHubBuddyParity.disposition(for: .calendar, actionID: "teleport"))
+    }
+
+    func testBuddyParityValidatorAcceptsTaskNoteAndPresenterActionMatrix() throws {
+        let noteDraft = PersonalHubNoteDraft(
+            text: "Launch checklist\n- [ ] Record demo",
+            category: "Work",
+            baseRevision: 3
+        )
+        let checklistMutation = try XCTUnwrap(
+            PersonalHubChecklistMutation(lineIndex: 1, baseRevision: 3).encodedActionValue()
+        )
+        let noteValue = try XCTUnwrap(noteDraft.encodedActionValue())
+
+        let snapshot = PersonalHubSnapshot(
+            serverName: "Greg's Mac",
+            requestedMode: .work,
+            resolvedMode: .work,
+            modules: [
+                PersonalHubModuleSnapshot(
+                    id: .reminders,
+                    availability: .ready,
+                    summary: "Tasks",
+                    items: [
+                        PersonalHubItem(
+                            id: "list:personal",
+                            title: "Personal",
+                            actions: [
+                                .init(id: "deleteList", label: "Delete list", targetID: "personal")
+                            ]
+                        ),
+                        PersonalHubItem(
+                            id: "task:first",
+                            title: "Finish deck",
+                            actions: [
+                                .init(id: "copyToDevice", label: "Copy", targetID: "task:first"),
+                                .init(id: "complete", label: "Complete", targetID: "task:first"),
+                                .init(id: "moveDown", label: "Down", targetID: "task:first"),
+                                .init(id: "delete", label: "Delete", targetID: "task:first"),
+                            ]
+                        ),
+                        PersonalHubItem(
+                            id: "task:second",
+                            title: "Book flights",
+                            actions: [
+                                .init(id: "moveUp", label: "Up", targetID: "task:second"),
+                                .init(id: "moveTop", label: "Top", targetID: "task:second"),
+                                .init(id: "restore", label: "Restore", targetID: "task:second"),
+                            ]
+                        ),
+                    ],
+                    actions: [
+                        .init(id: "add", label: "Add task"),
+                        .init(id: "addList", label: "Add list"),
+                    ]
+                ),
+                PersonalHubModuleSnapshot(
+                    id: .notes,
+                    availability: .ready,
+                    summary: "Notes",
+                    items: [
+                        PersonalHubItem(
+                            id: "note:launch",
+                            title: "Launch checklist",
+                            actions: [
+                                .init(id: "copyToDevice", label: "Copy", targetID: "note:launch"),
+                                .init(id: "append", label: "Append", targetID: "note:launch", value: noteValue),
+                                .init(id: "replace", label: "Edit", targetID: "note:launch", value: noteValue),
+                                .init(id: "setCategory", label: "Category", targetID: "note:launch", value: noteValue),
+                                .init(id: "undo", label: "Undo", targetID: "note:launch"),
+                                .init(id: "toggleChecklist", label: "Complete", targetID: "note:launch", value: checklistMutation),
+                                .init(id: "delete", label: "Delete", targetID: "note:launch"),
+                            ]
+                        )
+                    ],
+                    actions: [.init(id: "add", label: "Add note")]
+                ),
+                PersonalHubModuleSnapshot(
+                    id: .teleprompter,
+                    availability: .ready,
+                    summary: "Ready",
+                    items: [
+                        PersonalHubItem(
+                            id: "script:launch",
+                            title: "Launch remarks",
+                            actions: [
+                                .init(id: "presentOnDevice", label: "Present", targetID: "script:launch"),
+                                .init(id: "copyToDevice", label: "Copy", targetID: "script:launch"),
+                            ]
+                        )
+                    ],
+                    actions: [.init(id: "set", label: "Edit script")]
+                ),
+                PersonalHubModuleSnapshot(
+                    id: .quickToggles,
+                    availability: .ready,
+                    summary: "Mac controls",
+                    actions: [
+                        .init(id: "darkMode", label: "Dark / Light"),
+                        .init(id: "mute", label: "Mute"),
+                        .init(id: "displaySleep", label: "Sleep display"),
+                        .init(id: "lockMac", label: "Lock Mac"),
+                    ]
+                )
+            ]
+        )
+
+        XCTAssertEqual(PersonalHubBuddyParity.validate(snapshot: snapshot), [])
+    }
+
     func testPersonalHubDeepLinksRoundTripAllRoutesAndEscapedQuickJotText() throws {
         let routes: [PersonalHubDeepLink] = [
             .pendingApproval(id: nil),

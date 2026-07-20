@@ -1,4 +1,6 @@
 import XCTest
+import CoreLocation
+import EventKit
 @testable import CodeIsland
 
 @MainActor
@@ -8,6 +10,20 @@ final class GlancesModelTests: XCTestCase {
         XCTAssertTrue(GlancesModel.canRequestFullCalendarAccess(.writeOnly))
         XCTAssertFalse(GlancesModel.canRequestFullCalendarAccess(.fullAccess))
         XCTAssertFalse(GlancesModel.canRequestFullCalendarAccess(.denied))
+    }
+
+    func testAuthorizationStatusNamesAreStableForHealthDiagnostics() {
+        XCTAssertEqual(GlancesModel.eventKitAuthorizationStatusName(.notDetermined), "notDetermined")
+        XCTAssertEqual(GlancesModel.eventKitAuthorizationStatusName(.restricted), "restricted")
+        XCTAssertEqual(GlancesModel.eventKitAuthorizationStatusName(.denied), "denied")
+        XCTAssertEqual(GlancesModel.eventKitAuthorizationStatusName(.fullAccess), "fullAccess")
+        XCTAssertEqual(GlancesModel.eventKitAuthorizationStatusName(.writeOnly), "writeOnly")
+
+        XCTAssertEqual(GlancesModel.locationAuthorizationStatusName(.notDetermined), "notDetermined")
+        XCTAssertEqual(GlancesModel.locationAuthorizationStatusName(.restricted), "restricted")
+        XCTAssertEqual(GlancesModel.locationAuthorizationStatusName(.denied), "denied")
+        XCTAssertEqual(GlancesModel.locationAuthorizationStatusName(.authorizedAlways), "authorized")
+        XCTAssertEqual(GlancesModel.locationAuthorizationStatusName(.authorized), "authorized")
     }
 
     func testReminderSelectionKeepsValidStoredLists() {
@@ -134,6 +150,24 @@ final class GlancesModelTests: XCTestCase {
 
         XCTAssertEqual(firstID, repeatedID)
         XCTAssertNotEqual(firstID, secondID)
+    }
+
+    func testCalendarActionsResolveEventKitSourceIdentifier() {
+        let event = GlancesModel.EventInfo(
+            id: "event-123#456",
+            sourceID: "event-123",
+            title: "CodeIsland acceptance",
+            start: Date(timeIntervalSince1970: 1_000),
+            end: Date(timeIntervalSince1970: 2_000),
+            joinURL: nil,
+            notes: nil,
+            isAllDay: false,
+            calendarTitle: "Calendar",
+            isEditable: true
+        )
+
+        XCTAssertEqual(GlancesModel.event(forSourceID: "event-123", in: [event]), event)
+        XCTAssertNil(GlancesModel.event(forSourceID: event.id, in: [event]))
     }
 
     func testGeocodingURLExtractsZIPFromNaturalLocationInput() throws {

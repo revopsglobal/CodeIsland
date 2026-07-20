@@ -62,9 +62,14 @@ enum NotchHoverInteraction {
 enum ToolNameDisplay {
     static let compactMaxCharacters = 24
     static let compactMaxWidth: CGFloat = 120
+    static let englishFallback = "Activity"
 
     static func compact(_ tool: String, maxCharacters: Int = compactMaxCharacters) -> String {
         let trimmed = tool.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Tool names arrive from provider hooks and do not pass through L10n. Keep
+        // Greg's personal notch status English even when an upstream hook emits a
+        // localized label.
+        guard !containsCJKIdeograph(trimmed) else { return englishFallback }
         guard maxCharacters > 3, trimmed.count > maxCharacters else { return trimmed }
 
         let components = trimmed.components(separatedBy: "__")
@@ -79,6 +84,17 @@ enum ToolNameDisplay {
         let suffixCount = meaningfulSuffix.map { min($0.count, suffixBudget) } ?? max(4, maxCharacters / 2)
         let prefixCount = max(1, maxCharacters - suffixCount - 3)
         return "\(trimmed.prefix(prefixCount))...\(trimmed.suffix(suffixCount))"
+    }
+
+    private static func containsCJKIdeograph(_ value: String) -> Bool {
+        value.unicodeScalars.contains { scalar in
+            switch scalar.value {
+            case 0x3400...0x4DBF, 0x4E00...0x9FFF, 0x20000...0x2FA1F:
+                return true
+            default:
+                return false
+            }
+        }
     }
 }
 

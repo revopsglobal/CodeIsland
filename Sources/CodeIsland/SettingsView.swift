@@ -1556,12 +1556,42 @@ private struct BuddyPage: View {
     @AppStorage(SettingsKey.remoteApprovalAPNSKeyID) private var apnsKeyID: String = SettingsDefaults.remoteApprovalAPNSKeyID
     @AppStorage(SettingsKey.remoteApprovalAPNSPrivateKeyPath) private var apnsPrivateKeyPath: String = SettingsDefaults.remoteApprovalAPNSPrivateKeyPath
     @AppStorage(SettingsKey.remoteApprovalAPNSTopic) private var apnsTopic: String = SettingsDefaults.remoteApprovalAPNSTopic
+    @AppStorage(SettingsKey.remoteApprovalTelegramEnabled) private var telegramEnabled: Bool = SettingsDefaults.remoteApprovalTelegramEnabled
+    @AppStorage(SettingsKey.remoteApprovalTelegramBotToken) private var telegramBotToken: String = SettingsDefaults.remoteApprovalTelegramBotToken
+    @AppStorage(SettingsKey.remoteApprovalTelegramChatID) private var telegramChatID: String = SettingsDefaults.remoteApprovalTelegramChatID
+    @AppStorage(SettingsKey.remoteApprovalExpectedClientVersion) private var expectedBuddyVersion: String = SettingsDefaults.remoteApprovalExpectedClientVersion
+    @AppStorage(SettingsKey.remoteApprovalExpectedClientBuild) private var expectedBuddyBuild: String = SettingsDefaults.remoteApprovalExpectedClientBuild
     @ObservedObject private var appleCompanion = AppleCompanionPublisher.shared
     @ObservedObject private var remoteApprovals = RemoteApprovalService.shared
     @ObservedObject private var apns = APNSNotificationSender.shared
+    @ObservedObject private var telegram = TelegramAttentionNotifier.shared
     @State private var refreshTick = 0
 
     private var bridge: ESP32BridgeManager { ESP32BridgeManager.shared }
+
+    private var canSendTelegramTestAlert: Bool {
+        telegramEnabled
+            && !telegram.isSending
+            && !telegramBotToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !telegramChatID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var buddyBuildExpectation: RemoteBuddyBuildExpectation {
+        RemoteBuddyBuildExpectation(expectedVersion: expectedBuddyVersion, expectedBuild: expectedBuddyBuild)
+    }
+
+    private var buddyInstallGuidance: RemoteBuddyInstallGuidance {
+        RemoteBuddyInstallGuidance(expectedVersion: expectedBuddyVersion, expectedBuild: expectedBuddyBuild)
+    }
+
+    private var shouldShowBuddyInstallGuidance: Bool {
+        switch buddyBuildExpectation.status(for: remoteApprovals.pairedDevices) {
+        case .missing, .stale:
+            return true
+        case .notConfigured, .matched:
+            return false
+        }
+    }
 
     private var localizedPowerError: String {
         switch bridge.lastError {
@@ -1966,6 +1996,19 @@ private struct BuddyPage: View {
                     }
                 }
 
+                buddyBuildStatusRow
+                if shouldShowBuddyInstallGuidance {
+                    buddyTestFlightActionRow
+                }
+
+                DisclosureGroup("TestFlight acceptance target") {
+                    TextField("Expected Buddy version", text: $expectedBuddyVersion)
+                    TextField("Expected Buddy build", text: $expectedBuddyBuild)
+                    Text("The latest-build acceptance gate syncs these fields from the newest valid TestFlight upload. CodeIsland uses them to warn when a paired iPhone is still running an older Buddy build.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 Toggle("Keep this Mac awake for remote access", isOn: $remotePreventSleep)
                     .onChange(of: remotePreventSleep) { _, _ in
                         remoteApprovals.refreshSleepActivity()
@@ -2024,6 +2067,38 @@ private struct BuddyPage: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("Telegram fallback") {
+                Toggle("Text me when CodeIsland needs attention", isOn: $telegramEnabled)
+
+                SecureField("Bot token", text: $telegramBotToken)
+                    .disabled(!telegramEnabled)
+                TextField("Chat ID", text: $telegramChatID)
+                    .disabled(!telegramEnabled)
+
+                Button {
+                    telegram.sendTestAlert()
+                } label: {
+                    Label(telegram.isSending ? "Sending test alert…" : "Send test Telegram alert", systemImage: "paperplane")
+                }
+                .disabled(!canSendTelegramTestAlert)
+
+                if let delivered = telegram.lastDeliveryAt {
+                    Label("Last delivered \(delivered.formatted(date: .omitted, time: .shortened))", systemImage: "checkmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                }
+                if let error = telegram.lastError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .textSelection(.enabled)
+                }
+
+                Text("Optional personal backup for when APNs or Live Activities miss you. It only sends redacted approval/question alerts, a Buddy deep link, the expected Buddy TestFlight build when known, and your private Tailscale web link; the actual decision still happens in Buddy or the CodeIsland web app.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section {
                 Text(l10n["buddy_desc"])
                     .font(.caption)
@@ -2072,6 +2147,57 @@ private struct BuddyPage: View {
     private var appleCompanionStatusColor: Color {
         guard appleCompanion.enabled else { return .secondary }
         return appleCompanion.connectedPeerNames.isEmpty ? .orange : .green
+    }
+
+    @ViewBuilder
+    private var buddyBuildStatusRow: some View {
+        switch buddyBuildExpectation.status(for: remoteApprovals.pairedDevices) {
+        case .notConfigured:
+            EmptyView()
+        case .missing(_, let expectedBuild):
+            Label("Open CodeIsland Buddy \(expectedBuild) from TestFlight so this Mac can confirm the current iPhone build.", systemImage: "iphone.badge.exclamationmark")
+                .font(.caption)
+                .foregroundStyle(.orange)
+        case .matched(let deviceName, let lastSeenAt):
+            HStack(spacing: 6) {
+                Label("\(deviceName) is on the expected Buddy build", systemImage: "checkmark.circle.fill")
+                Text(lastSeenAt, style: .relative)
+            }
+            .font(.caption)
+            .foregroundStyle(.green)
+        case .stale(_, let expectedBuild, let newestDeviceName, let newestVersion, let newestBuild, let newestLastSeenAt):
+            VStack(alignment: .leading, spacing: 4) {
+                Label("\(newestDeviceName) is running an older Buddy build", systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                Text("Install/open TestFlight build \(expectedBuild). Last seen: \(newestVersion ?? "unknown") (\(newestBuild ?? "unknown")) \(newestLastSeenAt.formatted(date: .omitted, time: .shortened)).")
+                    .foregroundStyle(.secondary)
+            }
+            .font(.caption)
+        }
+    }
+
+    private var buddyTestFlightActionRow: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(buddyInstallGuidance.instruction)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack {
+                Button {
+                    NSWorkspace.shared.open(RemoteBuddyInstallGuidance.testFlightURL)
+                } label: {
+                    Label("Open TestFlight", systemImage: "square.and.arrow.up")
+                }
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(buddyInstallGuidance.copyText, forType: .string)
+                } label: {
+                    Label("Copy install steps", systemImage: "doc.on.doc")
+                }
+            }
+            .buttonStyle(.bordered)
+        }
+        .padding(10)
+        .background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     private func pairingExpiryText(at date: Date) -> String {

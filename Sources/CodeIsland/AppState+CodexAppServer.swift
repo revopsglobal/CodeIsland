@@ -47,10 +47,9 @@ extension AppState {
 
         codexAppServerObservers = observers
 
-        // Catch up with whatever state we booted into.
-        if NSWorkspace.shared.runningApplications.contains(where: { $0.bundleIdentifier == AppState.codexAppBundleId }) {
-            startCodexAppServerClientIfPossible()
-        }
+        // Remote iPhone tasks must work even when Codex Desktop is closed, so
+        // the validated host CLI fallback is also a supported app-server host.
+        startCodexAppServerClientIfPossible()
     }
 
     func stopCodexAppServerWatcher() {
@@ -91,20 +90,29 @@ extension AppState {
     }
 
     static func codexAppServerExecutableURL(
+        explicitExecutablePath: String? = UserDefaults.standard.string(forKey: "CodeIslandCodexExecutablePath"),
         runningBundleURLs: [URL] = NSWorkspace.shared.runningApplications.compactMap { app in
             app.bundleIdentifier == AppState.codexAppBundleId ? app.bundleURL : nil
         },
         fallbackPaths: [String] = [
             CodexAppServerClient.defaultExecutablePath,
-            NSHomeDirectory() + "/Applications/Codex.app/Contents/Resources/codex"
+            NSHomeDirectory() + "/Applications/Codex.app/Contents/Resources/codex",
+            "/usr/local/bin/codex",
+            "/opt/homebrew/bin/codex"
         ],
+        loginPathCandidates: [String] = AppState.codexLoginPathCandidates(),
         fileManager: FileManager = .default
     ) -> URL? {
         var candidates: [URL] = []
+        if let explicitExecutablePath,
+           !explicitExecutablePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            candidates.append(URL(fileURLWithPath: explicitExecutablePath))
+        }
         for bundleURL in runningBundleURLs {
             candidates.append(bundleURL.appendingPathComponent("Contents/Resources/codex"))
         }
         candidates.append(contentsOf: fallbackPaths.map { URL(fileURLWithPath: $0) })
+        candidates.append(contentsOf: loginPathCandidates.map { URL(fileURLWithPath: $0) })
 
         var seen = Set<String>()
         for candidate in candidates {
@@ -115,6 +123,27 @@ extension AppState {
             }
         }
         return nil
+    }
+
+    nonisolated static func codexLoginPathCandidates() -> [String] {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        process.arguments = ["-lc", "command -v codex"]
+        let output = Pipe()
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            return []
+        }
+        guard process.terminationStatus == 0,
+              let value = String(data: output.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+              value.hasPrefix("/")
+        else { return [] }
+        return [value]
     }
 
     private func stopCodexAppServerClient() {
@@ -134,6 +163,7 @@ extension AppState {
     // MARK: - Notification dispatch
 
     func handleCodexAppServerMessage(_ message: CodexJSONRPCMessage) {
+        codexRemoteTaskRunner?.handle(message)
         let params = message.raw["params"]?.asObject ?? [:]
 
         switch message.kind {

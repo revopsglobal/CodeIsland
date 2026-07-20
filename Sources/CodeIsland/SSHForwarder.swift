@@ -45,9 +45,9 @@ final class SSHForwarder {
         // -R bind never races the leftover socket.
         let cleanupArguments = Self.cleanupArguments(host: host, remoteSocketPath: remoteSocketPath)
         let cleanupEnvironment = buildEnvironment(host: host)
-        DispatchQueue.global(qos: .userInitiated).async {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             Self.runCleanup(arguments: cleanupArguments, environment: cleanupEnvironment)
-            DispatchQueue.main.async { [weak self] in
+            DispatchQueue.main.async {
                 guard let self else { return }
                 // A newer connect()/disconnect() may have superseded this attempt
                 // while the cleanup SSH was in flight — bail if so.

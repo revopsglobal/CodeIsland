@@ -72,6 +72,7 @@ mac_build=""
 mac_archs=""
 mac_signature_valid=false
 mac_team_id=""
+mac_cdhash=""
 mac_pid=""
 mac_running=false
 
@@ -87,6 +88,7 @@ if [[ -d "$APP_PATH" ]]; then
     fi
     signing_details="$($CODESIGN_BIN -dv --verbose=4 "$APP_PATH" 2>&1 || true)"
     mac_team_id="$(printf '%s\n' "$signing_details" | awk -F= '/^TeamIdentifier=/{print $2; exit}')"
+    mac_cdhash="$(printf '%s\n' "$signing_details" | awk -F= '/^CDHash=/{print $2; exit}')"
     mac_pid="$($PGREP_BIN -f "^$APP_PATH/Contents/MacOS/CodeIsland$" 2>/dev/null | head -n 1 || true)"
     if [[ -n "$mac_pid" ]]; then
         mac_running=true
@@ -127,18 +129,56 @@ fi
 
 expected_client_configured=false
 physical_match_count=0
+newest_physical_device='null'
+eligible_production_device_count=0
+ignored_non_production_build_device_count=0
 if [[ -n "$EXPECTED_CLIENT_VERSION" && -n "$EXPECTED_CLIENT_BUILD" ]]; then
     expected_client_configured=true
+    eligible_production_device_count="$(printf '%s' "$devices" | jq \
+        '[.[] | select(.pushEnvironment == "production")] | length')"
+    ignored_non_production_build_device_count="$(printf '%s' "$devices" | jq \
+        '[.[] | select(.pushEnvironment != "production") | select((.clientVersion // "") != "" or (.clientBuild // "") != "")] | length')"
     physical_match_count="$(printf '%s' "$devices" | jq \
         --arg version "$EXPECTED_CLIENT_VERSION" \
         --arg build "$EXPECTED_CLIENT_BUILD" \
-        '[.[] | select(.clientVersion == $version and .clientBuild == $build)] | length')"
+        '[.[] | select(.pushEnvironment == "production") | select(.clientVersion == $version and .clientBuild == $build)] | length')"
+    newest_physical_device="$(printf '%s' "$devices" | jq -c \
+        '[.[] | select(.pushEnvironment == "production") | select((.clientVersion // "") != "" or (.clientBuild // "") != "")] |
+        sort_by(.lastSeenAt // "") |
+        last // null')"
 fi
 
 physical_build_confirmed=false
 if [[ "$expected_client_configured" == "true" && "$physical_match_count" -gt 0 ]]; then
     physical_build_confirmed=true
 fi
+
+physical_build_status="$(jq -n -c \
+    --arg expectedClientVersion "$EXPECTED_CLIENT_VERSION" \
+    --arg expectedClientBuild "$EXPECTED_CLIENT_BUILD" \
+    --argjson expectedClientConfigured "$(bool_json "$expected_client_configured")" \
+    --argjson physicalMatchCount "$physical_match_count" \
+    --argjson eligibleProductionDeviceCount "$eligible_production_device_count" \
+    --argjson ignoredNonProductionBuildDeviceCount "$ignored_non_production_build_device_count" \
+    --argjson newestPhysicalDevice "$newest_physical_device" \
+    '{
+        expectedVersion:$expectedClientVersion,
+        expectedBuild:$expectedClientBuild,
+        eligibleProductionDeviceCount:$eligibleProductionDeviceCount,
+        ignoredNonProductionBuildDeviceCount:$ignoredNonProductionBuildDeviceCount,
+        newestObservedVersion:($newestPhysicalDevice.clientVersion // null),
+        newestObservedBuild:($newestPhysicalDevice.clientBuild // null),
+        newestObservedDeviceID:($newestPhysicalDevice.id // null),
+        newestObservedDeviceName:($newestPhysicalDevice.name // null),
+        newestObservedLastSeenAt:($newestPhysicalDevice.lastSeenAt // null),
+        status: (
+            if ($expectedClientConfigured | not) then "not-configured"
+            elif $physicalMatchCount > 0 then "matched"
+            elif $newestPhysicalDevice == null then "missing"
+            else "stale"
+            end
+        )
+    }')"
 
 delivery_healthy=false
 if [[ "$mac_installed" == "true" \
@@ -163,6 +203,7 @@ report="$(jq -n \
     --arg macBuild "$mac_build" \
     --arg macArchitectures "$mac_archs" \
     --arg macTeamIdentifier "$mac_team_id" \
+    --arg macCDHash "$mac_cdhash" \
     --arg macPid "$mac_pid" \
     --arg expectedMacVersion "$EXPECTED_MAC_VERSION" \
     --arg deviceStore "$DEVICE_STORE" \
@@ -181,6 +222,7 @@ report="$(jq -n \
     --argjson expectedClientConfigured "$(bool_json "$expected_client_configured")" \
     --argjson physicalMatchCount "$physical_match_count" \
     --argjson physicalBuildConfirmed "$(bool_json "$physical_build_confirmed")" \
+    --argjson physicalBuildStatus "$physical_build_status" \
     --argjson deliveryHealthy "$(bool_json "$delivery_healthy")" \
     --argjson complete "$(bool_json "$complete")" \
     '{
@@ -193,6 +235,7 @@ report="$(jq -n \
             architectures:$macArchitectures,
             signatureValid:$macSignatureValid,
             teamIdentifier:$macTeamIdentifier,
+            cdhash:($macCDHash | select(length > 0) // null),
             pid:$macPid,
             running:$macRunning
         },
@@ -210,6 +253,7 @@ report="$(jq -n \
             macTeamMatches:$macTeamMatches,
             deliveryHealthy:$deliveryHealthy,
             physicalMatchCount:$physicalMatchCount,
+            physicalBuildStatus:$physicalBuildStatus,
             physicalBuildConfirmed:$physicalBuildConfirmed,
             complete:$complete
         }

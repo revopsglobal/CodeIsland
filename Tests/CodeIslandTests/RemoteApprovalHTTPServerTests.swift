@@ -5,6 +5,45 @@ import CodeIslandCore
 
 @MainActor
 final class RemoteApprovalHTTPServerTests: XCTestCase {
+    func testHealthExposesReadOnlyPrivacyDiagnostics() async throws {
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CodeIslandHealthDiagnostics-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let service = RemoteApprovalService(
+            deviceStore: RemoteApprovalDeviceStore(
+                stateURL: temporaryDirectory.appendingPathComponent("devices.json")
+            ),
+            coordinator: RemoteApprovalCoordinator(
+                auditURL: temporaryDirectory.appendingPathComponent("audit.jsonl")
+            ),
+            localPortOverride: 0,
+            enabledOverride: true,
+            tailscaleConfigurator: { _, _ in "https://codeisland-health.invalid" }
+        )
+        let appState = AppState()
+        service.start(appState: appState)
+        defer { service.stop() }
+
+        let port = try await waitForPort(service)
+        let response = try await send(port: port, method: "GET", path: "/health")
+        XCTAssertEqual(response.response.statusCode, 200)
+
+        let status = try decode(RemoteServiceStatus.self, from: response.data)
+        let eventKitStates: Set<String> = [
+            "notDetermined", "restricted", "denied", "fullAccess", "writeOnly", "unknown",
+        ]
+        let locationStates: Set<String> = [
+            "notDetermined", "restricted", "denied", "authorized", "unknown",
+        ]
+        XCTAssertTrue(eventKitStates.contains(try XCTUnwrap(status.calendarAuthorizationStatus)))
+        XCTAssertTrue(eventKitStates.contains(try XCTUnwrap(status.remindersAuthorizationStatus)))
+        XCTAssertTrue(locationStates.contains(try XCTUnwrap(status.locationAuthorizationStatus)))
+        XCTAssertNotNil(status.manualWeatherLocationConfigured)
+        XCTAssertNotNil(status.reminderListSelectionConfigured)
+    }
+
     func testWebFallbackServesInstallableIdentityAssets() async throws {
         let temporaryDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("CodeIslandWebAssets-\(UUID().uuidString)", isDirectory: true)
@@ -42,6 +81,95 @@ final class RemoteApprovalHTTPServerTests: XCTestCase {
             "image/svg+xml; charset=utf-8"
         )
         XCTAssertTrue(String(decoding: icon.data, as: UTF8.self).contains("<svg"))
+    }
+
+    func testDelayedActivityStartedReceiptDoesNotRegressDismissedSummary() throws {
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CodeIslandReceiptOrdering-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let store = RemoteApprovalDeviceStore(
+            stateURL: temporaryDirectory.appendingPathComponent("devices.json")
+        )
+        let pair = try XCTUnwrap(store.pair(.init(code: store.pairingCode, deviceName: "iPhone")))
+        let observedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let dismissed = RemoteLiveActivityReceipt(
+            eventId: "dismissed-receipt",
+            source: .activityStateChanged,
+            requestId: "request-id",
+            kind: .question,
+            activityState: .dismissed,
+            observedAt: observedAt,
+            activitiesEnabled: true,
+            activeActivityCount: 0,
+            activeRequestIds: []
+        )
+        let delayedStart = RemoteLiveActivityReceipt(
+            eventId: "delayed-start-receipt",
+            source: .activityStarted,
+            requestId: "request-id",
+            kind: .question,
+            state: .pending,
+            activityState: .active,
+            observedAt: observedAt,
+            activitiesEnabled: true,
+            activeActivityCount: 0,
+            activeRequestIds: []
+        )
+
+        XCTAssertEqual(store.registerPushToken(
+            .init(environment: "production", liveActivityReceipts: [dismissed]),
+            deviceID: pair.deviceId
+        ), [dismissed])
+        XCTAssertEqual(store.registerPushToken(
+            .init(environment: "production", liveActivityReceipts: [delayedStart]),
+            deviceID: pair.deviceId
+        ), [delayedStart])
+
+        XCTAssertEqual(store.devices.first?.lastLiveActivityReceipt, dismissed)
+        XCTAssertEqual(
+            store.devices.first?.recentLiveActivityReceiptIDs,
+            [dismissed.eventId, delayedStart.eventId]
+        )
+    }
+
+    func testTerminalLiveActivityReceiptPrunesItsUpdateToken() throws {
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CodeIslandReceiptTokenCleanup-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let store = RemoteApprovalDeviceStore(
+            stateURL: temporaryDirectory.appendingPathComponent("devices.json")
+        )
+        let pair = try XCTUnwrap(store.pair(.init(code: store.pairingCode, deviceName: "iPhone")))
+        _ = store.registerPushToken(
+            .init(
+                environment: "production",
+                liveActivityUpdateTokens: ["request-id": String(repeating: "d", count: 64)]
+            ),
+            deviceID: pair.deviceId
+        )
+        XCTAssertNotNil(store.devices.first?.liveActivityUpdateTokens?["request-id"])
+
+        let dismissed = RemoteLiveActivityReceipt(
+            eventId: "dismissed-receipt",
+            source: .activityStateChanged,
+            requestId: "request-id",
+            kind: .question,
+            activityState: .dismissed,
+            observedAt: Date(timeIntervalSince1970: 1_800_000_000),
+            activitiesEnabled: true,
+            activeActivityCount: 0,
+            activeRequestIds: []
+        )
+        _ = store.registerPushToken(
+            .init(environment: "production", liveActivityReceipts: [dismissed]),
+            deviceID: pair.deviceId
+        )
+
+        XCTAssertNil(store.devices.first?.liveActivityUpdateTokens)
     }
 
     func testServerRetainsConnectionUntilResponseCompletes() async throws {
@@ -372,6 +500,11 @@ final class RemoteApprovalHTTPServerTests: XCTestCase {
             XCTAssertEqual(snapshot.requestedMode, mode)
             XCTAssertEqual(snapshot.resolvedMode, mode)
             XCTAssertEqual(snapshot.modules.map(\.id), PersonalHubCatalog.modules(for: mode))
+            XCTAssertEqual(
+                PersonalHubBuddyParity.validate(snapshot: snapshot).map(\.description),
+                [],
+                "Remote hub snapshot exposes actions without an explicit Buddy/iPhone/web parity disposition"
+            )
         }
 
         let configuredWorkRack: [PersonalHubModuleID] = [.reminders, .calendar, .downloads]

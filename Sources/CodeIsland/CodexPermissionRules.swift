@@ -83,6 +83,17 @@ struct CodexPermissionRules {
         return shellPrefix(from: command, maxTokens: 3)
     }
 
+    /// Remote task commands use the strict Edit & Test classifier instead of
+    /// the user's persistent Codex approval rules. This prevents a permissive
+    /// local profile from silently widening iPhone-created task authority.
+    static func remoteTaskDecision(
+        command: String,
+        workspaceURL: URL
+    ) -> RemoteTaskExecutionDecision {
+        RemoteTaskExecutionPolicy(workspaceURL: workspaceURL)
+            .decision(for: .shell(command))
+    }
+
     @discardableResult
     func persistAlwaysAllowRule(for event: HookEvent) -> Bool {
         if let mcpTool = Self.mcpToolApprovalTarget(for: event) {

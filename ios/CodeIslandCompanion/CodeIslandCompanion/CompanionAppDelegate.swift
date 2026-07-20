@@ -6,6 +6,7 @@ final class CompanionAppDelegate: NSObject, UIApplicationDelegate, UNUserNotific
     private static let pendingApprovalIDKey = "codeisland.remote.pendingApprovalID"
     private static let pendingQuestionIDKey = "codeisland.remote.pendingQuestionID"
     private static let pushHistoryKey = "codeisland.remote.pushHistory.v1"
+    private static let taskStateHistoryKey = "codeisland.remote.taskPushState.v1"
 
     func application(
         _ application: UIApplication,
@@ -88,6 +89,18 @@ final class CompanionAppDelegate: NSObject, UIApplicationDelegate, UNUserNotific
         var history = UserDefaults.standard.dictionary(forKey: Self.pushHistoryKey) as? [String: Double] ?? [:]
         let previous = history[envelope.requestKey].map(Date.init(timeIntervalSince1970:))
         guard envelope.isFresh(lastIssuedAt: previous) else { return false }
+        if envelope.kind == .task, let incomingState = envelope.taskState {
+            var taskStates = UserDefaults.standard.dictionary(forKey: Self.taskStateHistoryKey) as? [String: String] ?? [:]
+            let previousState = taskStates[envelope.requestID].flatMap(RemoteTaskState.init(rawValue:))
+            guard RemoteTaskAttentionPolicy.accepts(previousState: previousState, incomingState: incomingState) else {
+                return false
+            }
+            taskStates[envelope.requestID] = incomingState.rawValue
+            if taskStates.count > 64 {
+                taskStates = Dictionary(uniqueKeysWithValues: taskStates.prefix(64).map { ($0.key, $0.value) })
+            }
+            UserDefaults.standard.set(taskStates, forKey: Self.taskStateHistoryKey)
+        }
         history[envelope.requestKey] = envelope.issuedAt.timeIntervalSince1970
         if history.count > 64 {
             history = Dictionary(uniqueKeysWithValues: history
@@ -110,6 +123,8 @@ final class CompanionAppDelegate: NSObject, UIApplicationDelegate, UNUserNotific
             if UserDefaults.standard.string(forKey: Self.pendingQuestionIDKey) == envelope.requestID {
                 UserDefaults.standard.removeObject(forKey: Self.pendingQuestionIDKey)
             }
+        case (.task, _):
+            break
         }
 
         LiveActivityTokenMailbox.storeReceipt(
@@ -119,23 +134,31 @@ final class CompanionAppDelegate: NSObject, UIApplicationDelegate, UNUserNotific
             attentionState: envelope.state,
             activityState: nil
         )
-        postAttention(kind: envelope.kind, state: envelope.state, requestID: envelope.requestID)
+        postAttention(
+            kind: envelope.kind,
+            state: envelope.state,
+            requestID: envelope.requestID,
+            taskState: envelope.taskState
+        )
         return true
     }
 
     private func postAttention(
         kind: RemoteAttentionKind,
         state: RemoteAttentionState,
-        requestID: String
+        requestID: String,
+        taskState: RemoteTaskState? = nil
     ) {
+        var userInfo = [
+            "kind": kind.rawValue,
+            "state": state.rawValue,
+            "requestId": requestID,
+        ]
+        if let taskState { userInfo["taskState"] = taskState.rawValue }
         NotificationCenter.default.post(
             name: .codeIslandRemoteAttentionChanged,
             object: nil,
-            userInfo: [
-                "kind": kind.rawValue,
-                "state": state.rawValue,
-                "requestId": requestID,
-            ]
+            userInfo: userInfo
         )
     }
 }

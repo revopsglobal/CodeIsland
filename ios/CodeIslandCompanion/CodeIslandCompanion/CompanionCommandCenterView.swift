@@ -21,10 +21,18 @@ private enum CommandCenterDestination: String, CaseIterable, Identifiable {
     }
 }
 
-private enum CommandCenterSheet: String, Identifiable {
+private enum CommandCenterSheet: Identifiable {
     case more
+    case composer(String?, RemoteTaskProvider?)
+    case task(UUID)
 
-    var id: String { rawValue }
+    var id: String {
+        switch self {
+        case .more: return "more"
+        case .composer: return "composer"
+        case .task(let id): return "task:\(id.uuidString.lowercased())"
+        }
+    }
 }
 
 struct CompanionCommandCenterView: View {
@@ -38,41 +46,63 @@ struct CompanionCommandCenterView: View {
     @State private var destination = CommandCenterDestination.now
     @State private var presentedSheet: CommandCenterSheet?
     @State private var showsCaptureChoices = false
+    @State private var selectedAttentionID: String?
+    @State private var followedTaskID: UUID?
+    @AppStorage("companion.reviewedVerifiedTaskIDs")
+    private var reviewedVerifiedTaskIDsPayload = "[]"
 
     var body: some View {
-        ScrollView(.vertical) {
-            LazyVStack(alignment: .leading, spacing: 24) {
-                CompanionPresenceHeader()
-                    .environmentObject(connection)
-                    .environmentObject(remoteApprovals)
+        ZStack {
+            CompanionCommandBackground()
 
-                switch destination {
-                case .now:
-                    nowContent
-                case .sessions:
-                    CompanionSessionsSurface()
+            ScrollView(.vertical) {
+                LazyVStack(alignment: .leading, spacing: 20) {
+                    CompanionPresenceHeader()
                         .environmentObject(connection)
-                        .environmentObject(liveActivity)
                         .environmentObject(remoteApprovals)
-                        .transition(.opacity)
-                }
 
-                if let error = liveActivity.lastError {
-                    Label(error, systemImage: "livephoto.slash")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.orange)
-                        .padding(.horizontal, 4)
-                        .accessibilityIdentifier("companion.liveActivity.error")
+                    if destination != .now || attentionCount == 0 {
+                        CompanionSignalBoard(
+                            approvalCount: remoteApprovals.approvals.count,
+                            questionCount: remoteApprovals.questions.count,
+                            urgentTaskCount: urgentTaskCount,
+                            activeTaskCount: activeTaskCount,
+                            connectionState: remoteApprovals.state,
+                            activeSessionStatus: connection.latestState?.status
+                        )
+                    }
+
+                    switch destination {
+                    case .now:
+                        nowContent
+                    case .sessions:
+                        CompanionSessionsSurface(
+                            openTask: { presentedSheet = .task($0) },
+                            newTask: { presentedSheet = .composer(nil, nil) }
+                        )
+                            .environmentObject(connection)
+                            .environmentObject(liveActivity)
+                            .environmentObject(remoteApprovals)
+                            .transition(.opacity)
+                    }
+
+                    if let error = liveActivity.lastError {
+                        Label(error, systemImage: "livephoto.slash")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.orange)
+                            .padding(.horizontal, 4)
+                            .accessibilityIdentifier("companion.liveActivity.error")
+                    }
                 }
+                .padding(.horizontal, 18)
+                .padding(.top, topPadding)
+                .padding(.bottom, 24)
+                .frame(maxWidth: 640)
+                .frame(maxWidth: .infinity, alignment: .top)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, topPadding)
-            .padding(.bottom, 24)
-            .frame(maxWidth: 640)
-            .frame(maxWidth: .infinity, alignment: .top)
+            .scrollIndicators(.hidden)
+            .scrollBounceBehavior(.basedOnSize)
         }
-        .scrollIndicators(.hidden)
-        .scrollBounceBehavior(.basedOnSize)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             CompanionActionDock(
                 destination: destination,
@@ -84,13 +114,15 @@ struct CompanionCommandCenterView: View {
             .padding(.horizontal, 16)
             .padding(.top, 8)
             .padding(.bottom, 6)
+            .dynamicTypeSize(.xSmall ... .xxxLarge)
         }
         .confirmationDialog("Capture", isPresented: $showsCaptureChoices) {
-            Button("New task") { openQuickJot(.task) }
+            Button("New coding task") { presentedSheet = .composer(nil, nil) }
+            Button("New reminder") { openQuickJot(.task) }
             Button("New note") { openQuickJot(.note) }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Add it through your private Mac connection.")
+            Text("Send coding work to your Mac or capture a personal item.")
         }
         .sheet(item: $presentedSheet) { sheet in
             switch sheet {
@@ -101,6 +133,16 @@ struct CompanionCommandCenterView: View {
                 .presentationDragIndicator(.visible)
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("companion.more.sheet")
+            case .composer(let seedText, let provider):
+                RemoteTaskComposerView(seedText: seedText, provider: provider)
+                    .environmentObject(remoteApprovals)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+            case .task(let id):
+                RemoteTaskDetailView(taskID: id)
+                    .environmentObject(remoteApprovals)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
             }
         }
         .onChange(of: remoteApprovals.highlightedHubModuleID) { _, moduleID in
@@ -110,6 +152,22 @@ struct CompanionCommandCenterView: View {
         .onChange(of: attentionCount) { oldValue, newValue in
             guard newValue > oldValue else { return }
             select(.now)
+        }
+        .onChange(of: attentionCandidates) { _, candidates in
+            selectedAttentionID = RemoteTaskPresentationModel.selection(
+                previousID: selectedAttentionID,
+                candidates: candidates
+            )
+            if followedTaskID == nil,
+               let latest = remoteApprovals.remoteTasks
+                .filter({ !$0.state.isTerminal })
+                .max(by: { $0.updatedAt < $1.updatedAt }) {
+                followedTaskID = latest.id
+            }
+        }
+        .onChange(of: remoteApprovals.remoteTaskDeepLinkDestination) { _, route in
+            guard let route else { return }
+            present(route)
         }
         .onAppear {
             if remoteApprovals.highlightedHubModuleID != nil {
@@ -126,6 +184,13 @@ struct CompanionCommandCenterView: View {
                 presentedSheet = .more
             }
 #endif
+            selectedAttentionID = RemoteTaskPresentationModel.selection(
+                previousID: selectedAttentionID,
+                candidates: attentionCandidates
+            )
+            if let route = remoteApprovals.remoteTaskDeepLinkDestination {
+                present(route)
+            }
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("companion.commandCenter")
@@ -136,7 +201,16 @@ struct CompanionCommandCenterView: View {
         RemoteApprovalSurface()
             .environmentObject(remoteApprovals)
 
-        if remoteApprovals.hasPairingCredential, attentionCount == 0 {
+        if let task = selectedTask {
+            RemoteTaskSignalCard(task: task) {
+                if task.state == .verified { markVerifiedTaskReviewed(task.id) }
+                presentedSheet = .task(task.id)
+            }
+        } else if let draft = selectedDraft {
+            RemoteTaskWaitingCard(draft: draft)
+        }
+
+        if remoteApprovals.hasPairingCredential, attentionCandidates.isEmpty {
             CompanionTodayTimeline(
                 snapshot: remoteApprovals.hubSnapshot,
                 openSessions: { select(.sessions) },
@@ -146,7 +220,54 @@ struct CompanionCommandCenterView: View {
     }
 
     private var attentionCount: Int {
-        remoteApprovals.approvals.count + remoteApprovals.questions.count
+        RemoteTaskPresentationModel.immediateAttentionCount(in: attentionCandidates)
+    }
+
+    private var reviewedVerifiedTaskIDs: Set<UUID> {
+        RemoteTaskReviewPersistence.decode(reviewedVerifiedTaskIDsPayload)
+    }
+
+    private func markVerifiedTaskReviewed(_ id: UUID) {
+        var reviewed = reviewedVerifiedTaskIDs
+        reviewed.insert(id)
+        reviewedVerifiedTaskIDsPayload = RemoteTaskReviewPersistence.encode(reviewed)
+    }
+
+    private var urgentTaskCount: Int {
+        remoteApprovals.remoteTasks.filter { $0.state == .needsYou || $0.state == .failed }.count
+    }
+
+    private var activeTaskCount: Int {
+        remoteApprovals.remoteTasks.filter { !$0.state.isTerminal }.count
+            + remoteApprovals.remoteTaskDrafts.count
+    }
+
+    private var attentionCandidates: [RemoteTaskAttentionCandidate] {
+        RemoteTaskPresentationModel.candidates(
+            approvalIDs: remoteApprovals.approvals.map(\.id),
+            questionIDs: remoteApprovals.questions.map(\.id),
+            tasks: remoteApprovals.remoteTasks,
+            drafts: remoteApprovals.remoteTaskDrafts,
+            followedTaskID: followedTaskID,
+            reviewedVerifiedTaskIDs: reviewedVerifiedTaskIDs
+        )
+    }
+
+    private var selectedTask: RemoteTaskSummary? {
+        guard let selectedAttentionID,
+              let candidate = attentionCandidates.first(where: { $0.id == selectedAttentionID }),
+              let taskID = candidate.taskID,
+              candidate.kind != .approval,
+              candidate.kind != .question
+        else { return nil }
+        return remoteApprovals.remoteTasks.first(where: { $0.id == taskID })
+    }
+
+    private var selectedDraft: RemoteTaskDraft? {
+        guard let selectedAttentionID, selectedAttentionID.hasPrefix("draft:") else { return nil }
+        return remoteApprovals.remoteTaskDrafts.first {
+            "draft:\($0.id.uuidString.lowercased())" == selectedAttentionID
+        }
     }
 
     private func select(_ newDestination: CommandCenterDestination) {
@@ -163,6 +284,183 @@ struct CompanionCommandCenterView: View {
         remoteApprovals.quickJotDestination = destination
         presentedSheet = .more
     }
+
+    private func present(_ route: RemoteTaskDeepLinkDestination) {
+        switch route {
+        case .detail(let id): presentedSheet = .task(id)
+        case .composer(let text, let provider): presentedSheet = .composer(text, provider)
+        case .needsYou:
+            select(.now)
+        case .sessions:
+            select(.sessions)
+        }
+        remoteApprovals.consumeRemoteTaskDeepLinkDestination()
+    }
+}
+
+private struct CompanionSignalBoard: View {
+    let approvalCount: Int
+    let questionCount: Int
+    let urgentTaskCount: Int
+    let activeTaskCount: Int
+    let connectionState: RemoteApprovalClient.ConnectionState
+    let activeSessionStatus: CompanionStatus?
+
+    private var needsAttention: Bool {
+        approvalCount + questionCount + urgentTaskCount > 0
+    }
+
+    private var connectionTitle: String {
+        switch connectionState {
+        case .connected: return "Mac online"
+        case .connecting: return "Connecting"
+        case .offline: return "Mac offline"
+        case .unpaired: return "Pair Mac"
+        }
+    }
+
+    private var connectionSymbol: String {
+        switch connectionState {
+        case .connected: return "checkmark"
+        case .connecting: return "arrow.triangle.2.circlepath"
+        case .offline: return "wifi.slash"
+        case .unpaired: return "link.badge.plus"
+        }
+    }
+
+    private var sessionTitle: String {
+        guard let activeSessionStatus else { return "Quiet" }
+        switch activeSessionStatus {
+        case .waitingApproval, .waitingQuestion: return "Needs you"
+        case .running, .processing: return "Working"
+        case .idle: return "Quiet"
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(needsAttention ? "Signal is hot" : (activeTaskCount > 0 ? "Work is moving" : "Signal is quiet"))
+                        .font(.system(size: 16, weight: .black, design: .rounded))
+                        .foregroundStyle(Color.ciForeground)
+                    Text(needsAttention ? "Review what needs Greg before anything else." : (activeTaskCount > 0 ? "Your Mac is working. Routine updates stay in place." : "No approvals, questions, or coding tasks are waiting."))
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(Color.ciForeground.opacity(0.52))
+                }
+                Spacer(minLength: 12)
+                Image(systemName: needsAttention ? "exclamationmark.triangle.fill" : "sparkle")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(needsAttention ? .orange : Color.ciForeground.opacity(0.58))
+                    .frame(width: 36, height: 36)
+                    .background(
+                        (needsAttention ? Color.orange : Color.ciForeground).opacity(needsAttention ? 0.16 : 0.07),
+                        in: Circle()
+                    )
+            }
+
+            HStack(spacing: 8) {
+                CompanionSignalTile(
+                    title: "\(approvalCount)",
+                    subtitle: approvalCount == 1 ? "approval" : "approvals",
+                    symbol: "checkmark.seal",
+                    tint: approvalCount > 0 ? .orange : Color.ciForeground.opacity(0.55)
+                )
+                CompanionSignalTile(
+                    title: "\(questionCount)",
+                    subtitle: questionCount == 1 ? "question" : "questions",
+                    symbol: "questionmark.bubble",
+                    tint: questionCount > 0 ? Color(red: 0.34, green: 0.62, blue: 1.0) : Color.ciForeground.opacity(0.55)
+                )
+                CompanionSignalTile(
+                    title: urgentTaskCount > 0 ? "\(urgentTaskCount) need you" : (activeTaskCount > 0 ? "\(activeTaskCount) active" : sessionTitle),
+                    subtitle: connectionTitle,
+                    symbol: urgentTaskCount > 0 ? "terminal.fill" : connectionSymbol,
+                    tint: urgentTaskCount > 0 ? .orange : (connectionState == .connected ? .green : .orange)
+                )
+            }
+        }
+        .padding(16)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .stroke(
+                    needsAttention ? Color.orange.opacity(0.26) : Color.ciForeground.opacity(0.075),
+                    lineWidth: needsAttention ? 1 : 0.5
+                )
+        )
+        .shadow(
+            color: (needsAttention ? Color.orange : Color.black).opacity(needsAttention ? 0.14 : 0.055),
+            radius: needsAttention ? 22 : 16,
+            y: needsAttention ? 10 : 7
+        )
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(needsAttention
+            ? "\(approvalCount) approvals, \(questionCount) questions, and \(urgentTaskCount) coding tasks need attention"
+            : "No approvals, questions, or urgent coding tasks are waiting.")
+        .accessibilityIdentifier("companion.signalBoard")
+    }
+}
+
+private struct CompanionSignalTile: View {
+    let title: String
+    let subtitle: String
+    let symbol: String
+    let tint: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Image(systemName: symbol)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(tint)
+                .frame(width: 28, height: 28)
+                .background(tint.opacity(0.12), in: Circle())
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.system(size: title.count > 3 ? 13 : 18, weight: .black, design: .rounded))
+                    .foregroundStyle(Color.ciForeground.opacity(0.92))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                Text(subtitle)
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Color.ciForeground.opacity(0.48))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 92, alignment: .leading)
+        .padding(10)
+        .background(Color.ciForeground.opacity(0.045), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.ciForeground.opacity(0.055), lineWidth: 0.5)
+        )
+    }
+}
+
+private struct CompanionCommandBackground: View {
+    var body: some View {
+        ZStack {
+            Color.ciBackground
+
+            GeometryReader { proxy in
+                Circle()
+                    .fill(Color.orange.opacity(0.10))
+                    .frame(width: proxy.size.width * 0.72, height: proxy.size.width * 0.72)
+                    .blur(radius: 80)
+                    .offset(x: -proxy.size.width * 0.26, y: -proxy.size.height * 0.18)
+
+                Circle()
+                    .fill(Color.ciForeground.opacity(0.045))
+                    .frame(width: proxy.size.width * 0.58, height: proxy.size.width * 0.58)
+                    .blur(radius: 72)
+                    .offset(x: proxy.size.width * 0.54, y: proxy.size.height * 0.22)
+            }
+            .allowsHitTesting(false)
+        }
+        .ignoresSafeArea()
+        .accessibilityHidden(true)
+    }
 }
 
 private struct CompanionPresenceHeader: View {
@@ -175,13 +473,13 @@ private struct CompanionPresenceHeader: View {
             CodeIslandPresenceMark()
             .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text("CodeIsland")
-                    .font(.headline.weight(.bold))
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Code Island")
+                    .font(.system(size: 20, weight: .black, design: .rounded))
                     .foregroundStyle(Color.ciForeground)
                 Text(presentation.subtitle)
-                    .font(.subheadline)
-                    .foregroundStyle(Color.ciForeground.opacity(0.58))
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundStyle(Color.ciForeground.opacity(0.52))
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -218,7 +516,14 @@ private struct CompanionPresenceHeader: View {
             .accessibilityLabel("Connection and appearance")
             .accessibilityIdentifier("companion.presence.menu")
         }
-        .frame(minHeight: 54)
+        .padding(10)
+        .frame(minHeight: 68)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .stroke(Color.ciForeground.opacity(0.08), lineWidth: 0.5)
+        )
+        .shadow(color: Color.black.opacity(0.08), radius: 22, y: 10)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("companion.presence")
     }
@@ -250,13 +555,24 @@ private struct CodeIslandPresenceMark: View {
                     endPoint: .bottomTrailing
                 )
             )
-            .frame(width: 42, height: 42)
+            .frame(width: 48, height: 48)
             .overlay {
-                Image(systemName: "terminal.fill")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(.white)
+                VStack(spacing: 1) {
+                    Image(systemName: "terminal.fill")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.white)
+                    Capsule()
+                        .fill(Color.orange)
+                        .frame(width: 14, height: 3)
+                        .opacity(0.92)
+                }
             }
-        .frame(width: 44, height: 44)
+        .overlay(
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .stroke(Color.white.opacity(0.16), lineWidth: 0.5)
+        )
+        .shadow(color: Color.black.opacity(0.18), radius: 10, y: 5)
+        .frame(width: 50, height: 50)
     }
 }
 
@@ -286,6 +602,7 @@ private struct CompanionActionDock: View {
             }
         }
         .shadow(color: Color.black.opacity(0.10), radius: 24, y: 10)
+        .padding(.horizontal, 2)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("companion.actionDock")
     }
@@ -352,12 +669,12 @@ private struct CompanionActionDock: View {
             Image(systemName: symbol)
                 .font(.system(size: 16, weight: .semibold))
             Text(title)
-                .font(.caption2.weight(.semibold))
+                .font(.system(size: 10, weight: .bold, design: .rounded))
         }
         .foregroundStyle(selected ? Color.ciForeground : Color.ciForeground.opacity(0.56))
         .frame(maxWidth: .infinity, minHeight: 52)
         .background(
-            selected ? Color.ciForeground.opacity(0.085) : Color.clear,
+            selected ? Color.ciForeground.opacity(0.10) : Color.clear,
             in: Capsule()
         )
         .contentShape(Rectangle())
@@ -415,25 +732,36 @@ private struct CompanionTodayTimeline: View {
         }
     }
 
-    /// The headline states the answer; the subhead adds context that never
-    /// repeats it. Attention first, then weather, then a plain resting line.
-    private var subhead: String {
-        if hasAgentAttention { return "An agent is waiting for your decision." }
-        if let weather = weatherSummary { return weather }
-        return "Nothing has needed you recently."
+    /// Attention outranks weather — R5 (finding I1). main returned weather
+    /// first, which reintroduced the bug where "an agent is waiting" was
+    /// unreachable whenever the Mac reported any weather. Keeps main's
+    /// "Next: <upcoming item>" resting line for the idle case.
+    private var headlineSubtitle: String {
+        if hasAgentAttention {
+            return "An agent is waiting for your decision."
+        }
+        if let weatherSummary {
+            return weatherSummary
+        }
+        if let first = rows.first {
+            let subtitle = first.item.subtitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let subtitle, !subtitle.isEmpty {
+                return "Next: \(first.item.title) · \(subtitle)"
+            }
+            return "Next: \(first.item.title)"
+        }
+        return "Nothing needs you right now."
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 5) {
+                // The headline states the answer (R5, finding I1) rather than
+                // the date, in main's refreshed type treatment.
                 Text(hasAgentAttention ? "Needs you" : "All clear")
-                    .font(.largeTitle.weight(.bold))
+                    .font(.system(size: 36, weight: .black, design: .rounded))
                     .foregroundStyle(Color.ciForeground)
-                // Attention outranks weather. Previously the subhead was
-                // `weatherSummary ?? …`, so whenever the Mac returned any
-                // weather the "an agent is waiting" line was unreachable — and
-                // with no weather it duplicated the empty-state row verbatim.
-                Text(subhead)
+                Text(headlineSubtitle)
                     .font(.subheadline)
                     .foregroundStyle(Color.ciForeground.opacity(0.56))
                     .lineLimit(2)
@@ -475,7 +803,13 @@ private struct CompanionTodayTimeline: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, 4)
+        .padding(18)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .stroke(Color.ciForeground.opacity(0.075), lineWidth: 0.5)
+        )
+        .shadow(color: Color.black.opacity(0.06), radius: 18, y: 8)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("companion.now.overview")
     }
@@ -539,11 +873,13 @@ private struct CommandTimelineRow: Identifiable {
     }
 
     var tint: Color {
-        switch moduleID {
-        case .calendar: return .blue
-        case .reminders: return .orange
-        case .agents: return .purple
-        default: return .secondary
+        let signal = [item.title, item.subtitle ?? "", item.detail ?? ""]
+            .joined(separator: " ")
+            .lowercased()
+        if moduleID == .agents,
+           signal.contains("approval") || signal.contains("question") || signal.contains("needs") || signal.contains("waiting") {
+            return .orange
         }
+        return Color.ciForeground.opacity(0.62)
     }
 }

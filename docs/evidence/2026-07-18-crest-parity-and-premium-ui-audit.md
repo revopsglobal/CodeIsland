@@ -40,10 +40,12 @@ controls, and Mac Tools renders one selected module instead of an equal-weight
 card stack. The rejected beige cast and repeated green ready indicators are
 removed in favor of neutral semantic surfaces and one signal accent.
 
-It has **not reached physical end-to-end completion**. Automated and Simulator
-proof cannot substitute for the replacement TestFlight build registering from
-Greg's iPhone, or for real Calendar, Reminders, Join, Live Activity, Dynamic
-Island, background push, and cellular Tailscale acceptance.
+It has **not reached blanket physical end-to-end completion**. The current
+TestFlight build is now installed and registered; real Calendar read,
+Reminders/Notes writes, reviewed question continuation, production APNs,
+ActivityKit push-to-start, request-scoped update-token registration, terminal
+cleanup, and stable foreground rendering are physically proven. Cellular
+Tailscale and the named accessory/TCC mutation rows remain separate gates.
 
 ## Parity matrix
 
@@ -54,10 +56,10 @@ Island, background push, and cellular Tailscale acceptance.
 | Calendar agenda/month/CRUD/Join | Implemented | Implemented with trusted Join | Current Calendar permission plus real CRUD/Join run pending |
 | Tasks, lists, completion, notes, quick jot | Implemented | Implemented with reviewed writes | Replacement-build real task/note round trip pending |
 | Shelf, clipboard, capture, downloads | Implemented | Authenticated transfer/share/copy/remove | Cellular Tailscale file round trip pending |
-| Agent sessions, approvals, questions | Implemented | Exact, single-use remote actions | Replacement-build physical approval/question replay pending |
+| Agent sessions, approvals, questions | Implemented | Exact, single-use remote actions | Current-build physical question review/answer passed; cellular approval and replay remain |
 | System, weather, GitHub, audio, Bluetooth, battery, toggles | Implemented | Mirrored/confirmed host actions | Accessory, audio, GitHub, location, and toggle runtime pending |
 | Camera/mic preflight, teleprompter, window snapping | Implemented | Useful remote/native equivalents | Physical permissions and multi-display/window runs pending |
-| Push, Live Activity, Dynamic Island, App Intents | Host and APNs path implemented | Native extension and lifecycle implemented | APNs callback is proven; visible physical lifecycle pending |
+| Push, Live Activity, Dynamic Island, App Intents | Host and APNs path implemented | Native extension and lifecycle implemented | Physical push-to-start, update-token registration, reviewed answer, resolution, and cleanup passed; clean current-build expanded artwork remains |
 | Private web fallback | Implemented | Responsive Tailscale path | Physical mobile-browser actions pending |
 
 The full feature-by-feature proof ledger remains in
@@ -219,6 +221,29 @@ action. Put transport diagnostics behind Connection Details.
 
 ### Source and Simulator verification completed
 
+- Late command-center polish on branch `codex/continue-e2e-acceptance`
+  regenerated the eight settled native renders with `scripts/smoke-companion-ui.sh`.
+  The refreshed idle Now render is calm (`Nothing needs you right now.`) rather
+  than a mock pending approval, while explicit approval/question renders still
+  keep the exact attention card prominent. The Tools directory now uses neutral
+  icon wells for routine modules so the orange signal is reserved for attention
+  and primary action, not every row.
+- `scripts/check-companion-ui-regressions.sh` passed.
+- A focused native UI run passed with exit code 0 in 75.611 seconds using
+  Xcode beta and simulator `ECC99681-C3ED-4452-B727-0F9E2C09C469`:
+  `testAttentionFirstShellKeepsToolsSecondary`,
+  `testApprovalAttentionStageKeepsExactActionsProminent`, and
+  `testPersonalHubModesRenderAdvertisedModules`.
+- Post-merge TestFlight delivery for this polish passed in workflow run
+  `29666698698` from merge commit
+  `cf8f829dbc87b8130cdfcc06c1728e241b0141aa`. Build
+  `1.0.0 (20260719001734)` uploaded successfully with delivery UUID
+  `644d0693-cb10-447e-b385-7ef8509b6958`; Apple reported `VALID`,
+  `APP_STORE_ELIGIBLE`, and `CodeIsland Internal` all-build access. Local IPA:
+  `/Users/gregharned/Downloads/CodeIsland-TestFlight-20260719001734-run-29666698698/CodeIslandCompanion.ipa`;
+  SHA-256
+  `b3c43a4d19c3f4290364527c0ab8c9bf7a8722e972ced1bef202b1cfe82e5480`.
+  Physical installation and registration of this exact build remain pending.
 - `scripts/smoke-companion-ui.sh` completed with a 20-second system settle
   gate and produced eight full-chrome native renders: idle, approval,
   question, multiple-attention, Sessions, Tools, light, and dark.
@@ -230,6 +255,16 @@ action. Put transport diagnostics behind Connection Details.
 - `swift build -c release -j 1` completed with exit code 0 in 217.22 seconds.
 - `graphify update . --no-viz` rebuilt the source graph at 4,732 nodes,
   12,357 edges, and 55 communities.
+- Follow-up transport-copy hardening on
+  `codex/attention-command-center-audit` removes normal-surface references to
+  Tailscale/HTTPS from Buddy pairing, loading, invalid-URL, and connected
+  session summary copy while keeping the private URL inside Connection
+  settings. Focused verification passed:
+  `CodeIslandCompanionTests/LiveActivityPrivacyTests` executed 10 tests with
+  zero failures, and
+  `CodeIslandCompanionUITests/testAuthenticatedTailscaleConnectionDoesNotLookLikeNearbySearch`
+  executed 1 test with zero failures on simulator
+  `ECC99681-C3ED-4452-B727-0F9E2C09C469`.
 
 The remaining gates are signed distribution and physical-device acceptance;
 they are intentionally not inferred from Simulator or source proof.

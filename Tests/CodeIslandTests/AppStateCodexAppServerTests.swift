@@ -19,8 +19,10 @@ final class AppStateCodexAppServerTests: XCTestCase {
         try makeExecutable(at: fallbackExecutable)
 
         let resolved = AppState.codexAppServerExecutableURL(
+            explicitExecutablePath: nil,
             runningBundleURLs: [bundleURL],
             fallbackPaths: [fallbackExecutable.path],
+            loginPathCandidates: [],
             fileManager: fm
         )
 
@@ -36,12 +38,53 @@ final class AppStateCodexAppServerTests: XCTestCase {
         try makeExecutable(at: fallbackExecutable)
 
         let resolved = AppState.codexAppServerExecutableURL(
+            explicitExecutablePath: nil,
             runningBundleURLs: [],
             fallbackPaths: [fallbackExecutable.path],
+            loginPathCandidates: [],
             fileManager: fm
         )
 
         XCTAssertEqual(resolved?.path, fallbackExecutable.path)
+    }
+
+    func testCodexAppServerExecutablePrefersExplicitSettingOverRunningBundle() throws {
+        let fm = FileManager.default
+        let tempDir = fm.temporaryDirectory.appendingPathComponent("codeisland-codex-explicit-\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: tempDir) }
+        let explicit = tempDir.appendingPathComponent("explicit-codex")
+        try makeExecutable(at: explicit)
+        let bundleURL = tempDir.appendingPathComponent("Codex.app", isDirectory: true)
+        let bundled = bundleURL.appendingPathComponent("Contents/Resources/codex")
+        try makeExecutable(at: bundled)
+
+        let resolved = AppState.codexAppServerExecutableURL(
+            explicitExecutablePath: explicit.path,
+            runningBundleURLs: [bundleURL],
+            fallbackPaths: [],
+            loginPathCandidates: [],
+            fileManager: fm
+        )
+
+        XCTAssertEqual(resolved?.path, explicit.path)
+    }
+
+    func testCodexAppServerExecutableUsesValidatedLoginPathLast() throws {
+        let fm = FileManager.default
+        let tempDir = fm.temporaryDirectory.appendingPathComponent("codeisland-codex-path-\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: tempDir) }
+        let loginPath = tempDir.appendingPathComponent("codex")
+        try makeExecutable(at: loginPath)
+
+        let resolved = AppState.codexAppServerExecutableURL(
+            explicitExecutablePath: nil,
+            runningBundleURLs: [],
+            fallbackPaths: [tempDir.appendingPathComponent("missing").path],
+            loginPathCandidates: [loginPath.path],
+            fileManager: fm
+        )
+
+        XCTAssertEqual(resolved?.path, loginPath.path)
     }
 
     func testActiveWithApprovalFlagMapsToWaitingApproval() {

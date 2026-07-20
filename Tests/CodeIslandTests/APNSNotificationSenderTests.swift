@@ -3,6 +3,50 @@ import XCTest
 import CodeIslandCore
 
 final class APNSNotificationSenderTests: XCTestCase {
+    func testTaskNeedsYouPayloadIsGenericAndDeepLinkSafe() throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let id = UUID()
+        let envelope = RemoteAttentionPushEnvelope(
+            kind: .task,
+            state: .pending,
+            requestID: id.uuidString.lowercased(),
+            taskState: .needsYou,
+            issuedAt: now,
+            expiresAt: now.addingTimeInterval(600)
+        )
+        let data = try APNSNotificationPayloadBuilder.data(for: envelope)
+        let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let aps = try XCTUnwrap(object["aps"] as? [String: Any])
+        XCTAssertNotNil(aps["alert"])
+        XCTAssertEqual(object["ciTaskState"] as? String, "needs-you")
+        let text = try XCTUnwrap(String(data: data, encoding: .utf8))
+        XCTAssertFalse(text.localizedCaseInsensitiveContains("workspace"))
+        XCTAssertFalse(text.localizedCaseInsensitiveContains("prompt"))
+
+        let start = try XCTUnwrap(try JSONSerialization.jsonObject(
+            with: APNSNotificationPayloadBuilder.liveActivityStartData(for: envelope)
+        ) as? [String: Any])
+        let startAPS = try XCTUnwrap(start["aps"] as? [String: Any])
+        let content = try XCTUnwrap(startAPS["content-state"] as? [String: Any])
+        XCTAssertEqual(content["taskID"] as? String, id.uuidString.lowercased())
+        XCTAssertEqual(content["taskState"] as? String, "needs-you")
+    }
+
+    func testTaskVerifiedPayloadIsVisibleOnlyBecauseHostTargetsFollowedDevice() throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let envelope = RemoteAttentionPushEnvelope(
+            kind: .task,
+            state: .resolved,
+            requestID: UUID().uuidString.lowercased(),
+            taskState: .verified,
+            issuedAt: now,
+            expiresAt: now.addingTimeInterval(300)
+        )
+        XCTAssertTrue(APNSNotificationPayloadBuilder.isVisibleAlert(envelope))
+        XCTAssertFalse(APNSNotificationPayloadBuilder.shouldPushToStart(envelope))
+        XCTAssertEqual(APNSNotificationPayloadBuilder.pushType(for: envelope), "alert")
+    }
+
     func testPendingPayloadIsGenericAndOpaque() throws {
         let issuedAt = Date(timeIntervalSince1970: 1_800_000_000)
         let envelope = RemoteAttentionPushEnvelope(
@@ -138,5 +182,83 @@ final class APNSNotificationSenderTests: XCTestCase {
         XCTAssertNotNil(aps["dismissal-date"])
         let content = try XCTUnwrap(aps["content-state"] as? [String: Any])
         XCTAssertEqual(content["status"] as? String, "idle")
+    }
+
+    func testTelegramFallbackMessageIsAttentionOnlyAndRedacted() throws {
+        let issuedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let envelope = RemoteAttentionPushEnvelope(
+            eventID: "event-approval",
+            kind: .approval,
+            state: .pending,
+            requestID: "opaque-approval-id",
+            issuedAt: issuedAt,
+            expiresAt: issuedAt.addingTimeInterval(600)
+        )
+
+        let message = TelegramAttentionMessageBuilder.message(
+            for: envelope,
+            remoteURL: URL(string: "https://gregs-mac.tailnet.example"),
+            buddyURL: PersonalHubDeepLink.pendingApproval(id: nil).url,
+            testFlightURL: URL(string: "itms-beta://"),
+            expectedBuddyBuild: "1.0.0 (20260719042243)"
+        )
+
+        XCTAssertTrue(message.contains("CodeIsland needs your approval."))
+        XCTAssertTrue(message.contains("Buddy: codeisland://approvals/pending"))
+        XCTAssertTrue(message.contains("Web fallback: https://gregs-mac.tailnet.example"))
+        XCTAssertTrue(message.contains("If Buddy is stale: update CodeIsland Buddy to 1.0.0 (20260719042243) in TestFlight itms-beta://"))
+        XCTAssertFalse(message.contains("opaque-approval-id"))
+        XCTAssertFalse(message.localizedCaseInsensitiveContains("command"))
+        XCTAssertFalse(message.localizedCaseInsensitiveContains("transcript"))
+        XCTAssertFalse(message.localizedCaseInsensitiveContains("workspace"))
+    }
+
+    func testTelegramFallbackMessageDoesNotRequireLink() throws {
+        let issuedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let envelope = RemoteAttentionPushEnvelope(
+            eventID: "event-question",
+            kind: .question,
+            state: .pending,
+            requestID: "opaque-question-id",
+            issuedAt: issuedAt,
+            expiresAt: issuedAt.addingTimeInterval(600)
+        )
+
+        let message = TelegramAttentionMessageBuilder.message(
+            for: envelope,
+            remoteURL: nil,
+            buddyURL: PersonalHubDeepLink.pendingQuestion(id: nil).url,
+            testFlightURL: URL(string: "itms-beta://"),
+            expectedBuddyBuild: "20260719042243"
+        )
+
+        XCTAssertEqual(
+            message,
+            """
+            CodeIsland needs your answer.
+            Open Buddy to review the private details.
+            Buddy: codeisland://questions/pending
+            If Buddy is stale: update CodeIsland Buddy to 20260719042243 in TestFlight itms-beta://
+            """
+        )
+    }
+
+    func testTelegramFallbackTestMessageUsesSameRedactedShape() throws {
+        let message = TelegramAttentionMessageBuilder.testMessage(
+            remoteURL: URL(string: "https://gregs-mac.tailnet.example"),
+            buddyURL: PersonalHubDeepLink.pendingQuestion(id: nil).url,
+            testFlightURL: URL(string: "itms-beta://"),
+            expectedBuddyBuild: "1.0.0 (20260719042243)"
+        )
+
+        XCTAssertTrue(message.contains("CodeIsland needs your answer."))
+        XCTAssertTrue(message.contains("Open Buddy to review the private details."))
+        XCTAssertTrue(message.contains("Buddy: codeisland://questions/pending"))
+        XCTAssertTrue(message.contains("Web fallback: https://gregs-mac.tailnet.example"))
+        XCTAssertTrue(message.contains("If Buddy is stale: update CodeIsland Buddy to 1.0.0 (20260719042243) in TestFlight itms-beta://"))
+        XCTAssertFalse(message.contains("telegram-test"))
+        XCTAssertFalse(message.localizedCaseInsensitiveContains("command"))
+        XCTAssertFalse(message.localizedCaseInsensitiveContains("transcript"))
+        XCTAssertFalse(message.localizedCaseInsensitiveContains("workspace"))
     }
 }
