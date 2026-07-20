@@ -8,23 +8,26 @@ setup() {
   export EXPORT_OPTIONS="$REPO_ROOT/ios/CodeIslandCompanion/ExportOptions.plist"
 }
 
-@test "TestFlight uses one Xcode-managed signing path for app, widget, and share extension" {
-  [ "$(/usr/libexec/PlistBuddy -c 'Print :signingStyle' "$EXPORT_OPTIONS")" = "automatic" ]
-  run /usr/libexec/PlistBuddy -c 'Print :provisioningProfiles' "$EXPORT_OPTIONS"
-  [ "$status" -ne 0 ]
+@test "TestFlight deterministically signs app, widget, and share extension with App Store profiles" {
+  [ "$(/usr/libexec/PlistBuddy -c 'Print :signingStyle' "$EXPORT_OPTIONS")" = "manual" ]
+  [ "$(/usr/libexec/PlistBuddy -c 'Print :provisioningProfiles:com.revopsglobal.codeisland.buddy' "$EXPORT_OPTIONS")" = "CodeIsland Buddy App Store" ]
+  [ "$(/usr/libexec/PlistBuddy -c 'Print :provisioningProfiles:com.revopsglobal.codeisland.buddy.widget' "$EXPORT_OPTIONS")" = "CodeIsland Buddy Widget App Store" ]
+  [ "$(/usr/libexec/PlistBuddy -c 'Print :provisioningProfiles:com.revopsglobal.codeisland.buddy.share' "$EXPORT_OPTIONS")" = "CodeIsland Buddy Share App Store" ]
 
-  run grep -E 'CODE_SIGN_STYLE:[[:space:]]+Manual|PROVISIONING_PROFILE_SPECIFIER' "$PROJECT_SPEC"
-  [ "$status" -ne 0 ]
-  run grep -E 'CODE_SIGN_STYLE = Manual|PROVISIONING_PROFILE_SPECIFIER' "$XCODE_PROJECT"
-  [ "$status" -ne 0 ]
-  [ "$(grep -c 'REGISTER_APP_GROUPS: YES' "$PROJECT_SPEC")" -eq 2 ]
-  [ "$(grep -c 'REGISTER_APP_GROUPS = YES;' "$XCODE_PROJECT")" -eq 2 ]
+  [ "$(grep -c 'CODE_SIGN_STYLE: Manual' "$PROJECT_SPEC")" -eq 3 ]
+  [ "$(grep -c 'PROVISIONING_PROFILE_SPECIFIER:' "$PROJECT_SPEC")" -eq 3 ]
+  [ "$(grep -c 'CODE_SIGN_STYLE = Manual;' "$XCODE_PROJECT")" -eq 3 ]
+  [ "$(grep -c 'PROVISIONING_PROFILE_SPECIFIER =' "$XCODE_PROJECT")" -eq 3 ]
 
-  grep -Fq -- '-allowProvisioningUpdates' "$WORKFLOW"
-  grep -Fq -- '-authenticationKeyPath' "$WORKFLOW"
-  grep -Fq -- '-authenticationKeyID' "$WORKFLOW"
-  grep -Fq -- '-authenticationKeyIssuerID' "$WORKFLOW"
+  grep -Fq 'IOS_APPSTORE_PROFILE_BASE64' "$WORKFLOW"
+  grep -Fq 'IOS_WIDGET_PROFILE_BASE64' "$WORKFLOW"
+  grep -Fq 'IOS_SHARE_PROFILE_BASE64' "$WORKFLOW"
+  grep -Fq 'Import distribution certificate and profiles' "$WORKFLOW"
 
-  run grep -E 'IOS_(APPSTORE|WIDGET|SHARE)_PROFILE_BASE64' "$WORKFLOW"
+  run grep -F -- '-allowProvisioningUpdates' "$WORKFLOW"
+  [ "$status" -ne 0 ]
+  run grep -F -- '-authenticationKeyPath' "$WORKFLOW"
+  [ "$status" -ne 0 ]
+  run grep -F -- 'REGISTER_APP_GROUPS=YES' "$WORKFLOW"
   [ "$status" -ne 0 ]
 }
