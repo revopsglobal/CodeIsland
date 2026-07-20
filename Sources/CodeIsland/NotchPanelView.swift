@@ -2157,8 +2157,7 @@ private struct SessionListView: View {
                         SessionCard(
                             appState: appState,
                             sessionId: sessionId,
-                            session: session,
-                            isCompletion: onlySessionId != nil
+                            session: session
                         )
                     }
                 }
@@ -2477,7 +2476,6 @@ private struct SessionCard: View {
     var appState: AppState
     let sessionId: String
     let session: SessionSnapshot
-    var isCompletion: Bool = false
     @State private var hovering = false
     @State private var failureShakeOffset: CGFloat = 0
     @State private var jumpValidationTask: Task<Void, Never>?
