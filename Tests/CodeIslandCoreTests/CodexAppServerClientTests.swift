@@ -3,6 +3,16 @@ import XCTest
 
 final class CodexAppServerClientTests: XCTestCase {
 
+    func testInitializeHandshakeOptsIntoExperimentalAPIForRuntimeWorkspaceRoots() throws {
+        let params = CodexAppServerClient.initializeParameters(
+            clientName: "CodeIsland",
+            clientVersion: "1.0.55"
+        )
+
+        let capabilities = try XCTUnwrap(params["capabilities"] as? [String: Any])
+        XCTAssertEqual(capabilities["experimentalApi"] as? Bool, true)
+    }
+
     func testTypedThreadStartUsesBoundedEditAndTestConfiguration() throws {
         let sender = RecordingCodexSender()
         let id = try sender.startThread(

@@ -154,6 +154,29 @@ final class RemoteTaskCoordinatorTests: XCTestCase {
         XCTAssertEqual(fixture.codex.cancellations, [task.id])
         XCTAssertEqual(fixture.store.task(id: task.id)?.summary.state, .cancelled)
     }
+
+    func testFailedTaskCanBeDismissedWithoutCancellingProviderAgain() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let task = try fixture.coordinator.create(
+            request: fixture.request(provider: .codex),
+            deviceID: "iphone"
+        )
+        try fixture.append(
+            taskID: task.id,
+            provider: .codex,
+            providerSessionID: "thread-failed",
+            state: .failed,
+            summary: "Codex app-server failed"
+        )
+
+        try fixture.coordinator.cancel(taskID: task.id)
+        try fixture.coordinator.cancel(taskID: task.id)
+
+        XCTAssertTrue(fixture.codex.cancellations.isEmpty)
+        XCTAssertEqual(fixture.store.task(id: task.id)?.summary.state, .cancelled)
+        XCTAssertEqual(fixture.store.task(id: task.id)?.summary.latestSummary, "Failure dismissed")
+    }
 }
 
 @MainActor

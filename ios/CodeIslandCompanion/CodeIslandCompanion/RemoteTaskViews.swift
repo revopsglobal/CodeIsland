@@ -577,6 +577,18 @@ struct RemoteTaskDetailView: View {
                                     .font(.subheadline.weight(.semibold))
                                     .frame(maxWidth: .infinity, minHeight: 44)
                             }
+                        } else if task.state == .failed {
+                            detailCard(title: "Clear attention", symbol: "archivebox") {
+                                Text("Keep this failure in task history, but remove it from Needs You.")
+                                    .font(.subheadline)
+                                    .foregroundStyle(Color.ciForeground.opacity(0.56))
+                                Button("Dismiss failure") { showsCancelConfirmation = true }
+                                    .font(.subheadline.weight(.bold))
+                                    .frame(maxWidth: .infinity, minHeight: 44)
+                                    .buttonStyle(.bordered)
+                                    .tint(.orange)
+                                    .accessibilityIdentifier("task.dismiss-failure")
+                            }
                         }
                     }
                     .padding(20)
@@ -592,14 +604,18 @@ struct RemoteTaskDetailView: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
             }
-            .confirmationDialog("Cancel this task?", isPresented: $showsCancelConfirmation, titleVisibility: .visible) {
-                Button("Cancel task", role: .destructive) {
+            .confirmationDialog(
+                task?.state == .failed ? "Dismiss this failure?" : "Cancel this task?",
+                isPresented: $showsCancelConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button(task?.state == .failed ? "Dismiss failure" : "Cancel task", role: .destructive) {
                     Task {
                         await remoteApprovals.cancelRemoteTask(taskID: taskID)
                         dismiss()
                     }
                 }
-                Button("Keep working", role: .cancel) {}
+                Button(task?.state == .failed ? "Keep in Needs You" : "Keep working", role: .cancel) {}
             }
             .accessibilityIdentifier("task.detail.\(taskID.uuidString.lowercased())")
         }

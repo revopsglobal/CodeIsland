@@ -242,6 +242,59 @@ final class CodeIslandCompanionUITests: XCTestCase {
     }
 
     @MainActor
+    func testLivePairedMacCompletesBoundedCodexTask() throws {
+        guard ProcessInfo.processInfo.environment["CODEISLAND_LIVE_E2E"] == "1" else {
+            throw XCTSkip("Set CODEISLAND_LIVE_E2E=1 in the Xcode test environment to run against the paired Mac.")
+        }
+
+        let title = "Simulator live E2E handshake \(UUID().uuidString.prefix(8))"
+        let app = XCUIApplication()
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["Greg’s MacBook Air"].waitForExistence(timeout: 20))
+
+        let capture = app.buttons["companion.capture"]
+        XCTAssertTrue(capture.waitForExistence(timeout: 8))
+        capture.tap()
+
+        let newTask = app.buttons["New coding task"]
+        XCTAssertTrue(newTask.waitForExistence(timeout: 5))
+        newTask.tap()
+
+        let prompt = app.textViews["task.prompt"]
+        XCTAssertTrue(prompt.waitForExistence(timeout: 8))
+        prompt.tap()
+        prompt.typeText("\(title)\nReport the current git branch and make no file changes. Finish with exact text CODEISLAND_E2E_OK.")
+
+        let submit = app.buttons["task.submit"]
+        XCTAssertTrue(submit.waitForExistence(timeout: 8))
+        let enabled = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "enabled == true"),
+            object: submit
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 10), .completed)
+        submit.tap()
+
+        let sessions = app.buttons["companion.destination.sessions"]
+        XCTAssertTrue(sessions.waitForExistence(timeout: 15))
+        sessions.tap()
+
+        let taskTitle = app.staticTexts[title]
+        XCTAssertTrue(taskTitle.waitForExistence(timeout: 25))
+        taskTitle.tap()
+
+        let success = app.staticTexts["Verified by checks reported from your Mac."]
+        if !success.waitForExistence(timeout: 150) {
+            let screenshot = XCTAttachment(screenshot: app.screenshot())
+            screenshot.name = "live-paired-task-did-not-complete"
+            screenshot.lifetime = .keepAlways
+            add(screenshot)
+            print(app.debugDescription)
+        }
+        XCTAssertTrue(success.exists, "The paired Mac did not return the expected completion receipt.")
+    }
+
+    @MainActor
     func testRemoteTaskPortfolioGroupsByMeaning() throws {
         let app = launchRemoteTaskApp("portfolio")
         let sessions = app.buttons["companion.destination.sessions"]
@@ -287,6 +340,16 @@ final class CodeIslandCompanionUITests: XCTestCase {
             object: follow
         )
         XCTAssertEqual(XCTWaiter.wait(for: [following], timeout: 5), .completed)
+    }
+
+    @MainActor
+    func testFailedTaskOffersExplicitDismissWithoutDeletingHistory() throws {
+        let app = launchRemoteTaskApp("failed")
+        XCTAssertTrue(app.staticTexts["Recover the interrupted build"].waitForExistence(timeout: 8))
+        app.staticTexts["Recover the interrupted build"].tap()
+
+        XCTAssertTrue(app.staticTexts["Keep this failure in task history, but remove it from Needs You."].waitForExistence(timeout: 5))
+        XCTAssertTrue(findAny("task.dismiss-failure", in: app).exists)
     }
 
     @MainActor
