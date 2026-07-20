@@ -42,7 +42,10 @@ struct ContentView: View {
                             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
                             .padding(.horizontal, 24)
                             .padding(.bottom, 12)
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                            // A decision arriving unpredictably is exactly the
+                            // motion Reduce Motion exists to suppress, so the
+                            // slide degrades to a fade.
+                            .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
                         }
                     }
                 } else {
@@ -2177,10 +2180,15 @@ private struct LiveActivityDiagnosticStrip: View {
 
 private struct BlurFadeModifier: ViewModifier {
     let active: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
         content
-            .blur(radius: active ? 5 : 0)
+            // The policy lives here rather than at each call site, so every
+            // `.blurFade` in the app honours Reduce Motion — including the
+            // approval surface, which never read the environment at all.
+            // Under Reduce Motion this degrades to a plain cross-fade.
+            .blur(radius: active && !reduceMotion ? 5 : 0)
             .opacity(active ? 0 : 1)
     }
 }

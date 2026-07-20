@@ -1913,7 +1913,14 @@ private struct PixelButton: View {
             .padding(.vertical, 7)
             .background(
                 RoundedRectangle(cornerRadius: 4)
-                    .fill(hovering ? bg.opacity(1.5) : bg)
+                    // `bg.opacity(1.5)` clamped to 1.0 on these opaque fills, so
+                    // hover never changed the button at all. Lighten toward
+                    // white instead, which reads on every button colour.
+                    .fill(bg)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(.white.opacity(hovering ? 0.14 : 0))
+                    )
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 4)
