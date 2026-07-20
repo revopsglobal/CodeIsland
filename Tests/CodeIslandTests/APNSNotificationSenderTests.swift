@@ -3,6 +3,50 @@ import XCTest
 import CodeIslandCore
 
 final class APNSNotificationSenderTests: XCTestCase {
+    func testTaskNeedsYouPayloadIsGenericAndDeepLinkSafe() throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let id = UUID()
+        let envelope = RemoteAttentionPushEnvelope(
+            kind: .task,
+            state: .pending,
+            requestID: id.uuidString.lowercased(),
+            taskState: .needsYou,
+            issuedAt: now,
+            expiresAt: now.addingTimeInterval(600)
+        )
+        let data = try APNSNotificationPayloadBuilder.data(for: envelope)
+        let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let aps = try XCTUnwrap(object["aps"] as? [String: Any])
+        XCTAssertNotNil(aps["alert"])
+        XCTAssertEqual(object["ciTaskState"] as? String, "needs-you")
+        let text = try XCTUnwrap(String(data: data, encoding: .utf8))
+        XCTAssertFalse(text.localizedCaseInsensitiveContains("workspace"))
+        XCTAssertFalse(text.localizedCaseInsensitiveContains("prompt"))
+
+        let start = try XCTUnwrap(try JSONSerialization.jsonObject(
+            with: APNSNotificationPayloadBuilder.liveActivityStartData(for: envelope)
+        ) as? [String: Any])
+        let startAPS = try XCTUnwrap(start["aps"] as? [String: Any])
+        let content = try XCTUnwrap(startAPS["content-state"] as? [String: Any])
+        XCTAssertEqual(content["taskID"] as? String, id.uuidString.lowercased())
+        XCTAssertEqual(content["taskState"] as? String, "needs-you")
+    }
+
+    func testTaskVerifiedPayloadIsVisibleOnlyBecauseHostTargetsFollowedDevice() throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let envelope = RemoteAttentionPushEnvelope(
+            kind: .task,
+            state: .resolved,
+            requestID: UUID().uuidString.lowercased(),
+            taskState: .verified,
+            issuedAt: now,
+            expiresAt: now.addingTimeInterval(300)
+        )
+        XCTAssertTrue(APNSNotificationPayloadBuilder.isVisibleAlert(envelope))
+        XCTAssertFalse(APNSNotificationPayloadBuilder.shouldPushToStart(envelope))
+        XCTAssertEqual(APNSNotificationPayloadBuilder.pushType(for: envelope), "alert")
+    }
+
     func testPendingPayloadIsGenericAndOpaque() throws {
         let issuedAt = Date(timeIntervalSince1970: 1_800_000_000)
         let envelope = RemoteAttentionPushEnvelope(

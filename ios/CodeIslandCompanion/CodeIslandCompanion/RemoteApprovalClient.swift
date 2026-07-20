@@ -1,6 +1,29 @@
+import Combine
 import Foundation
 import Security
 import UIKit
+
+enum RemoteTaskDeepLinkDestination: Equatable, Sendable {
+    case detail(UUID)
+    case composer(text: String?, provider: RemoteTaskProvider?)
+    case needsYou
+    case sessions
+
+    init?(route: PersonalHubDeepLink) {
+        switch route {
+        case .task(let id):
+            self = .detail(id)
+        case .newTask(let text, let provider):
+            self = .composer(text: text, provider: provider)
+        case .needsYou:
+            self = .needsYou
+        case .sessions:
+            self = .sessions
+        case .pendingApproval, .pendingQuestion, .module, .quickJot:
+            return nil
+        }
+    }
+}
 
 @MainActor
 final class RemoteApprovalClient: ObservableObject {
@@ -40,6 +63,11 @@ final class RemoteApprovalClient: ObservableObject {
     @Published var preparedAction: PersonalHubPreparedAction?
     @Published var quickJotDestination: BuddyQuickJotDestination?
     @Published var quickJotSeedText: String?
+    @Published private(set) var remoteTaskDeepLinkDestination: RemoteTaskDeepLinkDestination?
+    @Published private(set) var remoteTasks: [RemoteTaskSummary] = []
+    @Published private(set) var remoteTaskWorkspaces: [RemoteWorkspaceSummary] = []
+    @Published private(set) var remoteTaskDrafts: [RemoteTaskDraft] = []
+    @Published private(set) var remoteTaskError: String?
     @Published var selectedMode: PersonalHubMode {
         didSet {
             UserDefaults.standard.set(selectedMode.rawValue, forKey: Self.selectedModeKey)
@@ -73,7 +101,10 @@ final class RemoteApprovalClient: ObservableObject {
     private var consecutiveApprovalRefreshFailures = 0
     private var notificationObservers: [NSObjectProtocol] = []
     private var pendingGenericDeepLink: RemoteAttentionKind?
+    private let remoteTaskClient = RemoteTaskClient()
+    private var remoteTaskCancellables: Set<AnyCancellable> = []
     var onSnapshotReceived: ((RemoteApprovalSnapshot) -> Void)?
+    var onRemoteTasksReceived: (([RemoteTaskSummary]) -> Void)?
 
     var hasPairingCredential: Bool {
         deviceToken != nil
@@ -105,10 +136,13 @@ final class RemoteApprovalClient: ObservableObject {
             return approvalIDs.first
         case .question:
             return questionIDs.first
+        case .task:
+            return nil
         }
     }
 
     init() {
+        remoteTaskDrafts = remoteTaskClient.localDrafts
 #if DEBUG
         usesMockHub = ProcessInfo.processInfo.arguments.contains("-CodeIslandCompanionMockHub")
         usesMockPairing = ProcessInfo.processInfo.arguments.contains("-CodeIslandCompanionMockPairing")
@@ -123,6 +157,7 @@ final class RemoteApprovalClient: ObservableObject {
         selectedMode = launchMode ?? PersonalHubMode(
             rawValue: UserDefaults.standard.string(forKey: Self.selectedModeKey) ?? ""
         ) ?? .auto
+        bindRemoteTaskClient()
 
 #if DEBUG
         if usesMockPairing {
@@ -139,6 +174,9 @@ final class RemoteApprovalClient: ObservableObject {
             sessionsModule = Self.mockHubModule(.agents)
             approvals = mockAttention.approvals
             questions = mockAttention.questions
+            let remoteTaskFixture = Self.mockRemoteTasksFromLaunchArguments()
+            remoteTaskWorkspaces = remoteTaskFixture.workspaces
+            remoteTasks = remoteTaskFixture.tasks
             if let url = Self.mockDeepLinkFromLaunchArguments() {
                 openDeepLink(url)
             }
@@ -188,6 +226,8 @@ final class RemoteApprovalClient: ObservableObject {
                     self.highlightedApprovalID = nil
                 } else if kind == .question, self.highlightedQuestionID == requestID {
                     self.highlightedQuestionID = nil
+                } else if kind == .task, let requestID, let id = UUID(uuidString: requestID) {
+                    self.remoteTaskDeepLinkDestination = .detail(id)
                 }
                 await self.refresh()
             }
@@ -252,6 +292,7 @@ final class RemoteApprovalClient: ObservableObject {
         isActive = active
         if active {
             consumePendingIntentRoute()
+            remoteTaskClient.resetForActivation()
             Task { await refresh() }
         }
     }
@@ -308,6 +349,7 @@ final class RemoteApprovalClient: ObservableObject {
     func unpair() {
         Self.deleteKeychainToken()
         deviceToken = nil
+        remoteTaskClient.clearConnection()
         approvals = []
         questions = []
         serverName = nil
@@ -317,7 +359,27 @@ final class RemoteApprovalClient: ObservableObject {
         hubError = nil
         preparedAction = nil
         consecutiveApprovalRefreshFailures = 0
+        remoteTasks = []
+        remoteTaskDrafts = remoteTaskClient.localDrafts
         state = .unpaired
+    }
+
+    private func bindRemoteTaskClient() {
+        remoteTaskClient.$tasks
+            .sink { [weak self] tasks in
+                self?.remoteTasks = tasks
+                self?.onRemoteTasksReceived?(tasks)
+            }
+            .store(in: &remoteTaskCancellables)
+        remoteTaskClient.$localDrafts
+            .sink { [weak self] in self?.remoteTaskDrafts = $0 }
+            .store(in: &remoteTaskCancellables)
+        remoteTaskClient.$workspaces
+            .sink { [weak self] in self?.remoteTaskWorkspaces = $0 }
+            .store(in: &remoteTaskCancellables)
+        remoteTaskClient.$lastError
+            .sink { [weak self] in self?.remoteTaskError = $0 }
+            .store(in: &remoteTaskCancellables)
     }
 
     func resolve(_ approval: RemoteApprovalItem, decision: RemoteApprovalDecision) async {
@@ -412,6 +474,7 @@ final class RemoteApprovalClient: ObservableObject {
             state = .connected
             onSnapshotReceived?(snapshot)
             await refreshHub()
+            await refreshRemoteTasks()
         } catch RemoteClientError.unauthorized {
             unpair()
         } catch {
@@ -424,6 +487,70 @@ final class RemoteApprovalClient: ObservableObject {
                 state = failureState
             }
         }
+    }
+
+    @discardableResult
+    func enqueueRemoteTask(_ input: RemoteTaskDraftInput) async throws -> RemoteTaskDraft {
+        let draft = try remoteTaskClient.enqueue(input)
+        remoteTaskDrafts = remoteTaskClient.localDrafts
+        await refreshRemoteTasks(force: true)
+        return draft
+    }
+
+    func refreshRemoteTasks(force: Bool = false) async {
+#if DEBUG
+        if usesMockHub { return }
+#endif
+        guard let deviceToken, let baseURL = normalizedServerURL else {
+            remoteTaskDrafts = remoteTaskClient.localDrafts
+            return
+        }
+        let result = await remoteTaskClient.sync(
+            baseURL: baseURL,
+            bearerToken: deviceToken,
+            force: force
+        )
+        remoteTasks = remoteTaskClient.tasks
+        remoteTaskDrafts = remoteTaskClient.localDrafts
+        remoteTaskError = remoteTaskClient.lastError
+        if remoteTaskClient.workspaces.isEmpty {
+            _ = await remoteTaskClient.refreshWorkspaces(baseURL: baseURL, bearerToken: deviceToken)
+        }
+        switch result {
+        case .pairingRequired:
+            unpair()
+        case .offline:
+            if lastUpdatedAt == nil {
+                state = .offline(remoteTaskClient.lastError ?? "Mac offline")
+            }
+        case .success, .conflict, .deferred:
+            break
+        }
+    }
+
+    func followUpRemoteTask(taskID: UUID, text: String) async {
+        guard let deviceToken, let baseURL = normalizedServerURL else { return }
+        let result = await remoteTaskClient.followUp(
+            taskID: taskID,
+            text: text,
+            baseURL: baseURL,
+            bearerToken: deviceToken
+        )
+        if result == .pairingRequired { unpair() }
+    }
+
+    func cancelRemoteTask(taskID: UUID) async {
+        guard let deviceToken, let baseURL = normalizedServerURL else { return }
+        let result = await remoteTaskClient.cancel(
+            taskID: taskID,
+            baseURL: baseURL,
+            bearerToken: deviceToken
+        )
+        if result == .pairingRequired { unpair() }
+    }
+
+    func consumeRemoteTaskDeepLinkDestination() {
+        remoteTaskDeepLinkDestination = nil
     }
 
     func refreshHub() async {
@@ -586,6 +713,9 @@ final class RemoteApprovalClient: ObservableObject {
             pendingGenericDeepLink = nil
             quickJotSeedText = text
             quickJotDestination = BuddyQuickJotDestination(rawValue: destination.rawValue)
+        case .task, .newTask, .needsYou, .sessions:
+            pendingGenericDeepLink = nil
+            remoteTaskDeepLinkDestination = RemoteTaskDeepLinkDestination(route: route)
         }
     }
 
@@ -604,6 +734,8 @@ final class RemoteApprovalClient: ObservableObject {
                 approvalIDs: approvals.map(\.id),
                 questionIDs: questions.map(\.id)
             )
+        case .task:
+            break
         }
         self.pendingGenericDeepLink = nil
     }
@@ -919,6 +1051,60 @@ final class RemoteApprovalClient: ObservableObject {
         case "question": return ([], [question])
         case "multiple": return ([approval], [question])
         default: return ([], [])
+        }
+    }
+
+    private static func mockRemoteTasksFromLaunchArguments() -> (
+        workspaces: [RemoteWorkspaceSummary],
+        tasks: [RemoteTaskSummary]
+    ) {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let index = arguments.firstIndex(of: "-CodeIslandCompanionMockRemoteTasks"),
+              arguments.indices.contains(index + 1)
+        else { return ([], []) }
+
+        let workspace = RemoteWorkspaceSummary(id: "ui-test-codeisland", name: "CodeIsland")
+        let now = Date()
+        func task(_ id: String, state: RemoteTaskState, title: String, summary: String) -> RemoteTaskSummary {
+            let uuid = UUID(uuidString: id)!
+            return RemoteTaskSummary(
+                id: uuid,
+                clientTaskID: uuid,
+                idempotencyKey: UUID(),
+                title: title,
+                workspaceID: workspace.id,
+                workspaceName: workspace.name,
+                provider: .codex,
+                authority: .editAndTest,
+                state: state,
+                createdAt: now.addingTimeInterval(-600),
+                updatedAt: now,
+                lastReceiptSequence: 2,
+                latestSummary: summary
+            )
+        }
+
+        switch arguments[index + 1].lowercased() {
+        case "needs-you":
+            return ([workspace], [task(
+                "20000000-0000-0000-0000-000000000001",
+                state: .needsYou,
+                title: "Finish Buddy end-to-end testing",
+                summary: "Choose whether to upload the internal build"
+            )])
+        case "portfolio":
+            return ([workspace], [
+                task("20000000-0000-0000-0000-000000000001", state: .needsYou, title: "Finish Buddy end-to-end testing", summary: "Choose whether to upload the internal build"),
+                task("20000000-0000-0000-0000-000000000002", state: .working, title: "Polish the Mac task portfolio", summary: "Running focused UI checks"),
+                task("20000000-0000-0000-0000-000000000003", state: .verified, title: "Keep notch text in English", summary: "English-boundary checks passed"),
+            ])
+        default:
+            return ([workspace], [task(
+                "20000000-0000-0000-0000-000000000002",
+                state: .working,
+                title: "Polish the Mac task portfolio",
+                summary: "Running focused UI checks"
+            )])
         }
     }
 

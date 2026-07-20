@@ -23,6 +23,11 @@ struct CodeIslandCompanionApp: App {
                 liveActivity?.syncAttention(with: state)
             }
         }
+        remoteApprovals.onRemoteTasksReceived = { [weak liveActivity] tasks in
+            Task { @MainActor in
+                liveActivity?.syncRemoteTasks(tasks)
+            }
+        }
 #if DEBUG
         Self.configureSmokeTestHooks(connection: connection, liveActivity: liveActivity)
 #endif
@@ -39,6 +44,9 @@ struct CodeIslandCompanionApp: App {
                 .environmentObject(remoteApprovals)
                 .onChange(of: scenePhase) { _, newPhase in
                     remoteApprovals.setActive(newPhase == .active)
+                }
+                .onChange(of: remoteApprovals.state) { _, state in
+                    liveActivity.hostAvailabilityChanged(isAvailable: state == .connected)
                 }
                 .onOpenURL { remoteApprovals.openDeepLink($0) }
         }

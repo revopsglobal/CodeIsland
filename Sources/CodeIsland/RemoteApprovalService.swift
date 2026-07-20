@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import CryptoKit
 import Foundation
@@ -18,6 +19,8 @@ final class RemoteApprovalService: ObservableObject {
     @Published private(set) var pairedDevices: [RemoteApprovalDevice] = []
     @Published private(set) var pairingCode: String = ""
     @Published private(set) var pairingExpiresAt: Date = .distantPast
+    @Published private(set) var remoteTasks: [RemoteTaskSummary] = []
+    @Published private(set) var remoteTaskWorkspaces: [RemoteWorkspaceSummary] = []
 
     private weak var appState: AppState?
     private var server: RemoteApprovalHTTPServer?
@@ -26,11 +29,19 @@ final class RemoteApprovalService: ObservableObject {
     private let personalHub: PersonalHubService
     private let localPortOverride: UInt16?
     private let enabledOverride: Bool?
+    private let remoteTasksEnabled: Bool
+    private let remoteTaskCoordinatorOverride: RemoteTaskCoordinator?
     private let tailscaleConfigurator: @Sendable (Int, Int) throws -> String
     private var pairAttemptLimiter = RemotePairAttemptLimiter()
     private var lastPendingIDs: Set<String> = []
     private var lastPendingQuestionIDs: Set<String> = []
     private var sleepActivity: NSObjectProtocol?
+    private var remoteTaskCoordinator: RemoteTaskCoordinator?
+    private var remoteTaskStore: RemoteTaskStore?
+    private var codexTaskRunner: CodexRemoteTaskRunner?
+    private var claudeTaskRunner: ClaudeRemoteTaskRunner?
+    private var remoteTaskStoreCancellable: AnyCancellable?
+    private var lastRemoteTaskStates: [UUID: RemoteTaskState] = [:]
 
     init(
         deviceStore: RemoteApprovalDeviceStore? = nil,
@@ -38,6 +49,8 @@ final class RemoteApprovalService: ObservableObject {
         personalHub: PersonalHubService? = nil,
         localPortOverride: UInt16? = nil,
         enabledOverride: Bool? = nil,
+        remoteTasksEnabled: Bool? = nil,
+        remoteTaskCoordinatorOverride: RemoteTaskCoordinator? = nil,
         tailscaleConfigurator: @escaping @Sendable (Int, Int) throws -> String = { localPort, tailscalePort in
             try TailscaleServeManager.configure(localPort: localPort, httpsPort: tailscalePort)
         }
@@ -47,6 +60,9 @@ final class RemoteApprovalService: ObservableObject {
         self.personalHub = personalHub ?? .shared
         self.localPortOverride = localPortOverride
         self.enabledOverride = enabledOverride
+        self.remoteTasksEnabled = remoteTasksEnabled
+            ?? (localPortOverride == nil && enabledOverride == nil)
+        self.remoteTaskCoordinatorOverride = remoteTaskCoordinatorOverride
         self.tailscaleConfigurator = tailscaleConfigurator
         syncPublishedState()
     }
@@ -99,6 +115,7 @@ final class RemoteApprovalService: ObservableObject {
                     case .success:
                         self.running = true
                         self.lastError = nil
+                        self.startRemoteTaskCoordinatorIfNeeded()
                         self.refreshSleepActivity()
                         self.configureTailscaleServe()
                     case .failure(let error):
@@ -116,10 +133,222 @@ final class RemoteApprovalService: ObservableObject {
     }
 
     func stop() {
+        remoteTaskCoordinator?.shutdown()
+        remoteTaskStoreCancellable?.cancel()
+        remoteTaskStoreCancellable = nil
+        remoteTaskCoordinator = nil
+        remoteTaskStore = nil
+        codexTaskRunner = nil
+        claudeTaskRunner = nil
+        appState?.codexRemoteTaskRunner = nil
+        remoteTasks = []
+        remoteTaskWorkspaces = []
+        lastRemoteTaskStates = [:]
         server?.stop()
         server = nil
         running = false
         endSleepActivity()
+    }
+
+    private func startRemoteTaskCoordinatorIfNeeded() {
+        guard remoteTasksEnabled, remoteTaskCoordinator == nil, let appState else { return }
+
+        if let remoteTaskCoordinatorOverride {
+            remoteTaskCoordinator = remoteTaskCoordinatorOverride
+            refreshRemoteTaskPublishedState()
+            do {
+                try remoteTaskCoordinatorOverride.recover()
+            } catch {
+                lastError = "Remote task recovery failed: \(error.localizedDescription)"
+            }
+            return
+        }
+
+        appState.startCodexAppServerWatcher()
+        let recent = appState.sessions.values.compactMap { session -> RemoteWorkspaceCandidate? in
+            guard let cwd = session.cwd, !cwd.isEmpty else { return nil }
+            return RemoteWorkspaceCandidate(
+                url: URL(fileURLWithPath: cwd, isDirectory: true),
+                source: .recentSession,
+                lastUsedAt: session.lastActivity
+            )
+        }
+        let saved = UserDefaults.standard
+            .stringArray(forKey: "CodeIslandRemoteTaskWorkspaceRoots")?
+            .map {
+                RemoteWorkspaceCandidate(
+                    url: URL(fileURLWithPath: $0, isDirectory: true),
+                    source: .saved
+                )
+            } ?? []
+        let candidates = recent + saved
+        let allowedRoots = candidates.map(\.url)
+        let catalog = RemoteWorkspaceCatalog(
+            allowedRoots: allowedRoots,
+            candidates: candidates
+        )
+        let store = RemoteTaskStore()
+        let attachments = RemoteTaskAttachmentStore()
+
+        var codexAdapter: RemoteTaskProviderRunner?
+        if let client = appState.codexAppServerClient {
+            let runner = CodexRemoteTaskRunner(sender: client, store: store)
+            codexTaskRunner = runner
+            appState.codexRemoteTaskRunner = runner
+            codexAdapter = runner.providerAdapter { [weak appState] in
+                appState?.codexAppServerClient != nil
+            }
+        }
+
+        let claude = ClaudeRemoteTaskRunner(store: store)
+        claudeTaskRunner = claude
+        let coordinator = RemoteTaskCoordinator(
+            store: store,
+            workspaceCatalog: catalog,
+            attachmentStore: attachments,
+            codex: codexAdapter,
+            claude: claude.providerAdapter {
+                ClaudeExecutableLocator.resolve(
+                    explicitPath: UserDefaults.standard.string(
+                        forKey: ClaudeExecutableLocator.defaultsKey
+                    )
+                ) != nil
+            }
+        )
+        remoteTaskStore = store
+        remoteTaskCoordinator = coordinator
+        remoteTaskWorkspaces = coordinator.workspaces
+        do {
+            try coordinator.recover()
+        } catch {
+            lastError = "Remote task recovery failed: \(error.localizedDescription)"
+        }
+        remoteTasks = store.tasks.map(\.summary)
+        lastRemoteTaskStates = Dictionary(uniqueKeysWithValues: store.tasks.map { ($0.id, $0.summary.state) })
+        remoteTaskStoreCancellable = store.$tasks
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] records in
+                self?.remoteTaskRecordsDidChange(records)
+            }
+    }
+
+    private func remoteTaskRecordsDidChange(_ records: [RemoteTaskRecord]) {
+        remoteTasks = records.map(\.summary)
+        let nextStates = Dictionary(uniqueKeysWithValues: records.map { ($0.id, $0.summary.state) })
+        for record in records {
+            let prior = lastRemoteTaskStates[record.id]
+            let next = record.summary.state
+            guard prior != next else { continue }
+            APNSNotificationSender.shared.notifyTask(
+                taskID: record.id,
+                state: next,
+                devices: deviceStore.devices
+            )
+        }
+        lastRemoteTaskStates = nextStates
+    }
+
+    @discardableResult
+    func createLocalRemoteTask(
+        prompt: String,
+        workspaceID: String,
+        provider: RemoteTaskProvider
+    ) throws -> RemoteTaskSummary {
+        guard let remoteTaskCoordinator else {
+            throw RemoteTaskLocalError.unavailable
+        }
+        let cleanPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanPrompt.isEmpty else { throw RemoteTaskLocalError.emptyPrompt }
+        let request = RemoteTaskCreateRequest(
+            clientTaskID: UUID(),
+            idempotencyKey: UUID(),
+            prompt: cleanPrompt,
+            workspaceID: workspaceID,
+            provider: provider,
+            authority: .editAndTest,
+            requestedProof: "Run focused tests and report exact evidence"
+        )
+        let record = try remoteTaskCoordinator.create(request: request, deviceID: "local-mac")
+        refreshRemoteTaskPublishedState()
+        return record.summary
+    }
+
+    func followUpLocalRemoteTask(id: UUID, text: String) throws {
+        guard let remoteTaskCoordinator else { throw RemoteTaskLocalError.unavailable }
+        let cleanText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanText.isEmpty else { throw RemoteTaskLocalError.emptyPrompt }
+        _ = try remoteTaskCoordinator.followUp(RemoteTaskFollowUpRequest(
+            taskID: id,
+            idempotencyKey: UUID(),
+            text: cleanText
+        ))
+        refreshRemoteTaskPublishedState()
+    }
+
+    func cancelLocalRemoteTask(id: UUID) throws {
+        guard let remoteTaskCoordinator else { throw RemoteTaskLocalError.unavailable }
+        try remoteTaskCoordinator.cancel(taskID: id)
+        refreshRemoteTaskPublishedState()
+    }
+
+    @discardableResult
+    func openRemoteTaskOnMac(id: UUID) -> Bool {
+        guard let appState,
+              let remoteTaskCoordinator,
+              let record = remoteTaskCoordinator.task(id: id)
+        else { return false }
+
+        let workspacePath = remoteTaskCoordinator
+            .workspaceURL(id: record.summary.workspaceID)?
+            .standardizedFileURL.path
+        let candidates = appState.sessions.map { key, session in
+            RemoteTaskSessionCandidate(
+                id: key,
+                provider: session.source,
+                workspacePath: session.cwd.map { URL(fileURLWithPath: $0).standardizedFileURL.path },
+                updatedAt: session.lastActivity
+            )
+        }
+        guard let targetID = RemoteTaskOpenTargetResolver.resolve(
+            providerSessionID: record.summary.providerSessionID,
+            provider: record.summary.provider,
+            workspacePath: workspacePath,
+            candidates: candidates
+        ), let session = appState.sessions[targetID]
+        else {
+            if let workspaceURL = remoteTaskCoordinator.workspaceURL(id: record.summary.workspaceID) {
+                NSWorkspace.shared.open(workspaceURL)
+            }
+            return false
+        }
+
+        appState.activeSessionId = targetID
+        appState.surface = .sessionList
+        TerminalActivator.activate(session: session, sessionId: targetID)
+        return true
+    }
+
+    func refreshRemoteTaskPublishedState() {
+        guard let remoteTaskCoordinator else {
+            remoteTasks = []
+            remoteTaskWorkspaces = []
+            return
+        }
+        remoteTasks = remoteTaskCoordinator.snapshot.tasks
+        remoteTaskWorkspaces = remoteTaskCoordinator.workspaces
+    }
+
+    enum RemoteTaskLocalError: LocalizedError {
+        case unavailable
+        case emptyPrompt
+
+        var errorDescription: String? {
+            switch self {
+            case .unavailable: return "Remote task service is not available"
+            case .emptyPrompt: return "Describe the coding task first"
+            }
+        }
     }
 
     func restart() {
@@ -330,6 +559,10 @@ final class RemoteApprovalService: ObservableObject {
             )
         }
 
+        if request.path == "/api/tasks" || request.path.hasPrefix("/api/tasks/") {
+            return routeRemoteTask(request, deviceID: authenticated.id)
+        }
+
         if request.method == "GET", request.path == "/api/approvals" {
             let snapshot = coordinator.snapshot(
                 appState: appState,
@@ -525,6 +758,189 @@ final class RemoteApprovalService: ObservableObject {
         }
 
         return .json(status: 404, object: ["error": "not found"])
+    }
+
+    private func routeRemoteTask(_ request: RemoteHTTPRequest, deviceID: String) -> RemoteHTTPResponse {
+        guard let taskCoordinator = remoteTaskCoordinator else {
+            return .json(status: 503, object: ["error": "remote tasks are unavailable"])
+        }
+        let components = request.path.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
+
+        if components == ["api", "tasks"] {
+            switch request.method {
+            case "GET":
+                return .json(status: 200, encodable: taskCoordinator.snapshot(deviceID: deviceID))
+            case "POST":
+                guard let create = request.decode(RemoteTaskCreateRequest.self),
+                      create.version == RemoteTaskCreateRequest.currentVersion,
+                      !create.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                      create.prompt.utf8.count <= 60_000
+                else {
+                    return .json(status: 400, object: ["error": "invalid task request"])
+                }
+                if let existing = taskCoordinator.task(idempotencyKey: create.idempotencyKey) {
+                    guard existing.deviceID == deviceID else {
+                        return .json(status: 403, object: ["error": "task belongs to another paired device"])
+                    }
+                    return .json(status: 200, encodable: existing.summary)
+                }
+                do {
+                    let created = try taskCoordinator.create(request: create, deviceID: deviceID)
+                    return .json(status: 201, encodable: created.summary)
+                } catch {
+                    return remoteTaskErrorResponse(error)
+                }
+            default:
+                return .json(status: 405, object: ["error": "method not allowed"])
+            }
+        }
+
+        if components == ["api", "tasks", "workspaces"] {
+            guard request.method == "GET" else {
+                return .json(status: 405, object: ["error": "method not allowed"])
+            }
+            return .json(
+                status: 200,
+                encodable: RemoteWorkspaceSnapshot(workspaces: taskCoordinator.workspaces)
+            )
+        }
+
+        guard components.count >= 3,
+              components[0] == "api", components[1] == "tasks",
+              let taskID = UUID(uuidString: components[2])
+        else {
+            return .json(status: 404, object: ["error": "task not found"])
+        }
+        guard let record = taskCoordinator.task(id: taskID) else {
+            return .json(status: 404, object: ["error": "task not found"])
+        }
+        guard record.deviceID == deviceID else {
+            return .json(status: 403, object: ["error": "task belongs to another paired device"])
+        }
+
+        if components.count == 3 {
+            guard request.method == "GET" else {
+                return .json(status: 405, object: ["error": "method not allowed"])
+            }
+            return .json(status: 200, encodable: record.summary)
+        }
+
+        if components.count == 4, components[3] == "follow-up" {
+            guard request.method == "POST" else {
+                return .json(status: 405, object: ["error": "method not allowed"])
+            }
+            guard let followUp = request.decode(RemoteTaskFollowUpRequest.self),
+                  followUp.version == RemoteTaskFollowUpRequest.currentVersion,
+                  followUp.taskID == taskID,
+                  !followUp.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  followUp.text.utf8.count <= 60_000
+            else {
+                return .json(status: 400, object: ["error": "invalid follow-up request"])
+            }
+            do {
+                return .json(status: 200, encodable: try taskCoordinator.followUp(followUp).summary)
+            } catch {
+                return remoteTaskErrorResponse(error)
+            }
+        }
+
+        if components.count == 4, components[3] == "cancel" {
+            guard request.method == "POST" else {
+                return .json(status: 405, object: ["error": "method not allowed"])
+            }
+            do {
+                try taskCoordinator.cancel(taskID: taskID)
+                return .json(status: 200, encodable: taskCoordinator.task(id: taskID)?.summary ?? record.summary)
+            } catch {
+                return remoteTaskErrorResponse(error)
+            }
+        }
+
+        if components.count == 5, components[3] == "attachments" {
+            guard request.method == "PUT" else {
+                return .json(status: 405, object: ["error": "method not allowed"])
+            }
+            let attachmentID = components[4].removingPercentEncoding ?? ""
+            guard !attachmentID.isEmpty else {
+                return .json(status: 400, object: ["error": "invalid attachment identifier"])
+            }
+            do {
+                let updated = try taskCoordinator.stageAttachment(
+                    taskID: taskID,
+                    attachmentID: attachmentID,
+                    data: request.body
+                )
+                return .json(status: 200, encodable: updated.summary)
+            } catch RemoteTaskCoordinator.CoordinatorError.attachmentMismatch {
+                return .json(status: 409, object: ["error": "attachment size or SHA-256 mismatch"])
+            } catch RemoteTaskCoordinator.CoordinatorError.unknownAttachment {
+                return .json(status: 404, object: ["error": "attachment was not declared"])
+            } catch {
+                return remoteTaskErrorResponse(error)
+            }
+        }
+
+        if components.count == 5, components[3] == "actions", components[4] == "prepare" {
+            guard request.method == "POST" else {
+                return .json(status: 405, object: ["error": "method not allowed"])
+            }
+            guard let intent = request.decode(RemoteTaskActionIntent.self),
+                  intent.version == RemoteTaskActionIntent.currentVersion,
+                  intent.taskID == taskID
+            else {
+                return .json(status: 400, object: ["error": "invalid action intent"])
+            }
+            do {
+                return .json(
+                    status: 200,
+                    encodable: try taskCoordinator.prepareAction(intent, deviceID: deviceID)
+                )
+            } catch {
+                return remoteTaskErrorResponse(error)
+            }
+        }
+
+        if components.count == 5, components[3] == "actions", components[4] == "execute" {
+            guard request.method == "POST" else {
+                return .json(status: 405, object: ["error": "method not allowed"])
+            }
+            guard let execution = request.decode(RemoteTaskActionExecutionRequest.self),
+                  execution.version == RemoteTaskActionExecutionRequest.currentVersion,
+                  execution.intent.taskID == taskID
+            else {
+                return .json(status: 400, object: ["error": "invalid action confirmation"])
+            }
+            do {
+                try taskCoordinator.authorizeAction(
+                    execution.intent,
+                    actionToken: execution.actionToken,
+                    deviceID: deviceID
+                )
+                return .json(status: 200, encodable: taskCoordinator.task(id: taskID)?.summary ?? record.summary)
+            } catch RemoteTaskCoordinator.CoordinatorError.invalidActionToken {
+                return .json(status: 403, object: ["error": "action confirmation is invalid or expired"])
+            } catch RemoteTaskCoordinator.CoordinatorError.staleAction {
+                return .json(status: 409, object: ["error": "task changed; review the action again"])
+            } catch {
+                return remoteTaskErrorResponse(error)
+            }
+        }
+
+        return .json(status: 405, object: ["error": "method not allowed"])
+    }
+
+    private func remoteTaskErrorResponse(_ error: Error) -> RemoteHTTPResponse {
+        switch error {
+        case RemoteTaskCoordinator.CoordinatorError.unknownTask:
+            return .json(status: 404, object: ["error": "task not found"])
+        case RemoteTaskCoordinator.CoordinatorError.invalidActionToken:
+            return .json(status: 403, object: ["error": error.localizedDescription])
+        case RemoteTaskCoordinator.CoordinatorError.staleAction,
+             RemoteTaskCoordinator.CoordinatorError.attachmentMismatch:
+            return .json(status: 409, object: ["error": error.localizedDescription])
+        default:
+            return .json(status: 400, object: ["error": error.localizedDescription])
+        }
     }
 
     private func downloadableFileResponse(

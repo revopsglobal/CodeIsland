@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#101014"/>
+      <stop offset="1" stop-color="#050507"/>
+    </linearGradient>
+    <linearGradient id="island" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFDF8"/>
+      <stop offset="1" stop-color="#D8D4CC"/>
+    </linearGradient>
+    <radialGradient id="signal" cx="0.42" cy="0.35" r="0.68">
+      <stop offset="0" stop-color="#FFD06E"/>
+      <stop offset="1" stop-color="#F59E0B"/>
+    </radialGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#background)"/>
+  <path fill="url(#island)" d="M0 0h224c150 0 248 104 248 270v172c0 31 12 51 40 70-28 19-40 39-40 70v172c0 166-98 270-248 270H0V0Z"/>
+  <path fill="url(#island)" d="M1024 0H800C650 0 552 104 552 270v172c0 31-12 51-40 70 28 19 40 39 40 70v172c0 166 98 270 248 270h224V0Z"/>
+  <circle cx="512" cy="512" r="33" fill="url(#signal)"/>
+</svg>

@@ -2,6 +2,25 @@ import XCTest
 @testable import CodeIslandCompanion
 
 final class CompanionCommandCenterModelTests: XCTestCase {
+    func testRemoteTaskDeepLinksMapToStableNavigationDestinations() throws {
+        let taskID = UUID()
+        XCTAssertEqual(
+            RemoteTaskDeepLinkDestination(route: .task(id: taskID)),
+            .detail(taskID)
+        )
+        XCTAssertEqual(
+            RemoteTaskDeepLinkDestination(route: .newTask(text: "Fix calendar access")),
+            .composer(text: "Fix calendar access", provider: nil)
+        )
+        XCTAssertEqual(
+            RemoteTaskDeepLinkDestination(route: .newTask(text: nil)),
+            .composer(text: nil, provider: nil)
+        )
+        XCTAssertEqual(RemoteTaskDeepLinkDestination(route: .needsYou), .needsYou)
+        XCTAssertEqual(RemoteTaskDeepLinkDestination(route: .sessions), .sessions)
+        XCTAssertNil(RemoteTaskDeepLinkDestination(route: .pendingApproval(id: nil)))
+    }
+
     func testAttentionSummaryUsesAuthoritativeRemoteQueueCounts() {
         XCTAssertEqual(
             CompanionAttentionSummary.resolve(

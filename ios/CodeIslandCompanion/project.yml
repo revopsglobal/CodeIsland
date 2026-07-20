@@ -21,6 +21,7 @@ targets:
           - WatchBridge.swift
       - path: Shared
       - path: ../../Sources/CodeIslandCore/RemoteApprovalProtocol.swift
+      - path: ../../Sources/CodeIslandCore/RemoteTaskProtocol.swift
       - path: ../../Sources/CodeIslandCore/LiveActivityLifecycle.swift
       - path: ../../Sources/CodeIslandCore/PersonalHubProtocol.swift
       - path: ../../Sources/CodeIsland/AntiGravityView.swift
@@ -59,6 +60,8 @@ targets:
           PROVISIONING_PROFILE_SPECIFIER: "CodeIsland Buddy App Store"
     dependencies:
       - target: CodeIslandCompanionWidget
+        embed: true
+      - target: CodeIslandShareExtension
         embed: true
       - sdk: AppIntents.framework
       - sdk: Speech.framework
@@ -100,6 +103,26 @@ targets:
           CODE_SIGN_STYLE: Manual
           CODE_SIGN_IDENTITY: "iPhone Distribution"
           PROVISIONING_PROFILE_SPECIFIER: "CodeIsland Buddy Widget App Store"
+  CodeIslandShareExtension:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: CodeIslandShareExtension
+      - path: Shared/SharedDraftInbox.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.revopsglobal.codeisland.buddy.share
+        INFOPLIST_FILE: CodeIslandShareExtension/Info.plist
+        CODE_SIGN_ENTITLEMENTS: CodeIslandShareExtension/CodeIslandShareExtension.entitlements
+        APPLICATION_EXTENSION_API_ONLY: YES
+        TARGETED_DEVICE_FAMILY: "1"
+        SKIP_INSTALL: YES
+      configs:
+        Release:
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_IDENTITY: "iPhone Distribution"
+          PROVISIONING_PROFILE_SPECIFIER: "CodeIsland Buddy Share App Store"
   CodeIslandCompanionUITests:
     type: bundle.ui-testing
     platform: iOS

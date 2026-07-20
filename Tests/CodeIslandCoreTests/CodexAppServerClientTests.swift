@@ -3,6 +3,70 @@ import XCTest
 
 final class CodexAppServerClientTests: XCTestCase {
 
+    func testTypedThreadStartUsesBoundedEditAndTestConfiguration() throws {
+        let sender = RecordingCodexSender()
+        let id = try sender.startThread(
+            cwd: "/tmp/workspace",
+            developerInstructions: "bounded instructions"
+        )
+
+        XCTAssertEqual(id, .int(1))
+        let request = try XCTUnwrap(sender.requests.first)
+        XCTAssertEqual(request.method, "thread/start")
+        let params = try XCTUnwrap(request.params as? [String: Any])
+        XCTAssertEqual(params["cwd"] as? String, "/tmp/workspace")
+        XCTAssertEqual(params["developerInstructions"] as? String, "bounded instructions")
+        XCTAssertEqual(params["approvalPolicy"] as? String, "on-request")
+        XCTAssertEqual(params["approvalsReviewer"] as? String, "user")
+        XCTAssertEqual(params["sandbox"] as? String, "workspace-write")
+        XCTAssertEqual(params["runtimeWorkspaceRoots"] as? [String], ["/tmp/workspace"])
+        XCTAssertEqual((params["environments"] as? [Any])?.count, 0)
+        let config = try XCTUnwrap(params["config"] as? [String: Any])
+        let sandbox = try XCTUnwrap(config["sandbox_workspace_write"] as? [String: Any])
+        XCTAssertEqual(sandbox["network_access"] as? Bool, false)
+    }
+
+    func testTypedTurnStartUsesSchemaInputsAndStableClientMessageID() throws {
+        let sender = RecordingCodexSender()
+        let attachments = [
+            URL(fileURLWithPath: "/tmp/context.png"),
+            URL(fileURLWithPath: "/tmp/brief.pdf"),
+        ]
+
+        _ = try sender.startTurn(
+            threadID: "thread-1",
+            text: "Implement and test",
+            attachments: attachments,
+            clientUserMessageID: "stable-message-1",
+            workspaceURL: URL(fileURLWithPath: "/tmp/workspace")
+        )
+
+        let params = try XCTUnwrap(sender.requests.first?.params as? [String: Any])
+        XCTAssertEqual(params["threadId"] as? String, "thread-1")
+        XCTAssertEqual(params["clientUserMessageId"] as? String, "stable-message-1")
+        XCTAssertEqual(params["approvalPolicy"] as? String, "on-request")
+        XCTAssertEqual((params["environments"] as? [Any])?.count, 0)
+        let sandbox = try XCTUnwrap(params["sandboxPolicy"] as? [String: Any])
+        XCTAssertEqual(sandbox["type"] as? String, "workspaceWrite")
+        XCTAssertEqual(sandbox["networkAccess"] as? Bool, false)
+        XCTAssertEqual(sandbox["writableRoots"] as? [String], ["/tmp/workspace"])
+        let input = try XCTUnwrap(params["input"] as? [[String: Any]])
+        XCTAssertEqual(input.map { $0["type"] as? String }, ["text", "localImage", "mention"])
+        XCTAssertEqual(input[0]["text"] as? String, "Implement and test")
+        XCTAssertEqual(input[1]["path"] as? String, "/tmp/context.png")
+        XCTAssertEqual(input[2]["name"] as? String, "brief.pdf")
+    }
+
+    func testTypedInterruptUsesThreadAndTurnIDs() throws {
+        let sender = RecordingCodexSender()
+        _ = try sender.interrupt(threadID: "thread-1", turnID: "turn-2")
+
+        let request = try XCTUnwrap(sender.requests.first)
+        XCTAssertEqual(request.method, "turn/interrupt")
+        let params = try XCTUnwrap(request.params as? [String: String])
+        XCTAssertEqual(params, ["threadId": "thread-1", "turnId": "turn-2"])
+    }
+
     // MARK: - drainMessages
 
     func testDrainMessagesEmptyBuffer() {
@@ -125,6 +189,8 @@ final class CodexAppServerClientTests: XCTestCase {
         XCTAssertEqual(AnyCodableLike.from(NSNull()), .null)
         XCTAssertEqual(AnyCodableLike.from(true), .bool(true))
         XCTAssertEqual(AnyCodableLike.from(42), .int(42))
+        XCTAssertEqual(AnyCodableLike.from(NSNumber(value: 0)), .int(0))
+        XCTAssertEqual(AnyCodableLike.from(NSNumber(value: true)), .bool(true))
         XCTAssertEqual(AnyCodableLike.from("hi"), .string("hi"))
 
         // Floats end up as .double (bridged through NSNumber's float-check logic).
@@ -152,5 +218,26 @@ final class CodexAppServerClientTests: XCTestCase {
             XCTFail("expected array for k3")
         }
         XCTAssertEqual(dict?["k4"]?.asObject?["inner"]?.asBool, true)
+    }
+}
+
+private final class RecordingCodexSender: CodexAppServerSending {
+    struct Request {
+        let id: CodexRequestID
+        let method: String
+        let params: Any?
+    }
+
+    var requests: [Request] = []
+    var responses: [(CodexRequestID, Any?)] = []
+
+    func sendRequest(method: String, params: Any?) throws -> CodexRequestID {
+        let id = CodexRequestID.int(Int64(requests.count + 1))
+        requests.append(Request(id: id, method: method, params: params))
+        return id
+    }
+
+    func sendResponse(id: CodexRequestID, result: Any?) throws {
+        responses.append((id, result))
     }
 }

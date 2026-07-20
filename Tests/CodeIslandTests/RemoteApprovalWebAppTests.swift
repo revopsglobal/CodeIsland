@@ -2,6 +2,21 @@ import XCTest
 @testable import CodeIsland
 
 final class RemoteApprovalWebAppTests: XCTestCase {
+    func testCodingTaskWebParityIncludesReviewedLifecycleActions() {
+        let html = RemoteApprovalWebApp.html
+        XCTAssertTrue(html.contains(#"id="taskComposer""#))
+        XCTAssertTrue(html.contains("Coding tasks · edit &amp; test"))
+        XCTAssertTrue(html.contains("fetch('/api/tasks/workspaces'"))
+        XCTAssertTrue(html.contains("fetch('/api/tasks'"))
+        XCTAssertTrue(html.contains("/follow-up`"))
+        XCTAssertTrue(html.contains("/cancel`"))
+        XCTAssertTrue(html.contains("Dispatch this exact task?"))
+        XCTAssertTrue(html.contains("Stop this exact coding task?"))
+        XCTAssertTrue(html.contains("Completion evidence"))
+        XCTAssertFalse(html.contains("window.confirm"))
+        XCTAssertFalse(html.contains("window.prompt"))
+    }
+
     func testAttentionRequestsRenderBeforePersonalTools() throws {
         let html = RemoteApprovalWebApp.html
         let questions = try XCTUnwrap(html.range(of: #"<section id="questions">"#))

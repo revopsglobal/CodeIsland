@@ -148,19 +148,19 @@ extension AppleCompanionBluetoothPeripheral: CBPeripheralManagerDelegate {
                 self.poweredOn = false
                 self.advertising = false
                 self.hasSubscribers = false
-                self.lastError = "蓝牙已关闭"
+                self.lastError = L10n.shared["buddy_status_bluetooth_off"]
             case .unauthorized:
                 self.poweredOn = false
                 self.advertising = false
-                self.lastError = "蓝牙权限未授权"
+                self.lastError = L10n.shared["buddy_status_bluetooth_denied"]
             case .unsupported:
                 self.poweredOn = false
                 self.advertising = false
-                self.lastError = "这台 Mac 不支持蓝牙"
+                self.lastError = L10n.shared["buddy_status_bluetooth_unsupported"]
             case .resetting:
                 self.poweredOn = false
                 self.advertising = false
-                self.lastError = "蓝牙正在重置"
+                self.lastError = L10n.shared["buddy_status_bluetooth_resetting"]
             case .unknown:
                 self.poweredOn = false
                 self.advertising = false

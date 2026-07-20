@@ -61,6 +61,17 @@ struct PersonalHubMacView: View {
                     .buttonStyle(.plain)
                     .foregroundStyle(accent)
                     .help("Edit \(snapshot.resolvedMode.rawValue.capitalized) rack")
+                    if snapshot.resolvedMode == .code {
+                        Button {
+                            RemoteTasksWindowController.shared.show(appState: appState)
+                        } label: {
+                            Label("Remote Tasks", systemImage: "terminal")
+                                .font(.system(size: 10, weight: .semibold))
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(accent)
+                        .help("Open the full coding task portfolio")
+                    }
                 }
                 .padding(.horizontal, 12)
 

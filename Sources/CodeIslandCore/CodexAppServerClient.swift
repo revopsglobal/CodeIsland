@@ -58,12 +58,13 @@ public enum AnyCodableLike: Equatable {
         switch value {
         case nil: return .null
         case let v as NSNull: _ = v; return .null
+        case let v as NSNumber:
+            if CFGetTypeID(v) == CFBooleanGetTypeID() { return .bool(v.boolValue) }
+            if CFNumberIsFloatType(v) { return .double(v.doubleValue) }
+            return .int(v.int64Value)
         case let v as Bool: return .bool(v)
         case let v as Int: return .int(Int64(v))
         case let v as Int64: return .int(v)
-        case let v as NSNumber:
-            if CFNumberIsFloatType(v) { return .double(v.doubleValue) }
-            return .int(v.int64Value)
         case let v as Double: return .double(v)
         case let v as String: return .string(v)
         case let v as [Any]: return .array(v.map(AnyCodableLike.from))
@@ -79,6 +80,10 @@ public enum AnyCodableLike: Equatable {
         if case .object(let o) = self { return o }
         return nil
     }
+    public var asArray: [AnyCodableLike]? {
+        if case .array(let values) = self { return values }
+        return nil
+    }
     public var asString: String? {
         if case .string(let s) = self { return s }
         return nil
@@ -86,6 +91,105 @@ public enum AnyCodableLike: Equatable {
     public var asBool: Bool? {
         if case .bool(let b) = self { return b }
         return nil
+    }
+    public var asInt: Int64? {
+        if case .int(let value) = self { return value }
+        return nil
+    }
+}
+
+/// Minimal transport surface used by higher-level Codex task runners. Keeping
+/// this protocol at the framing boundary makes request correlation testable
+/// without spawning a real app-server process.
+public protocol CodexAppServerSending: AnyObject {
+    @discardableResult
+    func sendRequest(method: String, params: Any?) throws -> CodexRequestID
+    func sendResponse(id: CodexRequestID, result: Any?) throws
+}
+
+public extension CodexAppServerSending {
+    /// Start a thread with the immutable CodeIsland Edit & Test boundary.
+    @discardableResult
+    func startThread(cwd: String, developerInstructions: String) throws -> CodexRequestID {
+        try sendRequest(method: "thread/start", params: [
+            "cwd": cwd,
+            "developerInstructions": developerInstructions,
+            "approvalPolicy": "on-request",
+            "approvalsReviewer": "user",
+            "sandbox": "workspace-write",
+            "runtimeWorkspaceRoots": [cwd],
+            "environments": [Any](),
+            "config": [
+                "sandbox_workspace_write": [
+                    "network_access": false,
+                ],
+            ],
+        ])
+    }
+
+    /// Start a turn using only schema-backed input variants. Images use the
+    /// dedicated local-image input; other staged files are explicit mentions.
+    @discardableResult
+    func startTurn(
+        threadID: String,
+        text: String,
+        attachments: [URL],
+        clientUserMessageID: String? = nil,
+        workspaceURL: URL? = nil
+    ) throws -> CodexRequestID {
+        var input: [[String: Any]] = [[
+            "type": "text",
+            "text": text,
+            "text_elements": [Any](),
+        ]]
+        for attachment in attachments {
+            let path = attachment.standardizedFileURL.path
+            if Self.codexImageExtensions.contains(attachment.pathExtension.lowercased()) {
+                input.append(["type": "localImage", "path": path])
+            } else {
+                input.append([
+                    "type": "mention",
+                    "name": attachment.lastPathComponent,
+                    "path": path,
+                ])
+            }
+        }
+
+        var params: [String: Any] = [
+            "threadId": threadID,
+            "input": input,
+            "approvalPolicy": "on-request",
+            "approvalsReviewer": "user",
+            "environments": [Any](),
+        ]
+        if let clientUserMessageID, !clientUserMessageID.isEmpty {
+            params["clientUserMessageId"] = clientUserMessageID
+        }
+        if let workspaceURL {
+            let path = workspaceURL.standardizedFileURL.path
+            params["cwd"] = path
+            params["runtimeWorkspaceRoots"] = [path]
+            params["sandboxPolicy"] = [
+                "type": "workspaceWrite",
+                "writableRoots": [path],
+                "networkAccess": false,
+                "excludeSlashTmp": false,
+                "excludeTmpdirEnvVar": false,
+            ]
+        }
+        return try sendRequest(method: "turn/start", params: params)
+    }
+
+    @discardableResult
+    func interrupt(threadID: String, turnID: String) throws -> CodexRequestID {
+        try sendRequest(method: "turn/interrupt", params: [
+            "threadId": threadID,
+            "turnId": turnID,
+        ])
+    }
+
+    private static var codexImageExtensions: Set<String> {
+        ["png", "jpg", "jpeg", "gif", "webp"]
     }
 }
 
@@ -105,7 +209,7 @@ public enum CodexAppServerError: Error, Equatable {
 /// Thread safety: `start`, `stop`, `sendRequest`, and `sendNotification` can
 /// be called from any thread; I/O is serialized on an internal dispatch queue.
 /// Handler closures run on the caller-supplied callback queue (default: main).
-public final class CodexAppServerClient: @unchecked Sendable {
+public final class CodexAppServerClient: CodexAppServerSending, @unchecked Sendable {
     public typealias MessageHandler = @Sendable (CodexJSONRPCMessage) -> Void
     public typealias ExitHandler = @Sendable (Int32) -> Void
 

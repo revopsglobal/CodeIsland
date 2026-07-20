@@ -46,6 +46,11 @@ final class NotchPanelViewTests: XCTestCase {
         XCTAssertEqual(ToolNameDisplay.compact("  Read  "), "Read")
     }
 
+    func testCompactToolNameReplacesProviderSuppliedChineseLabel() {
+        XCTAssertEqual(ToolNameDisplay.compact("正在读取文件"), "Activity")
+        XCTAssertEqual(ToolNameDisplay.compact("Bash 执行"), "Activity")
+    }
+
     func testCompactToolNameTruncatesLongNamesWithoutLosingSuffix() {
         let compact = ToolNameDisplay.compact("mcp__very_long_server_name__fetch_document_page", maxCharacters: 24)
 

@@ -2,6 +2,38 @@ import XCTest
 @testable import CodeIslandCore
 
 final class RemoteAttentionLifecycleTests: XCTestCase {
+    func testTaskEnvelopeRequiresOpaqueUUIDAndState() throws {
+        let id = UUID()
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let envelope = RemoteAttentionPushEnvelope(
+            kind: .task,
+            state: .pending,
+            requestID: id.uuidString.lowercased(),
+            taskState: .needsYou,
+            issuedAt: now,
+            expiresAt: now.addingTimeInterval(600)
+        )
+        let data = try JSONSerialization.data(withJSONObject: envelope.payloadFields)
+        let fields = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(RemoteAttentionPushEnvelope(payloadFields: fields), envelope)
+        XCTAssertEqual(fields["ciTaskState"] as? String, "needs-you")
+        XCTAssertNil(RemoteAttentionPushEnvelope(payloadFields: [
+            "ciVersion": 1, "ciEventId": "e", "ciAttentionKind": "task",
+            "ciAttentionState": "pending", "ciRequestId": "not-a-uuid",
+            "ciTaskState": "needs-you", "ciIssuedAt": 1, "ciExpiresAt": 2,
+        ]))
+    }
+
+    func testTaskAttentionPolicyIsSignalFirstAndTerminalCannotRegress() {
+        XCTAssertFalse(RemoteTaskAttentionPolicy.shouldNotifyImmediately(state: .working, isFollowed: true))
+        XCTAssertTrue(RemoteTaskAttentionPolicy.shouldNotifyImmediately(state: .needsYou, isFollowed: false))
+        XCTAssertTrue(RemoteTaskAttentionPolicy.shouldNotifyImmediately(state: .failed, isFollowed: false))
+        XCTAssertFalse(RemoteTaskAttentionPolicy.shouldNotifyImmediately(state: .verified, isFollowed: false))
+        XCTAssertTrue(RemoteTaskAttentionPolicy.shouldNotifyImmediately(state: .verified, isFollowed: true))
+        XCTAssertFalse(RemoteTaskAttentionPolicy.accepts(previousState: .verified, incomingState: .working))
+        XCTAssertTrue(RemoteTaskAttentionPolicy.accepts(previousState: .working, incomingState: .verified))
+    }
+
     func testOpaquePushEnvelopeRoundTripsWithoutPrivateContent() throws {
         let issuedAt = Date(timeIntervalSince1970: 1_800_000_000)
         let envelope = RemoteAttentionPushEnvelope(

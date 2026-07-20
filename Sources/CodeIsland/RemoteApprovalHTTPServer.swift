@@ -101,7 +101,6 @@ final class RemoteApprovalHTTPServer {
         }
     }
 
-    private static let maximumRequestBytes = 65_536
     private let listener: NWListener
     private let route: @MainActor (RemoteHTTPRequest) -> RemoteHTTPResponse
     private var didReportReady = false
@@ -156,7 +155,6 @@ final class RemoteApprovalHTTPServer {
         let id = UUID()
         let handler = RemoteHTTPConnection(
             connection: connection,
-            maximumBytes: Self.maximumRequestBytes,
             route: route,
             onFinish: { [weak self] in
                 self?.connections.removeValue(forKey: id)
@@ -169,8 +167,17 @@ final class RemoteApprovalHTTPServer {
 
 @MainActor
 private final class RemoteHTTPConnection {
+    private enum ParseResult {
+        case waiting
+        case request(RemoteHTTPRequest)
+        case failure(status: Int, message: String)
+    }
+
+    private static let maximumHeaderBytes = 32_768
+    private static let maximumJSONBodyBytes = 65_536
+    private static let maximumAttachmentBodyBytes = 25 * 1_024 * 1_024
+
     private let connection: NWConnection
-    private let maximumBytes: Int
     private let route: @MainActor (RemoteHTTPRequest) -> RemoteHTTPResponse
     private let onFinish: @MainActor () -> Void
     private var buffer = Data()
@@ -178,12 +185,10 @@ private final class RemoteHTTPConnection {
 
     init(
         connection: NWConnection,
-        maximumBytes: Int,
         route: @escaping @MainActor (RemoteHTTPRequest) -> RemoteHTTPResponse,
         onFinish: @escaping @MainActor () -> Void
     ) {
         self.connection = connection
-        self.maximumBytes = maximumBytes
         self.route = route
         self.onFinish = onFinish
     }
@@ -198,19 +203,19 @@ private final class RemoteHTTPConnection {
             Task { @MainActor in
                 guard let self else { return }
                 if let content { self.buffer.append(content) }
-                if self.buffer.count > self.maximumBytes {
-                    self.send(.json(status: 413, object: ["error": "request too large"]))
-                    return
-                }
-                if let request = Self.parse(self.buffer) {
+                switch Self.parse(self.buffer) {
+                case .request(let request):
                     self.send(self.route(request))
                     return
-                }
-                if isComplete || error != nil {
+                case .failure(let status, let message):
+                    self.send(.json(status: status, object: ["error": message]))
+                    return
+                case .waiting where isComplete || error != nil:
                     self.send(.json(status: 400, object: ["error": "malformed request"]))
                     return
+                case .waiting:
+                    self.receive()
                 }
-                self.receive()
             }
         }
     }
@@ -234,35 +239,101 @@ private final class RemoteHTTPConnection {
         onFinish()
     }
 
-    private static func parse(_ data: Data) -> RemoteHTTPRequest? {
+    private static func parse(_ data: Data) -> ParseResult {
         let separator = Data("\r\n\r\n".utf8)
-        guard let headerRange = data.range(of: separator) else { return nil }
+        guard let headerRange = data.range(of: separator) else {
+            if data.count > maximumHeaderBytes {
+                return .failure(status: 413, message: "request headers too large")
+            }
+            return .waiting
+        }
+        guard headerRange.lowerBound <= maximumHeaderBytes else {
+            return .failure(status: 413, message: "request headers too large")
+        }
         let headerData = data[..<headerRange.lowerBound]
-        guard let headerText = String(data: headerData, encoding: .utf8) else { return nil }
+        guard let headerText = String(data: headerData, encoding: .utf8) else {
+            return .failure(status: 400, message: "malformed request headers")
+        }
         let lines = headerText.components(separatedBy: "\r\n")
-        guard let requestLine = lines.first else { return nil }
+        guard let requestLine = lines.first else {
+            return .failure(status: 400, message: "malformed request line")
+        }
         let parts = requestLine.split(separator: " ", omittingEmptySubsequences: true)
-        guard parts.count == 3 else { return nil }
+        guard parts.count == 3, parts[2] == "HTTP/1.1" || parts[2] == "HTTP/1.0" else {
+            return .failure(status: 400, message: "malformed request line")
+        }
+
+        let method = String(parts[0]).uppercased()
+        let rawTarget = String(parts[1])
+        let path = URLComponents(string: rawTarget)?.path
+            ?? rawTarget.split(separator: "?", maxSplits: 1).first.map(String.init)
+            ?? rawTarget
 
         var headers: [String: String] = [:]
         for line in lines.dropFirst() {
-            guard let colon = line.firstIndex(of: ":") else { continue }
+            guard let colon = line.firstIndex(of: ":") else {
+                return .failure(status: 400, message: "malformed request headers")
+            }
             let key = line[..<colon].trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             let value = line[line.index(after: colon)...].trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !key.isEmpty, headers[key] == nil else {
+                return .failure(status: 400, message: "duplicate or malformed request header")
+            }
             headers[key] = value
         }
-        let contentLength = Int(headers["content-length"] ?? "0") ?? 0
-        guard contentLength >= 0 else { return nil }
+        guard headers["transfer-encoding"] == nil else {
+            return .failure(status: 400, message: "chunked requests are unsupported")
+        }
+
+        let requiresBodyLength = method == "POST" || method == "PUT"
+        if requiresBodyLength, headers["content-length"] == nil {
+            return .failure(status: 400, message: "Content-Length is required")
+        }
+        let contentLength: Int
+        if let rawLength = headers["content-length"] {
+            guard !rawLength.hasPrefix("-"),
+                  rawLength.allSatisfy(\.isNumber),
+                  let parsed = Int(rawLength)
+            else {
+                return .failure(status: 400, message: "Content-Length is invalid")
+            }
+            contentLength = parsed
+        } else {
+            contentLength = 0
+        }
+
+        let maximumBodyBytes = isAttachmentUpload(method: method, path: path)
+            ? maximumAttachmentBodyBytes
+            : maximumJSONBodyBytes
+        guard contentLength <= maximumBodyBytes else {
+            return .failure(status: 413, message: "request body too large")
+        }
         let bodyStart = headerRange.upperBound
-        guard data.count >= bodyStart + contentLength else { return nil }
+        guard contentLength <= Int.max - bodyStart else {
+            return .failure(status: 413, message: "request body too large")
+        }
+        let expectedCount = bodyStart + contentLength
+        guard data.count <= expectedCount else {
+            return .failure(status: 400, message: "request body exceeds Content-Length")
+        }
+        guard data.count == expectedCount else { return .waiting }
         let body = data.subdata(in: bodyStart..<(bodyStart + contentLength))
-        let rawTarget = String(parts[1])
-        let path = URLComponents(string: rawTarget)?.path ?? rawTarget.split(separator: "?", maxSplits: 1).first.map(String.init) ?? rawTarget
-        return RemoteHTTPRequest(
-            method: String(parts[0]).uppercased(),
+        return .request(RemoteHTTPRequest(
+            method: method,
             path: path,
             headers: headers,
             body: body
-        )
+        ))
+    }
+
+    private static func isAttachmentUpload(method: String, path: String) -> Bool {
+        guard method == "PUT" else { return false }
+        let components = path.split(separator: "/", omittingEmptySubsequences: true)
+        return components.count == 5
+            && components[0] == "api"
+            && components[1] == "tasks"
+            && UUID(uuidString: String(components[2])) != nil
+            && components[3] == "attachments"
+            && !components[4].isEmpty
     }
 }
