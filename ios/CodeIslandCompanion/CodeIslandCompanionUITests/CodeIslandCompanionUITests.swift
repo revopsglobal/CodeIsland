@@ -186,6 +186,10 @@ final class CodeIslandCompanionUITests: XCTestCase {
         let app = launchAttentionApp("question")
 
         XCTAssertTrue(app.staticTexts["Decision needed"].waitForExistence(timeout: 8))
+        XCTAssertFalse(
+            app.otherElements["companion.signalBoard"].exists,
+            "The generic signal summary must not precede an exact decision that needs Greg"
+        )
         XCTAssertTrue(app.staticTexts["Ship the signed build tonight?"].exists)
         let option = app.buttons["Ship tonight"]
         XCTAssertTrue(option.exists)
@@ -203,6 +207,7 @@ final class CodeIslandCompanionUITests: XCTestCase {
             "Selecting an answer must enable submission after SwiftUI commits the selection"
         )
         XCTAssertGreaterThanOrEqual(submit.frame.height, 44)
+        XCTAssertTrue(submit.isHittable, "The primary decision action must remain above the dock")
     }
 
     @MainActor

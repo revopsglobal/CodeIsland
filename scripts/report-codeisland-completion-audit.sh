@@ -317,8 +317,10 @@ audit="$(jq -n \
                     latestBuild:latest_build,
                     directDeviceVisibility:$strict.directDeviceVisibility
                 };
-                (if physical_e2e_complete then
+                (if physical_e2e_complete and (($strict.directDeviceVisibility.status // "unknown") == "physical-available") then
                     "No remaining physical E2E action."
+                 elif physical_e2e_complete then
+                    "Core physical acceptance is complete. Optional direct-device visual verification remains when the iPhone is visible to devicectl or unobscured in iPhone Mirroring."
                  else
                     "Install/open the latest TestFlight Buddy build on the physical iPhone, keep Tailscale connected, then rerun strict E2E."
                  end)

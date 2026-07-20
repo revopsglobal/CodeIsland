@@ -287,7 +287,7 @@ private struct MacTeleprompterView: View {
                 .padding(.horizontal, 50)
                 .padding(.vertical, 90)
             }
-            .onChange(of: playback.currentSegment) { value in
+            .onChange(of: playback.currentSegment) { _, value in
                 withAnimation(.linear(duration: 0.45)) {
                     proxy.scrollTo(value, anchor: .center)
                 }

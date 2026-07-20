@@ -26,6 +26,19 @@ struct RemoteTaskAttentionCandidate: Equatable, Identifiable {
 }
 
 enum RemoteTaskPresentationModel {
+    static func immediateAttentionCount<S: Sequence>(
+        in candidates: S
+    ) -> Int where S.Element == RemoteTaskAttentionCandidate {
+        candidates.reduce(into: 0) { count, candidate in
+            switch candidate.kind {
+            case .approval, .question, .needsYou, .failed:
+                count += 1
+            case .followed, .verified, .waitingForMac, .working:
+                break
+            }
+        }
+    }
+
     static func candidates(
         approvalIDs: [String],
         questionIDs: [String],
@@ -93,5 +106,25 @@ enum RemoteTaskPresentationModel {
             return previousID
         }
         return highest.sorted { $0.id < $1.id }.first?.id
+    }
+}
+
+enum RemoteTaskReviewPersistence {
+    private static let maximumStoredIDs = 200
+
+    static func decode(_ rawValue: String) -> Set<UUID> {
+        guard let data = rawValue.data(using: .utf8),
+              let values = try? JSONDecoder().decode([String].self, from: data)
+        else { return [] }
+        return Set(values.compactMap(UUID.init(uuidString:)))
+    }
+
+    static func encode(_ ids: Set<UUID>) -> String {
+        let values = ids
+            .map { $0.uuidString.lowercased() }
+            .sorted()
+            .suffix(maximumStoredIDs)
+        guard let data = try? JSONEncoder().encode(Array(values)) else { return "[]" }
+        return String(decoding: data, as: UTF8.self)
     }
 }

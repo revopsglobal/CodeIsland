@@ -9,6 +9,7 @@ OSASCRIPT_BIN="${OSASCRIPT_BIN:-osascript}"
 SCREENCAPTURE_BIN="${SCREENCAPTURE_BIN:-screencapture}"
 SWIFT_BIN="${SWIFT_BIN:-swift}"
 MIRRORING_TEXT="${MIRRORING_TEXT:-}"
+MIRRORING_WINDOW_EXPOSED="${MIRRORING_WINDOW_EXPOSED:-}"
 
 if ! command -v jq >/dev/null 2>&1; then
     echo "jq is required" >&2
@@ -83,6 +84,35 @@ SWIFT
     rm -f "$image" "$swift_file"
 }
 
+mirroring_window_is_exposed() {
+    if [[ -n "$MIRRORING_WINDOW_EXPOSED" ]]; then
+        [[ "$MIRRORING_WINDOW_EXPOSED" == "true" ]]
+        return
+    fi
+
+    # Explicit text is a deterministic test fixture and is authoritative unless
+    # the fixture also marks the window as occluded.
+    if [[ -n "$MIRRORING_TEXT" ]]; then
+        return 0
+    fi
+
+    command -v "$OSASCRIPT_BIN" >/dev/null 2>&1 || return 1
+    [[ "$("$OSASCRIPT_BIN" <<'APPLESCRIPT' 2>/dev/null || true
+tell application "System Events"
+  if not (exists process "iPhone Mirroring") then return "false"
+  tell process "iPhone Mirroring"
+    if (count of windows) is 0 then return "false"
+    if frontmost is false then return "false"
+    try
+      if value of attribute "AXMinimized" of window 1 is true then return "false"
+    end try
+    return "true"
+  end tell
+end tell
+APPLESCRIPT
+)" == "true" ]]
+}
+
 mirroring_process_running=false
 if command -v "$OSASCRIPT_BIN" >/dev/null 2>&1 \
     && [[ "$("$OSASCRIPT_BIN" -e 'tell application "System Events" to exists process "iPhone Mirroring"' 2>/dev/null || true)" == "true" ]]; then
@@ -92,7 +122,15 @@ if [[ -n "$MIRRORING_TEXT" ]]; then
     mirroring_process_running=true
 fi
 
-mirroring_text="$(read_mirroring_text_from_window | tr '\r' '\n' | sed '/^[[:space:]]*$/d' | head -n 30 || true)"
+mirroring_exposed=false
+if mirroring_window_is_exposed; then
+    mirroring_exposed=true
+fi
+
+mirroring_text=""
+if [[ "$mirroring_exposed" == "true" ]]; then
+    mirroring_text="$(read_mirroring_text_from_window | tr '\r' '\n' | sed '/^[[:space:]]*$/d' | head -n 30 || true)"
+fi
 mirroring_text_lower="$(printf '%s' "$mirroring_text" | tr '[:upper:]' '[:lower:]')"
 mirroring_report_text="$(printf '%s\n' "$mirroring_text" \
     | grep -Ei 'iphone|mirroring|lock|connect|testflight|codeisland|buddy' \
@@ -106,7 +144,10 @@ if [[ "$mirroring_process_running" == "true" ]]; then
     mirroring_checked=true
     mirroring_status="unknown"
     mirroring_next_action="iPhone Mirroring is running, but CodeIsland could not classify whether the mirrored phone is controllable."
-    if [[ "$mirroring_text_lower" == *"iphone in use"* || "$mirroring_text_lower" == *"lock your iphone to connect"* ]]; then
+    if [[ "$mirroring_exposed" != "true" ]]; then
+        mirroring_status="occluded"
+        mirroring_next_action="iPhone Mirroring is running behind another app; bring iPhone Mirroring to the front before using OCR as physical-device evidence."
+    elif [[ "$mirroring_text_lower" == *"iphone in use"* || "$mirroring_text_lower" == *"lock your iphone to connect"* ]]; then
         mirroring_status="iphone-in-use"
         mirroring_next_action="iPhone Mirroring is open but blocked because the iPhone is in use; lock the iPhone, click Connect, then open the latest TestFlight Buddy build."
     elif [[ "$mirroring_text_lower" == *"connect"* ]]; then
@@ -232,6 +273,8 @@ if [[ "$status" != "physical-available" && "$mirroring_status" == "iphone-in-use
     next_action="Only Simulator iOS devices are visible to devicectl, and iPhone Mirroring is blocked because the iPhone is in use. Lock the iPhone, click Connect in iPhone Mirroring, open the latest TestFlight Buddy build, keep Tailscale connected, then rerun strict E2E."
 elif [[ "$status" != "physical-available" && "$mirroring_status" == "waiting-connect" ]]; then
     next_action="Only Simulator iOS devices are visible to devicectl, but iPhone Mirroring is waiting on Connect. Click Connect after the iPhone is locked, open the latest TestFlight Buddy build, keep Tailscale connected, then rerun strict E2E."
+elif [[ "$status" != "physical-available" && "$mirroring_status" == "occluded" ]]; then
+    next_action="Only Simulator iOS devices are visible to devicectl, and iPhone Mirroring is occluded. Bring iPhone Mirroring to the front before treating its pixels as physical-device evidence."
 fi
 
 jq -n \

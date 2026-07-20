@@ -48,7 +48,8 @@ struct CompanionCommandCenterView: View {
     @State private var showsCaptureChoices = false
     @State private var selectedAttentionID: String?
     @State private var followedTaskID: UUID?
-    @State private var reviewedVerifiedTaskIDs: Set<UUID> = []
+    @AppStorage("companion.reviewedVerifiedTaskIDs")
+    private var reviewedVerifiedTaskIDsPayload = "[]"
 
     var body: some View {
         ZStack {
@@ -60,14 +61,16 @@ struct CompanionCommandCenterView: View {
                         .environmentObject(connection)
                         .environmentObject(remoteApprovals)
 
-                    CompanionSignalBoard(
-                        approvalCount: remoteApprovals.approvals.count,
-                        questionCount: remoteApprovals.questions.count,
-                        urgentTaskCount: urgentTaskCount,
-                        activeTaskCount: activeTaskCount,
-                        connectionState: remoteApprovals.state,
-                        activeSessionStatus: connection.latestState?.status
-                    )
+                    if destination != .now || attentionCount == 0 {
+                        CompanionSignalBoard(
+                            approvalCount: remoteApprovals.approvals.count,
+                            questionCount: remoteApprovals.questions.count,
+                            urgentTaskCount: urgentTaskCount,
+                            activeTaskCount: activeTaskCount,
+                            connectionState: remoteApprovals.state,
+                            activeSessionStatus: connection.latestState?.status
+                        )
+                    }
 
                     switch destination {
                     case .now:
@@ -111,6 +114,7 @@ struct CompanionCommandCenterView: View {
             .padding(.horizontal, 16)
             .padding(.top, 8)
             .padding(.bottom, 6)
+            .dynamicTypeSize(.xSmall ... .xxxLarge)
         }
         .confirmationDialog("Capture", isPresented: $showsCaptureChoices) {
             Button("New coding task") { presentedSheet = .composer(nil, nil) }
@@ -199,7 +203,7 @@ struct CompanionCommandCenterView: View {
 
         if let task = selectedTask {
             RemoteTaskSignalCard(task: task) {
-                if task.state == .verified { reviewedVerifiedTaskIDs.insert(task.id) }
+                if task.state == .verified { markVerifiedTaskReviewed(task.id) }
                 presentedSheet = .task(task.id)
             }
         } else if let draft = selectedDraft {
@@ -216,7 +220,17 @@ struct CompanionCommandCenterView: View {
     }
 
     private var attentionCount: Int {
-        attentionCandidates.filter { $0.priority >= 50 }.count
+        RemoteTaskPresentationModel.immediateAttentionCount(in: attentionCandidates)
+    }
+
+    private var reviewedVerifiedTaskIDs: Set<UUID> {
+        RemoteTaskReviewPersistence.decode(reviewedVerifiedTaskIDsPayload)
+    }
+
+    private func markVerifiedTaskReviewed(_ id: UUID) {
+        var reviewed = reviewedVerifiedTaskIDs
+        reviewed.insert(id)
+        reviewedVerifiedTaskIDsPayload = RemoteTaskReviewPersistence.encode(reviewed)
     }
 
     private var urgentTaskCount: Int {

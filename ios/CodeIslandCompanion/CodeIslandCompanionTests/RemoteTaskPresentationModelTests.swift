@@ -90,6 +90,30 @@ final class RemoteTaskPresentationModelTests: XCTestCase {
         XCTAssertEqual(candidates.map(\.kind), [.failed, .waitingForMac])
     }
 
+    func testImmediateAttentionCountExcludesRoutineFollowedVerifiedAndWaitingWork() {
+        let candidates = [
+            RemoteTaskAttentionCandidate(id: "approval", kind: .approval, priority: 100),
+            RemoteTaskAttentionCandidate(id: "question", kind: .question, priority: 100),
+            RemoteTaskAttentionCandidate(id: "needs-you", kind: .needsYou, priority: 90),
+            RemoteTaskAttentionCandidate(id: "failed", kind: .failed, priority: 80),
+            RemoteTaskAttentionCandidate(id: "followed", kind: .followed, priority: 70),
+            RemoteTaskAttentionCandidate(id: "verified", kind: .verified, priority: 60),
+            RemoteTaskAttentionCandidate(id: "waiting", kind: .waitingForMac, priority: 50),
+            RemoteTaskAttentionCandidate(id: "working", kind: .working, priority: 40),
+        ]
+
+        XCTAssertEqual(RemoteTaskPresentationModel.immediateAttentionCount(in: candidates), 4)
+    }
+
+    func testReviewedVerifiedTaskPersistenceRoundTripsAndRejectsMalformedValues() {
+        let first = UUID(uuidString: "10000000-0000-0000-0000-000000000001")!
+        let second = UUID(uuidString: "10000000-0000-0000-0000-000000000002")!
+        let encoded = RemoteTaskReviewPersistence.encode([second, first])
+
+        XCTAssertEqual(RemoteTaskReviewPersistence.decode(encoded), [first, second])
+        XCTAssertEqual(RemoteTaskReviewPersistence.decode("not-json"), [])
+    }
+
     private func task(
         id: String,
         state: RemoteTaskState,

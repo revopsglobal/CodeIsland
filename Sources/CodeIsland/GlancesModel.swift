@@ -86,7 +86,7 @@ final class GlancesModel: NSObject, ObservableObject {
     private let log = Logger(subsystem: "com.codeisland", category: "Glances")
     private var lastRefresh: Date = .distantPast
     private var refreshing = false
-    private static let reminderOrderKey = "codeisland.glances.reminderOrder.v1"
+    nonisolated private static let reminderOrderKey = "codeisland.glances.reminderOrder.v1"
 
     private override init() {
         super.init()

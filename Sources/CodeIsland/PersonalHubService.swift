@@ -1653,13 +1653,6 @@ final class PersonalHubService {
                 ]
             )
 
-        default:
-            let definition = PersonalHubCatalog.definition(for: id)
-            return .init(
-                id: id,
-                availability: .unavailable,
-                summary: "\(definition.title) is not implemented yet"
-            )
         }
     }
 
