@@ -80,6 +80,7 @@
 		F29B008893CA6F336BE93A42 /* DexView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6470A3909D478701A3B07E5 /* DexView.swift */; };
 		F2A37C4EDA80546E6307A8D6 /* CompanionBluetoothCentral.swift in Sources */ = {isa = PBXBuildFile; fileRef = 827D708763E7622166DF3F8B /* CompanionBluetoothCentral.swift */; };
 		F5C7B317A6F347087EE8D57D /* RemoteApprovalProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = D22D14326F1AEA2E097F595F /* RemoteApprovalProtocol.swift */; };
+		C0DE515400000000000000A1 /* CommandRisk.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE515400000000000000A2 /* CommandRisk.swift */; };
 		F6A28D1C6855BA337D8076F8 /* HermesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE12267AF913F735B14B643A /* HermesView.swift */; };
 		F6BF2F0FBFE41711C6160DFE /* AntiGravityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 312741CE7E44499956C35C45 /* AntiGravityView.swift */; };
 		F894E1D744DA83959EB19554 /* CopilotView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F7787F642A8E89A5AA5FFFC /* CopilotView.swift */; };
@@ -172,6 +173,7 @@
 		C6345881A14A90FBB79C7453 /* PixelCharacterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PixelCharacterView.swift; sourceTree = "<group>"; };
 		CCDD1EEEF11FA911FA8E42BF /* WatchStateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchStateStore.swift; sourceTree = "<group>"; };
 		D22D14326F1AEA2E097F595F /* RemoteApprovalProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteApprovalProtocol.swift; sourceTree = "<group>"; };
+		C0DE515400000000000000A2 /* CommandRisk.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandRisk.swift; sourceTree = "<group>"; };
 		D2A2C29C635BC87419FDED7F /* CompanionMascotView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionMascotView.swift; sourceTree = "<group>"; };
 		D4056DAB08B8F703E6F5C71B /* Speech.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Speech.framework; path = System/Library/Frameworks/Speech.framework; sourceTree = SDKROOT; };
 		D4F96960164D8A1BDE5A13B9 /* CodeIslandCompanion.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CodeIslandCompanion.entitlements; sourceTree = "<group>"; };
@@ -228,6 +230,7 @@
 				6F9D10CCE9485D7AE2F88931 /* LiveActivityLifecycle.swift */,
 				4F2D0C28F9B521F6A0F93CAC /* PersonalHubProtocol.swift */,
 				D22D14326F1AEA2E097F595F /* RemoteApprovalProtocol.swift */,
+				C0DE515400000000000000A2 /* CommandRisk.swift */,
 			);
 			name = CodeIslandCore;
 			path = ../../Sources/CodeIslandCore;
@@ -519,6 +522,7 @@
 				A19C06D932D5A5FE5DF0D513 /* QwenView.swift in Sources */,
 				6919B3BB7246E6928F77FF07 /* RemoteApprovalClient.swift in Sources */,
 				F5C7B317A6F347087EE8D57D /* RemoteApprovalProtocol.swift in Sources */,
+				C0DE515400000000000000A1 /* CommandRisk.swift in Sources */,
 				5595E2189BC2645718CEB77F /* RemoteApprovalView.swift in Sources */,
 				396FBAE8C75D88E0A0DAFAFC /* SharedMascotView.swift in Sources */,
 				CC8BFCADB0C71D1EC54DCD50 /* StandByLayout.swift in Sources */,

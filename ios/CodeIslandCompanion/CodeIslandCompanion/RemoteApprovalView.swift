@@ -566,17 +566,31 @@ private struct RemoteApprovalCard: View {
         icon: String,
         decision: RemoteApprovalDecision
     ) -> some View {
-        if decision == .approve {
+        // Emphasis follows risk, not decision. Approving a destructive command
+        // took exactly as many taps as denying it while looking considerably
+        // more inviting: a wide filled bar against a narrow outline. For a
+        // destructive request the safe action takes the filled treatment.
+        if isEmphasised(decision) {
             actionButton(title, icon: icon, decision: decision)
                 .buttonStyle(.borderedProminent)
-                .tint(.orange)
+                .tint(isDestructive ? .red : .orange)
                 .accessibilityIdentifier("companion.remote.\(decision.rawValue).\(approval.id)")
         } else {
             actionButton(title, icon: icon, decision: decision)
                 .buttonStyle(.bordered)
-                .tint(.red)
+                .tint(isDestructive ? .secondary : .red)
                 .accessibilityIdentifier("companion.remote.\(decision.rawValue).\(approval.id)")
         }
+    }
+
+    /// `nil` risk means an older Mac that predates classification — treated as
+    /// unclassified, so emphasis stays on the historical default rather than
+    /// implying the command is safe.
+    private var isDestructive: Bool { approval.risk == .destructive }
+
+    /// Which of the two actions gets the filled, full-width treatment.
+    private func isEmphasised(_ decision: RemoteApprovalDecision) -> Bool {
+        isDestructive ? decision == .deny : decision == .approve
     }
 
     private func actionButton(
@@ -592,8 +606,8 @@ private struct RemoteApprovalCard: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.88)
                 .frame(
-                    minWidth: decision == .approve ? 0 : 116,
-                    maxWidth: decision == .approve ? .infinity : 128,
+                    minWidth: isEmphasised(decision) ? 0 : 116,
+                    maxWidth: isEmphasised(decision) ? .infinity : 128,
                     minHeight: 48
                 )
         }

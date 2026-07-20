@@ -120,6 +120,10 @@ public struct RemoteApprovalItem: Codable, Equatable, Identifiable, Sendable {
     public let createdAt: Date
     public let actionToken: String
     public let actionExpiresAt: Date
+    /// How much damage approving this would do. Optional so a payload from an
+    /// older Mac still decodes on a newer phone and vice versa; `nil` means
+    /// "unclassified", which the UI treats as no emphasis rather than as safe.
+    public let risk: CommandRisk?
 
     public init(
         id: String,
@@ -130,7 +134,8 @@ public struct RemoteApprovalItem: Codable, Equatable, Identifiable, Sendable {
         workspace: String?,
         createdAt: Date,
         actionToken: String,
-        actionExpiresAt: Date
+        actionExpiresAt: Date,
+        risk: CommandRisk? = nil
     ) {
         self.id = id
         self.sessionId = sessionId
@@ -141,6 +146,7 @@ public struct RemoteApprovalItem: Codable, Equatable, Identifiable, Sendable {
         self.createdAt = createdAt
         self.actionToken = actionToken
         self.actionExpiresAt = actionExpiresAt
+        self.risk = risk
     }
 }
 
