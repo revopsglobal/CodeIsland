@@ -48,6 +48,7 @@ struct RemoteApprovalSurface: View {
                                 .controlSize(.small)
                             }
                             .padding(.horizontal, 4)
+                            .dynamicTypeSize(.xSmall ... .xxxLarge)
                         }
 
                         if let selectedAttention {
@@ -182,6 +183,7 @@ private struct RemoteQuestionCard: View {
                     .font(.caption)
                     .foregroundStyle(.ciForeground.opacity(0.42))
             }
+            .dynamicTypeSize(.xSmall ... .xxxLarge)
 
             HStack(spacing: 6) {
                 Text(question.source)
@@ -192,6 +194,7 @@ private struct RemoteQuestionCard: View {
             }
             .font(.caption.weight(.semibold))
             .foregroundStyle(Color.ciForeground.opacity(0.52))
+            .dynamicTypeSize(.xSmall ... .xxxLarge)
 
             if question.requiresLocalResponse {
                 Label("Sensitive question waiting on Mac", systemImage: "eye.slash.fill")
@@ -483,6 +486,7 @@ private struct RemoteApprovalStatusStrip: View {
 private struct RemoteApprovalCard: View {
     let approval: RemoteApprovalItem
     @EnvironmentObject private var client: RemoteApprovalClient
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var selection: DecisionSelection?
 
     private struct DecisionSelection: Identifiable {
@@ -501,6 +505,7 @@ private struct RemoteApprovalCard: View {
                     .font(.caption)
                     .foregroundStyle(.ciForeground.opacity(0.42))
             }
+            .dynamicTypeSize(.xSmall ... .xxxLarge)
 
             HStack(spacing: 6) {
                 Text(approval.source)
@@ -511,6 +516,7 @@ private struct RemoteApprovalCard: View {
             }
             .font(.caption.weight(.semibold))
             .foregroundStyle(Color.ciForeground.opacity(0.52))
+            .dynamicTypeSize(.xSmall ... .xxxLarge)
 
             Text(approval.tool)
                 .font(.title3.weight(.bold))
@@ -522,6 +528,7 @@ private struct RemoteApprovalCard: View {
                     Label("Requested action", systemImage: "terminal")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.ciForeground.opacity(0.5))
+                        .dynamicTypeSize(.xSmall ... .xxxLarge)
                     Text(detail)
                         .font(.system(.callout, design: .monospaced, weight: .medium))
                         .foregroundStyle(.ciForeground.opacity(0.78))
@@ -533,10 +540,7 @@ private struct RemoteApprovalCard: View {
                 .background(Color.ciForeground.opacity(0.045), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
 
-            HStack(spacing: 10) {
-                remoteAction("Deny", icon: "xmark", decision: .deny)
-                remoteAction("Approve once", icon: "checkmark", decision: .approve)
-            }
+            approvalActions
         }
         .padding(20)
         .background(
@@ -575,6 +579,21 @@ private struct RemoteApprovalCard: View {
     }
 
     @ViewBuilder
+    private var approvalActions: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(spacing: 10) {
+                remoteAction("Deny", icon: "xmark", decision: .deny)
+                remoteAction("Approve once", icon: "checkmark", decision: .approve)
+            }
+        } else {
+            HStack(spacing: 10) {
+                remoteAction("Deny", icon: "xmark", decision: .deny)
+                remoteAction("Approve once", icon: "checkmark", decision: .approve)
+            }
+        }
+    }
+
+    @ViewBuilder
     private func remoteAction(
         _ title: String,
         icon: String,
@@ -606,8 +625,8 @@ private struct RemoteApprovalCard: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.88)
                 .frame(
-                    minWidth: decision == .approve ? 0 : 116,
-                    maxWidth: decision == .approve ? .infinity : 128,
+                    minWidth: dynamicTypeSize.isAccessibilitySize ? 0 : (decision == .approve ? 0 : 116),
+                    maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : (decision == .approve ? .infinity : 128),
                     minHeight: 48
                 )
         }

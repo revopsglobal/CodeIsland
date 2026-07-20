@@ -74,17 +74,22 @@ enum AudioDeviceController {
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
-        var name: CFString = "" as CFString
-        var size = UInt32(MemoryLayout<CFString>.size)
+        let name = UnsafeMutablePointer<CFString?>.allocate(capacity: 1)
+        name.initialize(to: nil)
+        defer {
+            name.deinitialize(count: 1)
+            name.deallocate()
+        }
+        var size = UInt32(MemoryLayout<CFString?>.size)
         guard AudioObjectGetPropertyData(
             deviceID,
             &address,
             0,
             nil,
             &size,
-            &name
+            UnsafeMutableRawPointer(name)
         ) == noErr else { return nil }
-        return name as String
+        return name.pointee as String?
     }
 
     private static func supports(_ deviceID: AudioDeviceID, role: Role) -> Bool {

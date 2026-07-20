@@ -181,7 +181,11 @@ STUB
     .complete == true and
     .status == "complete" and
     ([.requirements[] | select(.complete == false)] | length) == 0 and
-    (.requiredGates | length) == 0'
+    (.requiredGates | length) == 0 and
+    ([.requirements[] | select(
+      .id == "real-physical-e2e" and
+      (.nextAction | contains("Optional direct-device visual verification remains"))
+    )] | length) == 1'
 }
 
 @test "blocks completion when away readiness is not parseable" {

@@ -149,6 +149,39 @@ STUB
     (.nextAction | contains("waiting on Connect"))'
 }
 
+@test "does not treat text from an occluding app as visible iPhone Mirroring content" {
+  export MIRRORING_TEXT=$'CodeIsland_Buddy_Share_App_Store.mobileprovision'
+  export MIRRORING_WINDOW_EXPOSED=false
+  cat > "$XCRUN_BIN" <<'STUB'
+#!/usr/bin/env bash
+json_output=""
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    --json-output)
+      json_output="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+cat > "$json_output" <<'JSON'
+{"result":{"devices":[]}}
+JSON
+STUB
+  chmod +x "$XCRUN_BIN"
+
+  run "$REPO_ROOT/scripts/report-ios-direct-device-visibility.sh"
+
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | jq -e '
+    .status == "no-ios-devices" and
+    .iphoneMirroring.status == "occluded" and
+    .iphoneMirroring.observedText == null and
+    (.iphoneMirroring.nextAction | contains("bring iPhone Mirroring to the front"))'
+}
+
 @test "reports physical-available when devicectl sees a real iPhone" {
   cat > "$XCRUN_BIN" <<'STUB'
 #!/usr/bin/env bash
