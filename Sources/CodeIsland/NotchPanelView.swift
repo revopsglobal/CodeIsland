@@ -1186,6 +1186,16 @@ private struct ApprovalToolDetailView: View {
 }
 
 private struct ApprovalBar: View {
+    /// Recomputed on the Swift side because the shim's verdict never crosses
+    /// the hook boundary. Values are stringified so a non-string payload
+    /// (numbers, arrays) still gets pattern-matched rather than dropped.
+    private var risk: CommandRisk {
+        CommandRiskClassifier.classify(
+            toolName: tool,
+            toolInput: (toolInput ?? [:]).mapValues { String(describing: $0) }
+        )
+    }
+
     let tool: String
     let toolInput: [String: Any]?
     let queuePosition: Int
@@ -1226,6 +1236,30 @@ private struct ApprovalBar: View {
                 Text(tool)
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(Color(red: 1.0, green: 0.7, blue: 0.28))
+                // Risk tier. The classifier existed only in the hook shims and
+                // was discarded at the boundary, so `rm -rf` and reading a
+                // config file rendered identically on the one screen where a
+                // wrong click is unrecoverable.
+                if risk == .destructive {
+                    Text(L10n.shared["risk_destructive"].uppercased())
+                        .font(.system(size: 8, weight: .black, design: .monospaced))
+                        .tracking(0.6)
+                        .foregroundStyle(Color(red: 0.16, green: 0.03, blue: 0.02))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Color(red: 1.0, green: 0.42, blue: 0.37))
+                        .clipShape(RoundedRectangle(cornerRadius: 3))
+                }
+                // Which project this lands in. Across parallel worktrees
+                // "Bash · rm -rf ./dist" is not a decidable question without it;
+                // the question card already showed this, the approval card
+                // never did.
+                if let project = session?.displayName {
+                    Text(project)
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.85))
+                        .lineLimit(1)
+                }
                 if let server = serverName {
                     Text("(\(server))")
                         .font(.system(size: 9))
@@ -2556,6 +2590,18 @@ private struct SessionCard: View {
                             enabled: true,
                             action: { withAnimation(NotchAnimation.micro) { showApprovalDetails.toggle() } }
                         )
+                        // Deny leads, matching the auto-expanded card. The two
+                        // surfaces previously ordered the same irreversible
+                        // decision in opposite directions — destructive first
+                        // on the card, last here — so muscle memory built on
+                        // one misfired on the other.
+                        inlineActionButton(
+                            L10n.shared["deny"],
+                            fg: .white,
+                            bg: Color(red: 0.85, green: 0.3, blue: 0.3),
+                            enabled: isActiveApproval,
+                            action: { appState.denyPermission() }
+                        )
                         inlineActionButton(
                             L10n.shared["allow_once"],
                             fg: .white,
@@ -2569,13 +2615,6 @@ private struct SessionCard: View {
                             bg: Color(red: 0.25, green: 0.55, blue: 0.85),
                             enabled: isActiveApproval,
                             action: { appState.approvePermission(always: true) }
-                        )
-                        inlineActionButton(
-                            L10n.shared["deny"],
-                            fg: .white,
-                            bg: Color(red: 0.85, green: 0.3, blue: 0.3),
-                            enabled: isActiveApproval,
-                            action: { appState.denyPermission() }
                         )
                     }
 
