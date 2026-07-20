@@ -2280,7 +2280,12 @@ private struct ProjectNameLink: View {
 
     var body: some View {
         Text(name)
-            .font(.system(size: fontSize, weight: .bold, design: .monospaced))
+            // R2 type split: the project name is human content, so it reads in
+            // SF Pro. Commands, IDs and paths stay monospaced in their wells,
+            // so the eye can tell what is the machine's and what is yours. This
+            // one line is the highest-leverage change in the move — the panel
+            // previously rendered everything, prose included, in SF Mono.
+            .font(NotchTokens.sans(fontSize, .bold))
             .foregroundStyle(color)
             .lineLimit(1)
             .truncationMode(.tail)
