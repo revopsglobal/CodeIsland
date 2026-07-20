@@ -394,6 +394,14 @@ private struct CompanionTodayTimeline: View {
         snapshot?.modules.first(where: { $0.id == .weather })?.summary
     }
 
+    /// The Mac already composes an agents summary ("2 running · no decisions
+    /// waiting"); reuse it so the empty state reports live work instead of
+    /// repeating the headline. Falls back only when the module is absent.
+    private var idleSummary: String {
+        snapshot?.modules.first(where: { $0.id == .agents })?.summary
+            ?? "Nothing has needed you recently."
+    }
+
     private var hasAgentAttention: Bool {
         rows.contains { row in
             guard row.moduleID == .agents else { return false }
@@ -407,15 +415,25 @@ private struct CompanionTodayTimeline: View {
         }
     }
 
+    /// The headline states the answer; the subhead adds context that never
+    /// repeats it. Attention first, then weather, then a plain resting line.
+    private var subhead: String {
+        if hasAgentAttention { return "An agent is waiting for your decision." }
+        if let weather = weatherSummary { return weather }
+        return "Nothing has needed you recently."
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 5) {
-                Text("Today")
+                Text(hasAgentAttention ? "Needs you" : "All clear")
                     .font(.largeTitle.weight(.bold))
                     .foregroundStyle(Color.ciForeground)
-                Text(weatherSummary ?? (hasAgentAttention
-                    ? "An agent is waiting for your decision."
-                    : "Nothing needs you right now."))
+                // Attention outranks weather. Previously the subhead was
+                // `weatherSummary ?? …`, so whenever the Mac returned any
+                // weather the "an agent is waiting" line was unreachable — and
+                // with no weather it duplicated the empty-state row verbatim.
+                Text(subhead)
                     .font(.subheadline)
                     .foregroundStyle(Color.ciForeground.opacity(0.56))
                     .lineLimit(2)
@@ -431,10 +449,13 @@ private struct CompanionTodayTimeline: View {
                 .frame(minHeight: 52)
             } else if rows.isEmpty {
                 HStack(spacing: 12) {
-                    Image(systemName: "checkmark.circle.fill")
+                    Image(systemName: "checkmark.circle")
                         .font(.title3)
                         .foregroundStyle(.green)
-                    Text("Nothing needs you right now.")
+                    // Says something the headline and subhead do not: how many
+                    // sessions are quietly running, so "all clear" reads as
+                    // informed rather than empty.
+                    Text(idleSummary)
                         .font(.body.weight(.semibold))
                         .foregroundStyle(Color.ciForeground.opacity(0.72))
                 }

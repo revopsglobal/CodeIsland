@@ -27,25 +27,17 @@ struct RemoteApprovalSurface: View {
                 } else {
                     VStack(alignment: .leading, spacing: 12) {
                         if attentionItems.count > 1 {
-                            HStack {
-                                Text("Attention queue")
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(Color.ciForeground.opacity(0.58))
-                                Spacer()
-                                Menu {
-                                    ForEach(attentionItems) { item in
-                                        Button {
-                                            selectedAttentionID = item.id
-                                        } label: {
-                                            Label(item.menuTitle, systemImage: item.symbol)
-                                        }
-                                    }
-                                } label: {
-                                    Text("\(selectedIndex + 1) of \(attentionItems.count)")
-                                        .font(.subheadline.weight(.semibold))
-                                }
-                                .buttonStyle(.bordered)
-                                .controlSize(.small)
+                            HStack(spacing: 8) {
+                                Text("NEEDS YOU")
+                                    .font(.caption2.weight(.bold))
+                                    .tracking(1.2)
+                                    .foregroundStyle(Color.orange)
+                                Text("\(attentionItems.count)")
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(Color.ciForeground.opacity(0.4))
+                                Rectangle()
+                                    .fill(Color.orange.opacity(0.25))
+                                    .frame(height: 1)
                             }
                             .padding(.horizontal, 4)
                         }
@@ -59,6 +51,21 @@ struct RemoteApprovalSurface: View {
                                 RemoteQuestionCard(question: question)
                                     .environmentObject(client)
                             }
+                        }
+
+                        // The rest of the queue as compact rows instead of a
+                        // dropdown. A dropdown switches between equivalent
+                        // options; these are not equivalent — one might be an
+                        // rm -rf — so each shows its project, age and a command
+                        // preview, and tapping promotes it into the card above.
+                        ForEach(queuedItems) { item in
+                            Button {
+                                selectedAttentionID = item.id
+                            } label: {
+                                queuedRow(item)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("companion.attention.queued.\(item.id)")
                         }
                     }
                     .accessibilityElement(children: .contain)
@@ -74,6 +81,47 @@ struct RemoteApprovalSurface: View {
     private var attentionItems: [RemoteAttentionCardItem] {
         client.approvals.map(RemoteAttentionCardItem.approval)
             + client.questions.map(RemoteAttentionCardItem.question)
+    }
+
+    /// Everything in the queue except the one already expanded in the card.
+    private var queuedItems: [RemoteAttentionCardItem] {
+        attentionItems.filter { $0.id != selectedAttention?.id }
+    }
+
+    @ViewBuilder
+    private func queuedRow(_ item: RemoteAttentionCardItem) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: item.symbol)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(item.isDestructive ? Color.red : Color.orange)
+                .frame(width: 30, height: 30)
+                .background(
+                    (item.isDestructive ? Color.red : Color.orange).opacity(0.14),
+                    in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+                )
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.rowTitle)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(Color.ciForeground)
+                    .lineLimit(1)
+                if let subtitle = item.rowSubtitle {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(item.isDestructive ? Color.red.opacity(0.9) : Color.ciForeground.opacity(0.5))
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 8)
+            Text(item.createdAt, style: .relative)
+                .font(.caption2)
+                .monospacedDigit()
+                .foregroundStyle(Color.ciForeground.opacity(0.4))
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .frame(minHeight: 52)
+        .background(Color.ciForeground.opacity(0.04), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .contentShape(Rectangle())
     }
 
     private var attentionIDs: [String] {
@@ -125,6 +173,43 @@ private enum RemoteAttentionCardItem: Identifiable {
         switch self {
         case .approval: return "checkmark.shield"
         case .question: return "questionmark.bubble"
+        }
+    }
+
+    /// Project · tool, for the compact queue rows.
+    var rowTitle: String {
+        switch self {
+        case .approval(let approval):
+            let project = approval.workspace ?? approval.source
+            return "\(project) · \(approval.tool)"
+        case .question(let question):
+            let project = question.workspace ?? question.source
+            return "\(project) · Question"
+        }
+    }
+
+    /// A one-line preview of what is being asked, so a queued row shows enough
+    /// to triage without being promoted first.
+    var rowSubtitle: String? {
+        switch self {
+        case .approval(let approval): return approval.detail
+        case .question(let question): return question.prompts.first?.question
+        }
+    }
+
+    var createdAt: Date {
+        switch self {
+        case .approval(let approval): return approval.createdAt
+        case .question(let question): return question.createdAt
+        }
+    }
+
+    /// Destructive queued rows preview their command in the danger colour, so
+    /// "the second item is an rm -rf" is legible before you open it.
+    var isDestructive: Bool {
+        switch self {
+        case .approval(let approval): return approval.risk == .destructive
+        case .question: return false
         }
     }
 }
