@@ -465,6 +465,11 @@ public struct RemoteServiceStatus: Codable, Equatable, Sendable {
     public let hostVersion: String?
     public let launchAtLoginStatus: String?
     public let launchAtLoginError: String?
+    public let calendarAuthorizationStatus: String?
+    public let remindersAuthorizationStatus: String?
+    public let locationAuthorizationStatus: String?
+    public let manualWeatherLocationConfigured: Bool?
+    public let reminderListSelectionConfigured: Bool?
     public let version: Int
 
     public init(
@@ -474,6 +479,11 @@ public struct RemoteServiceStatus: Codable, Equatable, Sendable {
         hostVersion: String? = nil,
         launchAtLoginStatus: String? = nil,
         launchAtLoginError: String? = nil,
+        calendarAuthorizationStatus: String? = nil,
+        remindersAuthorizationStatus: String? = nil,
+        locationAuthorizationStatus: String? = nil,
+        manualWeatherLocationConfigured: Bool? = nil,
+        reminderListSelectionConfigured: Bool? = nil,
         version: Int = 1
     ) {
         self.running = running
@@ -482,6 +492,11 @@ public struct RemoteServiceStatus: Codable, Equatable, Sendable {
         self.hostVersion = hostVersion
         self.launchAtLoginStatus = launchAtLoginStatus
         self.launchAtLoginError = launchAtLoginError
+        self.calendarAuthorizationStatus = calendarAuthorizationStatus
+        self.remindersAuthorizationStatus = remindersAuthorizationStatus
+        self.locationAuthorizationStatus = locationAuthorizationStatus
+        self.manualWeatherLocationConfigured = manualWeatherLocationConfigured
+        self.reminderListSelectionConfigured = reminderListSelectionConfigured
         self.version = version
     }
 }

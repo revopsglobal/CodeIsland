@@ -5,6 +5,45 @@ import CodeIslandCore
 
 @MainActor
 final class RemoteApprovalHTTPServerTests: XCTestCase {
+    func testHealthExposesReadOnlyPrivacyDiagnostics() async throws {
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CodeIslandHealthDiagnostics-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let service = RemoteApprovalService(
+            deviceStore: RemoteApprovalDeviceStore(
+                stateURL: temporaryDirectory.appendingPathComponent("devices.json")
+            ),
+            coordinator: RemoteApprovalCoordinator(
+                auditURL: temporaryDirectory.appendingPathComponent("audit.jsonl")
+            ),
+            localPortOverride: 0,
+            enabledOverride: true,
+            tailscaleConfigurator: { _, _ in "https://codeisland-health.invalid" }
+        )
+        let appState = AppState()
+        service.start(appState: appState)
+        defer { service.stop() }
+
+        let port = try await waitForPort(service)
+        let response = try await send(port: port, method: "GET", path: "/health")
+        XCTAssertEqual(response.response.statusCode, 200)
+
+        let status = try decode(RemoteServiceStatus.self, from: response.data)
+        let eventKitStates: Set<String> = [
+            "notDetermined", "restricted", "denied", "fullAccess", "writeOnly", "unknown",
+        ]
+        let locationStates: Set<String> = [
+            "notDetermined", "restricted", "denied", "authorized", "unknown",
+        ]
+        XCTAssertTrue(eventKitStates.contains(try XCTUnwrap(status.calendarAuthorizationStatus)))
+        XCTAssertTrue(eventKitStates.contains(try XCTUnwrap(status.remindersAuthorizationStatus)))
+        XCTAssertTrue(locationStates.contains(try XCTUnwrap(status.locationAuthorizationStatus)))
+        XCTAssertNotNil(status.manualWeatherLocationConfigured)
+        XCTAssertNotNil(status.reminderListSelectionConfigured)
+    }
+
     func testWebFallbackServesInstallableIdentityAssets() async throws {
         let temporaryDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("CodeIslandWebAssets-\(UUID().uuidString)", isDirectory: true)
