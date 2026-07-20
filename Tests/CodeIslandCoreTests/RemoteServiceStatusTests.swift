@@ -11,6 +11,11 @@ final class RemoteServiceStatusTests: XCTestCase {
         XCTAssertNil(status.hostVersion)
         XCTAssertNil(status.launchAtLoginStatus)
         XCTAssertNil(status.launchAtLoginError)
+        XCTAssertNil(status.calendarAuthorizationStatus)
+        XCTAssertNil(status.remindersAuthorizationStatus)
+        XCTAssertNil(status.locationAuthorizationStatus)
+        XCTAssertNil(status.manualWeatherLocationConfigured)
+        XCTAssertNil(status.reminderListSelectionConfigured)
     }
 
     func testHostAvailabilityFieldsRoundTrip() throws {
@@ -20,7 +25,12 @@ final class RemoteServiceStatusTests: XCTestCase {
             serverName: "Greg's Mac",
             hostVersion: "1.0.48",
             launchAtLoginStatus: "notFound",
-            launchAtLoginError: "Service not found"
+            launchAtLoginError: "Service not found",
+            calendarAuthorizationStatus: "fullAccess",
+            remindersAuthorizationStatus: "fullAccess",
+            locationAuthorizationStatus: "denied",
+            manualWeatherLocationConfigured: true,
+            reminderListSelectionConfigured: true
         )
 
         let decoded = try JSONDecoder().decode(

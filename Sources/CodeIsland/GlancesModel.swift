@@ -115,6 +115,12 @@ final class GlancesModel: NSObject, ObservableObject {
         if remindersAuthorized { loadReminderCalendarsAndReminders() }
     }
 
+    /// Refresh only the privacy state for diagnostics. Unlike
+    /// `refreshPermissions`, this does not read calendar or reminder content.
+    func refreshAuthorizationStatuses() {
+        updateAuthorizationStatuses()
+    }
+
     // MARK: - EventKit authorization
 
     func requestCalendarAccess() {
@@ -187,6 +193,28 @@ final class GlancesModel: NSObject, ObservableObject {
 
     nonisolated static func canRequestFullCalendarAccess(_ status: EKAuthorizationStatus) -> Bool {
         status == .notDetermined || status == .writeOnly
+    }
+
+    nonisolated static func eventKitAuthorizationStatusName(_ status: EKAuthorizationStatus) -> String {
+        switch status {
+        case .notDetermined: "notDetermined"
+        case .restricted: "restricted"
+        case .denied: "denied"
+        case .fullAccess: "fullAccess"
+        case .writeOnly: "writeOnly"
+        @unknown default: "unknown"
+        }
+    }
+
+    nonisolated static func locationAuthorizationStatusName(_ status: CLAuthorizationStatus) -> String {
+        switch status {
+        case .notDetermined: "notDetermined"
+        case .restricted: "restricted"
+        case .denied: "denied"
+        case .authorizedAlways: "authorized"
+        case .authorized: "authorized"
+        @unknown default: "unknown"
+        }
     }
 
     nonisolated private static func hasLocationAccess(_ status: CLAuthorizationStatus) -> Bool {

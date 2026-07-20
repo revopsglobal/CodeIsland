@@ -522,13 +522,29 @@ final class RemoteApprovalService: ObservableObject {
                 body: Data(RemoteApprovalWebApp.serviceWorker.utf8)
             )
         case ("GET", "/health"):
+            let glances = GlancesModel.shared
+            glances.refreshAuthorizationStatuses()
+            let manualWeatherLocationConfigured = !SettingsManager.shared.glancesWeatherLocation
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .isEmpty
             let status = RemoteServiceStatus(
                 running: running,
                 pendingCount: appState.permissionQueue.count,
                 serverName: Host.current().localizedName ?? "CodeIsland Mac",
                 hostVersion: AppVersion.current,
                 launchAtLoginStatus: SettingsManager.shared.launchAtLoginStatusDescription,
-                launchAtLoginError: SettingsManager.shared.lastLaunchAtLoginError
+                launchAtLoginError: SettingsManager.shared.lastLaunchAtLoginError,
+                calendarAuthorizationStatus: GlancesModel.eventKitAuthorizationStatusName(
+                    glances.calendarAuthorizationStatus
+                ),
+                remindersAuthorizationStatus: GlancesModel.eventKitAuthorizationStatusName(
+                    glances.remindersAuthorizationStatus
+                ),
+                locationAuthorizationStatus: GlancesModel.locationAuthorizationStatusName(
+                    glances.locationAuthorizationStatus
+                ),
+                manualWeatherLocationConfigured: manualWeatherLocationConfigured,
+                reminderListSelectionConfigured: !SettingsManager.shared.glancesReminderCalendarIDs.isEmpty
             )
             return .json(status: 200, encodable: status)
         case ("POST", "/api/pair"):
