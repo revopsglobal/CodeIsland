@@ -3,11 +3,17 @@
 ## [v1.0.62] - 2026-07-20
 
 ### English
+- Make CodeIsland Buddy the single away-attention channel. Native APNs notifications and Live Activities/Dynamic Island now carry approvals, questions, needs-you decisions, and task failures without duplicate bot alerts.
+- Keep push payloads opaque and private. Buddy receives only request identity and state, then fetches exact details from the paired Mac over authenticated Tailscale HTTPS; decisions still require short-lived, single-use action tokens.
+- Remove the Telegram sender, approval sheet, bot credentials, settings, and readiness checks so the product has one predictable notification and action path.
 - The type split now reaches the words. Prompts and chat prose render in SF Pro; only machine content (commands, IDs, paths) and the `$` sigil stay monospaced in their wells. Reading a session no longer feels like reading a terminal. (M2)
 - Approval buttons are risk-aware. The old four-colour button row is gone: on a destructive command (rm, force-push, DROP) Deny is the single filled action and the rest recede; on a safe command Allow leads. One emphasis, matched to consequence. (M3)
 - The Today (Glances) and Tools (Hub) surfaces join the design-token system for the first time. They were 113 inline colour literals with two different ad-hoc accents; they now route through one signal amber, the white-opacity ink ramp, and pinned on-accent foregrounds. This fixes the hardcoded black-on-amber button text and drops the alert colour from the Now/Today/Tools nav, which now reads in neutral ink so amber means only "needs you". (M5)
 
 ### 中文
+- 将 CodeIsland Buddy 设为唯一的离线注意力通道。原生 APNs 通知与实时活动／灵动岛统一承载审批、问题、需要你的决定和任务失败，不再产生重复的机器人提醒。
+- 推送载荷保持不透明和私密。Buddy 只接收请求标识与状态，再通过已认证的 Tailscale HTTPS 从配对 Mac 获取精确详情；决定仍需短时、一次性操作令牌。
+- 移除 Telegram 发送器、审批页面、机器人凭据、设置项和就绪检查，让产品只保留一条清晰可预测的通知与操作路径。
 - 字体分工现已延伸到正文。提示词与对话正文改用 SF Pro 渲染；仅机器内容（命令、ID、路径）与 `$` 记号仍在凹槽中保持等宽。阅读会话不再像在读终端。(M2)
 - 审批按钮现按风险区分。旧的四色按钮排已移除：对破坏性命令（rm、强制推送、DROP），仅「拒绝」为实心动作，其余弱化；对安全命令则「允许」为主。强调唯一，且与后果匹配。(M3)
 - 「今天」(Glances) 与「工具」(Hub) 界面首次接入设计令牌系统。此前为 113 处内联色值、两套各异的强调色；现统一走同一琥珀信号色、白色不透明度墨阶与固定的强调前景色。这修复了硬编码的琥珀底黑字按钮文字，并让 Now/Today/Tools 导航不再使用警示色（改为中性墨色），使琥珀仅表示「需要你」。(M5)

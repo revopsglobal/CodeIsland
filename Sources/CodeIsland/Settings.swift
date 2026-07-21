@@ -4,7 +4,7 @@ import ServiceManagement
 
 enum AppVersion {
     /// Update this each release. Used as fallback when Info.plist is unavailable (debug builds).
-    static let fallback = "1.0.49"
+    static let fallback = "1.0.62"
 
     static var current: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? fallback
@@ -127,9 +127,6 @@ enum SettingsKey {
     static let remoteApprovalAPNSKeyID = "remoteApprovalAPNSKeyID"
     static let remoteApprovalAPNSPrivateKeyPath = "remoteApprovalAPNSPrivateKeyPath"
     static let remoteApprovalAPNSTopic = "remoteApprovalAPNSTopic"
-    static let remoteApprovalTelegramEnabled = "remoteApprovalTelegramEnabled"
-    static let remoteApprovalTelegramBotToken = "remoteApprovalTelegramBotToken"
-    static let remoteApprovalTelegramChatID = "remoteApprovalTelegramChatID"
     static let remoteApprovalExpectedClientVersion = "remoteApprovalExpectedClientVersion"
     static let remoteApprovalExpectedClientBuild = "remoteApprovalExpectedClientBuild"
 
@@ -225,9 +222,6 @@ struct SettingsDefaults {
     static let remoteApprovalAPNSKeyID = ""
     static let remoteApprovalAPNSPrivateKeyPath = ""
     static let remoteApprovalAPNSTopic = "com.revopsglobal.codeisland.buddy"
-    static let remoteApprovalTelegramEnabled = false
-    static let remoteApprovalTelegramBotToken = ""
-    static let remoteApprovalTelegramChatID = ""
     static let remoteApprovalExpectedClientVersion = ""
     static let remoteApprovalExpectedClientBuild = ""
 
@@ -316,9 +310,6 @@ class SettingsManager {
             SettingsKey.remoteApprovalAPNSKeyID: SettingsDefaults.remoteApprovalAPNSKeyID,
             SettingsKey.remoteApprovalAPNSPrivateKeyPath: SettingsDefaults.remoteApprovalAPNSPrivateKeyPath,
             SettingsKey.remoteApprovalAPNSTopic: SettingsDefaults.remoteApprovalAPNSTopic,
-            SettingsKey.remoteApprovalTelegramEnabled: SettingsDefaults.remoteApprovalTelegramEnabled,
-            SettingsKey.remoteApprovalTelegramBotToken: SettingsDefaults.remoteApprovalTelegramBotToken,
-            SettingsKey.remoteApprovalTelegramChatID: SettingsDefaults.remoteApprovalTelegramChatID,
             SettingsKey.remoteApprovalExpectedClientVersion: SettingsDefaults.remoteApprovalExpectedClientVersion,
             SettingsKey.remoteApprovalExpectedClientBuild: SettingsDefaults.remoteApprovalExpectedClientBuild,
             SettingsKey.glancesReminderCalendarIDs: SettingsDefaults.glancesReminderCalendarIDs,

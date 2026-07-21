@@ -12,9 +12,6 @@ setup() {
 #!/usr/bin/env bash
 key="${3:-}"
 case "$key" in
-  remoteApprovalTelegramEnabled) printf '%s\n' "${TEST_TELEGRAM_ENABLED:-0}" ;;
-  remoteApprovalTelegramBotToken) printf '%s\n' "${TEST_TELEGRAM_BOT_TOKEN:-}" ;;
-  remoteApprovalTelegramChatID) printf '%s\n' "${TEST_TELEGRAM_CHAT_ID:-}" ;;
   remoteApprovalTailnetURL) printf '%s\n' "${TEST_TAILNET_URL:-}" ;;
   *) exit 1 ;;
 esac
@@ -150,7 +147,7 @@ STUB
   chmod +x "$STRICT_E2E_BIN"
 }
 
-@test "reports away path ready for manual physical acceptance with Telegram optional disabled" {
+@test "reports away path ready for manual physical acceptance" {
   write_strict_report
 
   run "$REPO_ROOT/scripts/report-away-readiness.sh"
@@ -175,47 +172,8 @@ STUB
     .webFallback.shell.markers.liveFeedback == true and
     .webFallback.shell.markers.inlineReview == true and
     .webFallback.shell.markers.noBrowserDialogs == true and
-    .telegramFallback.enabled == false and
-    .telegramFallback.controlPlane == false and
     ([.requiredGates[] | select(.id == "physical-buddy-checkin" and .owner == "greg")] | length) == 1 and
-    ([.optionalGates[] | select(.id == "telegram-fallback" and .status == "disabled")] | length) == 1'
-}
-
-@test "reports configured Telegram fallback without exposing credentials" {
-  export TEST_TELEGRAM_ENABLED=1
-  export TEST_TELEGRAM_BOT_TOKEN="123:secret"
-  export TEST_TELEGRAM_CHAT_ID="987654"
-  export TEST_TAILNET_URL="https://gregs-mac.tailnet.example"
-  write_strict_report
-
-  run "$REPO_ROOT/scripts/report-away-readiness.sh"
-
-  [ "$status" -eq 2 ]
-  [[ "$output" != *"123:secret"* ]]
-  [[ "$output" != *"987654"* ]]
-  printf '%s' "$output" | jq -e '
-    .telegramFallback.status == "configured" and
-    .telegramFallback.available == true and
-    .telegramFallback.hasBotToken == true and
-    .telegramFallback.hasChatID == true and
-    ([.optionalGates[] | select(.id == "private-tailnet-url" and .configured == true)] | length) == 1'
-}
-
-@test "reports incomplete Telegram as optional configuration issue" {
-  export TEST_TELEGRAM_ENABLED=1
-  export TEST_TELEGRAM_BOT_TOKEN=""
-  export TEST_TELEGRAM_CHAT_ID="987654"
-  write_strict_report
-
-  run "$REPO_ROOT/scripts/report-away-readiness.sh"
-
-  [ "$status" -eq 2 ]
-  printf '%s' "$output" | jq -e '
-    .status == "ready-for-manual-physical-acceptance" and
-    .telegramFallback.status == "incomplete" and
-    .telegramFallback.available == false and
-    ([.requiredGates[] | select(.id == "telegram-fallback")] | length) == 0 and
-    ([.optionalGates[] | select(.id == "telegram-fallback" and .status == "incomplete")] | length) == 1'
+    ([.optionalGates[] | select(.id == "private-tailnet-url")] | length) == 1'
 }
 
 @test "blocks away readiness when private web fallback is unreachable" {

@@ -1556,25 +1556,14 @@ private struct BuddyPage: View {
     @AppStorage(SettingsKey.remoteApprovalAPNSKeyID) private var apnsKeyID: String = SettingsDefaults.remoteApprovalAPNSKeyID
     @AppStorage(SettingsKey.remoteApprovalAPNSPrivateKeyPath) private var apnsPrivateKeyPath: String = SettingsDefaults.remoteApprovalAPNSPrivateKeyPath
     @AppStorage(SettingsKey.remoteApprovalAPNSTopic) private var apnsTopic: String = SettingsDefaults.remoteApprovalAPNSTopic
-    @AppStorage(SettingsKey.remoteApprovalTelegramEnabled) private var telegramEnabled: Bool = SettingsDefaults.remoteApprovalTelegramEnabled
-    @AppStorage(SettingsKey.remoteApprovalTelegramBotToken) private var telegramBotToken: String = SettingsDefaults.remoteApprovalTelegramBotToken
-    @AppStorage(SettingsKey.remoteApprovalTelegramChatID) private var telegramChatID: String = SettingsDefaults.remoteApprovalTelegramChatID
     @AppStorage(SettingsKey.remoteApprovalExpectedClientVersion) private var expectedBuddyVersion: String = SettingsDefaults.remoteApprovalExpectedClientVersion
     @AppStorage(SettingsKey.remoteApprovalExpectedClientBuild) private var expectedBuddyBuild: String = SettingsDefaults.remoteApprovalExpectedClientBuild
     @ObservedObject private var appleCompanion = AppleCompanionPublisher.shared
     @ObservedObject private var remoteApprovals = RemoteApprovalService.shared
     @ObservedObject private var apns = APNSNotificationSender.shared
-    @ObservedObject private var telegram = TelegramAttentionNotifier.shared
     @State private var refreshTick = 0
 
     private var bridge: ESP32BridgeManager { ESP32BridgeManager.shared }
-
-    private var canSendTelegramTestAlert: Bool {
-        telegramEnabled
-            && !telegram.isSending
-            && !telegramBotToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !telegramChatID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
 
     private var buddyBuildExpectation: RemoteBuddyBuildExpectation {
         RemoteBuddyBuildExpectation(expectedVersion: expectedBuddyVersion, expectedBuild: expectedBuddyBuild)
@@ -2067,38 +2056,6 @@ private struct BuddyPage: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("Telegram fallback") {
-                Toggle("Text me when CodeIsland needs attention", isOn: $telegramEnabled)
-
-                SecureField("Bot token", text: $telegramBotToken)
-                    .disabled(!telegramEnabled)
-                TextField("Chat ID", text: $telegramChatID)
-                    .disabled(!telegramEnabled)
-
-                Button {
-                    telegram.sendTestAlert()
-                } label: {
-                    Label(telegram.isSending ? "Sending test alert…" : "Send test Telegram alert", systemImage: "paperplane")
-                }
-                .disabled(!canSendTelegramTestAlert)
-
-                if let delivered = telegram.lastDeliveryAt {
-                    Label("Last delivered \(delivered.formatted(date: .omitted, time: .shortened))", systemImage: "checkmark.circle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.green)
-                }
-                if let error = telegram.lastError {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                        .textSelection(.enabled)
-                }
-
-                Text("Optional personal backup for when APNs or Live Activities miss you. It only sends redacted approval/question alerts, a Buddy deep link, the expected Buddy TestFlight build when known, and your private Tailscale web link; the actual decision still happens in Buddy or the CodeIsland web app.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
             Section {
                 Text(l10n["buddy_desc"])
                     .font(.caption)
@@ -2224,6 +2181,7 @@ private struct BuddyPage: View {
             apnsPrivateKeyPath = url.path
         }
     }
+
 }
 
 // MARK: - About Page

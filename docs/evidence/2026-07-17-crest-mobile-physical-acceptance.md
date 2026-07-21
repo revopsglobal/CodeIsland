@@ -432,5 +432,6 @@ yet visually accepted.
   teleprompter, and Accessibility-backed window actions against Greg's real
   devices and data.
 
-No Apple Watch or Pomodoro acceptance is required. Telegram remains an optional
-outbound alert/deep-link fallback, not a second control plane.
+No Apple Watch or Pomodoro acceptance is required. Telegram has since been
+retired from CodeIsland; Buddy APNs, Live Activities, and the authenticated
+private Tailscale client own away use.

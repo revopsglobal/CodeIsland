@@ -36,7 +36,7 @@ and the appropriate native or physical-device acceptance evidence.
   actions, task and note capture, Calendar/Reminders, files, and utility state.
 - Native iPhone editors, share flows, App Intents, push notifications, Live
   Activities, and Dynamic Island status where they improve away use.
-- A Tailscale web fallback and optional Telegram outbound alert/deep link.
+- A Tailscale web fallback plus native Buddy push notifications and Live Activities.
 - The lowest practical ongoing cost using Greg's existing Apple Developer
   account, GitHub Actions, Mac, and Tailscale.
 
@@ -46,7 +46,7 @@ and the appropriate native or physical-device acceptance evidence.
 - Apple Watch.
 - A multi-tenant service or scale-oriented backend.
 - A generic remote shell.
-- An inbound Telegram bot, Telegram task store, or always-on Telegram daemon.
+- Any Telegram integration, bot, task store, or daemon.
 - Remote camera streaming. Camera preview remains private and local to the
   device using it; remote surfaces expose permission/device health only.
 - Spotify queue control, because the Spotify macOS automation interface does
@@ -66,9 +66,9 @@ authenticated HTTPS over Greg's Tailscale tailnet. Nearby Bluetooth can assist
 discovery or pairing but is not the away transport. The web client uses the
 same listener, authentication, snapshots, confirmation flow, and audit model.
 
-Telegram is optional notification plumbing only. An alert may include a deep
-link that opens Buddy or the private web surface. The action still loads fresh
-state from the Mac and uses the normal confirmation contract.
+Buddy is the sole away-attention channel. APNs and Live Activities deep-link to
+Buddy, which loads fresh state from the Mac and uses the normal confirmation
+contract; the authenticated private web surface remains the fallback.
 
 ### Remote mutation safety
 

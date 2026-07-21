@@ -18,7 +18,7 @@ The design is optimized for Greg as the only intended user. It reuses the
 existing signed Mac host, paired-device authentication, Tailscale transport,
 attention queue, push notifications, Live Activities, Dynamic Island, and
 shared action/receipt model. It does not introduce a paid service, generic
-remote shell, Telegram task store, or second control plane.
+remote shell, messaging bot, or second control plane.
 
 ## Product context
 
@@ -50,9 +50,9 @@ Two alternatives were rejected as primary architectures:
 1. **App Intents only:** inexpensive and fast, but too shallow for workspace
    correction, attachments, failures, completion evidence, or steering several
    sessions.
-2. **Telegram control:** universally reachable, but it would duplicate task
+2. **Messaging-bot control:** universally reachable, but it would duplicate task
    state, weaken privacy and interaction quality, and become a second action
-   system. Telegram remains an optional outbound alert and Buddy deep link.
+   system. Buddy native push remains the single away-attention path.
 
 ## Authority model
 
@@ -201,8 +201,8 @@ iPhone composer / Share Sheet / Siri / Action Button
 ```
 
 `/Applications/CodeIsland.app` remains the sole host and local executor. The
-iPhone, private web fallback, push surfaces, and optional Telegram alert all
-load or deep-link into the same task record and exact action contract.
+iPhone, private web fallback, and push surfaces all load or deep-link into the
+same task record and exact action contract.
 
 The initial implementation should use a durable local host queue rather than a
 new cloud database. The paired Mac is the execution authority, and Greg's
@@ -240,8 +240,7 @@ or `Failed`. Dynamic Island and Lock Screen actions deep-link to the exact
 task; they do not execute sensitive actions from stale notification state.
 
 An optional morning/evening digest summarizes completed, failed, and waiting
-work. Telegram may send a redacted alert plus Buddy/private-web deep link but
-cannot submit, approve, or mutate a task.
+work inside Buddy. No messaging bot submits, approves, or mutates a task.
 
 ## Reliability and recovery
 
@@ -328,4 +327,4 @@ completion review while the phone is away from local Wi-Fi.
   external messaging under `Edit & Test`.
 - Replacing CodeIsland's Crest-class tools or turning every utility event into
   a notification.
-- An inbound Telegram bot or always-on Telegram daemon.
+- Any Telegram bot or daemon.

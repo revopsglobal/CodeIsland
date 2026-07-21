@@ -4,7 +4,7 @@
 
 **Goal:** Let Greg create and steer Codex or Claude coding tasks from CodeIsland Buddy while the paired Mac automatically performs bounded file edits and tests, then returns authenticated completion evidence and gates every consequential action.
 
-**Architecture:** Add a shared remote-task contract, a durable Mac-owned task/receipt store, provider adapters for Codex app-server and Claude Code, and authenticated task endpoints to the existing Tailscale listener. Extend Buddy's existing `Now`, `Sessions`, deep-link, App Intent, APNs, ActivityKit, and exact-confirmation surfaces; add a Share Extension that hands an editable draft to the main app through an App Group. The Mac remains the sole executor and source of truth; Telegram remains outbound notification only.
+**Architecture:** Add a shared remote-task contract, a durable Mac-owned task/receipt store, provider adapters for Codex app-server and Claude Code, and authenticated task endpoints to the existing Tailscale listener. Extend Buddy's existing `Now`, `Sessions`, deep-link, App Intent, APNs, ActivityKit, and exact-confirmation surfaces; add a Share Extension that hands an editable draft to the main app through an App Group. The Mac remains the sole executor and source of truth; Buddy native push is the sole away-attention channel.
 
 **Tech Stack:** Swift 5.9+, SwiftUI, Combine, Foundation, Network.framework, CryptoKit, Codex app-server JSON-RPC, Claude Code stream-json, App Intents, Share Extension, App Groups, UserNotifications, ActivityKit, WidgetKit, XCTest/XCUITest, XcodeGen, GitHub Actions, Tailscale Serve.
 
@@ -22,7 +22,7 @@
   acceptance contract. Pomodoro and Apple Watch remain explicitly excluded.
 - Start from current `origin/main` in a dedicated `codex/` worktree. Preserve the existing untracked `.playwright-cli/` and `graphify-out/` directories.
 - Keep source, commit, push, merge, signed build, TestFlight availability, physical install, Wi-Fi proof, and cellular proof as separate states.
-- Do not add a hosted database, paid service, inbound Telegram bot, generic shell API, Pomodoro feature, or Apple Watch work.
+- Do not add a hosted database, paid service, Telegram integration, generic shell API, Pomodoro feature, or Apple Watch work.
 - Run `graphify update . --no-viz` after code changes and before final verification.
 - Use `@systematic-debugging` on any unexpected test/runtime failure and `@verification-before-completion` before any completion claim.
 
@@ -1041,7 +1041,7 @@ Run focused iOS Live Activity tests. Expected: FAIL.
   Verified, and Failed.
 - Use the same task endpoints and exact-confirmation contract from the web
   fallback.
-- Do not make Telegram an inbound action surface.
+- Do not add a messaging-bot action surface.
 
 **Step 5: Run focused tests**
 

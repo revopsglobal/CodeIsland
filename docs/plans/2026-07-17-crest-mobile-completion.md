@@ -4,7 +4,7 @@
 
 **Goal:** Deliver useful Crest 4.9 behavior parity on the signed CodeIsland Mac app, excluding Pomodoro and Watch, and make every useful host action available from a signed iPhone app over Tailscale with a private web fallback.
 
-**Architecture:** Keep CodeIsland Mac as the only state/action host. Extend the shared `CodeIslandCore` catalog and typed snapshot/action protocol first, then render the same contract in the Mac, native iPhone, and web clients. Mutations continue to use short-lived, exact, device-bound confirmation tokens; Telegram remains outbound alert/deep-link only.
+**Architecture:** Keep CodeIsland Mac as the only state/action host. Extend the shared `CodeIslandCore` catalog and typed snapshot/action protocol first, then render the same contract in the Mac, native iPhone, and web clients. Mutations continue to use short-lived, exact, device-bound confirmation tokens; Buddy APNs and Live Activities are the sole away-attention path.
 
 **Tech Stack:** Swift 5.9, SwiftUI, AppKit, EventKit, AVFoundation, ScreenCaptureKit, Speech, ActivityKit, App Intents, UserNotifications/APNs, Carbon hot keys, Accessibility, Tailscale Serve HTTPS, XCTest/XCUITest, GitHub Actions, and the App Store Connect API.
 
@@ -17,7 +17,7 @@
 - Run focused tests before and after each change and the full Swift suite at batch boundaries.
 - Keep platform states separate: Simulator is not physical-iPhone proof, upload is not TestFlight availability, and merged source is not an installed DMG.
 - Commit each task independently.
-- Do not add Pomodoro, Watch work, a generic remote command endpoint, or an inbound Telegram daemon.
+- Do not add Pomodoro, Watch work, a generic remote command endpoint, or Telegram integration.
 
 ## Task 1: Restore Greg's internal TestFlight access
 

@@ -3,6 +3,37 @@ import XCTest
 
 @MainActor
 final class PersonalUtilitiesModelTests: XCTestCase {
+    func testBlockedDirectoryOpenDoesNotStarveAnotherModel() async throws {
+        let firstDirectory = try temporaryDirectory()
+        let secondDirectory = try temporaryDirectory()
+        defer {
+            try? FileManager.default.removeItem(at: firstDirectory)
+            try? FileManager.default.removeItem(at: secondDirectory)
+        }
+
+        let firstOpenerEntered = expectation(description: "first directory opener starts")
+        let releaseFirstOpener = DispatchSemaphore(value: 0)
+        let firstModel = PersonalUtilitiesModel(downloadsURL: firstDirectory) { _ in
+            firstOpenerEntered.fulfill()
+            releaseFirstOpener.wait()
+            return -1
+        }
+        firstModel.start()
+        await fulfillment(of: [firstOpenerEntered], timeout: 3)
+
+        let secondOpenerEntered = expectation(description: "second directory opener is independent")
+        let secondModel = PersonalUtilitiesModel(downloadsURL: secondDirectory) { _ in
+            secondOpenerEntered.fulfill()
+            return -1
+        }
+        secondModel.start()
+
+        await fulfillment(of: [secondOpenerEntered], timeout: 1)
+        firstModel.stop()
+        secondModel.stop()
+        releaseFirstOpener.signal()
+    }
+
     func testStartDoesNotBlockOnProtectedDownloadsDirectory() async throws {
         let directory = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }

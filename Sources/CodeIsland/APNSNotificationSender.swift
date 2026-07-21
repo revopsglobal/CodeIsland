@@ -73,8 +73,6 @@ final class APNSNotificationSender: ObservableObject {
                     && device.liveActivityPushToStartToken?.isEmpty == false)
                 || (state != .pending && device.liveActivityUpdateTokens?[requestID]?.isEmpty == false)
         }
-        TelegramAttentionNotifier.shared.notify(envelope: envelope)
-
         guard !targets.isEmpty else { return }
         guard let configuration = configuration() else { return }
         Task {
