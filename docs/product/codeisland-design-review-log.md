@@ -66,6 +66,34 @@ defects were caught only because the local toolchain was finally used:
    invariant. **This test runs only under `xcodebuild … test`, which the DMG CI
    workflow does not invoke** — so it is caught locally or not at all.
 
+### Visual-proof batch — 2026-07-20, shipped v1.0.62
+
+After R1–R7 and R2 (type split + token file) landed, Greg asked to *see* the
+remaining findings as real before/after renders, not prose. A follow-up
+"visual-proof" batch was rendered from the actual code (its own labels M2–M5 /
+DS2, distinct from the 07-19 findings above). Stamp:
+
+| Label | What it is | Stamp | Ship |
+| --- | --- | --- | --- |
+| M2 | Type split reaches prose — SF Pro for prompts/chat text, mono only for commands/IDs/paths + the `$` sigil | **accept** | v1.0.62 |
+| M3 | Risk-aware approval buttons — one filled action matched to consequence (Deny on destructive, Allow on safe); the four-colour row is gone | **accept** | v1.0.62 |
+| M5 | Today (Glances) + Tools (Hub) onto the token system — 113 inline literals and two ad-hoc accents collapse to one signal amber; `.black`-on-accent → pinned `onSignal`; Now/Today/Tools nav drops the alert colour for neutral ink | **accept** | v1.0.62 |
+| M4 | Collapsed island shows a "CodeIsland" wordmark at rest instead of "0" | **reject** | — |
+| DS2 | Neutral one-accent badge rail (`@host`/`+Sub`/`YOLO` → grey) | **reject** | — |
+
+`M4` and `DS2` are **rejected → closed for good.** DS2's rejection is a
+deliberate call to keep the badge rail's distinct hues rather than fold them into
+the one-accent system; do not re-propose either.
+
+Shipped as a clean fast-forward to `main` (`aecfc3f`) then cut as `1.0.62`
+(`86ad1ce`), signed with the internal Apple Development identity via
+`build-macos-arm-dmg.yml` and installed in place over `/Applications/CodeIsland.app`
+(same identity, so TCC permissions persist). M5's before/after was produced with a
+DEBUG `--render-snapshot` path that renders `GlancesToggleRow` / `GlancesView` /
+`PersonalHubMacView` headlessly; the iOS findings (I1/I2/I4) still lack real
+renders because the Simulator smoke path (`scripts/smoke-companion-ui.sh`) exits
+non-zero and produces no PNGs.
+
 ### Corrections to the 07-19 review made during implementation
 
 - `queuePosition: 1` on the Mac approval card was reported as a hardcoded lie. It
