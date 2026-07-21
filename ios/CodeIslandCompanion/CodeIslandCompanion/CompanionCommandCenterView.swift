@@ -700,17 +700,21 @@ private struct CompanionTodayTimeline: View {
         guard let snapshot else { return [] }
         var result: [CommandTimelineRow] = []
 
+        // Companion-first (B2-13): lead with agents, the reason to open Buddy,
+        // then calendar as a single demoted row. Reminders is trimmed under the
+        // flag, so it only appears in the legacy full-hub layout.
+        if let agents = snapshot.modules.first(where: { $0.id == .agents }),
+           let item = agents.items.first {
+            result.append(.init(moduleID: .agents, item: item))
+        }
         if let calendar = snapshot.modules.first(where: { $0.id == .calendar }),
            let item = calendar.items.first {
             result.append(.init(moduleID: .calendar, item: item))
         }
-        if let reminders = snapshot.modules.first(where: { $0.id == .reminders }),
+        if !CompanionFirst.isEnabled,
+           let reminders = snapshot.modules.first(where: { $0.id == .reminders }),
            let item = reminders.items.first(where: { !$0.id.hasPrefix("list:") }) {
             result.append(.init(moduleID: .reminders, item: item))
-        }
-        if let agents = snapshot.modules.first(where: { $0.id == .agents }),
-           let item = agents.items.first {
-            result.append(.init(moduleID: .agents, item: item))
         }
         return Array(result.prefix(3))
     }
@@ -747,6 +751,11 @@ private struct CompanionTodayTimeline: View {
     private var headlineSubtitle: String {
         if hasAgentAttention {
             return "An agent is waiting for your decision."
+        }
+        if CompanionFirst.isEnabled {
+            // Agent-first quiet hero (B2-13): report live agent work, not the
+            // next meeting. idleSummary reuses the Mac's agents summary.
+            return idleSummary
         }
         if let weatherSummary {
             return weatherSummary

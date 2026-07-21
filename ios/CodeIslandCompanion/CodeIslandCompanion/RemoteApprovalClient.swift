@@ -154,9 +154,20 @@ final class RemoteApprovalClient: ObservableObject {
         let launchMode: PersonalHubMode? = nil
 #endif
         serverURLText = UserDefaults.standard.string(forKey: Self.serverURLKey) ?? Self.defaultServerURL
-        selectedMode = launchMode ?? PersonalHubMode(
-            rawValue: UserDefaults.standard.string(forKey: Self.selectedModeKey) ?? ""
-        ) ?? (CompanionFirst.isEnabled ? .code : .auto)
+        // Companion-first lives in the agent (code) rack. Coerce to .code so a
+        // previously stored Home/Work mode never renders a sparse filtered Tools;
+        // set in init (no didSet), so the user's stored mode is preserved for when
+        // the flag is turned off. Interim until the Mac composes a cross-rack
+        // Companion rack (pair 5 wire change).
+        if let launchMode {
+            selectedMode = launchMode
+        } else if CompanionFirst.isEnabled {
+            selectedMode = .code
+        } else {
+            selectedMode = PersonalHubMode(
+                rawValue: UserDefaults.standard.string(forKey: Self.selectedModeKey) ?? ""
+            ) ?? .auto
+        }
         bindRemoteTaskClient()
 
 #if DEBUG

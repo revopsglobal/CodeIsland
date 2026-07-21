@@ -40,7 +40,7 @@ struct RemoteApprovalSurface: View {
                                     .frame(height: 1)
                             }
                             .padding(.horizontal, 4)
-                            .dynamicTypeSize(.xSmall ... .xxxLarge)
+                            .dynamicTypeSize(.xSmall ... .accessibility3)
                         }
 
                         if let selectedAttention {
@@ -268,7 +268,7 @@ private struct RemoteQuestionCard: View {
                     .font(.caption)
                     .foregroundStyle(.ciForeground.opacity(0.42))
             }
-            .dynamicTypeSize(.xSmall ... .xxxLarge)
+            .dynamicTypeSize(.xSmall ... .accessibility3)
 
             HStack(spacing: 6) {
                 Text(question.source)
@@ -279,7 +279,7 @@ private struct RemoteQuestionCard: View {
             }
             .font(.caption.weight(.semibold))
             .foregroundStyle(Color.ciForeground.opacity(0.52))
-            .dynamicTypeSize(.xSmall ... .xxxLarge)
+            .dynamicTypeSize(.xSmall ... .accessibility3)
 
             if question.requiresLocalResponse {
                 Label("Sensitive question waiting on Mac", systemImage: "eye.slash.fill")
@@ -590,7 +590,7 @@ private struct RemoteApprovalCard: View {
                     .font(.caption)
                     .foregroundStyle(.ciForeground.opacity(0.42))
             }
-            .dynamicTypeSize(.xSmall ... .xxxLarge)
+            .dynamicTypeSize(.xSmall ... .accessibility3)
 
             HStack(spacing: 6) {
                 Text(approval.source)
@@ -601,7 +601,7 @@ private struct RemoteApprovalCard: View {
             }
             .font(.caption.weight(.semibold))
             .foregroundStyle(Color.ciForeground.opacity(0.52))
-            .dynamicTypeSize(.xSmall ... .xxxLarge)
+            .dynamicTypeSize(.xSmall ... .accessibility3)
 
             Text(approval.tool)
                 .font(.title3.weight(.bold))
@@ -613,7 +613,7 @@ private struct RemoteApprovalCard: View {
                     Label("Requested action", systemImage: "terminal")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.ciForeground.opacity(0.5))
-                        .dynamicTypeSize(.xSmall ... .xxxLarge)
+                        .dynamicTypeSize(.xSmall ... .accessibility3)
                     Text(detail)
                         .font(.system(.callout, design: .monospaced, weight: .medium))
                         .foregroundStyle(.ciForeground.opacity(0.78))
