@@ -131,6 +131,7 @@ enum SettingsKey {
     // Legacy migration key. New bot-token writes belong in TelegramCredentialStore.
     static let remoteApprovalTelegramBotToken = "remoteApprovalTelegramBotToken"
     static let remoteApprovalTelegramChatID = "remoteApprovalTelegramChatID"
+    static let remoteApprovalTelegramUserID = "remoteApprovalTelegramUserID"
     static let remoteApprovalExpectedClientVersion = "remoteApprovalExpectedClientVersion"
     static let remoteApprovalExpectedClientBuild = "remoteApprovalExpectedClientBuild"
 
@@ -230,6 +231,7 @@ struct SettingsDefaults {
     // Retained only so older installs can migrate the preference into Keychain.
     static let remoteApprovalTelegramBotToken = ""
     static let remoteApprovalTelegramChatID = ""
+    static let remoteApprovalTelegramUserID = ""
     static let remoteApprovalExpectedClientVersion = ""
     static let remoteApprovalExpectedClientBuild = ""
 
@@ -321,6 +323,7 @@ class SettingsManager {
             SettingsKey.remoteApprovalTelegramEnabled: SettingsDefaults.remoteApprovalTelegramEnabled,
             SettingsKey.remoteApprovalTelegramBotToken: SettingsDefaults.remoteApprovalTelegramBotToken,
             SettingsKey.remoteApprovalTelegramChatID: SettingsDefaults.remoteApprovalTelegramChatID,
+            SettingsKey.remoteApprovalTelegramUserID: SettingsDefaults.remoteApprovalTelegramUserID,
             SettingsKey.remoteApprovalExpectedClientVersion: SettingsDefaults.remoteApprovalExpectedClientVersion,
             SettingsKey.remoteApprovalExpectedClientBuild: SettingsDefaults.remoteApprovalExpectedClientBuild,
             SettingsKey.glancesReminderCalendarIDs: SettingsDefaults.glancesReminderCalendarIDs,
@@ -332,6 +335,18 @@ class SettingsManager {
             SettingsKey.webhookURL: SettingsDefaults.webhookURL,
             SettingsKey.webhookEventFilter: SettingsDefaults.webhookEventFilter,
         ])
+        migrateTelegramAllowlistedUserIDIfNeeded()
+    }
+
+    private func migrateTelegramAllowlistedUserIDIfNeeded() {
+        let configuredUserID = (defaults.string(forKey: SettingsKey.remoteApprovalTelegramUserID) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard configuredUserID.isEmpty else { return }
+
+        let chatID = (defaults.string(forKey: SettingsKey.remoteApprovalTelegramChatID) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let privateUserID = Int64(chatID), privateUserID > 0 else { return }
+        defaults.set(String(privateUserID), forKey: SettingsKey.remoteApprovalTelegramUserID)
     }
 
     var launchAtLogin: Bool {
