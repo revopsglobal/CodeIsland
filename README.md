@@ -29,7 +29,7 @@ It connects to **13 AI coding tools** via Unix socket IPC, displaying session st
 - **13 AI tools supported** — Claude Code, Codex, Gemini CLI, Cursor, Copilot, Trae/Traecli, Qoder, Factory, CodeBuddy, OpenCode, Kimi Code CLI, Cline, Pi / Oh My Pi
 - **Live status tracking** — See active sessions, tool calls, and AI responses in real time
 - **Permission management** — Approve/deny tool permissions directly from the panel
-- **Secure away approvals** — Escalation-only Telegram alerts open a signed, private Tailscale review sheet with exact-request approval and no routine status noise
+- **Secure away approvals** — Buddy uses native APNs and Live Activities for attention, then fetches exact request details from your paired Mac over authenticated Tailscale
 - **Question answering** — Respond to agent questions without leaving your current app
 - **Pixel-art mascots** — Each AI tool has its own animated character; this RevOps fork gives Claude Code the Sheldon turtle island treatment
 - **One-click jump** — Click a session to jump to its terminal tab or IDE window

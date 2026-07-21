@@ -26,7 +26,6 @@ final class RemoteApprovalService: ObservableObject {
     private var server: RemoteApprovalHTTPServer?
     private let deviceStore: RemoteApprovalDeviceStore
     private let coordinator: RemoteApprovalCoordinator
-    private let telegramApprovalController: TelegramApprovalController
     private let personalHub: PersonalHubService
     private let localPortOverride: UInt16?
     private let enabledOverride: Bool?
@@ -47,7 +46,6 @@ final class RemoteApprovalService: ObservableObject {
     init(
         deviceStore: RemoteApprovalDeviceStore? = nil,
         coordinator: RemoteApprovalCoordinator? = nil,
-        telegramApprovalController: TelegramApprovalController? = nil,
         personalHub: PersonalHubService? = nil,
         localPortOverride: UInt16? = nil,
         enabledOverride: Bool? = nil,
@@ -59,7 +57,6 @@ final class RemoteApprovalService: ObservableObject {
     ) {
         self.deviceStore = deviceStore ?? RemoteApprovalDeviceStore()
         self.coordinator = coordinator ?? RemoteApprovalCoordinator()
-        self.telegramApprovalController = telegramApprovalController ?? .shared
         self.personalHub = personalHub ?? .shared
         self.localPortOverride = localPortOverride
         self.enabledOverride = enabledOverride
@@ -414,7 +411,6 @@ final class RemoteApprovalService: ObservableObject {
             )
         }
         for requestID in resolvedIDs {
-            telegramApprovalController.reconcileResolved(requestID: requestID, decision: nil)
             APNSNotificationSender.shared.notify(
                 requestID: requestID,
                 kind: .approval,
@@ -499,24 +495,6 @@ final class RemoteApprovalService: ObservableObject {
         }
 
         switch (request.method, request.path) {
-        case ("GET", "/telegram/approval"):
-            return telegramHTMLResponse(TelegramApprovalWebApp.html)
-        case ("POST", "/api/telegram/session"):
-            guard let sessionRequest = request.decode(TelegramSessionRequest.self) else {
-                return telegramErrorResponse(.badRequest)
-            }
-            do {
-                let response = try telegramApprovalController.createSession(
-                    sessionRequest,
-                    appState: appState,
-                    coordinator: coordinator
-                )
-                return telegramJSONResponse(status: 200, encodable: response)
-            } catch let error as TelegramApprovalRouteError {
-                return telegramErrorResponse(error)
-            } catch {
-                return telegramErrorResponse(.unavailable)
-            }
         case ("GET", "/"), ("GET", "/index.html"):
             return .html(RemoteApprovalWebApp.html)
         case ("GET", "/manifest.webmanifest"):
@@ -587,35 +565,6 @@ final class RemoteApprovalService: ObservableObject {
             return .json(status: 201, encodable: response)
         default:
             break
-        }
-
-        let telegramPrefix = "/api/telegram/approvals/"
-        let telegramSuffix = "/decision"
-        if request.method == "POST",
-           request.path.hasPrefix(telegramPrefix),
-           request.path.hasSuffix(telegramSuffix) {
-            let start = request.path.index(request.path.startIndex, offsetBy: telegramPrefix.count)
-            let end = request.path.index(request.path.endIndex, offsetBy: -telegramSuffix.count)
-            let requestID = String(request.path[start..<end]).removingPercentEncoding ?? ""
-            guard !requestID.isEmpty,
-                  let decisionRequest = request.decode(TelegramDecisionRouteRequest.self)
-            else {
-                return telegramErrorResponse(.badRequest)
-            }
-            do {
-                let response = try telegramApprovalController.decide(
-                    decisionRequest,
-                    requestID: requestID,
-                    appState: appState,
-                    coordinator: coordinator
-                )
-                stateDidChange()
-                return telegramJSONResponse(status: 200, encodable: response)
-            } catch let error as TelegramApprovalRouteError {
-                return telegramErrorResponse(error)
-            } catch {
-                return telegramErrorResponse(.unavailable)
-            }
         }
 
         guard let authenticated = authenticate(request) else {
@@ -826,34 +775,6 @@ final class RemoteApprovalService: ObservableObject {
 
         return .json(status: 404, object: ["error": "not found"])
     }
-
-    private func telegramHTMLResponse(_ html: String) -> RemoteHTTPResponse {
-        var response = RemoteHTTPResponse.html(html)
-        response.headers.merge(Self.telegramSecurityHeaders) { _, new in new }
-        return response
-    }
-
-    private func telegramJSONResponse<T: Encodable>(
-        status: Int,
-        encodable: T
-    ) -> RemoteHTTPResponse {
-        var response = RemoteHTTPResponse.json(status: status, encodable: encodable)
-        response.headers.merge(Self.telegramSecurityHeaders) { _, new in new }
-        return response
-    }
-
-    private func telegramErrorResponse(_ error: TelegramApprovalRouteError) -> RemoteHTTPResponse {
-        var response = RemoteHTTPResponse.json(status: error.status, object: ["error": error.message])
-        response.headers.merge(Self.telegramSecurityHeaders) { _, new in new }
-        return response
-    }
-
-    private static let telegramSecurityHeaders = [
-        "Cache-Control": "no-store",
-        "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' https://telegram.org; connect-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors https://web.telegram.org https://*.telegram.org; base-uri 'none'; form-action 'self'",
-        "Referrer-Policy": "no-referrer",
-        "X-Content-Type-Options": "nosniff"
-    ]
 
     private func routeRemoteTask(_ request: RemoteHTTPRequest, deviceID: String) -> RemoteHTTPResponse {
         guard let taskCoordinator = remoteTaskCoordinator else {

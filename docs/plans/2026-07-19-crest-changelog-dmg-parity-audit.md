@@ -141,8 +141,8 @@ questions stay request-bound, device-bound, short-lived, and single-use.
 
 - Pomodoro and Apple Watch work.
 - A generic AI chat surface or a duplicate Claude assistant inside Tools.
-- Inbound Telegram as a task store or control plane. Telegram may send a quiet
-  outbound alert that opens the exact Buddy task.
+- Telegram as an alert, task store, or control plane. Buddy native push owns
+  away attention and opens the exact task.
 - Broad notification mirroring, session-wide approval bypasses, arbitrary shell
   execution, and UI animation that rotates routine sessions for novelty.
 - Paid infrastructure or a hosted database unless a later, evidenced limitation

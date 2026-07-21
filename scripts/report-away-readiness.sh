@@ -6,7 +6,6 @@ STRICT_E2E_BIN="${STRICT_E2E_BIN:-$(dirname "$0")/report-strict-physical-e2e.sh}
 DEFAULTS_BIN="${DEFAULTS_BIN:-defaults}"
 DEFAULTS_DOMAIN="${DEFAULTS_DOMAIN:-com.codeisland.app}"
 CURL_BIN="${CURL_BIN:-curl}"
-SECURITY_BIN="${SECURITY_BIN:-security}"
 WEB_SHELL_URL="${WEB_SHELL_URL:-}"
 
 if ! command -v jq >/dev/null 2>&1; then
@@ -51,20 +50,10 @@ defaults_read() {
     "$DEFAULTS_BIN" read "$DEFAULTS_DOMAIN" "$key" 2>/dev/null || true
 }
 
-boolish_true() {
-    case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')" in
-        1|true|yes) return 0 ;;
-        *) return 1 ;;
-    esac
-}
-
 trim() {
     awk '{$1=$1};1'
 }
 
-telegram_enabled_raw="$(defaults_read remoteApprovalTelegramEnabled | trim)"
-telegram_chat_id="$(defaults_read remoteApprovalTelegramChatID | trim)"
-telegram_user_id="$(defaults_read remoteApprovalTelegramUserID | trim)"
 tailnet_url="$(defaults_read remoteApprovalTailnetURL | trim)"
 
 if [[ -z "$WEB_SHELL_URL" ]]; then
@@ -76,61 +65,9 @@ if [[ -z "$WEB_SHELL_URL" ]]; then
     fi
 fi
 
-telegram_enabled=false
-if boolish_true "$telegram_enabled_raw"; then
-    telegram_enabled=true
-fi
-
-telegram_has_bot_token=false
-if command -v "$SECURITY_BIN" >/dev/null 2>&1 \
-    && "$SECURITY_BIN" find-generic-password \
-        -s com.codeisland.telegram.bot-token \
-        -a default >/dev/null 2>&1; then
-    telegram_has_bot_token=true
-fi
-
-telegram_has_chat_id=false
-if [[ -n "$telegram_chat_id" ]]; then
-    telegram_has_chat_id=true
-fi
-
-telegram_has_user_id=false
-if [[ -n "$telegram_user_id" ]]; then
-    telegram_has_user_id=true
-fi
-
-telegram_private_identity=false
-if [[ "$telegram_chat_id" =~ ^[1-9][0-9]*$ \
-    && "$telegram_user_id" == "$telegram_chat_id" ]]; then
-    telegram_private_identity=true
-fi
-
 tailnet_url_configured=false
 if [[ -n "$tailnet_url" ]]; then
     tailnet_url_configured=true
-fi
-
-telegram_https_configured=false
-if [[ "$tailnet_url" == https://* ]]; then
-    telegram_https_configured=true
-fi
-
-telegram_service_running="$(printf '%s' "$strict_output" | jq -r '.remoteHostHealth.tailscale.running == true')"
-
-telegram_status="disabled"
-telegram_available=false
-telegram_next_action="Telegram fallback is optional and currently disabled; Buddy and the private web fallback remain the control surfaces."
-if [[ "$telegram_enabled" == "true" \
-    && "$telegram_has_bot_token" == "true" \
-    && "$telegram_private_identity" == "true" \
-    && "$telegram_https_configured" == "true" \
-    && "$telegram_service_running" == "true" ]]; then
-    telegram_status="configured"
-    telegram_available=true
-    telegram_next_action="Telegram escalation is ready; approvals open the signed private sheet, while blocking questions and failed tasks remain redacted alerts."
-elif [[ "$telegram_enabled" == "true" ]]; then
-    telegram_status="incomplete"
-    telegram_next_action="Telegram escalation is enabled but its Keychain token, private identity, Tailscale HTTPS endpoint, or Mac service is not ready; finish Settings → Buddy → Telegram."
 fi
 
 web_shell_output="$(mktemp -t codeisland-web-shell)"
@@ -219,16 +156,6 @@ away_report="$(jq -n \
     --arg generatedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     --argjson strictE2E "$strict_output" \
     --argjson strictExit "$strict_exit" \
-    --argjson telegramEnabled "$telegram_enabled" \
-    --argjson telegramHasBotToken "$telegram_has_bot_token" \
-    --argjson telegramHasChatID "$telegram_has_chat_id" \
-    --argjson telegramHasUserID "$telegram_has_user_id" \
-    --argjson telegramPrivateIdentity "$telegram_private_identity" \
-    --argjson telegramHTTPSConfigured "$telegram_https_configured" \
-    --argjson telegramServiceRunning "$telegram_service_running" \
-    --argjson telegramAvailable "$telegram_available" \
-    --arg telegramStatus "$telegram_status" \
-    --arg telegramNextAction "$telegram_next_action" \
     --argjson tailnetURLConfigured "$tailnet_url_configured" \
     --arg webShellURL "$WEB_SHELL_URL" \
     --argjson webShellChecked "$web_shell_checked" \
@@ -271,28 +198,13 @@ away_report="$(jq -n \
     def optional_gates:
         [
             gate(
-                "telegram-fallback";
-                $telegramStatus;
-                "greg";
-                $telegramNextAction
-            ) + {
-                enabled:$telegramEnabled,
-                available:$telegramAvailable,
-                hasBotToken:$telegramHasBotToken,
-                hasChatID:$telegramHasChatID,
-                hasUserID:$telegramHasUserID,
-                privateIdentity:$telegramPrivateIdentity,
-                httpsConfigured:$telegramHTTPSConfigured,
-                serviceRunning:$telegramServiceRunning
-            },
-            gate(
                 "private-tailnet-url";
                 (if $tailnetURLConfigured then "configured" else "not-configured" end);
                 "greg";
                 (if $tailnetURLConfigured then
                     "Tailnet URL is configured for fallback copy."
                  else
-                    "Optional: set the private Tailnet URL in CodeIsland Settings so Telegram alerts can include the Web fallback label."
+                    "Optional: set the private Tailnet URL in CodeIsland Settings so Buddy can show the Web fallback."
                  end)
             ) + {configured:$tailnetURLConfigured}
         ];
@@ -367,19 +279,6 @@ away_report="$(jq -n \
                     noBrowserDialogs:$webShellHasNoBrowserDialogs
                 }
             }
-        },
-        telegramFallback:{
-            enabled:$telegramEnabled,
-            status:$telegramStatus,
-            available:$telegramAvailable,
-            hasBotToken:$telegramHasBotToken,
-            hasChatID:$telegramHasChatID,
-            hasUserID:$telegramHasUserID,
-            privateIdentity:$telegramPrivateIdentity,
-            keychainProtected:true,
-            secureApprovalSheet:$telegramAvailable,
-            redacted:true,
-            controlPlane:false
         },
         requiredGates:(
             []

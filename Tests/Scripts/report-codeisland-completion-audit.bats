@@ -97,12 +97,6 @@ jq -n '{
       }
     }
   },
-  telegramFallback:{
-    enabled:false,
-    status:"disabled",
-    available:false,
-    controlPlane:false
-  },
   requiredGates:(
     if $complete then []
     else [
@@ -115,14 +109,7 @@ jq -n '{
     ]
     end
   ),
-  optionalGates:[
-    {
-      id:"telegram-fallback",
-      status:"disabled",
-      owner:"greg",
-      nextAction:"Telegram is optional."
-    }
-  ]
+  optionalGates:[]
 }'
 exit $(if [ "$complete" = "true" ]; then printf 0; else printf 2; fi)
 STUB

@@ -104,10 +104,6 @@ final class PersonalUtilitiesModel: ObservableObject {
     nonisolated private static let partialExtensions: Set<String> = [
         "crdownload", "download", "opdownload", "part", "partial",
     ]
-    nonisolated private static let downloadsIOQueue = DispatchQueue(
-        label: "com.codeisland.downloads-io",
-        qos: .utility
-    )
     nonisolated static let maximumRemoteTransferBytes: Int64 = 100_000_000
     nonisolated private static let recentDownloadAge: TimeInterval = 7 * 24 * 60 * 60
     nonisolated private static let maximumRecentDownloads = 12
@@ -206,8 +202,8 @@ final class PersonalUtilitiesModel: ObservableObject {
         Task { [weak self] in
             // Downloads is protected by Files & Folders TCC. A newly signed app
             // can block in open(2) while macOS resolves that permission, so the
-            // syscall must never run on the app's main actor or Swift's
-            // cooperative executor during launch.
+            // syscall must run on its own OS thread, never the app's main actor,
+            // Swift's cooperative executor, or a shared GCD worker pool.
             let descriptor = await Self.openDownloadsDirectory(path: path, using: opener)
             guard let self else {
                 if descriptor >= 0 { close(descriptor) }
@@ -267,7 +263,7 @@ final class PersonalUtilitiesModel: ObservableObject {
         using opener: @escaping DirectoryOpener
     ) async -> Int32 {
         await withCheckedContinuation { continuation in
-            downloadsIOQueue.async {
+            Thread.detachNewThread {
                 continuation.resume(returning: opener(path))
             }
         }
@@ -277,7 +273,7 @@ final class PersonalUtilitiesModel: ObservableObject {
         in directory: URL
     ) async -> (active: [DownloadInfo], recent: [RecentDownloadInfo]) {
         await withCheckedContinuation { continuation in
-            downloadsIOQueue.async {
+            Thread.detachNewThread {
                 continuation.resume(returning: (
                     active: scanDownloadEntries(in: directory),
                     recent: scanRecentDownloadEntries(in: directory)

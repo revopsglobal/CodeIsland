@@ -170,8 +170,6 @@ audit="$(jq -n \
         ($crestParity.checked == true) and
         ($crestParity.complete == true or $crestParity.status == "passed") and
         ($crestParity.exitCode == 0);
-    def telegram_ok:
-        (($away.telegramFallback.status // "disabled") | IN("disabled","configured","incomplete"));
     def physical_e2e_complete:
         ($strict.complete == true) and
         ($away.nativeBuddy.physicalAccepted == true or $away.complete == true);
@@ -217,9 +215,9 @@ audit="$(jq -n \
         end;
     {
         generatedAt:$generatedAt,
-        complete:(signed_testflight_ready and crest_parity_ready and away_surface_ready and telegram_ok and physical_e2e_complete and overclaim_guardrails_ready),
+        complete:(signed_testflight_ready and crest_parity_ready and away_surface_ready and physical_e2e_complete and overclaim_guardrails_ready),
         status:(
-            if (signed_testflight_ready and crest_parity_ready and away_surface_ready and telegram_ok and physical_e2e_complete and overclaim_guardrails_ready) then
+            if (signed_testflight_ready and crest_parity_ready and away_surface_ready and physical_e2e_complete and overclaim_guardrails_ready) then
                 "complete"
             elif (signed_testflight_ready | not) then
                 "testflight-incomplete"
@@ -233,7 +231,7 @@ audit="$(jq -n \
                 "incomplete"
             end
         ),
-        objective:"Finish CodeIsland end to end: Crest-class Mac feature parity, actionable iPhone parity over Tailscale for away use, optional Telegram fallback, signed TestFlight delivery, and real end-to-end verification without overstating any untested surface.",
+        objective:"Finish CodeIsland end to end: Crest-class Mac feature parity, actionable iPhone parity over Tailscale with native Buddy push for away use, signed TestFlight delivery, and real end-to-end verification without overstating any untested surface.",
         requirements:[
             requirement(
                 "signed-testflight-delivery";
@@ -296,14 +294,6 @@ audit="$(jq -n \
                  else
                     "Repair away readiness before physical acceptance."
                  end)
-            ),
-            requirement(
-                "optional-telegram-fallback";
-                "Telegram remains optional alert/deep-link fallback, not a control plane";
-                ($away.telegramFallback.status // "unknown");
-                telegram_ok;
-                $away.telegramFallback;
-                "No required action unless Greg wants Telegram enabled/configured."
             ),
             requirement(
                 "real-physical-e2e";

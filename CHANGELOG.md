@@ -3,16 +3,14 @@
 ## [v1.0.62] - 2026-07-20
 
 ### English
-- Add escalation-only secure Telegram approvals for away use. A redacted private-chat alert opens a focused Tailscale HTTPS Mini App; Telegram-signed identity, an allowlisted private user, short-lived opaque launch/session nonces, and the existing single-use CodeIsland action token all have to match before exact details appear or a decision can resolve.
-- Show summary, agent, workspace, risk/reason, and changed scope first. Exact command or tool input stays behind Show details with secret redaction and bounded payload sizes. Approve once and Deny both require a second fingerprint confirmation.
-- Edit the original Telegram message to a redacted resolved state and remove its button whether the decision happens in Telegram, Buddy, the web app, or on the Mac. Routine progress and completion stay quiet; Telegram is reserved for consequential approvals, blocking questions, and failed tasks.
-- Move the Telegram bot token from preferences into this Mac's Keychain. Settings now reports readiness for the token, private user/chat match, Tailscale HTTPS, and running remote service without exposing credentials.
+- Make CodeIsland Buddy the single away-attention channel. Native APNs notifications and Live Activities/Dynamic Island now carry approvals, questions, needs-you decisions, and task failures without duplicate bot alerts.
+- Keep push payloads opaque and private. Buddy receives only request identity and state, then fetches exact details from the paired Mac over authenticated Tailscale HTTPS; decisions still require short-lived, single-use action tokens.
+- Remove the Telegram sender, approval sheet, bot credentials, settings, and readiness checks so the product has one predictable notification and action path.
 
 ### 中文
-- 新增仅用于升级提醒的安全 Telegram 远程审批。私聊中的脱敏提醒会打开专注的 Tailscale HTTPS Mini App；仅当 Telegram 签名身份、白名单私有用户、短时不透明启动/会话令牌以及 CodeIsland 现有的一次性操作令牌全部匹配时，才会显示精确详情或执行决定。
-- 先显示摘要、代理、工作区、风险及原因和变更范围；精确命令或工具输入位于「显示详情」之后，并进行密钥脱敏与长度限制。「仅批准一次」和「拒绝」都需要再次确认操作指纹。
-- 无论决定在 Telegram、Buddy、Web App 还是 Mac 上完成，原 Telegram 消息都会更新为脱敏的已解决状态并移除按钮。常规进度与完成保持安静；Telegram 仅用于重要审批、阻塞问题和失败任务。
-- 将 Telegram Bot Token 从偏好设置迁移到本机钥匙串。设置页现在会在不暴露凭据的前提下检查令牌、私有用户/聊天匹配、Tailscale HTTPS 和远程服务运行状态。
+- 将 CodeIsland Buddy 设为唯一的离线注意力通道。原生 APNs 通知与实时活动／灵动岛统一承载审批、问题、需要你的决定和任务失败，不再产生重复的机器人提醒。
+- 推送载荷保持不透明和私密。Buddy 只接收请求标识与状态，再通过已认证的 Tailscale HTTPS 从配对 Mac 获取精确详情；决定仍需短时、一次性操作令牌。
+- 移除 Telegram 发送器、审批页面、机器人凭据、设置项和就绪检查，让产品只保留一条清晰可预测的通知与操作路径。
 
 ## [v1.0.61] - 2026-07-20
 

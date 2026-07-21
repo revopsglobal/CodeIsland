@@ -56,11 +56,10 @@ struct RemoteHTTPResponse {
         allHeaders["Connection"] = "close"
         allHeaders["Cache-Control"] = allHeaders["Cache-Control"] ?? "no-store"
         allHeaders["X-Content-Type-Options"] = "nosniff"
+        allHeaders["X-Frame-Options"] = "DENY"
         allHeaders["Referrer-Policy"] = "no-referrer"
-        if allHeaders["Content-Security-Policy"] == nil {
-            allHeaders["X-Frame-Options"] = "DENY"
-            allHeaders["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
-        }
+        allHeaders["Content-Security-Policy"] = allHeaders["Content-Security-Policy"]
+            ?? "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
 
         let reason: String
         switch status {

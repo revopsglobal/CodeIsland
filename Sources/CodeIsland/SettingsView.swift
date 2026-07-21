@@ -1556,46 +1556,14 @@ private struct BuddyPage: View {
     @AppStorage(SettingsKey.remoteApprovalAPNSKeyID) private var apnsKeyID: String = SettingsDefaults.remoteApprovalAPNSKeyID
     @AppStorage(SettingsKey.remoteApprovalAPNSPrivateKeyPath) private var apnsPrivateKeyPath: String = SettingsDefaults.remoteApprovalAPNSPrivateKeyPath
     @AppStorage(SettingsKey.remoteApprovalAPNSTopic) private var apnsTopic: String = SettingsDefaults.remoteApprovalAPNSTopic
-    @AppStorage(SettingsKey.remoteApprovalTelegramEnabled) private var telegramEnabled: Bool = SettingsDefaults.remoteApprovalTelegramEnabled
-    @AppStorage(SettingsKey.remoteApprovalTelegramChatID) private var telegramChatID: String = SettingsDefaults.remoteApprovalTelegramChatID
-    @AppStorage(SettingsKey.remoteApprovalTelegramUserID) private var telegramUserID: String = SettingsDefaults.remoteApprovalTelegramUserID
     @AppStorage(SettingsKey.remoteApprovalExpectedClientVersion) private var expectedBuddyVersion: String = SettingsDefaults.remoteApprovalExpectedClientVersion
     @AppStorage(SettingsKey.remoteApprovalExpectedClientBuild) private var expectedBuddyBuild: String = SettingsDefaults.remoteApprovalExpectedClientBuild
     @ObservedObject private var appleCompanion = AppleCompanionPublisher.shared
     @ObservedObject private var remoteApprovals = RemoteApprovalService.shared
     @ObservedObject private var apns = APNSNotificationSender.shared
-    @ObservedObject private var telegram = TelegramAttentionNotifier.shared
     @State private var refreshTick = 0
-    @State private var telegramBotTokenDraft = ""
-    @State private var telegramCredentialStored = false
-    @State private var telegramCredentialError: String?
-
-    private let telegramCredentialStore = TelegramCredentialStore()
 
     private var bridge: ESP32BridgeManager { ESP32BridgeManager.shared }
-
-    private var canSendTelegramTestAlert: Bool {
-        telegramEnabled
-            && !telegram.isSending
-            && telegramCredentialStored
-            && !telegramChatID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    private var telegramReadiness: TelegramApprovalReadiness {
-        let persistedTailnetURL = UserDefaults.standard.string(
-            forKey: SettingsKey.remoteApprovalTailnetURL
-        ) ?? SettingsDefaults.remoteApprovalTailnetURL
-        return TelegramApprovalReadiness(
-            enabled: telegramEnabled,
-            credentialStored: telegramCredentialStored,
-            chatID: telegramChatID,
-            userID: telegramUserID,
-            tailnetURL: remoteApprovals.tailnetURL.isEmpty
-                ? persistedTailnetURL
-                : remoteApprovals.tailnetURL,
-            serviceRunning: remoteApprovals.running
-        )
-    }
 
     private var buddyBuildExpectation: RemoteBuddyBuildExpectation {
         RemoteBuddyBuildExpectation(expectedVersion: expectedBuddyVersion, expectedBuild: expectedBuddyBuild)
@@ -2088,81 +2056,6 @@ private struct BuddyPage: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("Telegram fallback") {
-                Toggle("Text me when CodeIsland needs attention", isOn: $telegramEnabled)
-
-                HStack {
-                    SecureField(
-                        telegramCredentialStored ? "Replace saved bot token" : "Bot token",
-                        text: $telegramBotTokenDraft
-                    )
-                    .disabled(!telegramEnabled)
-                    Button(telegramCredentialStored ? "Replace" : "Save") {
-                        saveTelegramCredential()
-                    }
-                    .disabled(
-                        !telegramEnabled
-                            || telegramBotTokenDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                    )
-                    if telegramCredentialStored {
-                        Button("Clear", role: .destructive) { clearTelegramCredential() }
-                    }
-                }
-                if telegramCredentialStored {
-                    Label("Bot token saved in this Mac's Keychain", systemImage: "lock.fill")
-                        .font(.caption)
-                        .foregroundStyle(.green)
-                }
-                TextField("Chat ID", text: $telegramChatID)
-                    .disabled(!telegramEnabled)
-                TextField("Telegram User ID", text: $telegramUserID)
-                    .disabled(!telegramEnabled)
-
-                if telegramReadiness.isReady {
-                    Label("Secure approval sheet ready", systemImage: "checkmark.shield.fill")
-                        .font(.caption)
-                        .foregroundStyle(.green)
-                } else {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Label("Secure approval sheet needs setup", systemImage: "exclamationmark.shield.fill")
-                            .foregroundStyle(.orange)
-                        ForEach(telegramReadiness.issues, id: \.self) { issue in
-                            Text("• \(issue)")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .font(.caption)
-                }
-
-                Button {
-                    telegram.sendTestAlert()
-                } label: {
-                    Label(telegram.isSending ? "Sending test alert…" : "Send test Telegram alert", systemImage: "paperplane")
-                }
-                .disabled(!canSendTelegramTestAlert)
-
-                if let delivered = telegram.lastDeliveryAt {
-                    Label("Last delivered \(delivered.formatted(date: .omitted, time: .shortened))", systemImage: "checkmark.circle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.green)
-                }
-                if let error = telegram.lastError {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                        .textSelection(.enabled)
-                }
-                if let error = telegramCredentialError {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                }
-
-                Text("Escalation only: consequential approvals, blocking questions, and failed tasks. Routine progress and completion stay quiet. Approval alerts open a private, signed Telegram sheet with summary first and exact details behind Show details; the bot token stays in Keychain.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
             Section {
                 Text(l10n["buddy_desc"])
                     .font(.caption)
@@ -2174,7 +2067,6 @@ private struct BuddyPage: View {
             refreshTick &+= 1
         }
         .onAppear {
-            loadTelegramCredentialState()
             if enabled {
                 bridge.startDiscovery()
             }
@@ -2290,39 +2182,6 @@ private struct BuddyPage: View {
         }
     }
 
-    private func loadTelegramCredentialState() {
-        do {
-            telegramCredentialStored = try telegramCredentialStore.loadMigratingLegacyValue() != nil
-            telegramCredentialError = nil
-        } catch {
-            telegramCredentialStored = false
-            telegramCredentialError = "Telegram bot token could not be read from Keychain."
-        }
-    }
-
-    private func saveTelegramCredential() {
-        let token = telegramBotTokenDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !token.isEmpty else { return }
-        do {
-            try telegramCredentialStore.save(token)
-            telegramBotTokenDraft = ""
-            telegramCredentialStored = true
-            telegramCredentialError = nil
-        } catch {
-            telegramCredentialError = "Telegram bot token could not be saved to Keychain."
-        }
-    }
-
-    private func clearTelegramCredential() {
-        do {
-            try telegramCredentialStore.delete()
-            telegramBotTokenDraft = ""
-            telegramCredentialStored = false
-            telegramCredentialError = nil
-        } catch {
-            telegramCredentialError = "Telegram bot token could not be removed from Keychain."
-        }
-    }
 }
 
 // MARK: - About Page
