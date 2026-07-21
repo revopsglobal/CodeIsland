@@ -208,7 +208,7 @@ struct NotchPanelView: View {
                 // Below-notch expanded content
                 if shouldShowExpanded {
                     Line()
-                        .stroke(.white.opacity(0.15), style: StrokeStyle(lineWidth: 0.5, dash: [4, 3]))
+                        .stroke(NotchTokens.ink(0.15), style: StrokeStyle(lineWidth: 0.5, dash: [4, 3]))
                         .frame(height: 0.5)
                         .padding(.horizontal, 12)
 
@@ -295,7 +295,9 @@ struct NotchPanelView: View {
                     bottomRadius: shouldShowExpanded ? 24 : 12,
                     minHeight: notchHeight
                 )
-                .fill(.black)
+                // Expanded follows the system appearance; collapsed stays black
+                // because it meets the physical notch. R2 light mode.
+                .fill(shouldShowExpanded ? NotchTokens.panelGround : Color.black)
             )
             .offset(y: curtainOffset)
             .opacity(curtainOpacity)
@@ -974,17 +976,17 @@ private struct ApprovalToolDetailView: View {
                         HStack(alignment: .top, spacing: 4) {
                             Text("$")
                                 .font(.system(size: 10, weight: .bold, design: .monospaced))
-                                .foregroundStyle(Color(red: 0.3, green: 0.85, blue: 0.4))
+                                .foregroundStyle(NotchTokens.runningText)
                             Text(cmd)
                                 .font(.system(size: 10, design: .monospaced))
-                                .foregroundStyle(.white.opacity(0.85))
+                                .foregroundStyle(NotchTokens.ink(0.85))
                                 .lineLimit(maxLines)
                         }
                     }
                     if let desc = toolInput?["description"] as? String, !desc.isEmpty {
                         Text(desc)
                             .font(.system(size: 9.5, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.55))
+                            .foregroundStyle(NotchTokens.ink(0.55))
                             .lineLimit(maxLines)
                     }
                 }
@@ -994,7 +996,7 @@ private struct ApprovalToolDetailView: View {
                     if let fp = filePath {
                         Text(fp)
                             .font(.system(size: 9, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.35))
+                            .foregroundStyle(NotchTokens.ink(0.35))
                             .lineLimit(1)
                             .truncationMode(.head)
                     }
@@ -1013,10 +1015,10 @@ private struct ApprovalToolDetailView: View {
                         HStack(alignment: .top, spacing: 4) {
                             Text("+")
                                 .font(.system(size: 10, weight: .bold, design: .monospaced))
-                                .foregroundStyle(Color(red: 0.3, green: 0.85, blue: 0.4))
+                                .foregroundStyle(NotchTokens.runningText)
                             Text(new.prefix(120))
                                 .font(.system(size: 9.5, design: .monospaced))
-                                .foregroundStyle(Color(red: 0.3, green: 0.85, blue: 0.4).opacity(0.7))
+                                .foregroundStyle(NotchTokens.runningText.opacity(0.7))
                                 .lineLimit(maxLines ?? 2)
                         }
                     }
@@ -1027,14 +1029,14 @@ private struct ApprovalToolDetailView: View {
                     if let fp = filePath {
                         Text(fp)
                             .font(.system(size: 9, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.35))
+                            .foregroundStyle(NotchTokens.ink(0.35))
                             .lineLimit(1)
                             .truncationMode(.head)
                     }
                     if let content = toolInput?["content"] as? String {
                         Text(content.prefix(200))
                             .font(.system(size: 9.5, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.6))
+                            .foregroundStyle(NotchTokens.ink(0.6))
                             .lineLimit(maxLines ?? 4)
                     }
                 }
@@ -1044,7 +1046,7 @@ private struct ApprovalToolDetailView: View {
                     if let fp = filePath {
                         Text(fp)
                             .font(.system(size: 9.5, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.7))
+                            .foregroundStyle(NotchTokens.ink(0.7))
                             .lineLimit(1)
                             .truncationMode(.head)
                     }
@@ -1052,7 +1054,7 @@ private struct ApprovalToolDetailView: View {
                        let limit = toolInput?["limit"] as? Int {
                         Text("\(L10n.shared["lines"]) \(offset + 1)–\(offset + limit)")
                             .font(.system(size: 9, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.4))
+                            .foregroundStyle(NotchTokens.ink(0.4))
                             .lineLimit(1)
                     }
                 }
@@ -1073,7 +1075,7 @@ private struct ApprovalToolDetailView: View {
                     if let path = toolInput?["path"] as? String {
                         Text(path)
                             .font(.system(size: 9, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.35))
+                            .foregroundStyle(NotchTokens.ink(0.35))
                             .lineLimit(1)
                             .truncationMode(.head)
                     }
@@ -1090,7 +1092,7 @@ private struct ApprovalToolDetailView: View {
                     if let path = toolInput?["path"] as? String {
                         Text(path)
                             .font(.system(size: 9, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.35))
+                            .foregroundStyle(NotchTokens.ink(0.35))
                             .lineLimit(1)
                             .truncationMode(.head)
                     }
@@ -1107,7 +1109,7 @@ private struct ApprovalToolDetailView: View {
                                     .foregroundStyle(Color(red: 0.6, green: 0.7, blue: 0.9))
                                 Text(String(val.prefix(160)))
                                     .font(.system(size: 9.5, design: .monospaced))
-                                    .foregroundStyle(.white.opacity(0.6))
+                                    .foregroundStyle(NotchTokens.ink(0.6))
                                     .lineLimit(maxLines ?? 2)
                             }
                         }
@@ -1190,7 +1192,7 @@ private struct ApprovalBar: View {
                 if let project = session?.displayName {
                     Text(project)
                         .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.85))
+                        .foregroundStyle(NotchTokens.ink(0.85))
                         .lineLimit(1)
                 }
                 if let server = serverName {
@@ -1201,15 +1203,15 @@ private struct ApprovalBar: View {
                 if let name = fileName {
                     Text(name)
                         .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.6))
+                        .foregroundStyle(NotchTokens.ink(0.6))
                 }
                 if queueTotal > 1 {
                     Text("\(queuePosition)/\(queueTotal)")
                         .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.5))
+                        .foregroundStyle(NotchTokens.ink(0.5))
                         .padding(.horizontal, 4)
                         .padding(.vertical, 1)
-                        .background(Color.white.opacity(0.1))
+                        .background(NotchTokens.ink(0.1))
                         .clipShape(RoundedRectangle(cornerRadius: 3))
                 }
                 Spacer()
@@ -1224,17 +1226,17 @@ private struct ApprovalBar: View {
                     .padding(.horizontal, 14)
                     .padding(.vertical, 6)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.white.opacity(0.04))
+                    .background(NotchTokens.ink(0.04))
                     .contentShape(Rectangle())
                     .onTapGesture { handleCardClick() }
             }
 
             // Pixel-style buttons — badge the global shortcut when one is enabled
             HStack(spacing: 6) {
-                PixelButton(label: L10n.shared["deny"], fg: .white.opacity(0.95), bg: Color(red: 0.45, green: 0.12, blue: 0.12), border: Color(red: 0.7, green: 0.25, blue: 0.25), hint: Self.shortcutHint(.deny), action: onDeny)
-                PixelButton(label: L10n.shared["dismiss"], fg: .white.opacity(0.95), bg: Color(red: 0.25, green: 0.25, blue: 0.25), border: Color.white.opacity(0.28), action: onDismiss)
-                PixelButton(label: L10n.shared["allow_once"], fg: .white.opacity(0.95), bg: Color(red: 0.16, green: 0.38, blue: 0.18), border: Color(red: 0.28, green: 0.62, blue: 0.32), hint: Self.shortcutHint(.approve), action: onAllow)
-                PixelButton(label: L10n.shared["always"], fg: .white.opacity(0.95), bg: Color(red: 0.14, green: 0.28, blue: 0.52), border: Color(red: 0.28, green: 0.48, blue: 0.82), hint: Self.shortcutHint(.approveAlways), action: onAlwaysAllow)
+                PixelButton(label: L10n.shared["deny"], fg: Color.white.opacity(0.95), bg: Color(red: 0.45, green: 0.12, blue: 0.12), border: Color(red: 0.7, green: 0.25, blue: 0.25), hint: Self.shortcutHint(.deny), action: onDeny)
+                PixelButton(label: L10n.shared["dismiss"], fg: Color.white.opacity(0.95), bg: Color(red: 0.25, green: 0.25, blue: 0.25), border: Color.white.opacity(0.28), action: onDismiss)
+                PixelButton(label: L10n.shared["allow_once"], fg: Color.white.opacity(0.95), bg: Color(red: 0.16, green: 0.38, blue: 0.18), border: Color(red: 0.28, green: 0.62, blue: 0.32), hint: Self.shortcutHint(.approve), action: onAllow)
+                PixelButton(label: L10n.shared["always"], fg: Color.white.opacity(0.95), bg: Color(red: 0.14, green: 0.28, blue: 0.52), border: Color(red: 0.28, green: 0.48, blue: 0.82), hint: Self.shortcutHint(.approveAlways), action: onAlwaysAllow)
             }
             .padding(.horizontal, 14)
         }
@@ -1378,10 +1380,10 @@ private struct QuestionBar: View {
                     if let cwd = sessionContext {
                         Image(systemName: "folder.fill")
                             .font(.system(size: 8))
-                            .foregroundStyle(.white.opacity(0.5))
+                            .foregroundStyle(NotchTokens.ink(0.5))
                         Text((cwd as NSString).lastPathComponent)
                             .font(.system(size: 9, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.6))
+                            .foregroundStyle(NotchTokens.ink(0.6))
                     }
                     Spacer()
                 }
@@ -1418,22 +1420,22 @@ private struct QuestionBar: View {
             }
             Text(item.payload.question)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.white.opacity(0.9))
+                .foregroundStyle(NotchTokens.ink(0.9))
                 .lineLimit(3)
             Spacer()
             if allQuestions.count > 1 {
                 Text("\(currentQuestionIndex + 1)/\(allQuestions.count)")
                     .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(NotchTokens.ink(0.5))
                     .padding(.horizontal, 4)
                     .padding(.vertical, 1)
-                    .background(Color.white.opacity(0.1))
+                    .background(NotchTokens.ink(0.1))
                     .clipShape(RoundedRectangle(cornerRadius: 3))
             }
             if queueTotal > 1 {
                 Text("\(queuePosition)/\(queueTotal)")
                     .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(.white.opacity(0.4))
+                    .foregroundStyle(NotchTokens.ink(0.4))
             }
         }
         .padding(.horizontal, 14)
@@ -1470,11 +1472,11 @@ private struct QuestionBar: View {
                     HStack(spacing: 6) {
                         Text(">")
                             .font(.system(size: 10, weight: .bold, design: .monospaced))
-                            .foregroundStyle(Color(red: 0.3, green: 0.85, blue: 0.4))
+                            .foregroundStyle(NotchTokens.runningText)
                         TextField(L10n.shared["type_answer"], text: $otherText)
                             .textFieldStyle(.plain)
                             .font(.system(size: 10.5))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(NotchTokens.text1)
                             .focused($otherFocused)
                             .onSubmit {
                                 if !item.multiSelect && !otherText.isEmpty {
@@ -1484,11 +1486,11 @@ private struct QuestionBar: View {
                     }
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
-                    .background(Color.white.opacity(0.05))
+                    .background(NotchTokens.ink(0.05))
                     .cornerRadius(4)
                     .overlay(
                         RoundedRectangle(cornerRadius: 4)
-                            .strokeBorder(Color.white.opacity(0.1), lineWidth: 1)
+                            .strokeBorder(NotchTokens.ink(0.1), lineWidth: 1)
                     )
                     .padding(.horizontal, 14)
                     .onAppear { otherFocused = true }
@@ -1506,11 +1508,11 @@ private struct QuestionBar: View {
             HStack(spacing: 6) {
                 Text(">")
                     .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .foregroundStyle(Color(red: 0.3, green: 0.85, blue: 0.4))
+                    .foregroundStyle(NotchTokens.runningText)
                 TextField(L10n.shared["type_answer"], text: $textInput)
                     .textFieldStyle(.plain)
                     .font(.system(size: 10.5))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(NotchTokens.text1)
                     .focused($isFocused)
                     .onSubmit {
                         if !textInput.isEmpty { advanceWithAnswer(textInput) }
@@ -1518,11 +1520,11 @@ private struct QuestionBar: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(Color.white.opacity(0.05))
+            .background(NotchTokens.ink(0.05))
             .cornerRadius(4)
             .overlay(
                 RoundedRectangle(cornerRadius: 4)
-                    .strokeBorder(Color.white.opacity(0.1), lineWidth: 1)
+                    .strokeBorder(NotchTokens.ink(0.1), lineWidth: 1)
             )
             .padding(.horizontal, 14)
         }
@@ -1532,23 +1534,23 @@ private struct QuestionBar: View {
             if currentQuestionIndex > 0 {
                 PixelButton(
                     label: L10n.shared["back"],
-                    fg: .white.opacity(0.6),
-                    bg: Color.white.opacity(0.06),
-                    border: Color.white.opacity(0.12),
+                    fg: NotchTokens.ink(0.6),
+                    bg: NotchTokens.ink(0.06),
+                    border: NotchTokens.ink(0.12),
                     action: goBack
                 )
             }
             PixelButton(
                 label: L10n.shared["skip"],
-                fg: .white.opacity(0.6),
-                bg: Color.white.opacity(0.06),
-                border: Color.white.opacity(0.12),
+                fg: NotchTokens.ink(0.6),
+                bg: NotchTokens.ink(0.06),
+                border: NotchTokens.ink(0.12),
                 action: onSkip
             )
             if item.multiSelect {
                 PixelButton(
                     label: L10n.shared["confirm"],
-                    fg: .white.opacity(0.95),
+                    fg: Color.white.opacity(0.95),
                     bg: Color(red: 0.16, green: 0.38, blue: 0.18),
                     border: Color(red: 0.28, green: 0.62, blue: 0.32),
                     action: confirmMultiSelect
@@ -1556,7 +1558,7 @@ private struct QuestionBar: View {
             } else if item.payload.options == nil || item.payload.options?.isEmpty == true {
                 PixelButton(
                     label: L10n.shared["submit"],
-                    fg: .white.opacity(0.95),
+                    fg: Color.white.opacity(0.95),
                     bg: Color(red: 0.16, green: 0.38, blue: 0.18),
                     border: Color(red: 0.28, green: 0.62, blue: 0.32),
                     action: { if !textInput.isEmpty { advanceWithAnswer(textInput) } }
@@ -1564,7 +1566,7 @@ private struct QuestionBar: View {
             } else if showOtherInput && !item.multiSelect {
                 PixelButton(
                     label: L10n.shared["submit"],
-                    fg: .white.opacity(0.95),
+                    fg: Color.white.opacity(0.95),
                     bg: Color(red: 0.16, green: 0.38, blue: 0.18),
                     border: Color(red: 0.28, green: 0.62, blue: 0.32),
                     action: { if !otherText.isEmpty { advanceWithAnswer(otherText) } }
@@ -1674,15 +1676,15 @@ private struct QuestionBar: View {
                 .foregroundStyle(cyan)
             Text(question)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.white.opacity(0.9))
+                .foregroundStyle(NotchTokens.ink(0.9))
                 .lineLimit(3)
             if queueTotal > 1 {
                 Text("\(queuePosition)/\(queueTotal)")
                     .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(NotchTokens.ink(0.5))
                     .padding(.horizontal, 4)
                     .padding(.vertical, 1)
-                    .background(Color.white.opacity(0.1))
+                    .background(NotchTokens.ink(0.1))
                     .clipShape(RoundedRectangle(cornerRadius: 3))
             }
             Spacer()
@@ -1704,11 +1706,11 @@ private struct QuestionBar: View {
             HStack(spacing: 6) {
                 Text(">")
                     .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .foregroundStyle(Color(red: 0.3, green: 0.85, blue: 0.4))
+                    .foregroundStyle(NotchTokens.runningText)
                 TextField(L10n.shared["type_answer"], text: $textInput)
                     .textFieldStyle(.plain)
                     .font(.system(size: 10.5))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(NotchTokens.text1)
                     .focused($isFocused)
                     .onSubmit {
                         if !textInput.isEmpty { onAnswer(textInput) }
@@ -1716,11 +1718,11 @@ private struct QuestionBar: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(Color.white.opacity(0.05))
+            .background(NotchTokens.ink(0.05))
             .cornerRadius(4)
             .overlay(
                 RoundedRectangle(cornerRadius: 4)
-                    .strokeBorder(Color.white.opacity(0.1), lineWidth: 1)
+                    .strokeBorder(NotchTokens.ink(0.1), lineWidth: 1)
             )
             .padding(.horizontal, 14)
         }
@@ -1728,15 +1730,15 @@ private struct QuestionBar: View {
         HStack(spacing: 6) {
             PixelButton(
                 label: L10n.shared["skip"],
-                fg: .white.opacity(0.6),
-                bg: Color.white.opacity(0.06),
-                border: Color.white.opacity(0.12),
+                fg: NotchTokens.ink(0.6),
+                bg: NotchTokens.ink(0.06),
+                border: NotchTokens.ink(0.12),
                 action: onSkip
             )
             if options == nil || options?.isEmpty == true {
                 PixelButton(
                     label: L10n.shared["submit"],
-                    fg: .white.opacity(0.95),
+                    fg: Color.white.opacity(0.95),
                     bg: Color(red: 0.16, green: 0.38, blue: 0.18),
                     border: Color(red: 0.28, green: 0.62, blue: 0.32),
                     action: { if !textInput.isEmpty { onAnswer(textInput) } }
@@ -1763,16 +1765,16 @@ private struct MultiSelectRow: View {
             HStack(spacing: 8) {
                 Image(systemName: isChecked ? "checkmark.square.fill" : "square")
                     .font(.system(size: 11))
-                    .foregroundStyle(isChecked ? accent : .white.opacity(0.4))
+                    .foregroundStyle(isChecked ? accent : NotchTokens.ink(0.4))
                     .frame(width: 14)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(label)
                         .font(.system(size: 10.5, weight: hovering || isChecked ? .semibold : .regular))
-                        .foregroundStyle(.white.opacity(hovering || isChecked ? 1 : 0.75))
+                        .foregroundStyle(NotchTokens.ink(hovering || isChecked ? 1 : 0.75))
                     if let description, !description.isEmpty {
                         Text(description)
                             .font(.system(size: 9))
-                            .foregroundStyle(.white.opacity(0.45))
+                            .foregroundStyle(NotchTokens.ink(0.45))
                             .lineLimit(2)
                     }
                 }
@@ -1782,7 +1784,7 @@ private struct MultiSelectRow: View {
             .padding(.vertical, 7)
             .background(
                 RoundedRectangle(cornerRadius: 4)
-                    .fill(isChecked ? accent.opacity(0.08) : (hovering ? Color.white.opacity(0.08) : Color.white.opacity(0.03)))
+                    .fill(isChecked ? accent.opacity(0.08) : (hovering ? NotchTokens.ink(0.08) : NotchTokens.ink(0.03)))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 4)
@@ -1827,11 +1829,11 @@ private struct OptionRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(label)
                         .font(.system(size: 10.5, weight: hovering ? .semibold : .regular))
-                        .foregroundStyle(.white.opacity(hovering ? 1 : 0.75))
+                        .foregroundStyle(NotchTokens.ink(hovering ? 1 : 0.75))
                     if let description, !description.isEmpty {
                         Text(description)
                             .font(.system(size: 9))
-                            .foregroundStyle(.white.opacity(0.45))
+                            .foregroundStyle(NotchTokens.ink(0.45))
                             .lineLimit(2)
                     }
                 }
@@ -1841,7 +1843,7 @@ private struct OptionRow: View {
             .padding(.vertical, 7)
             .background(
                 RoundedRectangle(cornerRadius: 4)
-                    .fill(hovering ? Color.white.opacity(0.08) : Color.white.opacity(0.03))
+                    .fill(hovering ? NotchTokens.ink(0.08) : NotchTokens.ink(0.03))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 4)
@@ -1886,7 +1888,7 @@ private struct PixelButton: View {
                     .fill(bg)
                     .overlay(
                         RoundedRectangle(cornerRadius: 4)
-                            .fill(.white.opacity(hovering ? 0.14 : 0))
+                            .fill(NotchTokens.ink(hovering ? 0.14 : 0))
                     )
             )
             .overlay(
@@ -2021,10 +2023,10 @@ private struct SessionListView: View {
     /// and idle bands stay neutral so the accent keeps meaning something.
     private func bandLabelColor(_ band: SessionAttentionBand?) -> Color {
         switch band {
-        case .needsYou: return Color(red: 1.0, green: 0.6, blue: 0.2)
-        case .working: return .white.opacity(0.42)
-        case .idle: return .white.opacity(0.3)
-        case nil: return .white.opacity(0.5)
+        case .needsYou: return NotchTokens.signalText
+        case .working: return NotchTokens.ink(0.42)
+        case .idle: return NotchTokens.ink(0.3)
+        case nil: return NotchTokens.ink(0.5)
         }
     }
 
@@ -2055,7 +2057,7 @@ private struct SessionListView: View {
                         if group.band != nil {
                             Text("\(group.ids.count)")
                                 .font(.system(size: 11, weight: .medium, design: .monospaced))
-                                .foregroundStyle(.white.opacity(0.32))
+                                .foregroundStyle(NotchTokens.ink(0.32))
                             // A hairline carries the grouping without another
                             // filled surface competing with the rows.
                             Rectangle()
@@ -2132,13 +2134,13 @@ private struct UsageFooterLine: View {
                 .fontWeight(.semibold)
             Text("5h \(compact(usage.last5h))")
             Text("·")
-                .foregroundStyle(.white.opacity(0.25))
+                .foregroundStyle(NotchTokens.ink(0.25))
             Text("\(l10n["usage_today"]) \(compact(usage.today))")
             Spacer()
             UsageSparkline(buckets: usage.hourlyOutputTokens)
         }
         .font(.system(size: 10, weight: .medium, design: .monospaced))
-        .foregroundStyle(.white.opacity(0.45))
+        .foregroundStyle(NotchTokens.ink(0.45))
         .padding(.horizontal, 14)
         .padding(.vertical, 5)
         .help(detail)
@@ -2165,7 +2167,7 @@ private struct UsageSparkline: View {
         HStack(alignment: .bottom, spacing: 1.5) {
             ForEach(Array(buckets.enumerated()), id: \.offset) { _, value in
                 RoundedRectangle(cornerRadius: 0.75)
-                    .fill(.white.opacity(value == 0 ? 0.12 : 0.45))
+                    .fill(NotchTokens.ink(value == 0 ? 0.12 : 0.45))
                     .frame(width: 2.5, height: max(1.5, CGFloat(value) / CGFloat(peak) * 10))
             }
         }
@@ -2307,14 +2309,14 @@ private struct SessionsExpandLink: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 6) {
-                Rectangle().fill(.white.opacity(0.15)).frame(height: 1)
+                Rectangle().fill(NotchTokens.ink(0.15)).frame(height: 1)
                 Text("\(count) \(L10n.shared["n_sessions"])")
                     .font(.system(size: 11, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.white.opacity(hovering ? 0.7 : 0.45))
+                    .foregroundStyle(NotchTokens.ink(hovering ? 0.7 : 0.45))
                 Image(systemName: "chevron.down")
                     .font(.system(size: 8, weight: .bold))
-                    .foregroundStyle(.white.opacity(hovering ? 0.5 : 0.3))
-                Rectangle().fill(.white.opacity(0.15)).frame(height: 1)
+                    .foregroundStyle(NotchTokens.ink(hovering ? 0.5 : 0.3))
+                Rectangle().fill(NotchTokens.ink(0.15)).frame(height: 1)
             }
             .padding(.vertical, 8)
             .padding(.horizontal, 12)
@@ -2414,12 +2416,12 @@ private struct SessionCard: View {
     private var isActiveApproval: Bool { approvalQueueIndex == 0 }
     private var statusNameColor: Color {
         if session.status == .idle && session.interrupted {
-            return Color(red: 1.0, green: 0.45, blue: 0.35)
+            return NotchTokens.dangerText
         }
         switch session.status {
-        case .processing, .running:              return Color(red: 0.3, green: 0.85, blue: 0.4)
-        case .waitingApproval, .waitingQuestion:  return Color(red: 1.0, green: 0.6, blue: 0.2)
-        case .idle:                               return .white
+        case .processing, .running:              return NotchTokens.runningText
+        case .waitingApproval, .waitingQuestion:  return NotchTokens.signalText
+        case .idle:                               return NotchTokens.text1
         }
     }
 
@@ -2442,7 +2444,7 @@ private struct SessionCard: View {
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 5)
-                        .strokeBorder(.white.opacity(enabled ? 0.25 : 0.12), lineWidth: 1)
+                        .strokeBorder(NotchTokens.ink(enabled ? 0.25 : 0.12), lineWidth: 1)
                 )
         }
         .buttonStyle(.plain)
@@ -2485,8 +2487,8 @@ private struct SessionCard: View {
                         projectFontSize: fontSize + 2,
                         projectColor: statusNameColor,
                         sessionFontSize: fontSize,
-                        sessionColor: .white.opacity(0.76),
-                        dividerColor: .white.opacity(0.28)
+                        sessionColor: NotchTokens.ink(0.76),
+                        dividerColor: NotchTokens.ink(0.28)
                     )
                     Spacer(minLength: 8)
 
@@ -2515,14 +2517,14 @@ private struct SessionCard: View {
                     HStack(spacing: 8) {
                         Text(String(format: L10n.shared["approval_queue_label"], idx + 1, appState.permissionQueue.count, tool))
                             .font(.system(size: fontSize, weight: .medium, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.65))
+                            .foregroundStyle(NotchTokens.ink(0.65))
                             .lineLimit(1)
                             .truncationMode(.tail)
                         Spacer(minLength: 8)
                         inlineActionButton(
                             showApprovalDetails ? L10n.shared["approval_details_collapse"] : L10n.shared["approval_details_expand"],
                             fg: .white,
-                            bg: Color.white.opacity(0.10),
+                            bg: NotchTokens.ink(0.10),
                             enabled: true,
                             action: { withAnimation(NotchAnimation.micro) { showApprovalDetails.toggle() } }
                         )
@@ -2560,17 +2562,17 @@ private struct SessionCard: View {
                         case .text(let s):
                             Text(s)
                                 .font(.system(size: max(10, fontSize - 1), design: .monospaced))
-                                .foregroundStyle(.white.opacity(0.45))
+                                .foregroundStyle(NotchTokens.ink(0.45))
                                 .lineLimit(1)
                                 .truncationMode(.tail)
                         case .bashCommand(let cmd):
                             HStack(alignment: .top, spacing: 4) {
                                 Text("$")
                                     .font(.system(size: max(10, fontSize - 1), weight: .bold, design: .monospaced))
-                                    .foregroundStyle(Color(red: 0.3, green: 0.85, blue: 0.4).opacity(0.9))
+                                    .foregroundStyle(NotchTokens.runningText.opacity(0.9))
                                 Text(cmd)
                                     .font(.system(size: max(10, fontSize - 1), design: .monospaced))
-                                    .foregroundStyle(.white.opacity(0.55))
+                                    .foregroundStyle(NotchTokens.ink(0.55))
                                     .lineLimit(1)
                                     .truncationMode(.tail)
                             }
@@ -2585,10 +2587,10 @@ private struct SessionCard: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(
                                 RoundedRectangle(cornerRadius: 8)
-                                    .fill(Color.white.opacity(0.05))
+                                    .fill(NotchTokens.ink(0.05))
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 8)
-                                            .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                                            .strokeBorder(NotchTokens.ink(0.10), lineWidth: 1)
                                     )
                             )
                     }
@@ -2599,7 +2601,7 @@ private struct SessionCard: View {
                    session.recentMessages.isEmpty {
                     Text(prompt)
                         .font(.system(size: fontSize, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.45))
+                        .foregroundStyle(NotchTokens.ink(0.45))
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
@@ -2632,7 +2634,7 @@ private struct SessionCard: View {
                                 MorphText(
                                     text: session.toolDescription ?? tool,
                                     font: .system(size: fontSize, design: .monospaced),
-                                    color: .white.opacity(0.75)
+                                    color: NotchTokens.ink(0.75)
                                 )
                                 .truncationMode(.tail)
                             } else {
@@ -2649,7 +2651,7 @@ private struct SessionCard: View {
         .padding(.vertical, 12)
         .background(
             RoundedRectangle(cornerRadius: 10)
-                .fill(hovering ? Color.white.opacity(0.10) : Color.white.opacity(0.05))
+                .fill(hovering ? NotchTokens.ink(0.10) : NotchTokens.ink(0.05))
         )
         .padding(.horizontal, 6)
         .offset(x: failureShakeOffset)
@@ -2740,9 +2742,9 @@ private struct SessionCard: View {
     private var ageColor: Color {
         switch session.status {
         case .waitingApproval, .waitingQuestion:
-            return Color(red: 1.0, green: 0.6, blue: 0.2)
+            return NotchTokens.signalText
         default:
-            return .white.opacity(0.7)
+            return NotchTokens.ink(0.7)
         }
     }
 }
@@ -2988,7 +2990,7 @@ private struct TerminalBadge: View {
                     if let term = session.terminalName {
                         Text(term)
                             .font(.system(size: 9.5, weight: .medium, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.5))
+                            .foregroundStyle(NotchTokens.ink(0.5))
                     }
                 }
             }
@@ -3179,21 +3181,21 @@ private struct SessionListEmptyState: View {
         VStack(spacing: 7) {
             Image(systemName: "terminal")
                 .font(.system(size: 15, weight: .regular))
-                .foregroundStyle(.white.opacity(0.28))
+                .foregroundStyle(NotchTokens.ink(0.28))
                 .frame(width: 34, height: 34)
                 .overlay(
                     RoundedRectangle(cornerRadius: 11, style: .continuous)
-                        .stroke(.white.opacity(0.14), lineWidth: 1)
+                        .stroke(NotchTokens.ink(0.14), lineWidth: 1)
                 )
                 .padding(.bottom, 3)
 
             Text(L10n.shared["empty_no_agents"])
                 .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                .foregroundStyle(.white.opacity(0.78))
+                .foregroundStyle(NotchTokens.ink(0.78))
 
             Text(L10n.shared["empty_no_agents_hint"])
                 .font(.system(size: 10.5, weight: .regular, design: .monospaced))
-                .foregroundStyle(.white.opacity(0.38))
+                .foregroundStyle(NotchTokens.ink(0.38))
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: 280)
@@ -3206,9 +3208,9 @@ private struct SessionListEmptyState: View {
 
 private struct SessionTag: View {
     let text: String
-    var color: Color = .white.opacity(0.7)
+    var color: Color = NotchTokens.ink(0.7)
 
-    init(_ text: String, color: Color = .white.opacity(0.7)) {
+    init(_ text: String, color: Color = NotchTokens.ink(0.7)) {
         self.text = text
         self.color = color
     }
@@ -3253,9 +3255,9 @@ private struct TypingIndicator: View {
                     LinearGradient(
                         stops: [
                             .init(color: .clear, location: 0),
-                            .init(color: .white.opacity(midOpacity), location: bright ? 0.35 : 0.4),
-                            .init(color: .white.opacity(peakOpacity), location: 0.5),
-                            .init(color: .white.opacity(midOpacity), location: bright ? 0.65 : 0.6),
+                            .init(color: NotchTokens.ink(midOpacity), location: bright ? 0.35 : 0.4),
+                            .init(color: NotchTokens.ink(peakOpacity), location: 0.5),
+                            .init(color: NotchTokens.ink(midOpacity), location: bright ? 0.65 : 0.6),
                             .init(color: .clear, location: 1),
                         ],
                         startPoint: .leading,
@@ -3396,10 +3398,10 @@ private struct ChatMessageRow: View, Equatable {
             HStack(alignment: .top, spacing: 4) {
                 Text(">")
                     .font(.system(size: fontSize, weight: .bold, design: .monospaced))
-                    .foregroundStyle(Color(red: 0.3, green: 0.85, blue: 0.4))
+                    .foregroundStyle(NotchTokens.runningText)
                 Text(ChatMessageTextFormatter.literalText(text))
                     .font(.system(size: fontSize, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.9))
+                    .foregroundStyle(NotchTokens.ink(0.9))
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
@@ -3410,7 +3412,7 @@ private struct ChatMessageRow: View, Equatable {
                     .foregroundStyle(Color(red: 0.85, green: 0.47, blue: 0.34))
                 Text(ChatMessageTextFormatter.inlineMarkdown(compactText(stripDirectives(text))))
                     .font(.system(size: fontSize, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.85))
+                    .foregroundStyle(NotchTokens.ink(0.85))
                     .lineLimit(aiLineLimit)
                     .truncationMode(.tail)
             }
@@ -3467,4 +3469,61 @@ private func stripDirectives(_ text: String) -> String {
 
     let cleaned = result.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
     return cleaned
+}
+
+// MARK: - Light/dark snapshot tool (verification only)
+//
+// Renders the expanded session list at a forced appearance to a PNG, without
+// the notch overlay, window positioning, or TCC. Used to visually verify R2
+// light mode. Triggered by `--render-snapshot <dir>`.
+@MainActor
+enum PanelSnapshot {
+    static func render(appState: AppState, dark: Bool, width: CGFloat = 580) -> NSImage? {
+        image(of: SessionListView(appState: appState, onlySessionId: nil), dark: dark, width: width)
+    }
+
+    /// The approval card in isolation — where the DESTRUCTIVE risk pill and the
+    /// project identity land (R3). Built directly from tool/input, which is what
+    /// ApprovalBar takes, so no PermissionRequest continuation is needed.
+    static func renderApproval(session: SessionSnapshot, dark: Bool, width: CGFloat = 580) -> NSImage? {
+        let bar = ApprovalBar(
+            tool: "Bash",
+            toolInput: ["command": "rm -rf ./dist && git push --force origin main"],
+            queuePosition: 2,
+            queueTotal: 5,
+            session: session,
+            sessionId: "showcase",
+            appState: AppState(),
+            onAllow: {}, onAlwaysAllow: {}, onDeny: {}, onDismiss: {}
+        )
+        return image(of: bar, dark: dark, width: width)
+    }
+
+    private static func image<V: View>(of view: V, dark: Bool, width: CGFloat) -> NSImage? {
+        let content = view
+            .frame(width: width)
+            .background(NotchTokens.panelGround)
+            .padding(.bottom, 10)
+
+        let host = NSHostingView(rootView: content)
+        host.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        host.layoutSubtreeIfNeeded()
+        let size = host.fittingSize
+        host.frame = NSRect(origin: .zero, size: size)
+        host.layoutSubtreeIfNeeded()
+
+        guard size.width > 1, size.height > 1,
+              let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return nil }
+        host.cacheDisplay(in: host.bounds, to: rep)
+        let image = NSImage(size: size)
+        image.addRepresentation(rep)
+        return image
+    }
+
+    static func writePNG(_ image: NSImage, to url: URL) {
+        guard let tiff = image.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff),
+              let png = rep.representation(using: .png, properties: [:]) else { return }
+        try? png.write(to: url)
+    }
 }

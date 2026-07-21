@@ -43,6 +43,10 @@ enum NotchTokens {
     /// Motion meter only, never text. Clears the 3:1 non-text-graphic bar on light.
     static let live = dynamic(dark: 0x4DD966, light: 0x1E8F45)
 
+    /// Running/processing status as *text* (the project name of a live session).
+    /// The bright green reads on black but fails on white, so it darkens.
+    static let runningText = dynamic(dark: 0x4DD966, light: 0x1E8F45)
+
     // MARK: Radius — replaces 3,4,5,6,7,8,9,10,11,16 on Mac
 
     static let radiusSmall: CGFloat = 10
@@ -69,6 +73,26 @@ enum NotchTokens {
     static func mono(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
         .system(size: size, weight: weight, design: .monospaced)
     }
+
+    // MARK: Foreground ink — the sweep target
+
+    /// Muted foreground at a given opacity, resolved per appearance: white ink on
+    /// the dark panel, near-black ink on the light panel. This is what every
+    /// expanded-surface `.white.opacity(x)` becomes, so light mode enters without
+    /// hand-touching 100+ literals. Opacity is nudged up slightly on light because
+    /// 38% white on black reads about like 45% black on white.
+    static func ink(_ opacity: Double) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            appearance.isDark
+                ? NSColor(hex: 0xFFFFFF, alpha: opacity)
+                : NSColor(hex: 0x17171B, alpha: opacity < 0.6 ? min(1, opacity * 1.18) : opacity)
+        })
+    }
+
+    /// The expanded panel ground. Collapsed stays pure black — it abuts the
+    /// physical notch, where a light pill would read as a rendering fault, the
+    /// same reason Apple's Dynamic Island is permanently dark.
+    static let panelGround = dynamic(dark: 0x000000, light: 0xF2F3F6)
 
     // MARK: Appearance-aware construction
 
