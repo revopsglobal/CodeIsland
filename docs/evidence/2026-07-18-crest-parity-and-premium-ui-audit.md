@@ -22,8 +22,8 @@ an invisible closed-notch window and does not add a new product module.
 
 Pomodoro remains explicitly out of scope. Cross-app Notification Center
 history is not treated as a parity requirement because macOS exposes no public
-API for it. Telegram remains an optional outbound alert/deep-link fallback,
-not a second control plane.
+API for it. Telegram has since been retired from CodeIsland; Buddy APNs, Live
+Activities, and the authenticated private Tailscale client own away use.
 
 ## Verdict
 

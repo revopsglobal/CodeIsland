@@ -161,8 +161,8 @@ installation.
 It detects the native delivery as current, Tailscale and loopback transport as
 healthy, and the mobile web shell as ready with task, question, approval, hub,
 safe-area, touch-target, live-feedback, inline-review, and PWA markers.
-Telegram remains intentionally optional and disabled; it is not required for
-Buddy or private-web away use.
+Telegram has since been retired from the CodeIsland runtime. Buddy APNs, Live
+Activities, and the private Tailscale client are the away-use surfaces.
 
 The automated suites cover the user-facing surfaces requested for this
 release: pairing lifecycle and rate limiting, task creation and execution

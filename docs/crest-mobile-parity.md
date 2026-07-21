@@ -47,7 +47,7 @@ This delta supersedes older "current build" language below.
   `scripts/report-codeisland-completion-audit.sh`. It composes strict physical
   E2E and away-readiness into one fail-closed report for the actual objective:
   signed TestFlight delivery, Crest/source parity, private mobile web fallback,
-  native iPhone away readiness, optional Telegram fallback, real physical E2E,
+  native iPhone away readiness through APNs and Live Activities, real physical E2E,
   and no-overclaim guardrails. The Crest/source parity requirement runs the
   focused Swift parity tests covering Glances/Calendar, the shared
   Mac/iPhone/web module/action contract, and the authenticated host lifecycle.
@@ -187,7 +187,7 @@ This delta supersedes older "current build" language below.
   `30209`, and reported version/build `1.0.53`. Local and Tailscale `/health`
   both returned running with `pendingCount: 0`; both local and Tailscale web
   roots served the new `readOnlyHubActions` quiet-refresh code.
-- Latest Telegram fallback source: PR #107 merged as
+- Retired historical Telegram fallback source: PR #107 merged as
   `bc020a947606863448ccffae3fd9f0f0aae0cad1`, making outbound Telegram
   attention alerts more directly actionable while keeping Telegram out of the
   control plane. Redacted approval alerts now include the generic Buddy route
@@ -197,7 +197,9 @@ This delta supersedes older "current build" language below.
   commands, transcripts, workspace paths, and private details; decisions remain
   in Buddy or the authenticated web app. Verification passed focused Telegram
   fallback/deep-link tests, the full `APNSNotificationSenderTests` suite,
-  `git diff --check`, and `graphify update . --no-viz`.
+  `git diff --check`, and `graphify update . --no-viz`. This runtime and its
+  settings were removed in 1.0.62; Buddy APNs and Live Activities now own
+  away-attention.
 - Latest Mac delivery after PR #107: workflow run `29673998048` from
   `bc020a947606863448ccffae3fd9f0f0aae0cad1` completed successfully. The CI
   run passed personal utilities, remote approval security/exact-request
@@ -213,14 +215,15 @@ This delta supersedes older "current build" language below.
   `/Applications/CodeIsland.app.backup-20260718215848`, and the app relaunched
   as PID `44623` with local and Tailscale `/health` both running with
   `pendingCount: 0`.
-- Latest Telegram stale-Buddy recovery source: PR #109 merged as
+- Retired historical Telegram stale-Buddy recovery source: PR #109 merged as
   `03815bff9881cc3f570df5185d3ba6c8851f77f8`, adding a TestFlight recovery
   hint to the same redacted Telegram attention message. Alerts still point to
   the generic Buddy queue and private web fallback, but now also say
   `If Buddy is stale: update CodeIsland Buddy in TestFlight itms-beta://` so
   Greg can recover the stale/missing iPhone client path from the alert itself.
   Verification passed the full `APNSNotificationSenderTests` suite, `git diff
-  --check`, and `graphify update . --no-viz`.
+  --check`, and `graphify update . --no-viz`. This runtime and settings surface
+  were removed in 1.0.62.
 - Latest Mac delivery after PR #109: workflow run `29674251405` from
   `03815bff9881cc3f570df5185d3ba6c8851f77f8` completed successfully. The CI
   run passed personal utilities, remote approval security/exact-request
@@ -236,7 +239,7 @@ This delta supersedes older "current build" language below.
   `/Applications/CodeIsland.app.backup-20260718220828`, and the app relaunched
   as PID `49608` with local and Tailscale `/health` both running with
   `pendingCount: 0`.
-- Latest Telegram exact-build recovery source: PR #111 merged as
+- Retired historical Telegram exact-build recovery source: PR #111 merged as
   `1b8df18c810fb7872ae6cec14842be249d64a291`, reading the expected Buddy
   version/build from Mac settings and including it in redacted Telegram
   TestFlight recovery copy when known. The alert can now say, for example,
@@ -244,7 +247,8 @@ This delta supersedes older "current build" language below.
   TestFlight itms-beta://`, while still excluding request IDs, commands,
   transcripts, workspace paths, and private details. Verification passed the
   full `APNSNotificationSenderTests` suite, `git diff --check`, and
-  `graphify update . --no-viz`.
+  `graphify update . --no-viz`. This runtime and settings surface were removed
+  in 1.0.62.
 - Latest Mac delivery after PR #111: workflow run `29674484890` from
   `1b8df18c810fb7872ae6cec14842be249d64a291` completed successfully. The CI
   run passed personal utilities, remote approval security/exact-request
@@ -298,8 +302,8 @@ This delta supersedes older "current build" language below.
   `CodeIslandCompanionUITests/testAttentionFirstShellKeepsToolsSecondary` on
   Simulator `ECC99681-C3ED-4452-B727-0F9E2C09C469`, `git diff --check`, and
   `graphify update . --no-viz`.
-- Latest Telegram-to-Buddy attention routing source: PR #121 merged as
-  `868e52af7e6594106ca2f952d22ad6125005f0e3`, preserving generic Telegram
+- Retired historical Telegram-to-Buddy attention routing source: PR #121 merged as
+  `868e52af7e6594106ca2f952d22ad6125005f0e3`, preserving generic retired
   fallback links such as
   `codeisland://approvals/pending` and `codeisland://questions/pending` across
   cold Buddy opens until the first authenticated snapshot arrives. The
@@ -308,7 +312,8 @@ This delta supersedes older "current build" language below.
   selection. Verification passed `ios/CodeIslandCompanion/scripts/run-model-tests.sh`
   and the focused iOS Simulator XCTest
   `CodeIslandCompanionTests/CompanionCommandCenterModelTests` on Simulator
-  `ECC99681-C3ED-4452-B727-0F9E2C09C469`.
+  `ECC99681-C3ED-4452-B727-0F9E2C09C469`. This runtime and settings surface
+  were removed in 1.0.62; Buddy APNs and Live Activities now own away-attention.
 - Latest TestFlight delivery after PR #121: workflow run `29675764698` from
   `868e52af7e6594106ca2f952d22ad6125005f0e3` produced Buddy
   `1.0.0 (20260719060201)`, delivery UUID
@@ -318,16 +323,16 @@ This delta supersedes older "current build" language below.
 - Latest away-readiness source adds `scripts/report-away-readiness.sh`, a
   redacted machine-readable report for the exact away-use state: current
   TestFlight Buddy build, physical Buddy check-in, local/Tailscale private web
-  health, private web shell proof, strict interaction contract, and optional
-  Telegram fallback configuration. Live report at `2026-07-19T06:23:18Z`
+  health, private web shell proof, strict interaction contract, and native Buddy
+  away-attention readiness. Live report at `2026-07-19T06:23:18Z`
   returned
   `status = ready-for-manual-physical-acceptance`,
   `readyForAwayManualAcceptance = true`, latest Buddy build
   `20260719060201`, web fallback reachable with Tailscale running and
   `pendingCount = 0`, and private web shell `httpCode = 200`,
   `contentType = text/html; charset=utf-8`, with title, tagline, manifest,
-  icon, Questions, Approvals, and Hub markers all present. Telegram fallback is
-  disabled/optional, and the sole required gate remains
+  icon, Questions, Approvals, and Hub markers all present. The sole required
+  gate remains
   `physical-buddy-checkin`.
 - Latest strict E2E report at `2026-07-19T06:07:24Z` returned
   `status = physical-gate-incomplete`, `complete = false`: the Mac app is
@@ -502,11 +507,12 @@ This delta supersedes older "current build" language below.
   Tailscale `/health` both running with zero pending work. The strict physical
   gate wrote `remoteApprovalExpectedClientVersion = 1.0.0` and
   `remoteApprovalExpectedClientBuild = 20260719011702` to the Mac app defaults.
-- Previous source: PR #78 merged as
+- Retired historical source: PR #78 merged as
   `d9faa5efd75f33f8eda1d02be5edd3ea58a49ae4`, adding a manual
   Telegram fallback test alert in Buddy Settings. The test alert uses the same
   redacted approval/question message shape and private Tailscale link as real
-  Telegram fallback alerts.
+  Telegram fallback alerts. This runtime and settings surface were removed in
+  1.0.62.
 - Previous installed Mac: `1.0.53`, workflow run `29669425030`, artifact
   `8436864822`, downloaded DMG SHA-256
   `c421fe53f3011eded8cff233c2e7a55b61efb618257ae7b568c909dd51cee58a`,
@@ -715,7 +721,7 @@ below.
 | Weather | Physical ZIP fallback proven during the unlocked 1.0.41 run: `61° Clear · Ridgefield, Washington`; Location Services mode remains unverified | Ready implementation: mirrored remote weather and refresh | Physical location-mode, remote refresh, and offline-state runtime tests |
 | Notifications | Partial by deliberate platform boundary: CodeIsland action-required alerts are prioritized, deduped, redacted, and separated; macOS exposes no public cross-app Notification Center history API, so CodeIsland does not read private databases or request Full Disk Access | Physical proof on last observed iPhone build `20260718212803`: production APNs, ActivityKit push-to-start, and request-scoped update tokens are registered. A real question rendered the exact attention card, returned the reviewed answer, registered token for request `6ce1e9a8-e928-451d-9571-d10751ee017a`, resolved to zero active activities, and pruned that terminal token. Latest TestFlight build `20260719063154` is `VALID` but has not yet been opened on the physical iPhone. | Open latest TestFlight build `20260719063154` on the physical iPhone, then capture clean compact/expanded artwork without a competing activity and exercise stale-push behavior |
 | Claude co-pilot/voice/proposals | Ready implementation: read-only Ask and reviewed Do through authenticated local Claude Code with tools disabled, push-to-talk/continuous speech, visible listening state, bounded user-selected/drop file context, and best-effort screen-share-hidden strip with honest disclosure | Ready implementation: Ask/Do, speech recognition, proposal review, exact confirmation, and deep-linked task/note preparation | Run real Ask and multi-action Do, Mac voice/file context, and physical-iPhone dictation/task creation |
-| AI Coding sessions/approvals/questions | Signed 1.0.53 is installed, healthy, keeps the private host awake, and backed the physical question continuation | Physical build `20260718212803` is installed/opened and authenticated. A real exact question was selected, reviewed, answered `Approve`, audited, and drained without routine-content noise. Latest Buddy source adds the command-center signal board and preserves Telegram fallback `pending` deep links through cold refresh so approvals/questions are summarized and focused before routine sessions, but build `20260719063154` still needs physical iPhone acceptance. | Open latest build `20260719063154`, rerun exact-request replay, and complete one cellular/Tailscale approval away from local Wi-Fi |
+| AI Coding sessions/approvals/questions | Signed 1.0.53 is installed, healthy, keeps the private host awake, and backed the physical question continuation | Physical build `20260718212803` is installed/opened and authenticated. A real exact question was selected, reviewed, answered `Approve`, audited, and drained without routine-content noise. Latest Buddy source adds the command-center signal board and preserves native APNs/Live Activity `pending` routes through cold refresh so approvals/questions are summarized and focused before routine sessions, but build `20260719063154` still needs physical iPhone acceptance. | Open latest build `20260719063154`, rerun exact-request replay, and complete one cellular/Tailscale approval away from local Wi-Fi |
 | GitHub pull requests and CI | Ready: authenticated `gh` PR list/status/deep links | Ready: mirrored list/status/deep links | Runtime refresh/open test from iPhone |
 | Audio device switcher | Physical read proof on 1.0.43: only MacBook Air Microphone and MacBook Air Speakers carry the respective default flags; the remaining real and virtual devices no longer show false defaults. Switching, mute, and exact 0–100 output volume remain physically unverified | Unverified: mirrored device actions, ±10, and native/web volume editor | Run physical device switch, volume update, and expected failure states |
 | Bluetooth devices/connect/disconnect | Unverified: connected/remembered devices, battery, connect/disconnect | Unverified: mirrored devices and confirmed remote actions | Physical accessory connect/disconnect tests |
@@ -776,9 +782,9 @@ state—but they must publish the same snapshot and action contracts.
 
 Remote writes are never generic shell commands. The Mac exposes an allow-listed
 module action, binds a short-lived token to the exact device, action, and target,
-then revalidates current state before executing it. Telegram may notify Greg and
-link into the private client; it is not a second state store or inbound control
-daemon.
+then revalidates current state before executing it. Buddy native APNs and Live
+Activities notify Greg and deep-link into the private client; Telegram is not
+part of the runtime architecture.
 
 ## Automated host E2E proof
 
@@ -940,8 +946,8 @@ scripts/report-strict-physical-e2e.sh
 ```
 
 For away-use readiness before the physical iPhone tap, use the combined
-redacted report. It keeps optional Telegram separate from required Buddy/web
-gates and exits `2` until the physical Buddy build check-in is complete:
+redacted report. It checks required Buddy/web gates and exits `2` until the
+physical Buddy build check-in is complete:
 
 ```bash
 scripts/report-away-readiness.sh
@@ -981,5 +987,5 @@ scripts/report-away-readiness.sh
    cellular/Tailscale. This is the final away-from-the-Mac acceptance gate.
 
 Record failures by exact module/action and keep permission denial separate from
-implementation failure. Telegram is only an optional outbound alert/deep link;
-it is not required for the private Tailscale control path to pass.
+implementation failure. Buddy APNs, Live Activities, and the authenticated
+private Tailscale client are the supported away path.

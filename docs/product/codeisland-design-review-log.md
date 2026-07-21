@@ -201,9 +201,10 @@ records a regression that shipped through exactly that gap.
 `scripts/smoke-companion-ui.sh` fails before its first capture because its
 DEVELOPER_DIR autodetect prefers stable Xcode over the beta toolchain the
 companion requires — the reason iOS findings still have no real renders.
-TelegramAttentionNotifier, TailscaleServeManager, and UpdateChecker have zero
-tests. Proposal: beta-first toolchain detection, a companion test lane in the DMG
-workflow, seed tests for the transports.
+TailscaleServeManager and UpdateChecker have zero tests. The retired Telegram
+notifier has been removed, so it no longer belongs in the verification plan.
+Proposal: beta-first toolchain detection, a companion test lane in the DMG
+workflow, seed tests for the remaining transports.
 
 **B2-09 — Retire the dead updater.** Sparkle 2.9.1 is bundled but Info.plist has
 no SUFeedURL and no SUPublicEDKey; appcast.xml is frozen at 1.0.30 with all URLs
@@ -280,8 +281,8 @@ intents (CodeIslandAppIntents.swift); the Watch can approve/deny
 fix preserves the content-free APNS design: notification actions and LA buttons
 trigger the same authenticated fetch-then-act the app runs on open (the push
 carries no token). Add iOS notification actions + LA `Button(intent:)`; let the
-Watch answer questions. Shares the remote-action plumbing with the in-flight
-Telegram approval sheet — build the authenticated-action layer once. Depends on
+Watch answer questions. Shares the remote-action plumbing with the Buddy push
+approval path. Depends on
 B2-03 so the risk emphasis is already on those surfaces.
 
 **B2-16 — One reachability truth when the Mac is gone.** Three transports fail in
@@ -311,10 +312,9 @@ quiet hero) and B2-15 (unreachable Mac visibly disables the new action buttons).
   vs HubTheme orange, both ad hoc); `ciSurface` used as a foreground
   (ContentView:1276); broken `#Preview` (missing RemoteApprovalClient env object).
 - Notifications are tap-to-open only (no UNNotificationCategory anywhere).
-  Actionable approve/deny from a notification is deliberately NOT proposed while
-  the telegram-secure-approval-sheet work is in flight — same surface area;
-  revisit after it lands (push → authenticated refresh → local actionable
-  notification would preserve the content-free APNS design).
+  Actionable approve/deny from a notification should reuse the Buddy push path:
+  push -> authenticated refresh -> local actionable notification, preserving the
+  content-free APNS design.
 - Doc drift: `docs/remote-approvals.md:33` still says watch targets don't exist;
   they do. `CODEX_HANDOFF.md` describes 1.0.52.
 - The `sample` also showed multipeerconnectivity threads alive at idle;
