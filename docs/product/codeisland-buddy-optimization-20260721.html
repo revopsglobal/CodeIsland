@@ -1,0 +1,815 @@
+<meta charset="utf-8">
+<title>CodeIsland Buddy: Optimization Review (before / after, 2026-07-21)</title>
+<style>
+/* ============ review chrome (theme-aware; never used inside product mockups) ============ */
+:root{
+  --bg:#F4F2ED; --panel:#FCFBF8; --ink:#201E25; --ink2:#57545F; --ink3:#8B8794;
+  --line:#DDD9D0; --acc:#5148BD; --acc-ink:#FFFFFF; --acc-soft:#EAE8F8;
+  --good:#2E7D46; --good-soft:#E4F2E9; --warn:#9A5A00; --warn-soft:#F7ECDA;
+  --bad:#B3261E; --bad-soft:#F8E7E5; --mono-bg:#EDEAE2;
+  --stage:#E9E6DE; --stage-line:#D3CFC5; --r:12px;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#141318; --panel:#1C1B22; --ink:#ECEAF2; --ink2:#ABA7B6; --ink3:#716D7C;
+    --line:#2C2A34; --acc:#968CF2; --acc-ink:#17141F; --acc-soft:#2A2740;
+    --good:#5BBE7A; --good-soft:#1C2B21; --warn:#E0A458; --warn-soft:#2E2617;
+    --bad:#F08578; --bad-soft:#331B18; --mono-bg:#242230;
+    --stage:#0F0E13; --stage-line:#2A2833; }
+}
+:root[data-theme="light"]{ --bg:#F4F2ED; --panel:#FCFBF8; --ink:#201E25; --ink2:#57545F; --ink3:#8B8794;
+  --line:#DDD9D0; --acc:#5148BD; --acc-ink:#FFFFFF; --acc-soft:#EAE8F8;
+  --good:#2E7D46; --good-soft:#E4F2E9; --warn:#9A5A00; --warn-soft:#F7ECDA;
+  --bad:#B3261E; --bad-soft:#F8E7E5; --mono-bg:#EDEAE2;
+  --stage:#E9E6DE; --stage-line:#D3CFC5; }
+:root[data-theme="dark"]{ --bg:#141318; --panel:#1C1B22; --ink:#ECEAF2; --ink2:#ABA7B6; --ink3:#716D7C;
+  --line:#2C2A34; --acc:#968CF2; --acc-ink:#17141F; --acc-soft:#2A2740;
+  --good:#5BBE7A; --good-soft:#1C2B21; --warn:#E0A458; --warn-soft:#2E2617;
+  --bad:#F08578; --bad-soft:#331B18; --mono-bg:#242230;
+  --stage:#0F0E13; --stage-line:#2A2833; }
+
+*{box-sizing:border-box}
+body{margin:0; background:var(--bg); color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Helvetica,Arial,sans-serif;
+  font-size:15.5px; line-height:1.55; -webkit-font-smoothing:antialiased}
+.wrap{max-width:1020px; margin:0 auto; padding:38px 20px 90px; overflow-x:hidden}
+a{color:var(--acc)}
+.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-size:.86em; background:var(--mono-bg); padding:1px 5px; border-radius:5px}
+.eyebrow{font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:11px; letter-spacing:.14em; color:var(--acc); text-transform:uppercase; margin-bottom:8px}
+h1{font-size:29px; line-height:1.16; letter-spacing:-.02em; font-weight:750; margin:0 0 14px; text-wrap:balance}
+.lede{max-width:74ch; color:var(--ink2); margin:0 0 8px}
+.lede b{color:var(--ink)}
+.grounding{margin:20px 0 6px; padding:14px 16px; background:var(--panel); border:1px solid var(--line); border-radius:var(--r); font-size:13px; color:var(--ink2)}
+.grounding b{color:var(--ink)}
+.grounding ul{margin:8px 0 0; padding-left:18px}
+.grounding li{margin:3px 0}
+.legend{margin:14px 0 0; padding:11px 14px; background:var(--acc-soft); border-radius:var(--r); font-size:12.5px; color:var(--ink2); max-width:100%}
+.legend b{color:var(--ink)}
+.sw{display:inline-block; width:10px; height:10px; border-radius:3px; vertical-align:-1px; margin:0 4px 0 8px}
+
+h2{font-size:20px; letter-spacing:-.015em; margin:0 0 6px}
+.tblwrap{overflow-x:auto; margin:22px 0 4px}
+table.index{width:100%; border-collapse:collapse; background:var(--panel); border:1px solid var(--line); border-radius:var(--r); overflow:hidden; font-size:13.5px}
+table.index th{font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink3); text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); font-weight:600}
+table.index td{padding:8px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+table.index tr:last-child td{border-bottom:none}
+table.index td.n{font-family:ui-monospace,"SF Mono",Menlo,monospace; color:var(--ink3); width:26px}
+table.index a{text-decoration:none; color:var(--ink); font-weight:600}
+table.index a:hover{color:var(--acc)}
+
+section.pair{margin-top:46px; padding-top:26px; border-top:1px solid var(--line)}
+.meta{display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:10px}
+.chip{font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:10.5px; letter-spacing:.08em; padding:3px 9px; border-radius:999px; border:1px solid var(--line); color:var(--ink2); text-transform:uppercase; white-space:nowrap}
+.chip.num{background:var(--acc); color:var(--acc-ink); border-color:transparent}
+.chip.eff-s{background:var(--good-soft); color:var(--good); border-color:transparent}
+.chip.eff-m{background:var(--warn-soft); color:var(--warn); border-color:transparent}
+.chip.imp{background:var(--acc-soft); color:var(--acc); border-color:transparent}
+.thesis{color:var(--ink2); max-width:76ch; margin:0 0 6px; font-size:16px}
+.thesis b{color:var(--ink)}
+.ground{font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:11px; color:var(--ink3); margin:0 0 16px; line-height:1.7; overflow-wrap:anywhere}
+
+.stages{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:14px; margin:0 0 14px}
+@media (max-width:840px){ .stages{grid-template-columns:minmax(0,1fr)} }
+.stage{border:1px solid var(--stage-line); border-radius:var(--r); overflow:hidden; display:flex; flex-direction:column;
+  background:var(--stage);
+  background-image:repeating-linear-gradient(45deg, transparent 0 14px, rgba(128,120,150,.05) 14px 28px)}
+.stage .tag{font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:10px; letter-spacing:.16em; padding:7px 12px; color:var(--ink3); background:var(--panel); border-bottom:1px solid var(--stage-line)}
+.stage.after .tag{color:var(--acc-ink); background:var(--acc); border-bottom-color:transparent}
+.canvas{padding:18px 14px; display:flex; flex-wrap:wrap; gap:14px; align-items:flex-start; justify-content:center; flex:1}
+.cap{font-size:11.5px; color:var(--ink3); padding:0 14px 12px; text-align:center}
+.cap b{color:var(--ink2)}
+
+.rationale{max-width:78ch; margin:2px 0 0}
+.rationale p{margin:0 0 9px; color:var(--ink)}
+.lbl{font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--acc); display:inline-block; margin-right:6px}
+
+.sequence{border-left:3px solid var(--acc); background:var(--acc-soft); border-radius:0 var(--r) var(--r) 0; padding:16px 20px; margin:16px 0; max-width:80ch}
+.sequence p{margin:0 0 8px}
+.sequence p:last-child{margin-bottom:0}
+.validate{margin:14px 0 0; padding:12px 16px; background:var(--panel); border:1px solid var(--line); border-radius:var(--r); font-size:14px; max-width:80ch}
+footer{margin-top:56px; padding-top:16px; border-top:1px solid var(--line); font-size:12px; color:var(--ink3); max-width:78ch}
+
+/* ============ product mockup primitives (CITheme dark, verbatim values; fixed in both page themes) ============ */
+.phone{background:#1A1A1E; border:1px solid #2E2E34; border-radius:40px; padding:7px; width:262px; max-width:100%;
+  box-shadow:0 14px 34px rgba(0,0,0,.28); font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif}
+.phone.mini{width:196px; border-radius:32px}
+.screen{background:#070708; border-radius:33px; overflow:hidden; position:relative; color:#F7F7F7; font-size:11px; line-height:1.35}
+.phone.mini .screen{border-radius:26px; font-size:9.5px}
+.sbar{display:flex; align-items:center; justify-content:space-between; padding:8px 16px 2px}
+.sbar .tm{font-size:10px; font-weight:700}
+.isl{width:62px; height:17px; border-radius:10px; background:#000; border:1px solid #1B1B1F}
+.phone.mini .isl{width:48px; height:13px}
+.batt{width:17px; height:8px; border:1px solid rgba(247,247,247,.4); border-radius:2.5px; position:relative}
+.batt::after{content:""; position:absolute; inset:1px 5px 1px 1px; background:rgba(247,247,247,.75); border-radius:1px}
+.pcontent{padding:8px 9px 0; display:flex; flex-direction:column; gap:7px}
+.pcard{background:#121215; border:1px solid rgba(247,247,247,.07); border-radius:16px; padding:9px 10px}
+.pcard.hot{background:linear-gradient(135deg, rgba(255,159,10,.13), #121215 55%); border-color:rgba(255,159,10,.28)}
+.prow{display:flex; align-items:center; gap:7px}
+.w1{color:#F7F7F7} .w2{color:rgba(247,247,247,.56)} .w3{color:rgba(247,247,247,.40)}
+.org{color:#FF9F0A} .blu{color:#61ADFF} .blu2{color:#579EFF} .grn{color:#30D158} .prd{color:#FF453A}
+.pm{font-family:ui-monospace,"SF Mono",Menlo,monospace}
+.dot{width:6px; height:6px; border-radius:50%; flex:none}
+.pt{font-size:14px; font-weight:800; letter-spacing:-.02em}
+.hero{font-size:23px; font-weight:900; letter-spacing:-.02em; line-height:1.05}
+.phone.mini .hero{font-size:17px}
+.tile{flex:1 1 0; min-width:0; background:rgba(247,247,247,.045); border:1px solid rgba(247,247,247,.055); border-radius:11px; padding:6px}
+.tile .tn{font-size:13px; font-weight:900}
+.tile .ts{font-size:8px; color:rgba(247,247,247,.48); font-weight:600}
+.pbtn{border-radius:10px; padding:7px 9px; font-size:10px; font-weight:700; text-align:center; white-space:nowrap}
+.pbtn.fill{background:#FF9F0A; color:#241505}
+.pbtn.fillb{background:#61ADFF; color:#0A1524}
+.pbtn.fillr{background:#FF453A; color:#2A0806}
+.pbtn.line{border:1px solid rgba(255,69,58,.55); color:#FF453A}
+.pbtn.linen{border:1px solid rgba(247,247,247,.22); color:rgba(247,247,247,.78)}
+.pbtn.wide{flex:1}
+.codebox{background:rgba(247,247,247,.05); border-radius:10px; padding:7px 8px; font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:9px; color:rgba(247,247,247,.78); overflow-wrap:anywhere}
+.qrow{display:flex; align-items:center; gap:7px; background:rgba(247,247,247,.04); border-radius:12px; padding:7px 8px; margin-top:6px}
+.dock{display:flex; align-items:flex-end; gap:2px; background:rgba(18,18,21,.92); border:1px solid rgba(247,247,247,.08); border-radius:20px; margin:7px 8px 6px; padding:5px 4px}
+.ditem{flex:1; display:flex; flex-direction:column; align-items:center; gap:2px; font-size:8px; font-weight:700; color:rgba(247,247,247,.56); padding:4px 0; border-radius:14px; position:relative}
+.ditem.on{color:#F7F7F7; background:rgba(247,247,247,.10)}
+.ditem .g{font-size:12px; line-height:1}
+.ditem .fab{width:24px; height:24px; border-radius:50%; background:#FF9F0A; color:#000; display:grid; place-items:center; font-size:14px; font-weight:800}
+.ditem .fab.off{background:rgba(247,247,247,.08); color:rgba(247,247,247,.72)}
+.badge{position:absolute; top:-2px; right:14%; min-width:13px; height:13px; border-radius:7px; background:#FF9F0A; color:#000; font-size:8px; font-weight:800; display:grid; place-items:center; padding:0 3px}
+.homebar{width:86px; height:4px; border-radius:2px; background:rgba(247,247,247,.32); margin:2px auto 7px}
+.seg{display:flex; background:rgba(247,247,247,.07); border-radius:8px; padding:2px; font-size:8.5px; font-weight:700}
+.seg span{flex:1; text-align:center; padding:4px 0; color:rgba(247,247,247,.55); border-radius:6px}
+.seg span.on{background:rgba(247,247,247,.16); color:#F7F7F7}
+.mrow{display:flex; align-items:center; gap:8px; padding:7px 2px; border-bottom:1px solid rgba(247,247,247,.06); min-height:34px}
+.mrow:last-child{border-bottom:none}
+.micon{width:22px; height:22px; border-radius:7px; background:rgba(247,247,247,.05); display:grid; place-items:center; font-size:10px; color:rgba(247,247,247,.68); flex:none}
+.chev{margin-left:auto; color:rgba(247,247,247,.24); font-weight:700}
+.mact{margin-left:auto; border:1px solid rgba(247,247,247,.2); border-radius:8px; padding:2px 7px; font-size:8.5px; font-weight:700; color:rgba(247,247,247,.8); white-space:nowrap}
+.ledrow{display:flex; gap:8px; align-items:flex-start; padding:6px 0}
+.ledrow .lic{width:20px; height:20px; border-radius:50%; display:grid; place-items:center; font-size:10px; flex:none; font-weight:800}
+.lic.ok{background:rgba(48,209,88,.14); color:#30D158}
+.lic.run{background:rgba(97,173,255,.14); color:#61ADFF}
+.veil{position:absolute; inset:0; background:rgba(0,0,0,.5); border-radius:33px; display:flex; flex-direction:column; justify-content:flex-end; padding:8px}
+.asheet{background:#1B1B1F; border-radius:14px; padding:9px; text-align:center}
+.asheet .aq{font-size:9px; color:rgba(247,247,247,.55); padding:2px 6px 8px; border-bottom:1px solid rgba(247,247,247,.08)}
+.asheet .ab{padding:8px 0; font-size:11px; font-weight:700; border-bottom:1px solid rgba(247,247,247,.08)}
+.asheet .ab:last-child{border-bottom:none}
+.acancel{background:#1B1B1F; border-radius:14px; margin-top:6px; padding:9px 0; text-align:center; font-size:11px; font-weight:800}
+/* lock screen */
+.lock{padding-bottom:4px}
+.ltime{font-size:44px; font-weight:300; text-align:center; letter-spacing:-.02em; margin-top:16px}
+.ldate{font-size:10px; text-align:center; color:rgba(247,247,247,.6); font-weight:600; margin-bottom:14px}
+.notif{background:rgba(40,40,46,.92); border:1px solid rgba(247,247,247,.08); border-radius:16px; margin:0 8px 6px; padding:9px 10px}
+.notif .nh{display:flex; align-items:center; gap:6px; margin-bottom:3px}
+.nicon{width:16px; height:16px; border-radius:5px; background:linear-gradient(135deg,#2A2A30,#101014); border:1px solid rgba(247,247,247,.14); display:grid; place-items:center; font-size:7px; color:#FF9F0A; font-weight:800; font-family:ui-monospace,monospace}
+.notif .nt{font-size:9px; font-weight:700}
+.notif .nw{font-size:8px; color:rgba(247,247,247,.4); margin-left:auto}
+.notif .nb{font-size:9.5px; color:rgba(247,247,247,.78)}
+.nacts{display:flex; gap:6px; margin:6px 8px 6px}
+.nacts .na{flex:1; background:rgba(40,40,46,.92); border:1px solid rgba(247,247,247,.1); border-radius:12px; text-align:center; padding:8px 0; font-size:10px; font-weight:700}
+.lbottom{display:flex; justify-content:space-between; padding:12px 22px 4px}
+.lcirc{width:26px; height:26px; border-radius:50%; background:rgba(247,247,247,.12); display:grid; place-items:center; font-size:10px; color:rgba(247,247,247,.7)}
+/* watch */
+.watch{width:152px; max-width:100%; background:#000; border:1px solid #2E2E34; border-radius:36px; padding:9px 8px; color:#fff;
+  box-shadow:0 10px 26px rgba(0,0,0,.3); font-family:-apple-system,BlinkMacSystemFont,sans-serif; font-size:9.5px; position:relative}
+.watch::after{content:""; position:absolute; right:-4px; top:34px; width:4px; height:26px; border-radius:0 3px 3px 0; background:#2E2E34}
+.wtitle{display:inline-block; font-size:8.5px; font-weight:800; padding:2px 7px; border-radius:999px; margin-bottom:6px}
+.wopt{display:flex; gap:5px; align-items:flex-start; background:rgba(255,255,255,.065); border-radius:10px; padding:6px 7px; margin-top:5px; font-weight:700}
+.wopt .n{color:#61ADFF; font-family:ui-monospace,monospace; font-weight:800}
+.wbtn{border-radius:999px; text-align:center; padding:7px 0; font-weight:800; margin-top:5px; border:1px solid}
+/* token spec sheets (product-material, fixed dark) */
+.spec{background:#0D0D10; border:1px solid rgba(247,247,247,.09); border-radius:14px; padding:12px; color:#F7F7F7; width:100%; max-width:400px; font-size:11px; font-family:-apple-system,BlinkMacSystemFont,sans-serif}
+.spec .sh{font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:9px; letter-spacing:.14em; color:rgba(247,247,247,.4); text-transform:uppercase; margin:10px 0 5px}
+.spec .sh:first-child{margin-top:0}
+.spec .srow{display:flex; align-items:center; gap:8px; padding:3px 0; flex-wrap:wrap}
+.spec .box{width:14px; height:14px; border-radius:4px; flex:none; border:1px solid rgba(247,247,247,.12)}
+.spec .hx{font-family:ui-monospace,monospace; font-size:9.5px; color:rgba(247,247,247,.5)}
+.radrow{display:flex; gap:6px; align-items:flex-end; flex-wrap:wrap}
+.radrow .rs{width:26px; height:26px; background:rgba(247,247,247,.1); border:1px solid rgba(247,247,247,.2)}
+/* reviewer annotations (always chrome purple, never product) */
+.ann{outline:2px dashed var(--acc); outline-offset:2px; border-radius:6px}
+.anote{font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:9px; color:var(--acc); background:var(--acc-soft); padding:2px 6px; border-radius:5px; display:inline-block}
+.anwrap{display:flex; flex-direction:column; gap:6px; align-items:center}
+.steps{display:flex; flex-wrap:wrap; gap:4px; align-items:center; justify-content:center; font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:9.5px; color:var(--ink2)}
+.steps span{background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:3px 7px}
+.steps em{font-style:normal; color:var(--ink3)}
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">Optimization review · CodeIsland Buddy (iOS + Watch) · 2026-07-21 · for Greg Harned</div>
+  <h1>Buddy, optimized from here: seven before/after moves</h1>
+
+  <p class="lede">The identity call is made and shipped: Buddy is a coding-agent companion, the 19-module hub is trimmed
+  to 7 keepers behind a reversible flag (commit <span class="mono">e69ae32</span>). This review optimizes from that
+  point. The through-line: <b>every screen now has one job, so make each screen do that job in fewer seconds, with the
+  verb in reach, at every text size.</b> Seven before/after pairs, ordered by impact on the one scenario the product
+  exists for: Greg is away from the Mac and an agent needs him, or finished. Nothing here re-opens the trim or the
+  closed items (wordmark at rest, neutral badge rail, Mac light mode).</p>
+
+  <div class="grounding">
+    <b>Grounded in the app as it sits today, not the plan:</b>
+    <ul>
+      <li>Full reads of the live iOS shell: <span class="mono">CompanionCommandCenterView.swift</span> (Now surface, signal board, timeline, dock), <span class="mono">RemoteApprovalView.swift</span> (approval and question cards), <span class="mono">PersonalHubView.swift</span> (Tools directory), <span class="mono">ContentView.swift</span> (Sessions surface, CITheme, composer), <span class="mono">WatchContentView.swift</span>, and <span class="mono">Sources/CodeIslandCore/PersonalHubProtocol.swift</span> (catalog :18-40, racks :820-831).</li>
+      <li>The shipped companion-first diff (<span class="mono">git diff main...HEAD</span> on the worktree: CompanionFirst.swift, ingest filter, default mode .code, presence-menu toggle).</li>
+      <li>Measured, not estimated: 166 hardcoded <span class="mono">.system(size:)</span> call sites at 21 distinct values (8 to 36pt) and 16 distinct corner radii (5 to 30) across the five live view files; submit button minHeight 40; the attachment remove control has no frame at all.</li>
+      <li>Every string in the mockups exists in the product: the approval and question content is the app's own UI-test seed (Codex · CodeIsland · "Run release build" · <span class="mono">xcodebuild -scheme CodeIslandCompanion archive</span>, RemoteApprovalClient.swift:1005-1040).</li>
+      <li>Consolidates and extends, does not duplicate: Batch 02 items B2-12 to B2-16 and the forward review's moves are folded in where they touch the phone; the log at <span class="mono">docs/product/codeisland-design-review-log.md</span> stays the ledger of record.</li>
+    </ul>
+    <div class="legend"><b>Reading the mockups:</b> phone and Watch frames render Buddy's real dark tokens
+    (background <span class="sw" style="background:#070708"></span><span class="mono">#070708</span>, surface
+    <span class="sw" style="background:#121215"></span><span class="mono">#121215</span>, foreground
+    <span class="sw" style="background:#F7F7F7"></span><span class="mono">#F7F7F7</span>, HubTheme orange
+    <span class="sw" style="background:#FF9F0A"></span><span class="mono">#FF9F0A</span>, submit blue
+    <span class="sw" style="background:#61ADFF"></span><span class="mono">#61ADFF</span>) and keep that palette in both
+    page themes. Anything purple, dashed, or on the striped stage is <b>reviewer chrome</b>: annotations and
+    measurements, never product UI.</div>
+  </div>
+
+  <div class="tblwrap">
+  <table class="index">
+    <tr><th></th><th>Pair</th><th>Dimension</th><th>Effort</th><th>Impact</th></tr>
+    <tr><td class="n">1</td><td><a href="#p1">The verb travels with the alert</a></td><td>Action flow: lock screen, Live Activity, Watch</td><td>M</td><td>Very high</td></tr>
+    <tr><td class="n">2</td><td><a href="#p2">Quiet Now: say it once, then show what shipped</a></td><td>Home surface, quiet state</td><td>S to M</td><td>Very high</td></tr>
+    <tr><td class="n">3</td><td><a href="#p3">Blocked-time on the card, friction priced by risk</a></td><td>Home surface, attention state</td><td>S</td><td>High</td></tr>
+    <tr><td class="n">4</td><td><a href="#p4">Three destinations, one job</a></td><td>Information architecture, tabs</td><td>M</td><td>High</td></tr>
+    <tr><td class="n">5</td><td><a href="#p5">One Companion rack, no sparse states</a></td><td>Trimmed Tools surface</td><td>S now, M wire</td><td>High</td></tr>
+    <tr><td class="n">6</td><td><a href="#p6">One hand, every size</a></td><td>Mobile ergonomics</td><td>S</td><td>High</td></tr>
+    <tr><td class="n">7</td><td><a href="#p7">Make orange mean one thing</a></td><td>Design system consistency</td><td>M</td><td>High</td></tr>
+  </table>
+  </div>
+
+  <!-- ============================== PAIR 1 ============================== -->
+  <section class="pair" id="p1">
+    <div class="meta"><span class="chip num">Pair 1</span><span class="chip">iOS + Watch + Live Activity</span><span class="chip eff-m">Effort M</span><span class="chip imp">Impact Very high</span></div>
+    <h2>The verb travels with the alert</h2>
+    <p class="thesis">Buddy's core moment is a notification, and today every surface that announces a need sends Greg into the app to act on it. <b>Close the loop where the alert lands: approve, deny, or answer without unlocking.</b></p>
+    <p class="ground">No UNNotificationCategory registered anywhere; notification taps only launch (CompanionAppDelegate.swift:59-66). Live Activity has .widgetURL deep links, no Button(intent:). Watch quick-actions punts questions: "Answer on iPhone" (WatchContentView.swift:401-408), though WatchQuestionOptions already exists for the nearby transport (:253-303). Consolidates B2-15 and forward move 5.</p>
+    <div class="stages">
+      <div class="stage">
+        <div class="tag">BEFORE · NOTIFIED, THEN SENT TO THE APP</div>
+        <div class="canvas">
+          <div class="phone"><div class="screen lock">
+            <div class="sbar"><span class="tm"></span><span class="isl"></span><span class="batt"></span></div>
+            <div class="ltime">2:47</div>
+            <div class="ldate">Tuesday, July 21</div>
+            <div class="notif">
+              <div class="nh"><span class="nicon">&gt;_</span><span class="nt">CodeIsland Buddy</span><span class="nw">now</span></div>
+              <div class="nb w1" style="font-weight:700">Needs you</div>
+              <div class="nb">An agent is waiting on your Mac.</div>
+            </div>
+            <div class="lbottom"><span class="lcirc">|</span><span class="lcirc">O</span></div>
+            <div class="homebar"></div>
+          </div></div>
+          <div class="anwrap">
+            <div class="watch"><div style="padding:2px">
+              <span class="wtitle" style="background:rgba(48,209,88,.16); color:#30D158">Quick actions</span>
+              <div class="wbtn" style="background:rgba(48,209,88,.34); border-color:rgba(48,209,88,.72)">Open Mac</div>
+              <div class="wbtn" style="background:rgba(97,173,255,.28); border-color:rgba(97,173,255,.7)">Answer on iPhone</div>
+            </div></div>
+            <span class="anote">Watch verbatim: the question page punts</span>
+          </div>
+          <div class="steps"><span>raise</span><em>&gt;</em><span>unlock</span><em>&gt;</em><span>open app</span><em>&gt;</em><span>wait for refresh</span><em>&gt;</em><span>find card</span><em>&gt;</em><span>approve</span><em>&gt;</em><span>confirm</span></div>
+        </div>
+        <div class="cap">The push is content-free by design and carries no verbs; the Live Activity only deep-links; the Watch can approve a permission but sends questions to the iPhone. Seven steps from wrist-raise to a resolved agent.</div>
+      </div>
+      <div class="stage after">
+        <div class="tag">AFTER · ACT WHERE THE ALERT LANDS</div>
+        <div class="canvas">
+          <div class="phone"><div class="screen lock">
+            <div class="sbar"><span class="tm"></span><span class="isl"></span><span class="batt"></span></div>
+            <div class="ltime" style="font-size:30px; margin-top:8px">2:47</div>
+            <div class="ldate" style="margin-bottom:8px">Tuesday, July 21</div>
+            <div class="notif">
+              <div class="nh"><span class="nicon">&gt;_</span><span class="nt">CodeIsland Buddy</span><span class="nw">now</span></div>
+              <div class="nb w1" style="font-weight:700">Approval needed · Codex</div>
+              <div class="nb">CodeIsland · Run release build</div>
+              <div class="codebox" style="margin-top:5px">xcodebuild -scheme CodeIslandCompanion archive</div>
+            </div>
+            <div class="nacts">
+              <span class="na" style="color:#FF453A">Deny</span>
+              <span class="na" style="background:#FF9F0A; color:#241505; border-color:transparent">Approve once</span>
+            </div>
+            <div class="notif" style="opacity:.85">
+              <div class="nh"><span class="nicon">&gt;_</span><span class="nt">CodeIsland Buddy · Live Activity</span></div>
+              <div class="prow"><span class="nb w1" style="font-weight:700; flex:1">Codex · waiting 2m</span><span class="pbtn line" style="padding:3px 8px; font-size:8.5px">Deny</span><span class="pbtn fill" style="padding:3px 8px; font-size:8.5px">Approve</span></div>
+            </div>
+            <div class="homebar" style="margin-top:8px"></div>
+          </div></div>
+          <div class="anwrap">
+            <div class="watch"><div style="padding:2px">
+              <span class="wtitle" style="background:rgba(255,159,10,.18); color:#FF9F0A">Answer needed</span>
+              <div style="font-weight:800; font-size:11px; line-height:1.25">Ship the signed build tonight?</div>
+              <div class="wopt"><span class="n">1</span><span>Ship tonight</span></div>
+              <div class="wopt"><span class="n">2</span><span>Hold for review</span></div>
+            </div></div>
+            <span class="anote">Watch answers with the same two options</span>
+          </div>
+          <div class="steps"><span>raise</span><em>&gt;</em><span>one verb</span><em>&gt;</em><span>done</span></div>
+        </div>
+        <div class="cap">Long-press actions on the (locally enriched) notification, Button(intent:) on the Live Activity, and question options on the Watch. Each verb runs the same authenticated fetch-then-act the app runs on open; the APNS push stays content-free. Destructive requests never one-tap from a notification: Deny leads, approve routes to the full card.</div>
+      </div>
+    </div>
+    <div class="rationale">
+      <p><span class="lbl">Practice</span>Interaction cost and zero-navigation actions: put the verb where the attention already is (Fitts's law applied across devices), and keep the action grammar identical on notification, Live Activity, and Watch so no surface needs relearning.</p>
+      <p><span class="lbl">Why it fits</span>This is the exact away-from-Mac loop Buddy exists for. Every unlock it removes is the product's value realized; agents unblock in seconds instead of whenever the phone next comes out.</p>
+      <p><span class="lbl">Build</span>Register approve/deny/answer UNNotificationCategory sets, add Button(intent:) to the Live Activity widget, wire the existing WatchQuestionOptions into the quick-actions page. Reuse the secure-approval-sheet plumbing already in flight; risk emphasis follows the B2-03 rule so the filled action always matches consequence.</p>
+    </div>
+  </section>
+
+  <!-- ============================== PAIR 2 ============================== -->
+  <section class="pair" id="p2">
+    <div class="meta"><span class="chip num">Pair 2</span><span class="chip">Now · quiet state</span><span class="chip eff-s">Effort S (v1), M (full)</span><span class="chip imp">Impact Very high</span></div>
+    <h2>Quiet Now: say "all clear" once, then show what shipped while you were away</h2>
+    <p class="thesis">Three stacked cards each tell Greg nothing needs him; none of them tells him what his agents did. <b>Collapse the status to one band and spend the hero on the away ledger.</b></p>
+    <p class="ground">Presence header (CompanionCommandCenterView.swift:466-529) + signal board (:301-403) + timeline hero (:684-863) all render on the quiet Now. Rows build calendar-first (:695-707); the trim already removed weather and reminders from the snapshot, so the hero thinned by side effect but calendar still leads. Client-side task history already exists: RemoteTaskSummary states + reviewedVerifiedTaskIDs. Consolidates B2-13 (accepted, unbuilt) and forward moves 1 and 4.</p>
+    <div class="stages">
+      <div class="stage">
+        <div class="tag">BEFORE · QUIET, THREE TIMES, CALENDAR FIRST</div>
+        <div class="canvas">
+          <div class="phone"><div class="screen">
+            <div class="sbar"><span class="tm">9:41</span><span class="isl"></span><span class="batt"></span></div>
+            <div class="pcontent">
+              <div class="pcard"><div class="prow">
+                <span style="width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,#141414,#2B2B2B);display:grid;place-items:center;font-size:10px" class="org pm">&gt;_</span>
+                <span style="flex:1"><span class="pt">Code Island</span><br><span class="w2" style="font-size:9px">Connected to Greg's Mac Studio</span></span>
+                <span class="dot" style="background:#30D158"></span><span class="w3" style="font-weight:800">&#8943;</span>
+              </div></div>
+              <div class="pcard">
+                <div class="prow"><span style="flex:1"><span class="w1" style="font-weight:800; font-size:11.5px">Signal is quiet</span><br><span class="w3" style="font-size:8.5px">No approvals, questions, or coding tasks are waiting.</span></span></div>
+                <div class="prow" style="margin-top:7px; align-items:stretch">
+                  <div class="tile"><div class="tn">0</div><div class="ts">approvals</div></div>
+                  <div class="tile"><div class="tn">0</div><div class="ts">questions</div></div>
+                  <div class="tile"><div class="tn" style="font-size:10px" >Quiet</div><div class="ts">Mac online</div></div>
+                </div>
+              </div>
+              <div class="pcard">
+                <div class="hero">All clear</div>
+                <div class="w2" style="font-size:9px; margin:3px 0 8px">Next: Design review · 2:00 PM</div>
+                <div class="prow" style="align-items:flex-start; margin-bottom:7px">
+                  <span class="micon">&#9634;</span>
+                  <span style="flex:1"><span class="w1" style="font-weight:700">Design review</span><br><span class="w3" style="font-size:8.5px">2:00 PM · Zoom</span></span>
+                  <span class="pbtn fill" style="padding:4px 9px; font-size:9px">Join</span>
+                </div>
+                <div class="prow" style="align-items:flex-start">
+                  <span class="micon">&gt;_</span>
+                  <span style="flex:1"><span class="w1" style="font-weight:700">revops-global</span><br><span class="w3" style="font-size:8.5px">Claude · idle 38m</span></span>
+                </div>
+                <div class="w2" style="font-size:9px; margin-top:8px">Open Tools &#8594;</div>
+              </div>
+            </div>
+            <div class="dock">
+              <div class="ditem on"><span class="g">&#10022;</span>Now</div>
+              <div class="ditem"><span class="g pm">&gt;_</span>Sessions</div>
+              <div class="ditem"><span class="fab">+</span>Capture</div>
+              <div class="ditem"><span class="g">&#8862;</span>Tools</div>
+            </div>
+            <div class="homebar"></div>
+          </div></div>
+        </div>
+        <div class="cap">Rendered from the live view code. The answer ("nothing needs you") appears three ways: the board headline, its subline, and the zero tiles, plus the hero. The biggest text on screen introduces a meeting, and the day's agent outcomes appear nowhere.</div>
+      </div>
+      <div class="stage after">
+        <div class="tag">AFTER · ONE STATUS, THEN THE LEDGER</div>
+        <div class="canvas">
+          <div class="phone"><div class="screen">
+            <div class="sbar"><span class="tm">9:41</span><span class="isl"></span><span class="batt"></span></div>
+            <div class="pcontent">
+              <div class="pcard"><div class="prow">
+                <span class="dot" style="background:#30D158"></span>
+                <span class="w1" style="font-weight:700; font-size:10px; flex:1">Mac online · 6 sessions · quiet</span>
+                <span class="w3" style="font-weight:800">&#8943;</span>
+              </div></div>
+              <div class="pcard">
+                <div class="hero" style="font-size:19px">While you were away</div>
+                <div class="w3" style="font-size:8.5px; margin:2px 0 6px">Since 1:12 PM · all clear now</div>
+                <div class="ledrow"><span class="lic ok">&#10003;</span><span style="flex:1"><span class="w1" style="font-weight:700">CodeIsland · Run release build</span><br><span class="w3" style="font-size:8.5px">Verified · 22m ago</span></span></div>
+                <div class="ledrow"><span class="lic ok">&#10003;</span><span style="flex:1"><span class="w1" style="font-weight:700">rgos · tests green, PR #142 merged</span><br><span class="w3" style="font-size:8.5px">1h ago</span></span></div>
+                <div class="ledrow"><span class="lic run">&#9654;</span><span style="flex:1"><span class="w1" style="font-weight:700">revops-init · pricing refactor</span><br><span class="w3" style="font-size:8.5px">Running · 41m</span></span></div>
+                <div class="w2" style="font-size:9px; margin-top:6px">See all activity &#8594;</div>
+              </div>
+              <div class="pcard"><div class="prow">
+                <span class="micon">&#9634;</span>
+                <span style="flex:1"><span class="w1" style="font-weight:700">Design review · 2:00 PM</span></span>
+                <span class="pbtn linen" style="padding:3px 9px; font-size:9px">Join</span>
+              </div></div>
+            </div>
+            <div class="dock">
+              <div class="ditem on"><span class="g">&#10022;</span>Now</div>
+              <div class="ditem"><span class="g pm">&gt;_</span>Sessions</div>
+              <div class="ditem"><span class="fab off">+</span>Capture</div>
+              <div class="ditem"><span class="g">&#8862;</span>Tools</div>
+            </div>
+            <div class="homebar"></div>
+          </div></div>
+        </div>
+        <div class="cap">One status band answers "is it quiet" in half a line. The hero answers the question Greg actually returns with: project · outcome · age, newest first. The meeting survives as one calm row with a quiet Join; the orange stays in reserve for needs-you.</div>
+      </div>
+    </div>
+    <div class="rationale">
+      <p><span class="lbl">Practice</span>Glanceability and signal-to-noise: state each fact once, lead with the delta since last look (recency), and give every row information scent (project, outcome, age). Redundant reassurance is noise wearing a seatbelt.</p>
+      <p><span class="lbl">Why it fits</span>Returning to the phone after an hour, the question is never "is it quiet", it is "what happened while I was gone". An agent fleet's home screen should read like a ledger, not a lock screen widget.</p>
+      <p><span class="lbl">Build</span>v1 needs no wire change: render terminal remoteTasks (verified/failed, updatedAt) as the ledger and reorder CompanionTodayTimeline agents-first, calendar demoted. The full version rides the Mac-side session ring buffer (forward move 4) and becomes the data layer for pair 4's Activity tab.</p>
+    </div>
+  </section>
+
+  <!-- ============================== PAIR 3 ============================== -->
+  <section class="pair" id="p3">
+    <div class="meta"><span class="chip num">Pair 3</span><span class="chip">Now · attention state</span><span class="chip eff-s">Effort S</span><span class="chip imp">Impact High</span></div>
+    <h2>Blocked-time on the card, friction priced by risk</h2>
+    <p class="thesis">The card already matches <b>emphasis</b> to risk; it does not match <b>friction</b> or <b>urgency</b>. A safe build command and a force-push both cost two taps plus a dialog, and nothing says how long the agent has been stalled or what waits behind it.</p>
+    <p class="ground">RemoteApprovalCard: age is a caption top-right (createdAt, .relative); every decision routes through a confirmationDialog (:646-662, "Approve this exact request?"); risk flips emphasis only (:691-712). Queue rows show project · tool · age (:93-126). Waiting-age escalation and the risk field ride one payload rev (forward move 6, B2-03).</p>
+    <div class="stages">
+      <div class="stage">
+        <div class="tag">BEFORE · SAME CEREMONY FOR EVERY DECISION</div>
+        <div class="canvas">
+          <div class="phone"><div class="screen">
+            <div class="sbar"><span class="tm">9:41</span><span class="isl"></span><span class="batt"></span></div>
+            <div class="pcontent">
+              <div class="pcard hot">
+                <div class="prow"><span class="org" style="font-weight:800; font-size:10.5px">&#10003; Approval needed</span><span class="w3" style="margin-left:auto; font-size:8.5px">2m ago</span></div>
+                <div class="w3" style="font-size:8.5px; margin-top:3px">Codex · CodeIsland</div>
+                <div class="w1" style="font-weight:800; font-size:13px; margin:5px 0">Run release build</div>
+                <div class="codebox">$ xcodebuild -scheme CodeIslandCompanion archive</div>
+                <div class="prow" style="margin-top:8px">
+                  <span class="pbtn line">Deny</span>
+                  <span class="pbtn fill wide">Approve once</span>
+                </div>
+              </div>
+              <div class="qrow">
+                <span class="micon" style="background:rgba(255,159,10,.14); color:#FF9F0A">?</span>
+                <span style="flex:1"><span class="w1" style="font-weight:700; font-size:9.5px">CodeIsland · Question</span><br><span class="w3" style="font-size:8.5px">Ship the signed build tonight?</span></span>
+                <span class="w3 pm" style="font-size:8px">1m</span>
+              </div>
+            </div>
+            <div class="veil">
+              <div class="asheet">
+                <div class="aq">Approve this exact request? CodeIsland will re-check the request ID and single-use token on your Mac before executing this decision.</div>
+                <div class="ab org">Approve once</div>
+              </div>
+              <div class="acancel blu">Cancel</div>
+            </div>
+          </div></div>
+        </div>
+        <div class="cap">Tap two of two: after Approve once, this sheet interrupts every decision, safe or destructive, with the same wording. The 2m caption is the only trace of waiting, and the queued question's wait is invisible until promoted.</div>
+      </div>
+      <div class="stage after">
+        <div class="tag">AFTER · URGENCY VISIBLE, FRICTION EARNED</div>
+        <div class="canvas">
+          <div class="phone"><div class="screen">
+            <div class="sbar"><span class="tm">9:41</span><span class="isl"></span><span class="batt"></span></div>
+            <div class="pcontent">
+              <div class="pcard hot">
+                <div class="prow">
+                  <span style="background:#FF9F0A; color:#241505; font-weight:800; font-size:8.5px; padding:2px 7px; border-radius:999px">BLOCKED 12m</span>
+                  <span class="w3" style="font-size:8.5px">Codex · CodeIsland</span>
+                  <span style="margin-left:auto; border:1px solid rgba(48,209,88,.4); color:#30D158; font-size:7.5px; font-weight:800; padding:1px 6px; border-radius:999px">SAFE</span>
+                </div>
+                <div class="w1" style="font-weight:800; font-size:13px; margin:6px 0 4px">Run release build</div>
+                <div class="codebox">$ xcodebuild -scheme CodeIslandCompanion archive</div>
+                <div class="w3" style="font-size:8.5px; margin-top:5px">1 question waits behind this</div>
+                <div class="prow" style="margin-top:7px">
+                  <span class="pbtn line">Deny</span>
+                  <span class="pbtn fill wide">Approve once</span>
+                </div>
+                <div class="prow" style="margin-top:6px; background:rgba(48,209,88,.1); border-radius:9px; padding:5px 8px">
+                  <span class="grn" style="font-size:9px; font-weight:700">&#10003; Approved · sent to Mac</span>
+                  <span class="w2" style="margin-left:auto; font-size:9px; font-weight:700">Undo · 3</span>
+                </div>
+              </div>
+              <div class="qrow">
+                <span class="micon" style="background:rgba(255,159,10,.14); color:#FF9F0A">?</span>
+                <span style="flex:1"><span class="w1" style="font-weight:700; font-size:9.5px">CodeIsland · Question</span><br><span class="w3" style="font-size:8.5px">Ship the signed build tonight?</span></span>
+                <span class="org pm" style="font-size:8px; font-weight:700">11m</span>
+              </div>
+              <div class="qrow">
+                <span class="micon" style="background:rgba(255,69,58,.14); color:#FF453A">!</span>
+                <span style="flex:1"><span class="w1" style="font-weight:700; font-size:9.5px">rgos · Bash</span><br><span class="prd pm" style="font-size:8px">rm -rf node_modules · DESTRUCTIVE</span></span>
+                <span class="w3 pm" style="font-size:8px">4m</span>
+              </div>
+            </div>
+            <div class="homebar"></div>
+          </div></div>
+        </div>
+        <div class="cap">Blocked-time leads and escalates (calm under 5m, hot after 15m). Safe commands approve in one tap with a 3-second undo instead of a dialog; destructive requests keep the confirm sheet with Deny filled, exactly as shipped. Queue rows carry their own waiting ages, worst first.</div>
+      </div>
+    </div>
+    <div class="rationale">
+      <p><span class="lbl">Practice</span>Friction proportional to consequence, and visibility of system status: the number an operator manages is not "when did this arrive" but "how long has my agent been dead in the water". Hick and Fitts argue for one tap on the frequent safe case; the undo window keeps the safety property without the modal.</p>
+      <p><span class="lbl">Why it fits</span>Thirty approvals a day at two taps each is sixty taps of pure ceremony. Blocked-time is idle agent capacity made visible, which is the actual cost Greg is paying while away.</p>
+      <p><span class="lbl">Build</span>Blocked chip and queue ages derive from createdAt today (no wire change). One-tap-safe gates on the risk field and holds the resolve call for the undo window; the single-use token flow is untouched, and Deny stays instant everywhere.</p>
+    </div>
+  </section>
+
+  <!-- ============================== PAIR 4 ============================== -->
+  <section class="pair" id="p4">
+    <div class="meta"><span class="chip num">Pair 4</span><span class="chip">IA · tab model</span><span class="chip eff-m">Effort M</span><span class="chip imp">Impact High</span><span class="chip">B2-12, concrete form</span></div>
+    <h2>Three destinations, one job: Home, Activity, Tools</h2>
+    <p class="thesis">The center pedestal holds a note-taking action while the two left tabs split one job between them. <b>Navigation should mirror the mental model: what needs me, what happened, what can I reach.</b> Capture becomes a verb, not a place.</p>
+    <p class="ground">Dock: Now · Sessions · Capture (center FAB, orange only when nothing needs you: attentionCount == 0 keeps the accent, :615-633) · Tools. Task cards render on Now (RemoteTaskSignalCard) and again on Sessions (RemoteTaskSessionsView); agent sessions appear on Sessions and as a Now timeline row. Capture's menu writes reminders.add and notes.add, two trimmed modules. B2-12 is accepted-deferred; this is the shape for that decision, made with Greg in the loop.</p>
+    <div class="stages">
+      <div class="stage">
+        <div class="tag">BEFORE · FOUR TABS, TWO OVERLAP, FAB FOR NOTES</div>
+        <div class="canvas">
+          <div class="phone mini"><div class="screen">
+            <div class="sbar"><span class="tm">9:41</span><span class="isl"></span><span class="batt"></span></div>
+            <div class="pcontent">
+              <div class="w3" style="font-size:8px; font-weight:800; letter-spacing:.08em">NOW</div>
+              <div class="pcard"><span class="w1" style="font-weight:700; font-size:9px">&#9654; RUNNING · pricing refactor</span><br><span class="w3" style="font-size:8px">revops-init · Codex</span></div>
+              <div class="pcard" style="opacity:.55"><span class="w2" style="font-size:8.5px">All clear · timeline</span></div>
+            </div>
+            <div class="dock">
+              <div class="ditem on"><span class="g">&#10022;</span>Now</div>
+              <div class="ditem"><span class="g pm">&gt;_</span>Sessions</div>
+              <div class="ditem"><span class="fab">+</span>Capture</div>
+              <div class="ditem"><span class="g">&#8862;</span>Tools</div>
+            </div>
+            <div class="homebar"></div>
+          </div></div>
+          <div class="phone mini"><div class="screen">
+            <div class="sbar"><span class="tm">9:41</span><span class="isl"></span><span class="batt"></span></div>
+            <div class="pcontent">
+              <div class="w3" style="font-size:8px; font-weight:800; letter-spacing:.08em">SESSIONS</div>
+              <div class="pcard"><span class="w1" style="font-weight:700; font-size:9px">&#9654; RUNNING · pricing refactor</span><br><span class="w3" style="font-size:8px">revops-init · Codex</span></div>
+              <div class="pcard" style="opacity:.55"><span class="w2" style="font-size:8.5px">Sessions · 6 rows · refresh</span></div>
+            </div>
+            <div class="dock">
+              <div class="ditem"><span class="g">&#10022;</span>Now</div>
+              <div class="ditem on"><span class="g pm">&gt;_</span>Sessions</div>
+              <div class="ditem"><span class="fab">+</span>Capture</div>
+              <div class="ditem"><span class="g">&#8862;</span>Tools</div>
+            </div>
+            <div class="homebar"></div>
+          </div></div>
+          <div class="anwrap" style="flex-basis:100%">
+            <span class="anote">Same task, two tabs. The FAB's menu: New coding task · New reminder · New note (two of three write to trimmed modules). The orange FAB goes grey exactly when something needs you.</span>
+          </div>
+        </div>
+        <div class="cap">Now and Sessions compete to show the same work; the one pedestal slot iOS gives a product's primary action is spent on quick-jot. Hick's law is paying for a duplicate and a distraction.</div>
+      </div>
+      <div class="stage after">
+        <div class="tag">AFTER · WHAT NEEDS ME · WHAT HAPPENED · WHAT I CAN REACH</div>
+        <div class="canvas">
+          <div class="phone"><div class="screen">
+            <div class="sbar"><span class="tm">9:41</span><span class="isl"></span><span class="batt"></span></div>
+            <div class="pcontent">
+              <div class="prow" style="padding:0 2px"><span class="pt" style="flex:1">Home</span><span class="mact" style="margin-left:0">+ New task</span></div>
+              <div class="pcard hot"><span class="org" style="font-weight:800; font-size:9.5px">&#10003; Approval needed · Blocked 12m</span><br><span class="w1" style="font-weight:700; font-size:10px">Run release build</span></div>
+              <div class="pcard"><span class="w1" style="font-weight:700; font-size:9.5px">&#9654; Running</span><br><span class="w2" style="font-size:8.5px">revops-init · pricing refactor · 41m</span></div>
+              <div class="pcard" style="opacity:.8"><span class="w1" style="font-weight:700; font-size:9.5px">While you were away</span><br><span class="w2" style="font-size:8.5px">2 verified · 1 merged · See Activity</span></div>
+            </div>
+            <div class="dock">
+              <div class="ditem on"><span class="g">&#10022;</span>Home<em class="badge">1</em></div>
+              <div class="ditem"><span class="g">&#9711;</span>Activity</div>
+              <div class="ditem"><span class="g">&#8862;</span>Tools</div>
+            </div>
+            <div class="homebar"></div>
+          </div></div>
+          <div class="anwrap">
+            <span class="anote">Home = attention, then live, then ledger preview</span>
+            <span class="anote">Activity = the full ledger + notification history</span>
+            <span class="anote">Capture = a + verb in the header (composer kept)</span>
+          </div>
+        </div>
+        <div class="cap">One home for the job: attention on top, live sessions under it, the ledger preview closing the loop. Activity gets a real tab only because pair 2 gives it real content. Three tabs, three distinct scents, no duplicates.</div>
+      </div>
+    </div>
+    <div class="rationale">
+      <p><span class="lbl">Practice</span>Match between system and mental model, one primary action per screen, and Hick's law: fewer, more distinct destinations decide faster. A FAB is a promise about what the product is for; Buddy's answer cannot be "notes".</p>
+      <p><span class="lbl">Why it fits</span>Greg opens Buddy to decide or to check, never to file notes. Merging Now and Sessions removes the "which tab has it" hesitation on every open, and the composer stays one tap away for dispatching real coding work.</p>
+      <p><span class="lbl">Build</span>Fold the Sessions surface under Home below attention, move Capture to a header verb (keep the coding-task composer as its first citizen), stand up Activity on the pair 2 ledger. Sequence last, after the ledger exists, and with Greg stamping the tab set (B2-12's deferred condition).</p>
+    </div>
+  </section>
+
+  <!-- ============================== PAIR 5 ============================== -->
+  <section class="pair" id="p5">
+    <div class="meta"><span class="chip num">Pair 5</span><span class="chip">Tools · trimmed hub</span><span class="chip eff-s">Effort S now, M wire</span><span class="chip imp">Impact High</span></div>
+    <h2>One Companion rack: seven live rows, no mode picker, no sparse states</h2>
+    <p class="thesis">After the trim, the four-way workspace picker survives to choose between racks that no longer exist on this phone; the worst case renders one row under four segments. <b>Kill the picker, compose the seven keepers as one rack, and give every row a live summary and a verb.</b></p>
+    <p class="ground">Racks are Mac-side per mode (PersonalHubProtocol.swift:820-831): home &#8745; keepers = calendar alone; even code holds only 5 of 7 (calendar, notifications live elsewhere). The mode picker and directory: PersonalHubView.swift:230-319. The rack editor still offers all 19 (filteredCatalog has zero call sites). Forward moves 2 and 3 are the mechanics; this pair is the surface they buy.</p>
+    <div class="stages">
+      <div class="stage">
+        <div class="tag">BEFORE · FOUR SEGMENTS, ONE ROW</div>
+        <div class="canvas">
+          <div class="phone"><div class="screen">
+            <div class="sbar"><span class="tm">9:41</span><span class="isl"></span><span class="batt"></span></div>
+            <div class="pcontent">
+              <div class="prow"><span class="w2" style="font-size:9px">Edit</span><span class="w1" style="flex:1; text-align:center; font-weight:700; font-size:10.5px">Tools</span><span class="blu" style="font-size:9px; font-weight:700">Done</span></div>
+              <div class="seg"><span>Auto</span><span class="on">Home</span><span>Work</span><span>Code</span></div>
+              <div class="prow" style="margin-top:2px"><span style="flex:1"><span class="pt" style="font-size:12px">Home tools</span><br><span class="w3" style="font-size:8.5px">Greg's Mac Studio</span></span><span class="grn" style="font-size:8.5px; font-weight:700">&#10003; Connected</span></div>
+              <div class="pcard" style="padding:2px 10px">
+                <div class="mrow"><span class="micon">&#9634;</span><span style="flex:1"><span class="w1" style="font-weight:600; font-size:10px">Calendar</span><br><span class="w3" style="font-size:8.5px">Design review · 2:00 PM</span></span><span class="chev">&#8250;</span></div>
+              </div>
+              <div style="height:104px"></div>
+            </div>
+            <div class="homebar"></div>
+          </div></div>
+          <div class="anwrap">
+            <span class="anote">home rack &#8745; keepers = 1 module; Code mode shows 5 of 7</span>
+            <span class="anote">Edit still offers all 19 trimmed modules back</span>
+          </div>
+        </div>
+        <div class="cap">A stored or auto-resolved Home mode after the trim: one row, four segments, and most of the screen empty. The picker implies a choice the phone no longer delivers, and no mode can show the full keeper set.</div>
+      </div>
+      <div class="stage after">
+        <div class="tag">AFTER · SEVEN KEEPERS, EACH WITH A SUMMARY AND A VERB</div>
+        <div class="canvas">
+          <div class="phone"><div class="screen">
+            <div class="sbar"><span class="tm">9:41</span><span class="isl"></span><span class="batt"></span></div>
+            <div class="pcontent">
+              <div class="prow"><span class="w1" style="flex:1; text-align:center; font-weight:700; font-size:10.5px">Tools</span></div>
+              <div class="prow"><span style="flex:1"><span class="pt" style="font-size:12px">Companion rack</span><br><span class="w3" style="font-size:8.5px">Greg's Mac Studio</span></span><span class="grn" style="font-size:8.5px; font-weight:700">&#10003; Connected</span></div>
+              <div class="pcard" style="padding:2px 10px">
+                <div class="mrow"><span class="micon org" style="background:rgba(255,159,10,.12)">&gt;_</span><span style="flex:1"><span class="w1" style="font-weight:600; font-size:10px">Agents</span><br><span class="w3" style="font-size:8.5px">2 running · 1 needs you</span></span><span class="chev">&#8250;</span></div>
+                <div class="mrow"><span class="micon">&#10022;</span><span style="flex:1"><span class="w1" style="font-weight:600; font-size:10px">Claude</span><br><span class="w3" style="font-size:8.5px">68% of daily budget used</span></span><span class="chev">&#8250;</span></div>
+                <div class="mrow"><span class="micon">&#8916;</span><span style="flex:1"><span class="w1" style="font-weight:600; font-size:10px">GitHub</span><br><span class="w3" style="font-size:8.5px">2 PRs · checks green</span></span><span class="mact">Open</span></div>
+                <div class="mrow"><span class="micon">&#9675;</span><span style="flex:1"><span class="w1" style="font-weight:600; font-size:10px">Notifications</span><br><span class="w3" style="font-size:8.5px">3 new from Xcode</span></span><span class="chev">&#8250;</span></div>
+                <div class="mrow"><span class="micon">&#9634;</span><span style="flex:1"><span class="w1" style="font-weight:600; font-size:10px">Calendar</span><br><span class="w3" style="font-size:8.5px">Design review · 2:00 PM</span></span><span class="mact">Join</span></div>
+                <div class="mrow"><span class="micon">&#8615;</span><span style="flex:1"><span class="w1" style="font-weight:600; font-size:10px">Shelf</span><br><span class="w3" style="font-size:8.5px">Send text or files to Mac</span></span><span class="mact">Paste</span></div>
+                <div class="mrow"><span class="micon">&#9636;</span><span style="flex:1"><span class="w1" style="font-weight:600; font-size:10px">System</span><br><span class="w3" style="font-size:8.5px">CPU 14% · 96 GB free</span></span><span class="chev">&#8250;</span></div>
+              </div>
+              <div class="prow" style="justify-content:center; gap:10px"><span class="mact" style="margin:0">+ New task</span><span class="mact" style="margin:0">+ New note</span></div>
+            </div>
+            <div class="homebar"></div>
+          </div></div>
+        </div>
+        <div class="cap">No picker: one rack composed from the keeper set. Every row answers before it is tapped, and the rows with an obvious verb carry it inline. The quick-jot verbs survive their trimmed modules as footer actions.</div>
+      </div>
+    </div>
+    <div class="rationale">
+      <p><span class="lbl">Practice</span>Information scent and recognition over recall: a directory row that shows only a title forces a tap to learn anything. Never offer a control (the mode picker) whose options no longer differ, and treat sparse states as first impressions, because they are.</p>
+      <p><span class="lbl">Why it fits</span>Tools is the second-tap surface when Greg wants context beyond the attention card: is the Mac loaded, did checks pass, what is on the calendar before the agent finishes. Each visit should answer in one glance, not three taps.</p>
+      <p><span class="lbl">Build</span>Now: hide the mode strip under the flag and coerce a stored non-code mode (two lines), wire filteredCatalog into the rack editor. Real fix: the additive requestedModules key so the Mac composes keepers across racks (forward move 3), which also carries the trim to the web surface and any second device.</p>
+    </div>
+  </section>
+
+  <!-- ============================== PAIR 6 ============================== -->
+  <section class="pair" id="p6">
+    <div class="meta"><span class="chip num">Pair 6</span><span class="chip">Ergonomics</span><span class="chip eff-s">Effort S</span><span class="chip imp">Impact High</span></div>
+    <h2>One hand, every size: 44pt targets, Dynamic Type, verbs in the thumb zone</h2>
+    <p class="thesis">The decision surfaces are tuned to the demo phone: fixed type that ignores accessibility sizes, sub-44pt controls on the money path, and action buttons that land wherever the card happens to end. <b>Make the answer reachable by the thumb that is holding the phone.</b></p>
+    <p class="ground">Measured: 166 hardcoded .system(size:) call sites at 21 distinct values (8 to 36pt) across the five live views; submit button minHeight 40 (ContentView.swift submitButton); the attachment remove xmark has no frame (PersonalHubView.swift:1276-1281, chip minHeight 30); several rows clamp Dynamic Type at xxxLarge. The approval card already stacks its buttons at accessibility sizes (:666-678), so the pattern exists; it is just not systemic. Extends B2-07's target fixes.</p>
+    <div class="stages">
+      <div class="stage">
+        <div class="tag">BEFORE · FIXED TYPE, SMALL TARGETS, DRIFTING VERBS</div>
+        <div class="canvas">
+          <div class="phone"><div class="screen">
+            <div class="sbar"><span class="tm">9:41</span><span class="isl"></span><span class="batt"></span></div>
+            <div class="pcontent">
+              <div class="pcard hot">
+                <div class="prow"><span class="org" style="font-weight:800; font-size:10.5px">? Decision needed</span><span class="w3" style="margin-left:auto; font-size:8.5px">1m ago</span></div>
+                <div class="w1" style="font-weight:800; font-size:15px; margin:5px 0 2px">Ship the signed build tonight?</div>
+                <div class="qrow"><span class="w3">&#9675;</span><span style="flex:1"><span class="w1" style="font-weight:700; font-size:9px">Ship tonight</span><br><span class="w3" style="font-size:8px">Archive, upload, and keep the release internal.</span></span></div>
+                <div class="qrow"><span class="w3">&#9675;</span><span style="flex:1"><span class="w1" style="font-weight:700; font-size:9px">Hold for review</span><br><span class="w3" style="font-size:8px">Leave the current TestFlight build in place.</span></span></div>
+                <div class="prow" style="margin-top:6px">
+                  <span style="flex:1; background:rgba(247,247,247,.05); border-radius:8px; padding:5px 8px; font-size:8.5px" class="w3">Or type a custom answer</span>
+                  <span class="ann" style="display:inline-flex"><span style="background:rgba(247,247,247,.06); border-radius:999px; padding:3px 7px; font-size:8px" class="w2">notes.md &nbsp;&#10005;</span></span>
+                </div>
+                <div class="ann" style="margin-top:8px"><div class="pbtn fillb" style="padding:5px 9px">Send answer</div></div>
+              </div>
+              <div class="anwrap" style="align-items:flex-start">
+                <span class="anote">submit: minHeight 40, under the 44pt floor</span>
+                <span class="anote">remove-attachment target &#8776; 28pt, no frame</span>
+                <span class="anote">option labels fixed 13pt / 11pt: frozen at AX sizes</span>
+              </div>
+            </div>
+            <div class="homebar"></div>
+          </div></div>
+          <div class="phone mini"><div class="screen">
+            <div class="sbar"><span class="tm">9:41</span><span class="isl"></span><span class="batt"></span></div>
+            <div class="pcontent">
+              <div class="w3" style="font-size:7.5px; font-weight:800; letter-spacing:.08em">SAME CARD · AX3 TEXT SIZE</div>
+              <div class="pcard hot">
+                <div class="w1" style="font-weight:800; font-size:19px; line-height:1.1">Ship the signed build tonight?</div>
+                <div class="qrow"><span style="flex:1"><span class="w1" style="font-weight:700; font-size:9px">Ship tonight</span><br><span class="w3" style="font-size:8px">Archive, upload, and keep the release internal.</span></span></div>
+                <div class="qrow"><span style="flex:1"><span class="w1" style="font-weight:700; font-size:9px">Hold for review</span></span></div>
+              </div>
+              <div class="anote">semantic strings grow, hardcoded chips freeze: the hierarchy inverts</div>
+            </div>
+            <div class="homebar"></div>
+          </div></div>
+        </div>
+        <div class="cap">The question scales (it uses a semantic style); the answers do not (hard-set 13pt and 11pt). At accessibility sizes the prompt shouts while the options whisper, and the two smallest targets on screen are the ones that submit and the one that deletes.</div>
+      </div>
+      <div class="stage after">
+        <div class="tag">AFTER · SCALED TYPE, 44PT FLOOR, PINNED DECISION BAR</div>
+        <div class="canvas">
+          <div class="phone"><div class="screen">
+            <div class="sbar"><span class="tm">9:41</span><span class="isl"></span><span class="batt"></span></div>
+            <div class="pcontent">
+              <div class="pcard hot">
+                <div class="prow"><span class="org" style="font-weight:800; font-size:10.5px">? Decision needed</span><span class="w3" style="margin-left:auto; font-size:8.5px">1m ago</span></div>
+                <div class="w1" style="font-weight:800; font-size:15px; margin:5px 0 2px">Ship the signed build tonight?</div>
+                <div class="qrow" style="min-height:34px; background:rgba(255,159,10,.12); border:1px solid rgba(255,159,10,.3)"><span class="org">&#9673;</span><span style="flex:1"><span class="w1" style="font-weight:700; font-size:10px">Ship tonight</span><br><span class="w2" style="font-size:9px">Archive, upload, and keep the release internal.</span></span></div>
+                <div class="qrow" style="min-height:34px"><span class="w3">&#9675;</span><span style="flex:1"><span class="w1" style="font-weight:700; font-size:10px">Hold for review</span><br><span class="w3" style="font-size:9px">Leave the current TestFlight build in place.</span></span></div>
+                <div class="prow" style="margin-top:6px">
+                  <span style="flex:1; background:rgba(247,247,247,.05); border-radius:10px; padding:8px; font-size:9px" class="w3">Or type a custom answer</span>
+                  <span style="width:26px; height:26px; border-radius:50%; background:rgba(247,247,247,.08); display:grid; place-items:center; font-size:9px" class="w2">&#10005;</span>
+                </div>
+              </div>
+              <div style="height:26px"></div>
+              <div class="pcard" style="border-color:rgba(97,173,255,.35)">
+                <div class="pbtn fillb" style="padding:10px; font-size:11px">Send answer</div>
+              </div>
+            </div>
+            <div class="dock" style="opacity:.45">
+              <div class="ditem on"><span class="g">&#10022;</span>Now</div>
+              <div class="ditem"><span class="g pm">&gt;_</span>Sessions</div>
+              <div class="ditem"><span class="fab off">+</span>Capture</div>
+              <div class="ditem"><span class="g">&#8862;</span>Tools</div>
+            </div>
+            <div class="homebar"></div>
+          </div></div>
+          <div class="anwrap">
+            <span class="anote">all text on semantic styles + ScaledMetric</span>
+            <span class="anote">submit 48pt, remove control framed at 44pt</span>
+            <span class="anote">decision bar pinned above the dock: always in the thumb arc</span>
+            <span class="anote">options are full-row targets, whole row taps</span>
+          </div>
+        </div>
+        <div class="cap">The answer row and the send verb live at the bottom third of the screen regardless of card height, options are row-sized targets, and nothing on the money path is under 44pt. Large-type users get the same hierarchy, larger.</div>
+      </div>
+    </div>
+    <div class="rationale">
+      <p><span class="lbl">Practice</span>Fitts's law and the HIG 44pt floor; Dynamic Type as a contract, not a suggestion; thumb-zone reachability (a one-handed grip owns the bottom third of a 6.1 to 6.9 inch screen, and decisions made walking are made one-handed).</p>
+      <p><span class="lbl">Why it fits</span>Approvals happen on the move: one hand, sunlight, seconds of attention. This is exactly where a mis-tap denies a deploy or fat-fingers the wrong option.</p>
+      <p><span class="lbl">Build</span>Three point fixes are an afternoon: submit 40 to 48, frame the xmark at 44, drop the xxxLarge clamps. The full ramp (semantic styles everywhere) rides pair 7's token file rather than preceding it.</p>
+    </div>
+  </section>
+
+  <!-- ============================== PAIR 7 ============================== -->
+  <section class="pair" id="p7">
+    <div class="meta"><span class="chip num">Pair 7</span><span class="chip">Design system</span><span class="chip eff-m">Effort M</span><span class="chip imp">Impact High</span><span class="chip">B2-14, consolidated</span></div>
+    <h2>Make orange mean one thing: an accent token, a type ramp, a radius scale</h2>
+    <p class="thesis">CITheme has no accent token, so the attention color moonlights as the brand: the same orange says "approval needed", "capture a note", "join a meeting", and "connect", while submitting an answer runs two nearly identical ad hoc blues. <b>When orange is everywhere, orange is nothing.</b></p>
+    <p class="ground">CITheme defines bg/surface/fg only (ContentView.swift:2264-2285); its own comment says "Signal color belongs to the current action", yet no signal token exists. HubTheme.accent = system orange (PersonalHubView.swift:8). Submit blue #61ADFF (QuestionOptionsView) vs question-tile blue #579EFF (CompanionCommandCenterView.swift:373). Measured sprawl: 21 distinct type sizes, 166 call sites; 16 distinct radii, 5 to 30. The Mac got NotchTokens in Batch 01; the phone and Watch got nothing.</p>
+    <div class="stages">
+      <div class="stage">
+        <div class="tag">BEFORE · THE AUDIT, FROM SOURCE</div>
+        <div class="canvas">
+          <div class="spec">
+            <div class="sh">One orange, five meanings</div>
+            <div class="srow"><span class="box" style="background:#FF9F0A"></span><span class="hx">#FF9F0A</span><span style="font-size:10px; color:rgba(247,247,247,.75)">Approval needed · Capture FAB · pairing CTA · calendar Join · signal tiles · timeline tint</span></div>
+            <div class="sh">Two blues, three hue-degrees apart</div>
+            <div class="srow"><span class="box" style="background:#61ADFF"></span><span class="hx">#61ADFF</span><span style="font-size:10px; color:rgba(247,247,247,.75)">Send answer / submit</span></div>
+            <div class="srow"><span class="box" style="background:#579EFF"></span><span class="hx">#579EFF</span><span style="font-size:10px; color:rgba(247,247,247,.75)">questions tile on the signal board</span></div>
+            <div class="sh">Type: 21 fixed sizes, 166 call sites</div>
+            <div class="srow"><span class="hx" style="font-size:9px; line-height:1.9">8 · 9 · 10 · 11 · 12 · 13 · 14 · 15 · 16 · 17 · 18 · 20 · 21 · 22 · 24 · 25 · 28 · 30 · 32 · 34 · 36</span></div>
+            <div class="sh">Radii: 16 distinct values</div>
+            <div class="radrow">
+              <span class="rs" style="border-radius:5px"></span><span class="rs" style="border-radius:8px"></span><span class="rs" style="border-radius:10px"></span><span class="rs" style="border-radius:12px"></span><span class="rs" style="border-radius:14px"></span><span class="rs" style="border-radius:18px"></span><span class="rs" style="border-radius:22px"></span><span class="rs" style="border-radius:26px"></span><span class="rs" style="border-radius:50%"></span>
+              <span class="hx">5 7 8 9 10 11 12 13 14 16 18 20 22 26 28 30</span>
+            </div>
+          </div>
+          <div class="anote">the attention color is spent on decoration; the decision color is not even one color</div>
+        </div>
+        <div class="cap">Everything above is read from source, not styled to look bad. The theme file's own comment promises signal discipline the codebase cannot keep, because there is no token to keep it with.</div>
+      </div>
+      <div class="stage after">
+        <div class="tag">AFTER · CIDESIGNSYSTEM: TOKENS THE VIEWS CANNOT DODGE</div>
+        <div class="canvas">
+          <div class="spec">
+            <div class="sh">Color roles</div>
+            <div class="srow"><span class="box" style="background:#FF9F0A"></span><span class="hx">signal</span><span style="font-size:10px; color:rgba(247,247,247,.75)">needs-you only: approval, question, blocked</span></div>
+            <div class="srow"><span class="box" style="background:#FF453A"></span><span class="hx">danger</span><span style="font-size:10px; color:rgba(247,247,247,.75)">destructive commands, deny-first states</span></div>
+            <div class="srow"><span class="box" style="background:#30D158"></span><span class="hx">live</span><span style="font-size:10px; color:rgba(247,247,247,.75)">connected, running, verified</span></div>
+            <div class="srow"><span class="box" style="background:#F7F7F7"></span><span class="hx">interactive</span><span style="font-size:10px; color:rgba(247,247,247,.75)">neutral ink for buttons, links, Join, submit (the blues retire)</span></div>
+            <div class="sh">Type ramp (Dynamic Type mapped)</div>
+            <div class="srow"><span style="font-size:15px; font-weight:900">Hero</span><span style="font-size:12px; font-weight:800">Title</span><span style="font-size:11px; font-weight:600">Body</span><span style="font-size:9.5px; font-weight:700">Label</span><span style="font-size:8.5px; color:rgba(247,247,247,.6)">Caption</span><span class="hx">5 steps, all scale</span></div>
+            <div class="sh">Radius scale + spacing grid</div>
+            <div class="radrow"><span class="rs" style="border-radius:10px"></span><span class="rs" style="border-radius:16px"></span><span class="rs" style="border-radius:24px"></span><span class="rs" style="border-radius:50%"></span><span class="hx">10 · 16 · 24 · capsule &nbsp;/&nbsp; 4pt grid</span></div>
+            <div class="sh">Same components, recolored</div>
+            <div class="srow" style="gap:6px">
+              <span class="pbtn fill" style="font-size:8.5px; padding:4px 8px">Approve once</span>
+              <span class="pbtn linen" style="font-size:8.5px; padding:4px 8px">Join</span>
+              <span style="width:20px; height:20px; border-radius:50%; background:rgba(247,247,247,.1); display:grid; place-items:center; font-weight:800; font-size:11px">+</span>
+              <span class="hx">only needs-you keeps the signal orange</span>
+            </div>
+          </div>
+        </div>
+        <div class="cap">One file, Shared/CodeIslandDesignSystem.swift (already specced in the 07-19 plan, never built). The Watch adopts the same tokens, replacing its private palette. Pairs 1 to 6 all build new surface area; this is what they build it on.</div>
+      </div>
+    </div>
+    <div class="rationale">
+      <p><span class="lbl">Practice</span>Color is meaning: an alarm color must be scarce to stay an alarm (roughly the 60-30-10 discipline, enforced). Tokens are the enforcement mechanism; a style guide that lives in a comment is a wish.</p>
+      <p><span class="lbl">Why it fits</span>Greg reads this app in half-second glances. If orange only ever means "an agent needs you", the glance is the interface; today the glance requires a scan to rule out FABs, CTAs, and Join buttons.</p>
+      <p><span class="lbl">Build</span>Create the token file, migrate the five view files and the Watch, delete the two blues, and land it before pairs 1, 2, and 4 add new screens (sequenced below). The Mac keeps NotchTokens; risk colors (B2-03) get their canonical home here.</p>
+    </div>
+  </section>
+
+  <!-- ============================== SEQUENCE ============================== -->
+  <section class="pair" id="sequence">
+    <div class="meta"><span class="chip num">Sequence</span><span class="chip">prioritized</span></div>
+    <h2>Build order</h2>
+    <div class="sequence">
+      <p><b>1 · This week (all S, no dependencies):</b> pair 6's three target fixes; pair 3's blocked-time chip, queue ages, and one-tap-safe with undo; pair 2's ledger v1 from client-side task history; pair 5's picker removal plus the stored-mode coercion.</p>
+      <p><b>2 · Next block:</b> pair 7's token file first, so everything after lands on the system instead of against it. Then pair 1's verbs (notification categories, Live Activity buttons, Watch questions) on the secure-approval plumbing, and pair 5's requestedModules wire change so the Mac composes the Companion rack.</p>
+      <p><b>3 · Last, with Greg in the loop:</b> pair 4's tab restructure, once the ledger has proven Activity deserves a tab (B2-12 stays a decision, not a default).</p>
+    </div>
+    <div class="validate"><b>What only Greg can validate in real use:</b> after one real week away from the Mac, do alerts close from the lock screen and wrist without opening the app, does blocked-time match felt urgency rather than nagging, and does he ever reach for a module the trim removed.</div>
+  </section>
+
+  <footer>
+    Grounded in: the CodeIsland repo at ~/work/CodeIsland (CompanionCommandCenterView.swift, RemoteApprovalView.swift,
+    PersonalHubView.swift, ContentView.swift incl. CITheme :2264-2285, WatchContentView.swift,
+    Sources/CodeIslandCore/PersonalHubProtocol.swift), the shipped companion-first diff on the
+    CodeIsland-companion-first worktree (commit e69ae32), docs/product/codeisland-design-review-log.md (Batch 02,
+    RESOLVED 2026-07-21), the Review 02 artifact (items 11 to 16), and the forward review at
+    docs/product/codeisland-fable-review-20260721.html. Mock strings come from the app's UI-test seed
+    (RemoteApprovalClient.swift:1005-1040). Counts (166 size call sites, 21 sizes, 16 radii) measured with grep over the
+    five live view files on 2026-07-21. Prepared on the Fable 5 model.
+  </footer>
+</div>
