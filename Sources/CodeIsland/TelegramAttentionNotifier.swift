@@ -13,9 +13,19 @@ final class TelegramAttentionNotifier: ObservableObject {
 
     private let log = Logger(subsystem: "com.codeisland", category: "telegram")
     private let credentialStore: TelegramCredentialStore
+    private let botClient: any TelegramBotAPIClientProtocol
+    private let approvalController: TelegramApprovalController
+    private var activeSendCount = 0
+    private var pendingApprovalDeliveries = Set<String>()
 
-    private init(credentialStore: TelegramCredentialStore = TelegramCredentialStore()) {
+    init(
+        credentialStore: TelegramCredentialStore = TelegramCredentialStore(),
+        botClient: any TelegramBotAPIClientProtocol = TelegramBotAPIClient(),
+        approvalController: TelegramApprovalController? = nil
+    ) {
         self.credentialStore = credentialStore
+        self.botClient = botClient
+        self.approvalController = approvalController ?? .shared
     }
 
     func notify(envelope: RemoteAttentionPushEnvelope) {
@@ -31,7 +41,7 @@ final class TelegramAttentionNotifier: ObservableObject {
             testFlightURL: Self.buddyTestFlightURL,
             expectedBuddyBuild: Self.expectedBuddyBuild()
         )
-        sendInBackground(text: text)
+        sendInBackground(text: text, envelope: envelope, remoteURL: remoteURL)
     }
 
     func sendTestAlert() {
@@ -44,8 +54,12 @@ final class TelegramAttentionNotifier: ObservableObject {
         sendInBackground(text: text, reportMissingConfiguration: true)
     }
 
-    private func sendInBackground(text: String, reportMissingConfiguration: Bool = false) {
-        guard !isSending else { return }
+    private func sendInBackground(
+        text: String,
+        envelope: RemoteAttentionPushEnvelope? = nil,
+        remoteURL: URL? = nil,
+        reportMissingConfiguration: Bool = false
+    ) {
         let resolvedConfiguration: Configuration
         do {
             guard let configured = try configuration() else {
@@ -60,11 +74,61 @@ final class TelegramAttentionNotifier: ObservableObject {
             log.error("telegram credentials are unavailable")
             return
         }
+
+        var preparedLaunch: TelegramPreparedApprovalLaunch?
+        if let envelope,
+           envelope.kind == .approval,
+           envelope.state == .pending,
+           let remoteURL,
+           let chatID = Int64(resolvedConfiguration.chatID),
+           chatID > 0 {
+            guard !pendingApprovalDeliveries.contains(envelope.requestID) else { return }
+            do {
+                let prepared = try approvalController.prepareLaunch(
+                    requestID: envelope.requestID,
+                    chatID: chatID,
+                    baseURL: remoteURL
+                )
+                guard prepared.launch.messageID == nil else { return }
+                pendingApprovalDeliveries.insert(envelope.requestID)
+                preparedLaunch = prepared
+            } catch {
+                log.error("secure Telegram review launch is unavailable")
+            }
+        }
+
+        let payload = preparedLaunch.map {
+            TelegramSendMessagePayload.secureReview(
+                chatID: resolvedConfiguration.chatID,
+                text: text,
+                reviewURL: $0.reviewURL
+            )
+        } ?? TelegramSendMessagePayload.redactedAlert(
+            chatID: resolvedConfiguration.chatID,
+            text: text
+        )
+
+        activeSendCount += 1
         isSending = true
         Task {
-            defer { isSending = false }
+            defer {
+                activeSendCount = max(0, activeSendCount - 1)
+                isSending = activeSendCount > 0
+                if let requestID = envelope?.requestID {
+                    pendingApprovalDeliveries.remove(requestID)
+                }
+            }
             do {
-                try await send(text: text, configuration: resolvedConfiguration)
+                let message = try await botClient.sendMessage(
+                    payload,
+                    botToken: resolvedConfiguration.botToken
+                )
+                if let preparedLaunch {
+                    approvalController.attachMessageID(
+                        message.messageID,
+                        to: preparedLaunch.launch.nonce
+                    )
+                }
                 lastDeliveryAt = Date()
                 lastError = nil
             } catch {
@@ -82,8 +146,6 @@ final class TelegramAttentionNotifier: ObservableObject {
     private enum TelegramError: LocalizedError {
         case incompleteConfiguration
         case credentialUnavailable
-        case invalidResponse
-        case rejected(status: Int, reason: String)
 
         var errorDescription: String? {
             switch self {
@@ -91,10 +153,6 @@ final class TelegramAttentionNotifier: ObservableObject {
                 return "Telegram needs a bot token and chat ID in CodeIsland Settings"
             case .credentialUnavailable:
                 return "Telegram could not access its saved bot credential"
-            case .invalidResponse:
-                return "Telegram returned an invalid response"
-            case .rejected(let status, let reason):
-                return "Telegram rejected the alert (\(status)): \(reason)"
             }
         }
     }
@@ -149,33 +207,6 @@ final class TelegramAttentionNotifier: ObservableObject {
         return "\(version) (\(build))"
     }
 
-    private func send(text: String, configuration: Configuration) async throws {
-        guard let url = URL(string: "https://api.telegram.org/bot\(configuration.botToken)/sendMessage") else {
-            throw TelegramError.incompleteConfiguration
-        }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "content-type")
-        request.httpBody = try JSONSerialization.data(
-            withJSONObject: [
-                "chat_id": configuration.chatID,
-                "disable_web_page_preview": true,
-                "text": text
-            ],
-            options: [.sortedKeys]
-        )
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse else { throw TelegramError.invalidResponse }
-        guard (200..<300).contains(http.statusCode) else {
-            let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-            let reason = object?["description"] as? String
-                ?? object?["error"] as? String
-                ?? String(data: data, encoding: .utf8)
-                ?? "unknown"
-            throw TelegramError.rejected(status: http.statusCode, reason: reason)
-        }
-    }
 }
 
 enum TelegramAttentionMessageBuilder {
