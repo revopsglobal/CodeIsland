@@ -71,18 +71,30 @@ iPhone-refresh, or acceptance-verifier work is proposed.
 | B2-12 | iOS · IA | Four-tab structure buries the one job; Capture wrongly holds the FAB | M | Very high | proposed |
 | B2-13 | iOS | Quiet Now hero leads with calendar, not agent context | S | High | proposed |
 | B2-14 | iOS | Give iOS the design system (tokens/type/accent) Batch 01 gave the Mac | M | High | proposed |
+| B2-15 | iOS · Watch | Let Buddy act from where it notifies you (notification actions, LA buttons, Watch questions) | M | Very high | proposed |
+| B2-16 | iOS · Watch | Tell the truth when the Mac is gone — one reachability state everywhere | M | High | proposed |
 
 **Extension 2026-07-20 (same evening):** Greg asked the batch to also review the iOS
 mobile app directly and to weigh information architecture and tool relevance to
-UI/UX. Added B2-11…B2-14, grounded in live Buddy renders from the iPhone 16 Pro
+UI/UX, then clarified the target is **CodeIsland Buddy for iOS**. Added B2-11…B2-16
+as a dedicated Buddy review, grounded in live renders from the iPhone 16 Pro
 simulator (beta toolchain, `-CodeIslandCompanionMockHub` / `-CodeIslandCompanionMockPairing`
-/ `-CodeIslandCompanionMockAttention` launch args) — captures of the paired "All
-clear" Now surface and the unpaired pairing flow with the four-tab bar are embedded
-in the artifact — plus the 19-module catalog in
-`Sources/CodeIslandCore/PersonalHubProtocol.swift:19` (the `// Crest 4.9 catalog`
-comment is verbatim). B2-11 is the premise item: B2-12 and B2-13 are its screen-level
-expressions and shift shape if B2-11's framing is rejected. Same artifact URL; the
-Mac/pipeline items 01–10 are unchanged.
+/ `-CodeIslandCompanionMockAttention approval|question|multiple` / `-CodeIslandCompanionMockDeepLink <url>`
+launch args — the mock deep link is applied at launch via `openDeepLink`,
+RemoteApprovalClient.swift:180). Embedded captures: the paired "All clear" Now
+surface and the unpaired pairing flow with the four-tab bar. Later captures
+(approval surface, sessions) were blocked by an unresponsive simulator under
+extreme host load (load avg ~500–980; Copilot.app + build swarm), so B2-15/B2-16
+mockups are code-accurate reconstructions from the exact mock seed
+(RemoteApprovalClient.swift:1015 — Codex / "Run release build" /
+`xcodebuild -scheme CodeIslandCompanion archive`) rather than live renders. The
+19-module catalog is `Sources/CodeIslandCore/PersonalHubProtocol.swift:19` (the
+`// Crest 4.9 catalog` comment is verbatim). B2-11 is the premise item: B2-12 and
+B2-13 are its screen-level expressions and shift shape if B2-11's framing is
+rejected. B2-15 is scoped as Apple's notification/Live-Activity/Watch surface,
+distinct from the in-flight telegram-secure-approval-sheet (shared authenticated-
+action plumbing, coordinate; do not duplicate). Same artifact URL; the Mac/pipeline
+items 01–10 are unchanged.
 
 ### Rationale
 
@@ -247,6 +259,36 @@ Dynamic Type, 12 corner radii 5→28, and `ciSurface` used as a foreground
 file plus migrating the accents, type scale, and radius scale onto it (Watch
 adopts it too). Foundation for B2-03's risk colors and B2-12/B2-13's new surfaces;
 do it after/with B2-07's dead-code cut.
+
+**B2-15 — Let Buddy act from where it notifies you.** A phone companion's core
+value is acting without opening it; on iOS every notification and glanceable
+surface is tap-to-open. No `UNNotificationCategory`/`UNNotificationAction` is
+registered anywhere (`didReceive response` only opens the app,
+CompanionAppDelegate.swift:59-66); the Live Activity / Dynamic Island / lock
+screen have only `.widgetURL` deep links, no `Button(intent:)`
+(CodeIslandLiveActivityWidget.swift:11,31), and the App Intents are all *Open…*
+intents (CodeIslandAppIntents.swift); the Watch can approve/deny
+(WatchContentView.swift:385-400) but questions say "Answer on iPhone" (:405). The
+fix preserves the content-free APNS design: notification actions and LA buttons
+trigger the same authenticated fetch-then-act the app runs on open (the push
+carries no token). Add iOS notification actions + LA `Button(intent:)`; let the
+Watch answer questions. Shares the remote-action plumbing with the in-flight
+Telegram approval sheet — build the authenticated-action layer once. Depends on
+B2-03 so the risk emphasis is already on those surfaces.
+
+**B2-16 — One reachability truth when the Mac is gone.** Three transports fail in
+three voices: Multipeer watchdog "Connected but no status updates for a while;
+reconnecting to Mac" (CompanionConnection.swift:18-19), Tailscale offline "Remote
+Mac unavailable" + Retry/Pair again (RemoteApprovalView.swift:518-538),
+followed-task loss LA "Waiting for your Mac to reconnect" + local notification
+(LiveActivityController.swift:118-143). With the Mac asleep and no followed task /
+active pairing, only the generic reconnect string or the discovery card shows, so
+"quiet" and "offline" look alike — the ambiguity bites exactly when the user is
+away. Live Activity `staleDate` is itself inconsistent (300/180/90s at
+LiveActivityController.swift:128/:215/:377). Consolidate behind one reachability
+state with a "last seen" timestamp, rendered identically on Now, approvals, LA, and
+Watch, plus one staleDate constant. Pairs with B2-13 (reachability inline in the
+quiet hero) and B2-15 (unreachable Mac visibly disables the new action buttons).
 
 ### Also found, not written up as batch items
 
