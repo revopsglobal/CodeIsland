@@ -124,7 +124,7 @@ jobs:
 
       - name: Test remote approval security and exact-request routing
         run: |
-          swift test --filter 'LaunchAtLoginReliabilityTests|RemoteActionTokenVaultTests|RemoteApprovalHTTPServerTests|RemoteAvailabilityPowerTests|RemotePairAttemptLimiterTests|RemotePairingCodeLifecycleTests|RemoteServiceStatusTests|SessionAttentionRouterTests|AppStatePermissionFlowTests/testRemoteDecisionResolvesOnlyTheSelectedPermission|AppStateQuestionFlowTests/testRemoteAnswerResolvesOnlyTheSelectedQuestion|AppStateQuestionFlowTests/testRemoteAnswerNeverResolvesSecretQuestion'
+          swift test --filter 'LaunchAtLoginReliabilityTests|RemoteActionTokenVaultTests|RemoteApprovalHTTPServerTests|RemoteAvailabilityPowerTests|RemotePairAttemptLimiterTests|RemotePairingCodeLifecycleTests|RemoteServiceStatusTests|SessionAttentionRouterTests|TelegramApprovalHTTPAPITests|TelegramApprovalPresentationTests|TelegramApprovalReadinessTests|TelegramApprovalReconciliationTests|TelegramApprovalSessionVaultTests|TelegramApprovalWebAppTests|TelegramBotAPIClientTests|TelegramCredentialStoreTests|TelegramInitDataValidatorTests|AppStatePermissionFlowTests/testRemoteDecisionResolvesOnlyTheSelectedPermission|AppStateQuestionFlowTests/testRemoteAnswerResolvesOnlyTheSelectedQuestion|AppStateQuestionFlowTests/testRemoteAnswerNeverResolvesSecretQuestion'
 
       - name: Test iPhone companion models
         run: ios/CodeIslandCompanion/scripts/run-model-tests.sh

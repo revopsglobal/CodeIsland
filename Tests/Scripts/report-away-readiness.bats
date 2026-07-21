@@ -6,6 +6,7 @@ setup() {
   export STRICT_E2E_BIN="$TEST_TMPDIR/strict-e2e"
   export DEFAULTS_BIN="$TEST_TMPDIR/defaults"
   export CURL_BIN="$TEST_TMPDIR/curl"
+  export SECURITY_BIN="$TEST_TMPDIR/security"
   mkdir -p "$TEST_TMPDIR"
 
   cat > "$DEFAULTS_BIN" <<'STUB'
@@ -13,13 +14,21 @@ setup() {
 key="${3:-}"
 case "$key" in
   remoteApprovalTelegramEnabled) printf '%s\n' "${TEST_TELEGRAM_ENABLED:-0}" ;;
-  remoteApprovalTelegramBotToken) printf '%s\n' "${TEST_TELEGRAM_BOT_TOKEN:-}" ;;
   remoteApprovalTelegramChatID) printf '%s\n' "${TEST_TELEGRAM_CHAT_ID:-}" ;;
+  remoteApprovalTelegramUserID) printf '%s\n' "${TEST_TELEGRAM_USER_ID:-}" ;;
   remoteApprovalTailnetURL) printf '%s\n' "${TEST_TAILNET_URL:-}" ;;
   *) exit 1 ;;
 esac
 STUB
   chmod +x "$DEFAULTS_BIN"
+  cat > "$SECURITY_BIN" <<'STUB'
+#!/usr/bin/env bash
+if [[ "${TEST_TELEGRAM_TOKEN_STORED:-0}" == "1" ]]; then
+  exit 0
+fi
+exit 44
+STUB
+  chmod +x "$SECURITY_BIN"
   cat > "$CURL_BIN" <<'STUB'
 #!/usr/bin/env bash
 output=""
@@ -183,28 +192,33 @@ STUB
 
 @test "reports configured Telegram fallback without exposing credentials" {
   export TEST_TELEGRAM_ENABLED=1
-  export TEST_TELEGRAM_BOT_TOKEN="123:secret"
+  export TEST_TELEGRAM_TOKEN_STORED=1
   export TEST_TELEGRAM_CHAT_ID="987654"
+  export TEST_TELEGRAM_USER_ID="987654"
   export TEST_TAILNET_URL="https://gregs-mac.tailnet.example"
   write_strict_report
 
   run "$REPO_ROOT/scripts/report-away-readiness.sh"
 
   [ "$status" -eq 2 ]
-  [[ "$output" != *"123:secret"* ]]
   [[ "$output" != *"987654"* ]]
   printf '%s' "$output" | jq -e '
     .telegramFallback.status == "configured" and
     .telegramFallback.available == true and
     .telegramFallback.hasBotToken == true and
     .telegramFallback.hasChatID == true and
+    .telegramFallback.hasUserID == true and
+    .telegramFallback.privateIdentity == true and
+    .telegramFallback.keychainProtected == true and
+    .telegramFallback.secureApprovalSheet == true and
     ([.optionalGates[] | select(.id == "private-tailnet-url" and .configured == true)] | length) == 1'
 }
 
 @test "reports incomplete Telegram as optional configuration issue" {
   export TEST_TELEGRAM_ENABLED=1
-  export TEST_TELEGRAM_BOT_TOKEN=""
+  export TEST_TELEGRAM_TOKEN_STORED=0
   export TEST_TELEGRAM_CHAT_ID="987654"
+  export TEST_TELEGRAM_USER_ID="987654"
   write_strict_report
 
   run "$REPO_ROOT/scripts/report-away-readiness.sh"
