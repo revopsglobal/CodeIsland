@@ -1,5 +1,27 @@
 # Changelog
 
+## [v1.0.58] - 2026-07-20
+
+### English
+- Attention-first notch panel: the expanded session list is ordered by who needs you, not by session identifier, and grouped into Needs you / Working / Idle bands. The routing was already computed for the collapsed pill; the panel now reads from the same source. Within the waiting band the session blocked longest sorts first, so it cannot be buried under a decision that just arrived (#142)
+- The row time badge now measures time since last activity, not session age, and reads "Blocked 41m" when a session is waiting on you. Session age looked like it answered that question and did not (#142)
+- The collapsed island names the blocked project (with "+N" when several wait) instead of a bare bell, so you can triage without expanding (#142)
+- The approval card shows a DESTRUCTIVE risk tier and the project it lands in; a classifier that only lived in the hook shims now reaches the UI. rm -rf and reading a config file no longer render identically. Approve/deny button order is unified between the card and the session list, and the iPhone flips button emphasis by risk (#142)
+- Reduce Motion is honoured at the transition itself, so every blur-fade in the companion — including the approval surface — degrades to a plain cross-fade rather than only the status dot (#142)
+- The Mac panel gains a real empty state, and the question card's option numbers are now working keyboard shortcuts. Removed the orphaned IdleIndicatorBar and other verified-dead code (#142)
+- iPhone Now states the answer ("Needs you" / "All clear") rather than the date, keeps attention above weather in the fallback, and shows the attention queue as rows instead of a dropdown (#142)
+- Design-token system with a light-mode-aware palette and the SF Pro / SF Mono split — project names read as human content in SF Pro, commands stay monospaced in their wells (#143)
+
+### 中文
+- 注意力优先的灵动岛面板：展开的会话列表按「谁需要你」而非会话 ID 排序，并分为「需要你 / 工作中 / 空闲」三段。该排序此前只用于收起的小岛，现在面板读取同一来源。等待段内阻塞最久的会话排在最前，不会被刚到达的请求淹没（#142）
+- 行内时间标签改为显示距上次活动的时间，而非会话总时长，会话等待时显示「阻塞 41m」（#142）
+- 收起的灵动岛直接显示被阻塞的项目名（多个等待时附「+N」），无需展开即可分诊（#142）
+- 审批卡片显示「破坏性」风险等级与目标项目；此前只存在于 hook 中的分类器现已进入 UI。rm -rf 与读取配置文件不再渲染相同。卡片与会话列表的批准/拒绝按钮顺序统一，iPhone 按风险切换按钮强调（#142）
+- 「减弱动态效果」在过渡处生效，companion 的所有模糊淡入（含审批界面）降级为普通交叉淡入（#142）
+- Mac 面板新增空状态，问答卡片的选项编号成为可用的键盘快捷键。移除已确认失效的 IdleIndicatorBar 等死代码（#142）
+- iPhone Now 直接给出答案（「需要你」/「全部完成」）而非日期，回退顺序中注意力优先于天气，注意力队列以行而非下拉显示（#142）
+- 设计令牌系统与感知浅色模式的配色，以及 SF Pro / SF Mono 分工——项目名以 SF Pro 呈现为人类内容，命令保留等宽字体（#143）
+
 ## [v1.0.30] - 2026-07-10
 
 ### English

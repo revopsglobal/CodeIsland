@@ -15,9 +15,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0.55</string>
+	<string>1.0.58</string>
 	<key>CFBundleVersion</key>
-	<string>1.0.55</string>
+	<string>1.0.58</string>
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSAppTransportSecurity</key>
@@ -29,33 +29,30 @@
 	<string>CodeIsland needs to control terminal apps to jump to the correct window and tab when you click a session.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>CodeIsland uses Bluetooth to mirror the island onto Buddy.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_codeisland._tcp</string>
+	</array>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>CodeIsland shows your next meeting in the notch's Glances so you can join the call with one tap.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>CodeIsland uses the camera only while you run a private local camera pre-check.</string>
 	<key>NSCameraUseContinuityCameraDeviceType</key>
 	<true/>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>CodeIsland advertises itself on the local network so iPhone can mirror the island state.</string>
+	<key>NSLocationUsageDescription</key>
+	<string>CodeIsland shows local weather in the notch's Glances.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>CodeIsland shows local weather in the notch's Glances.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>CodeIsland uses the microphone only while you run a private local microphone pre-check or dictate a request.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>CodeIsland converts your voice to text only while you dictate a private Claude request.</string>
 	<key>NSRemindersFullAccessUsageDescription</key>
 	<string>CodeIsland shows your reminders in the notch's Glances so you can check them off.</string>
 	<key>NSScreenCaptureUsageDescription</key>
 	<string>CodeIsland captures only the screen, window, or app you select and saves it privately to your Shelf.</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>CodeIsland shows local weather in the notch's Glances.</string>
-	<key>NSLocationUsageDescription</key>
-	<string>CodeIsland shows local weather in the notch's Glances.</string>
-	<key>NSBonjourServices</key>
-	<array>
-		<string>_codeisland._tcp</string>
-	</array>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>CodeIsland advertises itself on the local network so iPhone can mirror the island state.</string>
-	<!-- Fork build: Sparkle updates disabled so the upstream appcast can never
-	     replace this build with the official release (which would drop the fork's
-	     customizations). Ship updates by rebuilding from this repo. -->
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>CodeIsland converts your voice to text only while you dictate a private Claude request.</string>
 	<key>SUAutomaticallyUpdate</key>
 	<false/>
 	<key>SUEnableAutomaticChecks</key>
