@@ -76,47 +76,32 @@ enum NotchTokens {
 
     // MARK: Foreground ink — the sweep target
 
-    /// Muted foreground at a given opacity, resolved per appearance: white ink on
-    /// the dark panel, near-black ink on the light panel. This is what every
-    /// expanded-surface `.white.opacity(x)` becomes, so light mode enters without
-    /// hand-touching 100+ literals. Opacity is nudged up slightly on light because
-    /// 38% white on black reads about like 45% black on white.
+    /// Muted foreground at a given opacity: white ink on the dark panel.
+    ///
+    /// Light mode was reverted 2026-07-20 — it rendered unreadable on the real
+    /// notch (the headless snapshot did not reproduce it). This and the token
+    /// resolvers below are pinned to their dark values so the panel is always
+    /// dark, exactly as it was before the light-mode wiring, while keeping the
+    /// token structure and the SF Pro / SF Mono type split intact. The light
+    /// values are retained in the resolvers as documentation of the intended
+    /// palette for a future, properly-verified attempt.
     static func ink(_ opacity: Double) -> Color {
-        Color(nsColor: NSColor(name: nil) { appearance in
-            appearance.isDark
-                ? NSColor(hex: 0xFFFFFF, alpha: opacity)
-                : NSColor(hex: 0x17171B, alpha: opacity < 0.6 ? min(1, opacity * 1.18) : opacity)
-        })
+        Color(hex: 0xFFFFFF, alpha: opacity)
     }
 
-    /// The expanded panel ground. Collapsed stays pure black — it abuts the
-    /// physical notch, where a light pill would read as a rendering fault, the
-    /// same reason Apple's Dynamic Island is permanently dark.
-    static let panelGround = dynamic(dark: 0x000000, light: 0xF2F3F6)
+    /// The panel ground: always black. See the note on `ink` above.
+    static let panelGround = Color.black
 
     // MARK: Appearance-aware construction
 
-    /// A colour that resolves per the view's appearance. The Mac panel had **no**
-    /// appearance handling at all (the only `.light` in the app was a scroller
-    /// knob style), so this is also where light mode enters.
+    /// Pinned to the dark value — light mode reverted (see `ink`). The `light`
+    /// argument is retained only to document the intended palette.
     static func dynamic(dark: Int, light: Int) -> Color {
-        Color(nsColor: NSColor(name: nil) { appearance in
-            appearance.isDark ? NSColor(hex: dark) : NSColor(hex: light)
-        })
+        Color(hex: dark)
     }
 
     static func dynamicA(dark: (Int, CGFloat), light: (Int, CGFloat)) -> Color {
-        Color(nsColor: NSColor(name: nil) { appearance in
-            appearance.isDark
-                ? NSColor(hex: dark.0, alpha: dark.1)
-                : NSColor(hex: light.0, alpha: light.1)
-        })
-    }
-}
-
-private extension NSAppearance {
-    var isDark: Bool {
-        bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        Color(hex: dark.0, alpha: dark.1)
     }
 }
 

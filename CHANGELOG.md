@@ -1,5 +1,13 @@
 # Changelog
 
+## [v1.0.60] - 2026-07-20
+
+### English
+- Revert the notch-panel light mode shipped in 1.0.59. It rendered unreadable on the real notch (the headless render did not reproduce the problem), so the panel is pinned back to always-dark, exactly as before. The token structure and the SF Pro / SF Mono type split are kept; a light mode will only return once it can be verified on a physical notch.
+
+### 中文
+- 回退 1.0.59 中的刘海面板浅色模式。它在真实刘海上渲染后无法阅读（无窗口的离屏渲染未能复现该问题），因此面板固定回始终深色，与此前完全一致。保留令牌结构与 SF Pro / SF Mono 字体分工；浅色模式将在能于物理刘海上验证后再行加入。
+
 ## [v1.0.59] - 2026-07-20
 
 ### English
