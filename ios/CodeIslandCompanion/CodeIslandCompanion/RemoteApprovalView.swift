@@ -84,9 +84,16 @@ struct RemoteApprovalSurface: View {
             + client.questions.map(RemoteAttentionCardItem.question)
     }
 
-    /// Everything in the queue except the one already expanded in the card.
+    /// Everything in the queue except the one already expanded in the card,
+    /// worst first: destructive ahead of the rest, then longest-waiting first
+    /// (pair 3, so the row that has been blocking an agent longest leads).
     private var queuedItems: [RemoteAttentionCardItem] {
-        attentionItems.filter { $0.id != selectedAttention?.id }
+        attentionItems
+            .filter { $0.id != selectedAttention?.id }
+            .sorted { lhs, rhs in
+                if lhs.isDestructive != rhs.isDestructive { return lhs.isDestructive }
+                return lhs.createdAt < rhs.createdAt
+            }
     }
 
     @ViewBuilder
@@ -579,16 +586,59 @@ private struct RemoteApprovalCard: View {
         let decision: RemoteApprovalDecision
     }
 
+    // Pair 3: how long the agent has been blocked, escalating past 15 minutes.
+    private var blockedInterval: TimeInterval { max(0, Date().timeIntervalSince(approval.createdAt)) }
+    private var blockedLabel: String {
+        let minutes = Int(blockedInterval / 60)
+        if minutes < 1 { return "BLOCKED NOW" }
+        if minutes < 60 { return "BLOCKED \(minutes)m" }
+        return "BLOCKED \(minutes / 60)h \(minutes % 60)m"
+    }
+    private var blockedIsHot: Bool { blockedInterval >= 15 * 60 }
+    private var isDestructiveRisk: Bool { approval.risk == .destructive }
+    private var riskLabel: String {
+        switch approval.risk {
+        case .destructive: return "DESTRUCTIVE"
+        case .writes: return "WRITES"
+        case .readOnly, .none: return "SAFE"
+        }
+    }
+    private var riskColor: Color {
+        switch approval.risk {
+        case .destructive: return .red
+        case .writes: return .orange
+        case .readOnly, .none: return .green
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
+            HStack(spacing: 8) {
+                Text(blockedLabel)
+                    .font(.caption2.weight(.heavy))
+                    .monospacedDigit()
+                    .foregroundStyle(blockedIsHot ? Color.black : Color.orange)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(
+                        (blockedIsHot ? Color.orange : Color.orange.opacity(0.16)),
+                        in: Capsule()
+                    )
+                Spacer(minLength: 6)
+                Text(riskLabel)
+                    .font(.caption2.weight(.heavy))
+                    .foregroundStyle(riskColor)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .overlay(Capsule().stroke(riskColor.opacity(0.5), lineWidth: 1))
+            }
+            .dynamicTypeSize(.xSmall ... .accessibility3)
+
             HStack(spacing: 10) {
                 Label("Approval needed", systemImage: "checkmark.shield.fill")
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(.orange)
                 Spacer()
-                Text(approval.createdAt, style: .relative)
-                    .font(.caption)
-                    .foregroundStyle(.ciForeground.opacity(0.42))
             }
             .dynamicTypeSize(.xSmall ... .accessibility3)
 
