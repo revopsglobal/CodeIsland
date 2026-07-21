@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CodeIsland Buddy — Taking Companion-First Further (Fable review, 2026-07-21)</title>
+<style>
+:root{
+  --ground:#F4F2ED; --panel:#FCFBF8; --ink:#201E25; --ink2:#57545F; --ink3:#8B8794;
+  --line:#DDD9D0; --accent:#4F46B8; --accent-ink:#FFFFFF; --accent-soft:#EAE8F8;
+  --good:#2E7D46; --good-soft:#E4F2E9; --warn:#9A5A00; --warn-soft:#F7ECDA;
+  --bad:#B3261E; --bad-soft:#F8E7E5; --mono-bg:#EDEAE2; --radius:12px;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --ground:#141318; --panel:#1C1B22; --ink:#ECEAF2; --ink2:#ABA7B6; --ink3:#716D7C;
+    --line:#2C2A34; --accent:#948AF0; --accent-ink:#17141F; --accent-soft:#29263D;
+    --good:#5BBE7A; --good-soft:#1C2B21; --warn:#E0A458; --warn-soft:#2E2617;
+    --bad:#F08578; --bad-soft:#331B18; --mono-bg:#242230; }
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Helvetica,Arial,sans-serif;
+  font-size:15.5px; line-height:1.55; -webkit-font-smoothing:antialiased;
+}
+.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-size:0.86em; background:var(--mono-bg); padding:1px 5px; border-radius:5px}
+.wrap{max-width:960px; margin:0 auto; padding:40px 22px 90px}
+a{color:var(--accent)}
+
+.eyebrow{font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:11px; letter-spacing:.14em; color:var(--accent); text-transform:uppercase; margin-bottom:8px}
+h1{font-size:29px; line-height:1.16; letter-spacing:-.02em; font-weight:750; margin:0 0 14px; text-wrap:balance}
+.lede{max-width:72ch; color:var(--ink2); margin:0 0 8px}
+.lede b{color:var(--ink)}
+
+.grounding{
+  margin:22px 0 6px; padding:14px 16px; background:var(--panel); border:1px solid var(--line);
+  border-radius:var(--radius); font-size:13px; color:var(--ink2);
+}
+.grounding b{color:var(--ink)}
+.grounding ul{margin:8px 0 0; padding-left:18px}
+.grounding li{margin:3px 0}
+
+h2{font-size:20px; letter-spacing:-.015em; margin:44px 0 12px; padding-top:22px; border-top:1px solid var(--line)}
+h2:first-of-type{border-top:none; padding-top:0}
+
+table.index{width:100%; border-collapse:collapse; background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; font-size:13.5px; margin:14px 0 4px}
+table.index th{font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink3); text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); font-weight:600}
+table.index td{padding:8px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+table.index tr:last-child td{border-bottom:none}
+table.index td.n{font-family:ui-monospace,"SF Mono",Menlo,monospace; color:var(--ink3); width:26px}
+table.index a{text-decoration:none; color:var(--ink); font-weight:600}
+table.index a:hover{color:var(--accent)}
+.tblwrap{overflow-x:auto}
+
+.move{
+  background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+  padding:20px 22px 18px; margin:22px 0; position:relative;
+}
+.move .rank{
+  position:absolute; top:-11px; left:16px; background:var(--accent); color:var(--accent-ink);
+  font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:11.5px; font-weight:700;
+  padding:3px 10px; border-radius:999px; letter-spacing:.06em;
+}
+.move h3{font-size:17.5px; letter-spacing:-.01em; margin:4px 0 8px; text-wrap:balance}
+.chips{display:flex; flex-wrap:wrap; gap:6px; margin:0 0 12px}
+.chip{
+  font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:10px; letter-spacing:.07em;
+  padding:3px 9px; border-radius:999px; border:1px solid var(--line); color:var(--ink2); text-transform:uppercase; white-space:nowrap;
+}
+.chip.effort-s{background:var(--good-soft); color:var(--good); border-color:transparent}
+.chip.effort-m{background:var(--warn-soft); color:var(--warn); border-color:transparent}
+.chip.effort-l{background:var(--bad-soft); color:var(--bad); border-color:transparent}
+.chip.impact{background:var(--accent-soft); color:var(--accent); border-color:transparent}
+.move p{margin:0 0 10px; max-width:76ch}
+.move p:last-child{margin-bottom:0}
+.lbl{font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--ink3); display:block; margin:12px 0 4px}
+.move ul{margin:4px 0 10px; padding-left:19px; max-width:76ch}
+.move li{margin:4px 0}
+
+.risks{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:6px 22px 14px; margin:14px 0}
+.risks ol{padding-left:20px; margin:12px 0 0}
+.risks li{margin:10px 0; max-width:76ch; color:var(--ink2)}
+.risks li b{color:var(--ink)}
+
+.sequence{
+  border-left:3px solid var(--accent); background:var(--accent-soft);
+  border-radius:0 var(--radius) var(--radius) 0; padding:16px 20px; margin:16px 0; max-width:78ch;
+}
+.sequence p{margin:0}
+
+footer{margin-top:56px; padding-top:16px; border-top:1px solid var(--line); font-size:12px; color:var(--ink3); max-width:76ch}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="eyebrow">Fable review · 2026-07-21 · for Greg Harned · builds on commit e69ae32</div>
+  <h1>CodeIsland Buddy — Taking Companion-First Further</h1>
+
+  <p class="lede">The identity call is made and the first build is live: Buddy is a coding-agent companion, and the
+  19-module hub is trimmed to 7 keepers behind a reversible flag. That build was pure subtraction. The through-line for
+  what comes next: <b>subtraction bought focus; now spend it.</b> Three kinds of spending, in order: finish the promises
+  the flag already makes (the hero, the two catalog leaks, the sparse-rack problem), give the freed surface something
+  only Buddy can show (an agent ledger, blocked-agent escalation, verbs on the lock screen), and convert reversible into
+  deleted only when real use has voted. Eight moves below, ranked, each grounded in the code as it sits on
+  <span class="mono">claude/buddy-companion-first</span> this morning.</p>
+
+  <div class="grounding">
+    <b>What shipped overnight (verified against the diff, not the plan):</b> commit <span class="mono">e69ae32</span>,
+    4 files, +69/-7, reversible behind <span class="mono">buddy.companionFirst.v1</span> (default on) with a
+    "Companion-first Tools" toggle in the presence menu.
+    <ul>
+      <li><span class="mono">CompanionFirst.swift</span> (new, 54 lines): the 7-keeper set, <span class="mono">PersonalHubSnapshot.filteringModules</span>, and a <span class="mono">filteredCatalog</span> helper.</li>
+      <li><span class="mono">RemoteApprovalClient.swift</span>: ingest-layer filter on <span class="mono">refreshHub</span> and the mock path; unset mode now defaults to <span class="mono">.code</span>.</li>
+      <li>Nothing deleted; CodeIslandCore untouched. Known leftovers: the quiet-hero rework (B2-13) is not done, the rack editor and App Intents still enumerate all 19, and no Mac rack holds all 7 keepers, so a stored Home mode renders a near-empty Tools grid. The tab restructure (B2-12) stays deferred.</li>
+    </ul>
+  </div>
+
+  <h2>The eight moves</h2>
+  <div class="tblwrap">
+  <table class="index">
+    <tr><th></th><th>Move</th><th>Effort</th><th>Impact</th></tr>
+    <tr><td class="n">1</td><td><a href="#m1">Finish the quiet hero the trim already half-rewrote</a></td><td>S</td><td>High</td></tr>
+    <tr><td class="n">2</td><td><a href="#m2">Close the two catalog leaks: rack editor and Siri</a></td><td>S</td><td>Medium</td></tr>
+    <tr><td class="n">3</td><td><a href="#m3">Solve sparse racks on the wire, not the client</a></td><td>M</td><td>Very high</td></tr>
+    <tr><td class="n">4</td><td><a href="#m4">The away ledger: what shipped while you were gone</a></td><td>M</td><td>Very high</td></tr>
+    <tr><td class="n">5</td><td><a href="#m5">Put the verb where the alert is (B2-15, now urgent)</a></td><td>M</td><td>Very high</td></tr>
+    <tr><td class="n">6</td><td><a href="#m6">Escalate on blocked, not just notify once</a></td><td>M</td><td>High</td></tr>
+    <tr><td class="n">7</td><td><a href="#m7">Staged deletion of the 12, gated on evidence</a></td><td>M, spread</td><td>Medium</td></tr>
+    <tr><td class="n">8</td><td><a href="#m8">Re-sequence B2-14 and B2-16 around the new center</a></td><td>Planning</td><td>High</td></tr>
+  </table>
+  </div>
+
+  <div class="move" id="m1">
+    <span class="rank">MOVE 1</span>
+    <h3>Finish the quiet hero the trim already half-rewrote</h3>
+    <div class="chips"><span class="chip effort-s">Effort S</span><span class="chip impact">Impact High</span><span class="chip">Finishes B2-13 (accepted, building)</span></div>
+    <p><span class="lbl">Insight</span>
+    <span class="mono">CompanionTodayTimeline</span> builds its rows in the order calendar, reminders, agents
+    (CompanionCommandCenterView.swift:703-715). The overnight filter already gutted that hero by side effect: reminders
+    and weather no longer arrive in the snapshot, so the reminders row and the weather subtitle silently vanish, leaving
+    calendar plus agents, still calendar first. The app decided it is about agents; its quiet home screen has not been
+    told deliberately, only by subtraction.</p>
+    <p><span class="lbl">Next action</span>
+    Reorder in <span class="mono">CompanionTodayTimeline</span>: agents row first (the module summary is already reused
+    as <span class="mono">idleSummary</span> at :725-728, so the data path exists), calendar second with its Join button
+    demoted to row level, and the headline subtitle drawn from the agents summary in the idle case instead of
+    "Next: meeting". Ship behind the same flag. This is a one-view change; move 4 later upgrades what the agents row can
+    say.</p>
+  </div>
+
+  <div class="move" id="m2">
+    <span class="rank">MOVE 2</span>
+    <h3>Close the two catalog leaks: rack editor and Siri</h3>
+    <div class="chips"><span class="chip effort-s">Effort S</span><span class="chip impact">Impact Medium</span><span class="chip">Integrity of the flag</span></div>
+    <p><span class="lbl">Insight</span>
+    <span class="mono">CompanionFirst.filteredCatalog(_:)</span> was written for exactly this and currently has zero
+    call sites. The rack editor offers all 19 modules to add back
+    (<span class="mono">availableModules</span>, PersonalHubView.swift:878-880), and Shortcuts/Siri expose the full
+    catalog through <span class="mono">CodeIslandIntentModule</span> (CodeIslandAppIntents.swift:28-31), so
+    "Open CodeIsland Module: Teleprompter" deep-links into a module the app claims not to have. While these leak, the
+    app disagrees with itself about what it is.</p>
+    <p><span class="lbl">Next action</span>
+    Wire <span class="mono">filteredCatalog</span> into <span class="mono">availableModules</span>; in
+    <span class="mono">OpenCodeIslandModuleIntent.perform</span> route cut IDs to the Tools root when the flag is on
+    (the AppEnum is static, so the gate belongs in perform, not the enum). Two call sites, plus one UI test asserting a
+    cut module cannot be reached while the flag is on.</p>
+  </div>
+
+  <div class="move" id="m3">
+    <span class="rank">MOVE 3</span>
+    <h3>Solve sparse racks on the wire, not the client</h3>
+    <div class="chips"><span class="chip effort-m">Effort M</span><span class="chip impact">Impact Very high</span><span class="chip">Mac + iOS + web</span></div>
+    <p><span class="lbl">Insight</span>
+    Racks are Mac-side, persisted per mode (<span class="mono">PersonalHubConfigurationStore</span>), and the snapshot
+    request carries only <span class="mono">requestedMode</span> (PersonalHubProtocol.swift:741-755). No rack contains
+    all 7 keepers: the code rack is 5 of them plus downloads and windowManager, while calendar and notifications live
+    only in the work and home racks (PersonalHubProtocol.swift:820-831). So the client-side filter can never show the
+    full keeper set, and a stored Home mode filters down to a one-module grid that reads as breakage. The question posed
+    overnight (define a cross-rack keeper view Mac-side, or coerce mode?) has a clear answer: <b>coercion is a bandage,
+    the keeper view belongs on the wire.</b></p>
+    <p><span class="lbl">Next action</span>
+    Additive wire change, same pattern that carried the R3 risk field: an optional
+    <span class="mono">requestedModules: [PersonalHubModuleID]?</span> on
+    <span class="mono">PersonalHubSnapshotRequest</span>; when present, the Mac composes exactly those modules across
+    racks in <span class="mono">PersonalHubService</span>. Old Macs ignore the unknown key and the client filter still
+    applies, so it degrades to today's behavior. Under the flag, hide the Home/Work/Code mode strip
+    (PersonalHubView.swift:654) and present one Companion rack. Interim, this week: a two-line coercion of a stored
+    non-code mode to <span class="mono">.code</span> at launch when the flag is on, accepting the missing
+    calendar/notifications for days, not weeks. Server-side composition also means the web approval surface
+    (<span class="mono">RemoteApprovalWebApp</span>) and any second device inherit the trim for free, which the
+    per-device UserDefaults flag never can.</p>
+  </div>
+
+  <div class="move" id="m4">
+    <span class="rank">MOVE 4</span>
+    <h3>The away ledger: what shipped while you were gone</h3>
+    <div class="chips"><span class="chip effort-m">Effort M</span><span class="chip impact">Impact Very high</span><span class="chip">Makes the trim a feature</span></div>
+    <p><span class="lbl">Insight</span>
+    So far companion-first only makes Buddy smaller. The positive case is the thing no other app on the phone can know:
+    what your agents did while you were away. Today the agents module carries live sessions only
+    (PersonalHubService.swift:1264 onward, first 6, "N total sessions"); there is no completion history anywhere on the
+    wire, so "All clear" is always amnesiac. The Mac already observes every session start, status change, and end
+    through the hook pipeline; it just forgets them.</p>
+    <p><span class="lbl">Next action</span>
+    Mac-side ring buffer of session transitions (project, agent, outcome, timestamp; last ~50) fed from the hook events
+    AppState already receives, exposed either as a second items section on the agents module or as a small
+    <span class="mono">activity</span> payload on the same snapshot. Buddy stores a
+    <span class="mono">lastOpenedAt</span> and renders the diff: "Shipped 1.0.62, 22m ago. rgos tests passed, 1h ago.
+    2 still running." This slots directly into move 1's hero as row one, becomes the data layer for B2-12's Activity
+    tab before any tab restructure happens, and gives cross-session roll-ups a home. Build the data first, the tab
+    later.</p>
+  </div>
+
+  <div class="move" id="m5">
+    <span class="rank">MOVE 5</span>
+    <h3>Put the verb where the alert is (B2-15, now urgent)</h3>
+    <div class="chips"><span class="chip effort-m">Effort M</span><span class="chip impact">Impact Very high</span><span class="chip">Watch + LA + Dynamic Island + notifications</span></div>
+    <p><span class="lbl">Insight</span>
+    Carrying companion-first to the glanceable ring is not a trimming job: the Watch, Live Activity, Dynamic Island,
+    StandBy, and widgets are already agent-only (WatchContentView has zero hub code; the LA widget renders sessions and
+    mascots). Out there the gap is capability, not content. Every notification is tap-to-open (no
+    <span class="mono">UNNotificationCategory</span> registered anywhere; CompanionAppDelegate.swift:59-66 only routes
+    to launch), the Live Activity has <span class="mono">.widgetURL</span> deep links but no
+    <span class="mono">Button(intent:)</span>, and the Watch approves but tells you to "Answer on iPhone" for
+    questions. Now that Buddy's identity is settled as "act on your agents from anywhere", B2-15 stops being one
+    proposal among six and becomes the single highest-leverage unbuilt item.</p>
+    <p><span class="lbl">Next action</span>
+    Three additions that all preserve the content-free APNS design (an action triggers the same authenticated
+    fetch-then-act the app runs on open): register approve/deny/answer notification categories in
+    <span class="mono">CompanionAppDelegate</span>; add <span class="mono">Button(intent:)</span> to
+    <span class="mono">CodeIslandLiveActivityWidget.swift</span>; let the Watch answer questions
+    (WatchContentView.swift:405). Coordinate with the in-flight secure-approval-sheet plumbing rather than duplicating
+    it, per the Batch 02 scope note.</p>
+  </div>
+
+  <div class="move" id="m6">
+    <span class="rank">MOVE 6</span>
+    <h3>Escalate on blocked, not just notify once</h3>
+    <div class="chips"><span class="chip effort-m">Effort M</span><span class="chip impact">Impact High</span><span class="chip">Rides one payload rev with B2-03 risk</span></div>
+    <p><span class="lbl">Insight</span>
+    Buddy announces a need once and goes quiet. An approval that sits for 25 minutes while you are at lunch costs
+    exactly one buzz, the same as one that gets handled in 10 seconds; the product treats a stalled agent and a handled
+    one identically after the first push. Waiting-age exists nowhere in
+    <span class="mono">CompanionStatePayload</span>, and B2-03 already established that the same payload needs a risk
+    field. Two fields, one payload revision.</p>
+    <p><span class="lbl">Next action</span>
+    Add <span class="mono">risk</span> and <span class="mono">waitingSince</span> to the companion state payload in one
+    rev. Then: time-sensitive re-notification at thresholds (5 and 15 minutes, configurable), waiting-age rendered in
+    the Live Activity and the move 1 hero ("Codex waiting 12m"), and a hard dependency on B2-16 so "waiting 20m" is
+    never shown when the truth is "Mac unreachable for 20m". This is the away-from-desk moment the whole product exists
+    for; it should be the loudest thing Buddy ever does, and the only loud thing.</p>
+  </div>
+
+  <div class="move" id="m7">
+    <span class="rank">MOVE 7</span>
+    <h3>Staged deletion of the 12, gated on evidence</h3>
+    <div class="chips"><span class="chip effort-m">Effort M, spread</span><span class="chip impact">Impact Medium, risk-reducing</span><span class="chip">Do not rush this</span></div>
+    <p><span class="lbl">Insight</span>
+    Three load-bearing couplings hide inside the cut set, all found in the code this morning. First, the Capture flow (a
+    keeper) writes through cut modules' action endpoints: quick-jot posts <span class="mono">reminders.add</span> and
+    <span class="mono">notes.add</span> (PersonalHubView.swift, preparePendingQuickJot). Second, rack persistence itself
+    rides a cut module: <span class="mono">quickToggles.setModeRack</span> (PersonalHubService.swift:141, :516). Third,
+    the Mac-side services also feed the Mac's own surfaces and the web app (GlancesView renders weather natively;
+    PersonalHubMacView shows the catalog), and the Buddy decision never covered those. The lesson: <b>cut modules are
+    not the same as cut verbs or cut services.</b> The nexus test judged phone surfaces; some actions underneath them
+    deserve to survive as capture verbs.</p>
+    <p><span class="lbl">Next action</span></p>
+    <ul>
+      <li><b>Stage 0, now:</b> count module opens and toggle flips locally (a UserDefaults tally is enough). Set a decision date, two weeks out, so reversible does not become permanent limbo.</li>
+      <li><b>Stage 1, after the window:</b> move the filter server-side (move 3), so Buddy snapshots stop composing the 12 at the source. Mac services keep running for Mac surfaces.</li>
+      <li><b>Stage 2:</b> re-home <span class="mono">setModeRack</span> to a neutral config action; decide whether quick-jot task/note survive as capture verbs under shelf (recommended) or die with their modules. Then delete the iOS module-card branches for the 12.</li>
+      <li><b>Stage 3:</b> delete phone-side module clients and Mac services with no remaining consumer: TeleprompterWindowController (363 lines), WindowManagerController (124), BluetoothDeviceController (15), the camera preview path, plus their strings across all 7 locales. Check first that Buddy's <span class="mono">NSCameraUsageDescription</span> and <span class="mono">NSBluetoothAlwaysUsageDescription</span> are not load-bearing elsewhere: CompanionBluetoothCentral is pairing transport, not the bluetooth module, and dictation keeps the mic string. Shrinking the privacy manifest of a Developer Tools app is a real App Store win.</li>
+      <li><b>Never (for now):</b> removing <span class="mono">PersonalHubModuleID</span> cases. Persisted configurations decode against the enum; retire IDs only at a deliberate protocol version bump.</li>
+    </ul>
+  </div>
+
+  <div class="move" id="m8">
+    <span class="rank">MOVE 8</span>
+    <h3>Re-sequence B2-14 and B2-16 around the new center</h3>
+    <div class="chips"><span class="chip effort-s">Planning</span><span class="chip impact">Impact High</span><span class="chip">B2-14 tokens · B2-16 reachability · B2-12 last</span></div>
+    <p><span class="lbl">Insight</span>
+    The three unbuilt Batch 02 items were proposed before the identity call; the call reorders them. Moves 1 and 4
+    create new surfaces, and building new surfaces on CITheme's tokenless sprawl (two accents, 16 fixed font sizes)
+    digs the B2-14 hole deeper with every screen. Meanwhile moves 5 and 6 make Buddy speak up when you are away, which
+    is exactly when B2-16's three-voiced failure ambiguity lies to you: a nudge system without one reachability truth
+    will escalate about a Mac that is simply asleep.</p>
+    <p><span class="lbl">Next action</span>
+    Order: B2-14 first, scoped to the already-specced <span class="mono">Shared/CodeIslandDesignSystem.swift</span>
+    (accent, type scale, radius scale; the Watch adopts it), so the new hero and ledger land on tokens from day one.
+    B2-16 second: one reachability state with a last-seen timestamp and one staleDate constant (today it is 300/180/90s
+    in three places), threaded through the hero, Live Activity, and Watch. B2-15 rides move 5. B2-12's tab restructure
+    stays last and happens with you in the loop, once the Activity data (move 4) exists so the new tab set has real
+    content instead of an empty pane.</p>
+  </div>
+
+  <h2>Risks to watch in real use</h2>
+  <div class="risks">
+    <ol>
+      <li><b>Default-on hides the cost of being wrong.</b> You only notice a cut module when you reach for it and miss. Without a decision date and the stage-0 counters, the two-week test never concludes and 19 modules get maintained behind a flag forever.</li>
+      <li><b>Sparse Tools reads as breakage today.</b> Until the interim coercion or move 3 lands, a stored Home mode shows a one-module grid under a Home/Work/Code strip that implies choice it no longer delivers. First impressions of the flag will be formed here.</li>
+      <li><b>The app currently disagrees with itself.</b> Siri and the rack editor still offer the full catalog while Tools hides it (move 2). Small surface, but it undermines the claim that the trim is the product's identity rather than a display setting.</li>
+      <li><b>The quiet hero can now feel empty.</b> With reminders and weather gone, a meeting-free day leaves the hero with little to say until the ledger (move 4) exists. Watch whether "All clear" plus the agents summary carries the screen or reads as a blank app.</li>
+      <li><b>Capture is quietly coupled to cut modules.</b> Quick-jot writes through reminders and notes actions; a careless stage-2 deletion breaks a keeper feature. The staged plan exists precisely for this.</li>
+      <li><b>Per-device flag drift.</b> The UserDefaults flag lives on one phone. A second device, the web surface, and the Mac's own Tools all still show the old world until the keeper set moves server-side.</li>
+      <li><b>Escalation can become noise.</b> Moves 5 and 6 add louder verbs; without B2-16's reachability truth and sane thresholds, Buddy could nag about an unreachable Mac and burn the trust the trim just bought.</li>
+    </ol>
+  </div>
+
+  <h2>Sequence</h2>
+  <div class="sequence">
+    <p>This week, finish what the flag promises: moves 1 and 2 plus the two-line mode coercion (all S, all inside the
+    existing flag), and start the stage-0 counters with a decision date two weeks out. Then land B2-14's token file so
+    every new surface after it is built on the system, not against it. Next block: move 3's wire change and move 4's
+    ledger together (one Mac-side PR, one iOS PR; they share the snapshot), followed by the single payload rev that
+    powers moves 5 and 6, with B2-16's reachability truth landing alongside so the new loudness never lies. Hold
+    B2-12's tab restructure until the ledger is real and you are in the loop. Only after the two-week window closes
+    with no promotions does move 7 begin, one stage at a time. Net effect: by the time anything is deleted, Buddy will
+    already feel bigger than it did with 19 modules.</p>
+  </div>
+
+  <footer>
+    Grounded in: commit <span class="mono">e69ae32</span> on <span class="mono">claude/buddy-companion-first</span>
+    (worktree CodeIsland-companion-first), full reads of CompanionFirst.swift, RemoteApprovalClient.swift,
+    CompanionCommandCenterView.swift, PersonalHubView.swift, PersonalHubProtocol.swift (racks :820-831),
+    PersonalHubService.swift, PersonalHubConfigurationStore.swift, CodeIslandAppIntents.swift, WatchContentView and the
+    widget bundle; docs/product/codeisland-design-review-log.md (Batch 02, RESOLVED 2026-07-21); and the Review 02
+    artifact (items 11-16). Prepared on the Fable 5 model, 2026-07-21.
+  </footer>
+
+</div>
+</body>
+</html>

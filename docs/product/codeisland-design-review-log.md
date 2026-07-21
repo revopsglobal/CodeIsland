@@ -67,9 +67,9 @@ iPhone-refresh, or acceptance-verifier work is proposed.
 | B2-08 | Ops | iOS verification gap: CI tests + working screenshot path | M | High | proposed |
 | B2-09 | Ops | Retire the dead updater instead of shipping its ghost | S | Medium | proposed |
 | B2-10 | Mac | Panel chrome hygiene: guard Quit, localize tabs, drop dead keys | S | Medium | proposed |
-| B2-11 | iOS · Product | Companion-first: trim Hub to 7 keepers (reversible) | M | Very high | accepted — building |
+| B2-11 | iOS · Product | Companion-first: trim Hub to 7 keepers (reversible) | M | Very high | accepted — BUILT on branch (e69ae32), pending real-use + merge |
 | B2-12 | iOS · IA | Tab answer: Agents / Activity / Capture-action / thin Mac | M | Very high | accepted — deferred (needs Greg in loop) |
-| B2-13 | iOS | Quiet Now hero leads with agent context, calendar one tap down | S | High | accepted — building |
+| B2-13 | iOS | Quiet Now hero leads with agent context, calendar one tap down | S | High | accepted — NOT yet built (hero reorder is top follow-up; see Fable review) |
 | B2-14 | iOS | Give iOS the design system (tokens/type/accent) Batch 01 gave the Mac | M | High | proposed |
 | B2-15 | iOS · Watch | Let Buddy act from where it notifies you (notification actions, LA buttons, Watch questions) | M | Very high | proposed |
 | B2-16 | iOS · Watch | Tell the truth when the Mac is gone — one reachability state everywhere | M | High | proposed |
@@ -331,6 +331,37 @@ quiet hero) and B2-15 (unreachable Mac visibly disables the new action buttons).
   they do. `CODEX_HANDOFF.md` describes 1.0.52.
 - The `sample` also showed multipeerconnectivity threads alive at idle;
   not investigated further (B2-04 covers the measured burn).
+
+### Overnight build 2026-07-21 (what actually shipped vs pending)
+
+Branch `claude/buddy-companion-first` (pushed; PR open, NOT merged), off main.
+Verified: `xcodebuild -scheme CodeIslandCompanion` (beta toolchain, sim) →
+**BUILD SUCCEEDED**; installed and launched clean in the iPhone 16 Pro simulator.
+
+- **Shipped (B2-11 + reversibility):** `CompanionFirst.swift` (7-keeper set +
+  `PersonalHubSnapshot.filteringModules` + unused-so-far `filteredCatalog`);
+  ingest-layer filter on `RemoteApprovalClient.refreshHub` and the mock path;
+  unset mode defaults to `.code`; a "Companion-first Tools" toggle in the presence
+  menu (flag `buddy.companionFirst.v1`, default on). Commit e69ae32 (+69/-7).
+  Nothing deleted; CodeIslandCore untouched.
+- **Build-drift fix:** `project.yml` omitted `CommandRisk.swift` while the
+  committed pbxproj referenced it, so any `xcodegen generate` broke the build.
+  Added it (commit 38271d5). Latent bug, now fixed.
+- **NOT built (honest correction — earlier notes overstated B2-13 as "building"):**
+  the B2-13 agent-first quiet-hero reorder was NOT implemented. The filter removed
+  the reminders row from `CompanionTodayTimeline` as a side effect, but calendar
+  still leads. Also not done: the rack-editor / App Intents catalog gate (leaks),
+  and the sparse-Home-rack problem (no rack holds all 7 keepers). These are the
+  Fable review's moves 1-3.
+- **Verification limit:** the trimmed Tools grid and the toggle were not
+  screenshotted — this Xcode-beta toolchain has no Simulator.app GUI to tap
+  through the tab bar, and no deep link opens the Tools root. Trim correctness
+  rests on compile + the filter sitting at the single ingest choke point.
+- **Fable forward review:** https://claude.ai/code/artifact/f04ce28e-6c52-4b96-91df-d37a8c2922c9
+  (source committed at `docs/product/codeisland-fable-review-20260721.html`).
+  Eight ranked moves for taking companion-first further; grounded in e69ae32.
+- **On device:** not yet. TestFlight upload (outward-facing, brushes in-flight
+  TestFlight work) parked for Greg's go.
 
 ---
 
