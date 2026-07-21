@@ -751,7 +751,7 @@ private struct QuestionOptionsView: View {
             Text(title)
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(enabled ? .black : .ciForeground.opacity(0.4))
-                .frame(maxWidth: .infinity, minHeight: 40)
+                .frame(maxWidth: .infinity, minHeight: 48)
                 .background(enabled ? accent : Color.ciForeground.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)

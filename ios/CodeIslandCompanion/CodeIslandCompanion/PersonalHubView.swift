@@ -135,7 +135,12 @@ struct PersonalHubDirectorySurface: View {
         NavigationStack(path: $path) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    modePicker
+                    // Companion-first collapses the Home/Work/Code racks into one
+                    // Companion rack, so the workspace picker is hidden (it would
+                    // choose between racks that no longer differ on this phone).
+                    if !CompanionFirst.isEnabled {
+                        modePicker
+                    }
 
                     if let snapshot = client.hubSnapshot {
                         contextHeader(snapshot)
@@ -876,7 +881,9 @@ private struct PersonalHubModeRackEditor: View {
     }
 
     private var availableModules: [PersonalHubModuleID] {
-        PersonalHubModuleID.allCases.filter { !modules.contains($0) }
+        // Under companion-first, only keeper modules can be added back, so the
+        // editor cannot re-expose a trimmed module (closes the catalog leak).
+        CompanionFirst.filteredCatalog(PersonalHubModuleID.allCases).filter { !modules.contains($0) }
     }
 
     private func move(_ index: Int, by offset: Int) {
@@ -1277,13 +1284,16 @@ private struct PersonalHubModuleCard: View {
                                         claudeContexts.remove(at: index)
                                     } label: {
                                         Image(systemName: "xmark")
+                                            .frame(width: 44, height: 44)
+                                            .contentShape(Rectangle())
                                     }
                                     .buttonStyle(.plain)
+                                    .accessibilityLabel("Remove \(context.name)")
                                 }
                                 .font(.system(size: 10, weight: .semibold))
                                 .foregroundStyle(context.wasTruncated ? HubTheme.accent : HubTheme.foreground.opacity(0.7))
-                                .padding(.horizontal, 9)
-                                .frame(minHeight: 30)
+                                .padding(.leading, 9)
+                                .frame(minHeight: 44)
                                 .background(HubTheme.foreground.opacity(0.06), in: Capsule())
                             }
                         }

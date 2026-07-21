@@ -210,6 +210,12 @@ struct CompanionCommandCenterView: View {
             RemoteTaskWaitingCard(draft: draft)
         }
 
+        if CompanionFirst.isEnabled, remoteApprovals.hasPairingCredential, attentionCandidates.isEmpty {
+            // Pair 2: the positive half of companion-first. When nothing needs
+            // you, lead with what the agents actually did while you were away.
+            CompanionAwayLedger(tasks: remoteApprovals.remoteTasks)
+        }
+
         if remoteApprovals.hasPairingCredential, attentionCandidates.isEmpty {
             CompanionTodayTimeline(
                 snapshot: remoteApprovals.hubSnapshot,
@@ -467,6 +473,7 @@ private struct CompanionPresenceHeader: View {
     @EnvironmentObject private var connection: CompanionConnection
     @EnvironmentObject private var remoteApprovals: RemoteApprovalClient
     @AppStorage(appAppearanceStorageKey) private var appearanceRaw = AppAppearance.system.rawValue
+    @AppStorage(CompanionFirst.flagKey) private var companionFirst = true
 
     var body: some View {
         HStack(spacing: 12) {
@@ -506,6 +513,10 @@ private struct CompanionPresenceHeader: View {
                         Label(mode.label, systemImage: mode.icon).tag(mode.rawValue)
                     }
                 }
+
+                Toggle(isOn: $companionFirst) {
+                    Label("Companion-first Tools", systemImage: "square.grid.2x2")
+                }
             } label: {
                 Image(systemName: "ellipsis")
                     .font(.body.weight(.bold))
@@ -526,6 +537,9 @@ private struct CompanionPresenceHeader: View {
         .shadow(color: Color.black.opacity(0.08), radius: 22, y: 10)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("companion.presence")
+        .onChange(of: companionFirst) { _, _ in
+            Task { await remoteApprovals.refreshHub() }
+        }
     }
 
     private var presentation: CompanionConnectionPresentation {
@@ -681,6 +695,87 @@ private struct CompanionActionDock: View {
     }
 }
 
+// Pair 2: "While you were away" ledger. Renders recent terminal outcomes and
+// live work from the task history the client already holds (no wire change).
+private struct CompanionAwayLedger: View {
+    let tasks: [RemoteTaskSummary]
+
+    private var rows: [RemoteTaskSummary] {
+        Array(
+            tasks
+                .filter { [.verified, .failed, .cancelled, .working].contains($0.state) }
+                .sorted { $0.updatedAt > $1.updatedAt }
+                .prefix(4)
+        )
+    }
+
+    var body: some View {
+        if !rows.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("While you were away")
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(Color.ciForeground)
+                ForEach(rows, id: \.id) { task in
+                    HStack(spacing: 10) {
+                        Image(systemName: icon(task.state))
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(tint(task.state))
+                            .frame(width: 22, height: 22)
+                            .background(tint(task.state).opacity(0.14), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(task.title)
+                                .font(.callout.weight(.semibold))
+                                .foregroundStyle(Color.ciForeground)
+                                .lineLimit(1)
+                            Text("\(task.workspaceName) · \(label(task.state))")
+                                .font(.caption2)
+                                .foregroundStyle(Color.ciForeground.opacity(0.5))
+                                .lineLimit(1)
+                        }
+                        Spacer(minLength: 6)
+                        Text(task.updatedAt, style: .relative)
+                            .font(.caption2)
+                            .monospacedDigit()
+                            .foregroundStyle(Color.ciForeground.opacity(0.4))
+                    }
+                }
+            }
+            .padding(18)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.ciSurface, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .accessibilityIdentifier("companion.awayLedger")
+        }
+    }
+
+    private func icon(_ state: RemoteTaskState) -> String {
+        switch state {
+        case .verified: return "checkmark"
+        case .failed: return "xmark"
+        case .cancelled: return "slash.circle"
+        case .working: return "play.fill"
+        default: return "circle"
+        }
+    }
+    private func tint(_ state: RemoteTaskState) -> Color {
+        switch state {
+        case .verified: return .green
+        case .failed: return .red
+        case .cancelled: return Color.ciForeground.opacity(0.5)
+        case .working: return .blue
+        default: return .orange
+        }
+    }
+    private func label(_ state: RemoteTaskState) -> String {
+        switch state {
+        case .verified: return "Verified"
+        case .failed: return "Failed"
+        case .cancelled: return "Cancelled"
+        case .working: return "Running"
+        default: return "Updated"
+        }
+    }
+}
+
 private struct CompanionTodayTimeline: View {
     let snapshot: PersonalHubSnapshot?
     let openSessions: () -> Void
@@ -692,17 +787,21 @@ private struct CompanionTodayTimeline: View {
         guard let snapshot else { return [] }
         var result: [CommandTimelineRow] = []
 
+        // Companion-first (B2-13): lead with agents, the reason to open Buddy,
+        // then calendar as a single demoted row. Reminders is trimmed under the
+        // flag, so it only appears in the legacy full-hub layout.
+        if let agents = snapshot.modules.first(where: { $0.id == .agents }),
+           let item = agents.items.first {
+            result.append(.init(moduleID: .agents, item: item))
+        }
         if let calendar = snapshot.modules.first(where: { $0.id == .calendar }),
            let item = calendar.items.first {
             result.append(.init(moduleID: .calendar, item: item))
         }
-        if let reminders = snapshot.modules.first(where: { $0.id == .reminders }),
+        if !CompanionFirst.isEnabled,
+           let reminders = snapshot.modules.first(where: { $0.id == .reminders }),
            let item = reminders.items.first(where: { !$0.id.hasPrefix("list:") }) {
             result.append(.init(moduleID: .reminders, item: item))
-        }
-        if let agents = snapshot.modules.first(where: { $0.id == .agents }),
-           let item = agents.items.first {
-            result.append(.init(moduleID: .agents, item: item))
         }
         return Array(result.prefix(3))
     }
@@ -739,6 +838,11 @@ private struct CompanionTodayTimeline: View {
     private var headlineSubtitle: String {
         if hasAgentAttention {
             return "An agent is waiting for your decision."
+        }
+        if CompanionFirst.isEnabled {
+            // Agent-first quiet hero (B2-13): report live agent work, not the
+            // next meeting. idleSummary reuses the Mac's agents summary.
+            return idleSummary
         }
         if let weatherSummary {
             return weatherSummary
