@@ -210,6 +210,12 @@ struct CompanionCommandCenterView: View {
             RemoteTaskWaitingCard(draft: draft)
         }
 
+        if CompanionFirst.isEnabled, remoteApprovals.hasPairingCredential, attentionCandidates.isEmpty {
+            // Pair 2: the positive half of companion-first. When nothing needs
+            // you, lead with what the agents actually did while you were away.
+            CompanionAwayLedger(tasks: remoteApprovals.remoteTasks)
+        }
+
         if remoteApprovals.hasPairingCredential, attentionCandidates.isEmpty {
             CompanionTodayTimeline(
                 snapshot: remoteApprovals.hubSnapshot,
@@ -686,6 +692,87 @@ private struct CompanionActionDock: View {
             in: Capsule()
         )
         .contentShape(Rectangle())
+    }
+}
+
+// Pair 2: "While you were away" ledger. Renders recent terminal outcomes and
+// live work from the task history the client already holds (no wire change).
+private struct CompanionAwayLedger: View {
+    let tasks: [RemoteTaskSummary]
+
+    private var rows: [RemoteTaskSummary] {
+        Array(
+            tasks
+                .filter { [.verified, .failed, .cancelled, .working].contains($0.state) }
+                .sorted { $0.updatedAt > $1.updatedAt }
+                .prefix(4)
+        )
+    }
+
+    var body: some View {
+        if !rows.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("While you were away")
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(Color.ciForeground)
+                ForEach(rows, id: \.id) { task in
+                    HStack(spacing: 10) {
+                        Image(systemName: icon(task.state))
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(tint(task.state))
+                            .frame(width: 22, height: 22)
+                            .background(tint(task.state).opacity(0.14), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(task.title)
+                                .font(.callout.weight(.semibold))
+                                .foregroundStyle(Color.ciForeground)
+                                .lineLimit(1)
+                            Text("\(task.workspaceName) · \(label(task.state))")
+                                .font(.caption2)
+                                .foregroundStyle(Color.ciForeground.opacity(0.5))
+                                .lineLimit(1)
+                        }
+                        Spacer(minLength: 6)
+                        Text(task.updatedAt, style: .relative)
+                            .font(.caption2)
+                            .monospacedDigit()
+                            .foregroundStyle(Color.ciForeground.opacity(0.4))
+                    }
+                }
+            }
+            .padding(18)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.ciSurface, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .accessibilityIdentifier("companion.awayLedger")
+        }
+    }
+
+    private func icon(_ state: RemoteTaskState) -> String {
+        switch state {
+        case .verified: return "checkmark"
+        case .failed: return "xmark"
+        case .cancelled: return "slash.circle"
+        case .working: return "play.fill"
+        default: return "circle"
+        }
+    }
+    private func tint(_ state: RemoteTaskState) -> Color {
+        switch state {
+        case .verified: return .green
+        case .failed: return .red
+        case .cancelled: return Color.ciForeground.opacity(0.5)
+        case .working: return .blue
+        default: return .orange
+        }
+    }
+    private func label(_ state: RemoteTaskState) -> String {
+        switch state {
+        case .verified: return "Verified"
+        case .failed: return "Failed"
+        case .cancelled: return "Cancelled"
+        case .working: return "Running"
+        default: return "Updated"
+        }
     }
 }
 
