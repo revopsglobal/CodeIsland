@@ -467,6 +467,7 @@ private struct CompanionPresenceHeader: View {
     @EnvironmentObject private var connection: CompanionConnection
     @EnvironmentObject private var remoteApprovals: RemoteApprovalClient
     @AppStorage(appAppearanceStorageKey) private var appearanceRaw = AppAppearance.system.rawValue
+    @AppStorage(CompanionFirst.flagKey) private var companionFirst = true
 
     var body: some View {
         HStack(spacing: 12) {
@@ -506,6 +507,10 @@ private struct CompanionPresenceHeader: View {
                         Label(mode.label, systemImage: mode.icon).tag(mode.rawValue)
                     }
                 }
+
+                Toggle(isOn: $companionFirst) {
+                    Label("Companion-first Tools", systemImage: "square.grid.2x2")
+                }
             } label: {
                 Image(systemName: "ellipsis")
                     .font(.body.weight(.bold))
@@ -526,6 +531,9 @@ private struct CompanionPresenceHeader: View {
         .shadow(color: Color.black.opacity(0.08), radius: 22, y: 10)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("companion.presence")
+        .onChange(of: companionFirst) { _, _ in
+            Task { await remoteApprovals.refreshHub() }
+        }
     }
 
     private var presentation: CompanionConnectionPresentation {

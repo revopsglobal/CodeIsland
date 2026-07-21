@@ -156,7 +156,7 @@ final class RemoteApprovalClient: ObservableObject {
         serverURLText = UserDefaults.standard.string(forKey: Self.serverURLKey) ?? Self.defaultServerURL
         selectedMode = launchMode ?? PersonalHubMode(
             rawValue: UserDefaults.standard.string(forKey: Self.selectedModeKey) ?? ""
-        ) ?? .auto
+        ) ?? (CompanionFirst.isEnabled ? .code : .auto)
         bindRemoteTaskClient()
 
 #if DEBUG
@@ -170,7 +170,7 @@ final class RemoteApprovalClient: ObservableObject {
             state = .connected
             serverName = "Code Island UI Test Mac"
             lastUpdatedAt = Date()
-            hubSnapshot = Self.mockHubSnapshot(requestedMode: selectedMode)
+            hubSnapshot = Self.mockHubSnapshot(requestedMode: selectedMode).companionFiltered
             sessionsModule = Self.mockHubModule(.agents)
             approvals = mockAttention.approvals
             questions = mockAttention.questions
@@ -585,7 +585,7 @@ final class RemoteApprovalClient: ObservableObject {
                 )
             )
             let snapshot: PersonalHubSnapshot = try await perform(request, authenticated: true)
-            hubSnapshot = snapshot
+            hubSnapshot = snapshot.companionFiltered
             hubError = nil
         } catch RemoteClientError.unauthorized {
             unpair()
