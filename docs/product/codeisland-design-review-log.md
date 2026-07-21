@@ -67,9 +67,9 @@ iPhone-refresh, or acceptance-verifier work is proposed.
 | B2-08 | Ops | iOS verification gap: CI tests + working screenshot path | M | High | proposed |
 | B2-09 | Ops | Retire the dead updater instead of shipping its ghost | S | Medium | proposed |
 | B2-10 | Mac | Panel chrome hygiene: guard Quit, localize tabs, drop dead keys | S | Medium | proposed |
-| B2-11 | iOS · Product | Tool relevance: Hub drifted from agent monitor to Mac dashboard | M | Very high | proposed |
-| B2-12 | iOS · IA | Four-tab structure buries the one job; Capture wrongly holds the FAB | M | Very high | proposed |
-| B2-13 | iOS | Quiet Now hero leads with calendar, not agent context | S | High | proposed |
+| B2-11 | iOS · Product | Companion-first: trim Hub to 7 keepers (reversible) | M | Very high | accepted — building |
+| B2-12 | iOS · IA | Tab answer: Agents / Activity / Capture-action / thin Mac | M | Very high | accepted — deferred (needs Greg in loop) |
+| B2-13 | iOS | Quiet Now hero leads with agent context, calendar one tap down | S | High | accepted — building |
 | B2-14 | iOS | Give iOS the design system (tokens/type/accent) Batch 01 gave the Mac | M | High | proposed |
 | B2-15 | iOS · Watch | Let Buddy act from where it notifies you (notification actions, LA buttons, Watch questions) | M | Very high | proposed |
 | B2-16 | iOS · Watch | Tell the truth when the Mac is gone — one reachability state everywhere | M | High | proposed |
@@ -233,11 +233,23 @@ catalog (nowPlaying, shelf, calendar, reminders, notes, system, weather, audio,
 bluetooth, battery, quickToggles) and four are "Personal parity extensions"
 (downloads, camera, teleprompter, windowManager). Each is a maintained,
 server-driven module with permission/loading/unavailable states, localization, and
-Mac-side services. The recommendation is not deletion but an explicit identity
-call: commit to the coding command center (demote the personal hub to a labeled
-secondary or ship it off by default) or give the hub its own tab identity so the
-agent signal stops competing with bluetooth battery. This is the batch's headline;
-every other iOS item is downstream.
+Mac-side services. This is the batch's headline; every other iOS item is downstream.
+
+**RESOLVED 2026-07-21 — companion first.** Greg reviewed the identity question and
+agreed. The evidence was one-sided: `apple-companion/APP_STORE_METADATA.md` files
+Buddy under **Developer Tools** and pitches only agent sessions/approvals/questions
+(zero mention of weather/calendar/teleprompter/camera), while git shows ~19
+"Crest parity" commits (PR #6 "Add Crest-class personal hub" onward, plus a
+completion audit that *requires* Crest-parity proof to pass) — stated identity vs
+invested identity diverge. Decision: Buddy is a coding-agent companion; the personal
+hub is a thin, trimmed convenience layer, not a co-equal identity. **Nexus test**
+(does it help the away-from-Mac user decide about / act on their agents?) →
+**KEEP 7**: claude, agents, github, notifications (core) + calendar, shelf, system
+(thin nexus). **CUT/quarantine 12**: nowPlaying, reminders, notes, weather, audio,
+bluetooth, battery, quickToggles, downloads, camera, teleprompter, windowManager.
+Implemented reversibly overnight (see build note below): the 12 are hidden behind a
+UserDefaults toggle (default on), nothing deleted, so real-use testing can promote
+any module that earns a reprieve before the Mac-side services are removed.
 
 **B2-12 — Four-tab IA buries the one job.** The live tab bar is
 Now · Sessions · **Capture (elevated center FAB)** · Tools. The primary-action
