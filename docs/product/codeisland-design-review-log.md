@@ -22,7 +22,7 @@ findings.
 | Move | Closes | Platform | Effort |
 | --- | --- | --- | --- |
 | R1 Attention order + state bands | M1, M4, I4, M5 | Both | S |
-| R2 Type split (SF Pro / SF Mono) + token file, **both appearances** | badge hues, radius sprawl, no Mac light mode, `.black` on-accent | Both | M |
+| R2 Type split (SF Pro / SF Mono) + token file (light mode **reverted**, see below) | badge hues, radius sprawl | Both | M |
 | R3 One risk-driven DecisionCard | M2, M3, I2, I3 | Both | L |
 | R4 Collapsed island names what needs you | collapsed bell, dead IdleIndicatorBar | Mac | M |
 | R5 Rebuild iPhone Now + queue as rows | I1, I3, I4 | iOS | M |
@@ -81,6 +81,20 @@ rest; (2) attention order, collapsed island, empty states; (3) DecisionCard alon
 with its own tests, since it is the security-sensitive path and needs a risk
 field added to `RemoteApprovalItem`; (4) iPhone Now and motion, needing physical
 device acceptance.
+
+> **REVERTED 2026-07-20 (v1.0.60).** Light mode shipped in v1.0.59 and was
+> **unreadable on the real notch** — Greg: "I can't see anything." It was
+> "verified" only by a headless `NSHostingView` snapshot at a forced
+> `NSAppearance`, which did **not** reproduce the failure of the live panel (an
+> `NSPanel` floating over the desktop resolves the dynamic colours differently).
+> All token resolvers are now pinned to their dark values; the panel is always
+> dark again, and the rest of the redesign (R1, R3–R7, the SF Pro / SF Mono
+> split) is untouched. **Lesson, twice-learned this session:** verifying a
+> representation — an HTML mockup rendered in a browser, then an isolated
+> SwiftUI view rendered headless — is not verifying the live surface. A light
+> mode only returns after it is confirmed on a physical notch, not a render.
+> The design below is retained as the *intended* palette for that future
+> attempt, not as a shipped or validated result.
 
 **Light appearance (added 2026-07-19, second pass).** The first redesign draft was
 dark-only. Two facts made that wrong:
