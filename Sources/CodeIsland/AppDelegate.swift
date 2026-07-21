@@ -36,6 +36,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     if let img = PanelSnapshot.renderApproval(session: blocked, dark: dark) {
                         PanelSnapshot.writePNG(img, to: dir.appendingPathComponent("approval-\(name).png"))
                     }
+                    // Collapsed island at rest — empty appState so it shows the
+                    // idle first-impression state (mascot + "0").
+                    if let img = PanelSnapshot.renderCollapsed(appState: AppState(), dark: dark) {
+                        PanelSnapshot.writePNG(img, to: dir.appendingPathComponent("collapsed-\(name).png"))
+                    }
                     FileHandle.standardError.write(Data("wrote \(name)\n".utf8))
                 }
                 exit(0)
@@ -347,6 +352,15 @@ extension AppDelegate {
         web.startTime = now.addingTimeInterval(-3600)
         web.lastActivity = now.addingTimeInterval(-2)
         web.termApp = "iTerm.app"
+        // Badge rail: exercises the four competing hues (@host, +Sub, YOLO) for
+        // the DS2 before/after.
+        web.remoteHostName = "bee"
+        web.remoteHostId = "bee-host"
+        web.subagents = [
+            "a1": SubagentState(agentId: "a1", agentType: "explore"),
+            "a2": SubagentState(agentId: "a2", agentType: "test"),
+        ]
+        web.isYoloMode = true
 
         var docs = SessionSnapshot()
         docs.status = .idle

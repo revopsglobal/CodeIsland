@@ -777,35 +777,51 @@ private struct CompactRightWing: View {
                 }
 
                 if showToolStatus {
-                    // Detailed mode: session count (project name is shown in center on non-notch)
-                    HStack(spacing: 1) {
-                        let active = appState.activeSessionCount
-                        let total = appState.totalSessionCount
-                        if active > 0 {
-                            Text("\(active)")
-                                .foregroundStyle(Color(red: 0.4, green: 1.0, blue: 0.5))
-                            Text("/")
-                                .foregroundStyle(.white.opacity(0.4))
+                    // Detailed mode. At rest (no sessions) show a quiet wordmark
+                    // instead of a bare "0" — the first-impression surface. (M4)
+                    let total = appState.totalSessionCount
+                    if total == 0 {
+                        Text("CodeIsland")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(NotchTokens.ink(0.5))
+                    } else {
+                        HStack(spacing: 1) {
+                            let active = appState.activeSessionCount
+                            if active > 0 {
+                                Text("\(active)")
+                                    .foregroundStyle(Color(red: 0.4, green: 1.0, blue: 0.5))
+                                Text("/")
+                                    .foregroundStyle(.white.opacity(0.4))
+                            }
+                            Text("\(total)")
+                                .foregroundStyle(.white.opacity(0.9))
                         }
-                        Text("\(total)")
-                            .foregroundStyle(.white.opacity(0.9))
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
                     }
-                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
                 } else {
-                    // Simple mode: original session count only
-                    HStack(spacing: 1) {
-                        let active = appState.activeSessionCount
-                        let total = appState.totalSessionCount
-                        if active > 0 {
-                            Text("\(active)")
-                                .foregroundStyle(Color(red: 0.4, green: 1.0, blue: 0.5))
-                            Text("/")
-                                .foregroundStyle(.white.opacity(0.4))
+                    // Simple mode. At rest (no sessions) the island used to show a
+                    // bare "0" — the first-impression surface said nothing. Show a
+                    // quiet wordmark instead; the count returns the moment an agent
+                    // starts. (M4)
+                    let total = appState.totalSessionCount
+                    if total == 0 {
+                        Text("CodeIsland")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(NotchTokens.ink(0.5))
+                    } else {
+                        HStack(spacing: 1) {
+                            let active = appState.activeSessionCount
+                            if active > 0 {
+                                Text("\(active)")
+                                    .foregroundStyle(Color(red: 0.4, green: 1.0, blue: 0.5))
+                                Text("/")
+                                    .foregroundStyle(.white.opacity(0.4))
+                            }
+                            Text("\(total)")
+                                .foregroundStyle(.white.opacity(0.9))
                         }
-                        Text("\(total)")
-                            .foregroundStyle(.white.opacity(0.9))
+                        .font(.system(size: 13, weight: .bold, design: .monospaced))
                     }
-                    .font(.system(size: 13, weight: .bold, design: .monospaced))
                 }
             }
         }
@@ -1231,12 +1247,39 @@ private struct ApprovalBar: View {
                     .onTapGesture { handleCardClick() }
             }
 
-            // Pixel-style buttons — badge the global shortcut when one is enabled
+            // Risk-aware buttons. The old four-colour rainbow gave Allow Once a
+            // friendly green even on a destructive command. Now emphasis follows
+            // risk: on destructive, Deny is the filled action and Allow recedes
+            // to a quiet ghost; on a safe request, Allow leads. One accent, not
+            // four. (M3)
             HStack(spacing: 6) {
-                PixelButton(label: L10n.shared["deny"], fg: Color.white.opacity(0.95), bg: Color(red: 0.45, green: 0.12, blue: 0.12), border: Color(red: 0.7, green: 0.25, blue: 0.25), hint: Self.shortcutHint(.deny), action: onDeny)
-                PixelButton(label: L10n.shared["dismiss"], fg: Color.white.opacity(0.95), bg: Color(red: 0.25, green: 0.25, blue: 0.25), border: Color.white.opacity(0.28), action: onDismiss)
-                PixelButton(label: L10n.shared["allow_once"], fg: Color.white.opacity(0.95), bg: Color(red: 0.16, green: 0.38, blue: 0.18), border: Color(red: 0.28, green: 0.62, blue: 0.32), hint: Self.shortcutHint(.approve), action: onAllow)
-                PixelButton(label: L10n.shared["always"], fg: Color.white.opacity(0.95), bg: Color(red: 0.14, green: 0.28, blue: 0.52), border: Color(red: 0.28, green: 0.48, blue: 0.82), hint: Self.shortcutHint(.approveAlways), action: onAlwaysAllow)
+                let destructive = risk == .destructive
+                let ghostFg = NotchTokens.ink(0.6)
+                let ghostBg = NotchTokens.ink(0.06)
+                let ghostBorder = NotchTokens.ink(0.14)
+                PixelButton(
+                    label: L10n.shared["deny"],
+                    fg: destructive ? NotchTokens.onDanger : NotchTokens.ink(0.9),
+                    bg: destructive ? NotchTokens.dangerFill : ghostBg,
+                    border: destructive ? NotchTokens.dangerFill : ghostBorder,
+                    hint: Self.shortcutHint(.deny), action: onDeny
+                )
+                PixelButton(
+                    label: L10n.shared["dismiss"],
+                    fg: ghostFg, bg: ghostBg, border: ghostBorder, action: onDismiss
+                )
+                PixelButton(
+                    label: L10n.shared["allow_once"],
+                    fg: destructive ? ghostFg : Color(red: 0.05, green: 0.06, blue: 0.07),
+                    bg: destructive ? ghostBg : Color.white.opacity(0.92),
+                    border: destructive ? ghostBorder : Color.white.opacity(0.92),
+                    hint: Self.shortcutHint(.approve), action: onAllow
+                )
+                PixelButton(
+                    label: L10n.shared["always"],
+                    fg: NotchTokens.ink(0.5), bg: NotchTokens.ink(0.05), border: NotchTokens.ink(0.1),
+                    hint: Self.shortcutHint(.approveAlways), action: onAlwaysAllow
+                )
             }
             .padding(.horizontal, 14)
         }
@@ -2503,16 +2546,16 @@ private struct SessionCard: View {
 
                     HStack(spacing: 4) {
                         if let remote = session.remoteDisplayName {
-                            SessionTag("@\(remote)", color: Color(red: 0.45, green: 0.72, blue: 1.0))
+                            SessionTag("@\(remote)", color: NotchTokens.ink(0.5))
                         }
                         if !session.subagents.isEmpty {
-                            SessionTag("+\(session.subagents.count) Sub", color: Color(red: 0.65, green: 0.55, blue: 0.95))
+                            SessionTag("+\(session.subagents.count) Sub", color: NotchTokens.ink(0.5))
                         }
                         if session.interrupted {
-                            SessionTag("INT", color: Color(red: 1.0, green: 0.6, blue: 0.2))
+                            SessionTag("INT", color: NotchTokens.ink(0.5))
                         }
                         if session.isYoloMode == true {
-                            SessionTag("YOLO", color: Color(red: 1.0, green: 0.35, blue: 0.35))
+                            SessionTag("YOLO", color: NotchTokens.ink(0.5))
                         }
                         SessionTag(ageLabel, color: ageColor)
                         TerminalBadge(session: session)
@@ -2609,7 +2652,7 @@ private struct SessionCard: View {
                 if let prompt = session.lastUserPrompt,
                    session.recentMessages.isEmpty {
                     Text(prompt)
-                        .font(.system(size: fontSize, design: .monospaced))
+                        .font(.system(size: fontSize))
                         .foregroundStyle(NotchTokens.ink(0.45))
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -3409,7 +3452,7 @@ private struct ChatMessageRow: View, Equatable {
                     .font(.system(size: fontSize, weight: .bold, design: .monospaced))
                     .foregroundStyle(NotchTokens.runningText)
                 Text(ChatMessageTextFormatter.literalText(text))
-                    .font(.system(size: fontSize, weight: .medium, design: .monospaced))
+                    .font(.system(size: fontSize, weight: .medium))
                     .foregroundStyle(NotchTokens.ink(0.9))
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -3420,7 +3463,7 @@ private struct ChatMessageRow: View, Equatable {
                     .font(.system(size: fontSize, weight: .bold, design: .monospaced))
                     .foregroundStyle(Color(red: 0.85, green: 0.47, blue: 0.34))
                 Text(ChatMessageTextFormatter.inlineMarkdown(compactText(stripDirectives(text))))
-                    .font(.system(size: fontSize, design: .monospaced))
+                    .font(.system(size: fontSize))
                     .foregroundStyle(NotchTokens.ink(0.85))
                     .lineLimit(aiLineLimit)
                     .truncationMode(.tail)
@@ -3488,7 +3531,15 @@ private func stripDirectives(_ text: String) -> String {
 @MainActor
 enum PanelSnapshot {
     static func render(appState: AppState, dark: Bool, width: CGFloat = 580) -> NSImage? {
-        image(of: SessionListView(appState: appState, onlySessionId: nil), dark: dark, width: width)
+        // The list now always wraps in a ThinScrollView (1.0.61), which collapses
+        // to nothing in a headless render with no ambient height — so give it a
+        // fixed height to fill and top-align. The real app gets this from the
+        // panel window.
+        image(
+            of: SessionListView(appState: appState, onlySessionId: nil)
+                .frame(height: 560, alignment: .top),
+            dark: dark, width: width
+        )
     }
 
     /// The approval card in isolation — where the DESTRUCTIVE risk pill and the
@@ -3506,6 +3557,20 @@ enum PanelSnapshot {
             onAllow: {}, onAlwaysAllow: {}, onDeny: {}, onDismiss: {}
         )
         return image(of: bar, dark: dark, width: width)
+    }
+
+    /// The collapsed island at rest (idle, no sessions) — the first-impression
+    /// surface. Renders the two wings flanking a mock notch gap for M4.
+    static func renderCollapsed(appState: AppState, dark: Bool) -> NSImage? {
+        let island = HStack(spacing: 0) {
+            CompactLeftWing(appState: appState, expanded: false, mascotSize: 24, hasNotch: true, showToolStatus: false)
+            Spacer().frame(width: 150)
+            CompactRightWing(appState: appState, expanded: false, hasNotch: true)
+        }
+        .padding(.horizontal, 10)
+        .frame(width: 430, height: 38)
+        .background(Color.black)
+        return image(of: island, dark: dark, width: 430)
     }
 
     private static func image<V: View>(of view: V, dark: Bool, width: CGFloat) -> NSImage? {
