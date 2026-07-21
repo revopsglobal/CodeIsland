@@ -67,6 +67,22 @@ iPhone-refresh, or acceptance-verifier work is proposed.
 | B2-08 | Ops | iOS verification gap: CI tests + working screenshot path | M | High | proposed |
 | B2-09 | Ops | Retire the dead updater instead of shipping its ghost | S | Medium | proposed |
 | B2-10 | Mac | Panel chrome hygiene: guard Quit, localize tabs, drop dead keys | S | Medium | proposed |
+| B2-11 | iOS · Product | Tool relevance: Hub drifted from agent monitor to Mac dashboard | M | Very high | proposed |
+| B2-12 | iOS · IA | Four-tab structure buries the one job; Capture wrongly holds the FAB | M | Very high | proposed |
+| B2-13 | iOS | Quiet Now hero leads with calendar, not agent context | S | High | proposed |
+| B2-14 | iOS | Give iOS the design system (tokens/type/accent) Batch 01 gave the Mac | M | High | proposed |
+
+**Extension 2026-07-20 (same evening):** Greg asked the batch to also review the iOS
+mobile app directly and to weigh information architecture and tool relevance to
+UI/UX. Added B2-11…B2-14, grounded in live Buddy renders from the iPhone 16 Pro
+simulator (beta toolchain, `-CodeIslandCompanionMockHub` / `-CodeIslandCompanionMockPairing`
+/ `-CodeIslandCompanionMockAttention` launch args) — captures of the paired "All
+clear" Now surface and the unpaired pairing flow with the four-tab bar are embedded
+in the artifact — plus the 19-module catalog in
+`Sources/CodeIslandCore/PersonalHubProtocol.swift:19` (the `// Crest 4.9 catalog`
+comment is verbatim). B2-11 is the premise item: B2-12 and B2-13 are its screen-level
+expressions and shift shape if B2-11's framing is rejected. Same artifact URL; the
+Mac/pipeline items 01–10 are unchanged.
 
 ### Rationale
 
@@ -129,6 +145,11 @@ agent pipeline — the actual product — has none. Live proof of the class of
 failure this would catch: the retired Claude Island app's
 `claude-island-state.py` hook is still registered on this Mac, spawning python3
 on every hook event of every session to hit a socket that no longer exists.
+(Cleaned up 2026-07-20: the 11 stale entries were removed from
+`~/.claude/settings.json` (backup: `settings.json.backup-20260720-claude-island-removal`)
+and the script archived to `~/.claude/hooks/archive/`. The proposal itself
+remains open; stale-foreign-hook detection would have flagged this
+automatically instead of it surviving 12 days.)
 Proposal: tri-state health rows (socket/hooks/Accessibility/notifications) in
 Tools + status-menu diagnostics + stale-foreign-hook detection; same checklist
 doubles as first-run.
@@ -182,6 +203,50 @@ product's passive vigilance. ALL/STA/CLI are English literals with no L10n
 (GlancesView.swift:527-529) in a 7-locale app; `scroll_for_more`/`scroll_hidden`
 are localized in all locales and referenced nowhere. Confirmation popover reuses
 the B2-03 decision language; M4/DS2 stay untouched.
+
+**B2-11 — Tool relevance: the Hub drifted from agent monitor to Mac dashboard.**
+`PersonalHubModuleID` (PersonalHubProtocol.swift:19) exposes 19 leaf modules under
+a literal `// Crest 4.9 catalog` comment. Only four relate to AI coding agents
+(claude, agents, github, notifications); eleven are the Crest personal-dashboard
+catalog (nowPlaying, shelf, calendar, reminders, notes, system, weather, audio,
+bluetooth, battery, quickToggles) and four are "Personal parity extensions"
+(downloads, camera, teleprompter, windowManager). Each is a maintained,
+server-driven module with permission/loading/unavailable states, localization, and
+Mac-side services. The recommendation is not deletion but an explicit identity
+call: commit to the coding command center (demote the personal hub to a labeled
+secondary or ship it off by default) or give the hub its own tab identity so the
+agent signal stops competing with bluetooth battery. This is the batch's headline;
+every other iOS item is downstream.
+
+**B2-12 — Four-tab IA buries the one job.** The live tab bar is
+Now · Sessions · **Capture (elevated center FAB)** · Tools. The primary-action
+pedestal holds Capture (quick-jot/shelf), while Sessions — the live agent list,
+the mobile reason-to-exist — is a flat tab that overlaps with Now (Now already
+aggregates the attention triad + a session strip via
+CompanionCommandCenterView.swift). Proposal: merge Now+Sessions into one "Agents"
+home, return Capture to a contextual + action. Scoped M because the right tab set
+depends on B2-11 (demoting the hub frees a tab).
+
+**B2-13 — Quiet Now hero leads with the calendar.** On the paired all-clear Now
+(live render), the signal triad (0 approvals / 0 questions / Mac online) is correct
+and glanceable, but the hero below it is the calendar/reminders timeline — the
+biggest element is "Next: Design review · 2:00 PM" with a "Join" button — pulled
+from personal-hub data (nowContent / CompanionTodayTimeline). Nothing about recent
+sessions, completions, or what's running. Small self-contained change to the
+quiet-state hero: lead with agent context (recent/running/shipped), keep the
+calendar one tap away. Clearest screen-level expression of the B2-11 call.
+
+**B2-14 — Give iOS the design system.** CITheme (ContentView.swift:2264-2285)
+defines only bg/surface/fg — no accent, no type scale, no radius scale. Result:
+two competing accents (submit blue #61ADFF ContentView:606 vs HubTheme orange
+PersonalHubView:8), 16 hardcoded `.system(size:)` values 8→32pt that ignore
+Dynamic Type, 12 corner radii 5→28, and `ciSurface` used as a foreground
+(:1276). Batch 01's R2 gave the Mac NotchTokens; the plan
+(docs/plans/2026-07-19-adaptive-native-product.md) specced
+`Shared/CodeIslandDesignSystem.swift` and it was never built. This item is that
+file plus migrating the accents, type scale, and radius scale onto it (Watch
+adopts it too). Foundation for B2-03's risk colors and B2-12/B2-13's new surfaces;
+do it after/with B2-07's dead-code cut.
 
 ### Also found, not written up as batch items
 
