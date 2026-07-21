@@ -501,6 +501,7 @@ struct RemoteTaskDetailView: View {
     @State private var followUp = ""
     @State private var isSending = false
     @State private var showsCancelConfirmation = false
+    @State private var cancelErrorMessage: String?
 
     private var task: RemoteTaskSummary? {
         remoteApprovals.remoteTasks.first(where: { $0.id == taskID })
@@ -611,11 +612,29 @@ struct RemoteTaskDetailView: View {
             ) {
                 Button(task?.state == .failed ? "Dismiss failure" : "Cancel task", role: .destructive) {
                     Task {
-                        await remoteApprovals.cancelRemoteTask(taskID: taskID)
-                        dismiss()
+                        let result = await remoteApprovals.cancelRemoteTask(taskID: taskID)
+                        if result == .success {
+                            dismiss()
+                        } else {
+                            // Do not dismiss on failure: keep the task on screen and
+                            // say why, instead of pretending the cancel worked.
+                            cancelErrorMessage = remoteApprovals.remoteTaskError
+                                ?? "Buddy could not reach your Mac to cancel this task."
+                        }
                     }
                 }
                 Button(task?.state == .failed ? "Keep in Needs You" : "Keep working", role: .cancel) {}
+            }
+            .alert(
+                "Couldn't cancel",
+                isPresented: Binding(
+                    get: { cancelErrorMessage != nil },
+                    set: { if !$0 { cancelErrorMessage = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) { cancelErrorMessage = nil }
+            } message: {
+                Text(cancelErrorMessage ?? "")
             }
             .accessibilityIdentifier("task.detail.\(taskID.uuidString.lowercased())")
         }

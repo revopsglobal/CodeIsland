@@ -550,14 +550,33 @@ final class RemoteApprovalClient: ObservableObject {
         if result == .pairingRequired { unpair() }
     }
 
-    func cancelRemoteTask(taskID: UUID) async {
-        guard let deviceToken, let baseURL = normalizedServerURL else { return }
+    /// Cancel a task. Returns the result so the UI can stay open and explain a
+    /// failure instead of dismissing as if it worked (the old behavior swallowed
+    /// every non-pairing error, which read as "cancel did nothing").
+    @discardableResult
+    func cancelRemoteTask(taskID: UUID) async -> RemoteTaskSyncResult {
+        guard let deviceToken, let baseURL = normalizedServerURL else {
+            remoteTaskError = "Buddy is not connected to your Mac, so the cancel could not be sent."
+            return .offline
+        }
         let result = await remoteTaskClient.cancel(
             taskID: taskID,
             baseURL: baseURL,
             bearerToken: deviceToken
         )
-        if result == .pairingRequired { unpair() }
+        switch result {
+        case .success:
+            remoteTaskError = nil
+        case .pairingRequired:
+            unpair()
+        case .offline:
+            remoteTaskError = "Could not reach your Mac to cancel. Try again when Buddy shows the Mac online."
+        case .conflict:
+            remoteTaskError = "Your Mac already changed this task. Pull to refresh to see its current state."
+        case .deferred:
+            remoteTaskError = "Cancel is queued and will send once the Mac is reachable."
+        }
+        return result
     }
 
     func consumeRemoteTaskDeepLinkDestination() {
