@@ -25,104 +25,117 @@ struct PersonalHubMacView: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            modeStrip
+            if showingRackEditor,
+               let snapshot,
+               let configuration = snapshot.configuration {
+                MacModeRackEditor(
+                    mode: snapshot.resolvedMode,
+                    modules: configuration.rack(for: snapshot.resolvedMode),
+                    onCancel: { showingRackEditor = false }
+                ) { modules in
+                    showingRackEditor = false
+                    saveRack(mode: snapshot.resolvedMode, modules: modules)
+                }
+            } else {
+                modeStrip
 
-            if let snapshot {
-                HStack {
-                    Text("\(snapshot.resolvedMode.rawValue.capitalized) tools")
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        .foregroundStyle(accent)
-                    Text(snapshot.serverName)
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.34))
-                    Spacer()
-                    Text(snapshot.generatedAt, style: .time)
-                        .font(.system(size: 9, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.25))
-                    Button {
-                        toggleDashboard(snapshot)
-                    } label: {
-                        Image(systemName: snapshot.configuration?.dashboardEnabled == false
-                            ? "gauge.with.dots.needle.0percent"
-                            : "gauge.with.dots.needle.67percent")
-                            .font(.system(size: 10, weight: .bold))
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.white.opacity(0.48))
-                    .help(snapshot.configuration?.dashboardEnabled == false
-                        ? "Show day dashboard"
-                        : "Hide day dashboard")
-                    Button {
-                        showingRackEditor = true
-                    } label: {
-                        Image(systemName: "slider.horizontal.3")
-                            .font(.system(size: 10, weight: .bold))
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(accent)
-                    .help("Edit \(snapshot.resolvedMode.rawValue.capitalized) rack")
-                    if snapshot.resolvedMode == .code {
+                if let snapshot {
+                    HStack {
+                        Text("\(snapshot.resolvedMode.rawValue.capitalized) tools")
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundStyle(accent)
+                        Text(snapshot.serverName)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.34))
+                        Spacer()
+                        Text(snapshot.generatedAt, style: .time)
+                            .font(.system(size: 9, weight: .medium, design: .monospaced))
+                            .foregroundStyle(.white.opacity(0.25))
                         Button {
-                            RemoteTasksWindowController.shared.show(appState: appState)
+                            toggleDashboard(snapshot)
                         } label: {
-                            Label("Remote Tasks", systemImage: "terminal")
-                                .font(.system(size: 10, weight: .semibold))
+                            Image(systemName: snapshot.configuration?.dashboardEnabled == false
+                                ? "gauge.with.dots.needle.0percent"
+                                : "gauge.with.dots.needle.67percent")
+                                .font(.system(size: 10, weight: .bold))
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.white.opacity(0.48))
+                        .help(snapshot.configuration?.dashboardEnabled == false
+                            ? "Show day dashboard"
+                            : "Hide day dashboard")
+                        Button {
+                            showingRackEditor = true
+                        } label: {
+                            Image(systemName: "slider.horizontal.3")
+                                .font(.system(size: 10, weight: .bold))
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(accent)
-                        .help("Open the full coding task portfolio")
-                    }
-                }
-                .padding(.horizontal, 12)
-
-                if snapshot.configuration?.dashboardEnabled != false,
-                   let dayProgress = snapshot.dayProgress {
-                    VStack(alignment: .leading, spacing: 3) {
-                        HStack {
-                            Text("DAY")
-                            Spacer()
-                            Text("\(Int((dayProgress * 100).rounded()))%")
+                        .help("Edit \(snapshot.resolvedMode.rawValue.capitalized) rack")
+                        if snapshot.resolvedMode == .code {
+                            Button {
+                                RemoteTasksWindowController.shared.show(appState: appState)
+                            } label: {
+                                Label("Remote Tasks", systemImage: "terminal")
+                                    .font(.system(size: 10, weight: .semibold))
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(accent)
+                            .help("Open the full coding task portfolio")
                         }
-                        .font(.system(size: 8, weight: .black, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.36))
-                        ProgressView(value: dayProgress)
-                            .tint(accent)
-                            .controlSize(.mini)
                     }
                     .padding(.horizontal, 12)
-                }
 
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 5) {
-                        ForEach(snapshot.modules) { module in
-                            moduleTab(module)
+                    if snapshot.configuration?.dashboardEnabled != false,
+                       let dayProgress = snapshot.dayProgress {
+                        VStack(alignment: .leading, spacing: 3) {
+                            HStack {
+                                Text("DAY")
+                                Spacer()
+                                Text("\(Int((dayProgress * 100).rounded()))%")
+                            }
+                            .font(.system(size: 8, weight: .black, design: .monospaced))
+                            .foregroundStyle(.white.opacity(0.36))
+                            ProgressView(value: dayProgress)
+                                .tint(accent)
+                                .controlSize(.mini)
                         }
+                        .padding(.horizontal, 12)
                     }
-                    .padding(.horizontal, 10)
-                }
 
-                if let selectedModule {
-                    ScrollView {
-                        MacHubModuleCard(
-                            module: selectedModule,
-                            prepare: prepare,
-                            addText: addText,
-                            selectCalendarDate: selectCalendarDate
-                        )
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 5) {
+                            ForEach(snapshot.modules) { module in
+                                moduleTab(module)
+                            }
+                        }
                         .padding(.horizontal, 10)
-                        .padding(.bottom, 10)
                     }
-                    .frame(maxHeight: 370)
-                }
-            }
 
-            if let actionMessage {
-                Text(actionMessage)
-                    .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.48))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 6)
+                    if let selectedModule {
+                        ScrollView {
+                            MacHubModuleCard(
+                                module: selectedModule,
+                                prepare: prepare,
+                                addText: addText,
+                                selectCalendarDate: selectCalendarDate
+                            )
+                            .padding(.horizontal, 10)
+                            .padding(.bottom, 10)
+                        }
+                        .frame(maxHeight: 370)
+                    }
+                }
+
+                if let actionMessage {
+                    Text(actionMessage)
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.48))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 6)
+                }
             }
         }
         .task {
@@ -134,30 +147,14 @@ struct PersonalHubMacView: View {
         }
         .onChange(of: requestedMode) { _, _ in refresh() }
         .onReceive(personalData.$shelf) { _ in refresh() }
-        .confirmationDialog(
-            "Review action",
-            isPresented: Binding(
-                get: { preparedAction != nil },
-                set: { if !$0 { preparedAction = nil } }
-            ),
-            titleVisibility: .visible,
-            presenting: preparedAction
-        ) { prepared in
-            Button("Do it") { execute(prepared) }
-            Button("Cancel", role: .cancel) { preparedAction = nil }
-        } message: { prepared in
-            Text(prepared.preview)
-        }
-        .sheet(isPresented: $showingRackEditor) {
-            if let snapshot,
-               let configuration = snapshot.configuration {
-                MacModeRackEditor(
-                    mode: snapshot.resolvedMode,
-                    modules: configuration.rack(for: snapshot.resolvedMode)
-                ) { modules in
-                    showingRackEditor = false
-                    saveRack(mode: snapshot.resolvedMode, modules: modules)
-                }
+        .overlay {
+            if let preparedAction {
+                MacHubActionReview(
+                    prepared: preparedAction,
+                    onCancel: { self.preparedAction = nil },
+                    onConfirm: { execute(preparedAction) }
+                )
+                .padding(10)
             }
         }
     }
@@ -659,8 +656,10 @@ private struct MacHubModuleCard: View {
             guard module.id == .claude else { return false }
             return acceptClaudeDrop(providers)
         }
-        .sheet(isPresented: $showsMediaPreflight) {
-            MediaPreflightView()
+        .overlay {
+            if showsMediaPreflight {
+                MediaPreflightView(onDismiss: { showsMediaPreflight = false })
+            }
         }
     }
 
@@ -1249,19 +1248,81 @@ private struct MacReminderListChoice: Identifiable {
     let title: String
 }
 
+private struct MacHubActionReview: View {
+    let prepared: PersonalHubPreparedAction
+    let onCancel: () -> Void
+    let onConfirm: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.72)
+
+            VStack(alignment: .leading, spacing: 13) {
+                HStack(spacing: 10) {
+                    Image(systemName: "checkmark.shield.fill")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(.orange)
+                        .frame(width: 34, height: 34)
+                        .background(Color.orange.opacity(0.13), in: RoundedRectangle(cornerRadius: 9))
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Review action")
+                            .font(.system(size: 15, weight: .bold, design: .rounded))
+                        Text("Nothing happens until you confirm")
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                }
+
+                Text(prepared.preview)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.primary.opacity(0.88))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+                    .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 9))
+
+                HStack(spacing: 8) {
+                    Spacer()
+                    Button("Cancel", action: onCancel)
+                        .keyboardShortcut(.cancelAction)
+                    Button("Do it", action: onConfirm)
+                        .buttonStyle(.borderedProminent)
+                        .tint(.orange)
+                        .keyboardShortcut(.defaultAction)
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: 390)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.white.opacity(0.11), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.42), radius: 24, y: 12)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Review action")
+    }
+}
+
 private struct MacModeRackEditor: View {
     let mode: PersonalHubMode
+    let onCancel: () -> Void
     let onSave: ([PersonalHubModuleID]) -> Void
 
-    @Environment(\.dismiss) private var dismiss
     @State private var modules: [PersonalHubModuleID]
 
     init(
         mode: PersonalHubMode,
         modules: [PersonalHubModuleID],
+        onCancel: @escaping () -> Void,
         onSave: @escaping ([PersonalHubModuleID]) -> Void
     ) {
         self.mode = mode
+        self.onCancel = onCancel
         self.onSave = onSave
         _modules = State(initialValue: modules)
     }
@@ -1277,7 +1338,7 @@ private struct MacModeRackEditor: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button("Cancel") { dismiss() }
+                Button("Cancel", action: onCancel)
                 Button("Review") { onSave(modules) }
                     .buttonStyle(.borderedProminent)
                     .tint(.orange)
@@ -1342,8 +1403,11 @@ private struct MacModeRackEditor: View {
                 }
             }
         }
-        .padding(18)
-        .frame(width: 500, height: 560)
+        .padding(14)
+        .frame(maxWidth: .infinity, maxHeight: 410, alignment: .top)
+        .background(Color.black.opacity(0.22), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .padding(.horizontal, 10)
+        .padding(.bottom, 10)
     }
 
     private var availableModules: [PersonalHubModuleID] {

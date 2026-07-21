@@ -1,5 +1,13 @@
 # Changelog
 
+## [v1.0.59] - 2026-07-20
+
+### English
+- Fix a Mac crash when reviewing Open Settings and other Tools actions from the auto-collapsing notch panel. Tools now uses stable in-panel review, rack-editor, and camera-preflight surfaces instead of SwiftUI sheets attached to the transient panel.
+
+### 中文
+- 修复从自动收起的刘海面板中审核「打开设置」及其他工具操作时可能发生的 Mac 崩溃。工具审核、模块编辑器和相机预检现改为稳定的面板内界面，不再使用附着于临时面板的 SwiftUI 弹窗。
+
 ## [v1.0.58] - 2026-07-20
 
 ### English
