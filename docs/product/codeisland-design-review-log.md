@@ -81,13 +81,21 @@ as a dedicated Buddy review, grounded in live renders from the iPhone 16 Pro
 simulator (beta toolchain, `-CodeIslandCompanionMockHub` / `-CodeIslandCompanionMockPairing`
 / `-CodeIslandCompanionMockAttention approval|question|multiple` / `-CodeIslandCompanionMockDeepLink <url>`
 launch args — the mock deep link is applied at launch via `openDeepLink`,
-RemoteApprovalClient.swift:180). Embedded captures: the paired "All clear" Now
-surface and the unpaired pairing flow with the four-tab bar. Later captures
-(approval surface, sessions) were blocked by an unresponsive simulator under
-extreme host load (load avg ~500–980; Copilot.app + build swarm), so B2-15/B2-16
-mockups are code-accurate reconstructions from the exact mock seed
+RemoteApprovalClient.swift:180). Embedded live captures: the paired "All clear" Now
+surface, the unpaired pairing flow with the four-tab bar, and (added on a retry
+when host load briefly dipped) the paired "Needs you" attention state with the
+real "Approval needed" card (Codex / CodeIsland / Run release build) — now the
+second Before image in B2-13, making the quiet-vs-attention contrast fully
+real-grounded. Deeper tab surfaces (Sessions, Tools grid, Capture composer,
+StandBy, Watch) could NOT be captured live: the host stayed pinned at load
+~300–980 all evening (Copilot.app + a build swarm), `simctl io screenshot` timed
+out repeatedly, and this Xcode-beta toolchain has no Simulator.app GUI on disk, so
+there was no way to tap through the tab bar (launch-arg deep links to those tabs
+were killed by the load before the app foregrounded). B2-15/B2-16 depict proposed
+notification-action and reachability states that do not exist as live screens
+anyway, so their mockups are code-accurate reconstructions from the exact mock seed
 (RemoteApprovalClient.swift:1015 — Codex / "Run release build" /
-`xcodebuild -scheme CodeIslandCompanion archive`) rather than live renders. The
+`xcodebuild -scheme CodeIslandCompanion archive`). The
 19-module catalog is `Sources/CodeIslandCore/PersonalHubProtocol.swift:19` (the
 `// Crest 4.9 catalog` comment is verbatim). B2-11 is the premise item: B2-12 and
 B2-13 are its screen-level expressions and shift shape if B2-11's framing is
