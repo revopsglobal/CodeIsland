@@ -16,6 +16,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     let appState = AppState()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        #if DEBUG
+        // Snapshot mode runs FIRST — before any bundle-dependent setup
+        // (NotificationManager etc. throw when run as a bare binary). Renders
+        // the session list in both appearances to PNGs, then exits. R2 light
+        // mode verification; no window/notch/TCC involved.
+        let launchArgs = ProcessInfo.processInfo.arguments
+        if let idx = launchArgs.firstIndex(of: "--render-snapshot"), idx + 1 < launchArgs.count {
+            let dir = URL(fileURLWithPath: launchArgs[idx + 1])
+            let scenario = PreviewScenario(rawValue: idx + 2 < launchArgs.count ? launchArgs[idx + 2] : "multi") ?? .multi
+            DebugHarness.apply(scenario, to: appState)
+            appState.surface = .sessionList
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                for (dark, name) in [(true, "dark"), (false, "light")] {
+                    if let img = PanelSnapshot.render(appState: appState, dark: dark) {
+                        PanelSnapshot.writePNG(img, to: dir.appendingPathComponent("panel-\(name).png"))
+                        FileHandle.standardError.write(Data("wrote panel-\(name).png\n".utf8))
+                    } else {
+                        FileHandle.standardError.write(Data("render \(name) returned nil\n".utf8))
+                    }
+                }
+                exit(0)
+            }
+            return
+        }
+        #endif
         ProcessInfo.processInfo.disableAutomaticTermination("CodeIsland must stay running")
         ProcessInfo.processInfo.disableSuddenTermination()
         // Pre-set app icon so Dock/menu bar use the packaged bundle icon.
