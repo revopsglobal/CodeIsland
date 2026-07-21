@@ -2034,7 +2034,16 @@ private struct SessionListView: View {
         // Compute once per render — groupedSessions, totalCount, needsScroll
         let groups = groupedSessions
         let totalSessionCount = groups.reduce(0) { $0 + $1.ids.count }
-        let needsScroll = onlySessionId == nil && totalSessionCount > maxVisibleSessions
+        // The full session list always scrolls so it can never exceed the panel.
+        // The old rule (count > maxVisibleSessions) missed the case where fewer
+        // sessions than the cap are each tall enough to overrun the screen —
+        // which pushed the nav off the top. ThinScrollView only actually scrolls
+        // when content exceeds maxHeight, so short lists are unaffected.
+        let needsScroll = onlySessionId == nil && totalSessionCount > 1
+        // Cap the scroll region to what fits on screen below the menu bar and the
+        // panel's own header/footer, not just maxVisibleSessions × row height.
+        let screenListCap = max(220, (NSScreen.main?.visibleFrame.height ?? 800) - 180)
+        let scrollMaxHeight = min(CGFloat(maxVisibleSessions) * 110, screenListCap)
         let content = VStack(spacing: 6) {
             // Zero sessions previously rendered nothing at all: header, rule,
             // then blank panel. That is the first screen a new user sees.
@@ -2096,7 +2105,7 @@ private struct SessionListView: View {
 
         VStack(spacing: 0) {
             if needsScroll {
-                ThinScrollView(maxHeight: CGFloat(maxVisibleSessions) * 90) {
+                ThinScrollView(maxHeight: scrollMaxHeight) {
                     content
                 }
                 .clipShape(

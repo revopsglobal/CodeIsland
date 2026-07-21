@@ -1,5 +1,13 @@
 # Changelog
 
+## [v1.0.61] - 2026-07-20
+
+### English
+- Fix the expanded notch panel overflowing the screen and pushing the Now/Today/Tools nav off the top when several sessions are open. The panel height is now clamped to the screen below the menu bar, the per-session height estimate is realistic for multi-line rows, and the session list always scrolls to fit instead of only scrolling above the visible-sessions setting.
+
+### 中文
+- 修复多个会话打开时展开的刘海面板超出屏幕、把 Now/Today/Tools 导航挤出顶部的问题。面板高度现固定在菜单栏以下的屏幕范围内，每会话高度估算更贴合多行内容，会话列表始终滚动以适配，而非仅在超过可见会话设置时才滚动。
+
 ## [v1.0.60] - 2026-07-20
 
 ### English

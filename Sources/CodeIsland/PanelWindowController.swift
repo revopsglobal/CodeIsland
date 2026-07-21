@@ -118,7 +118,14 @@ class PanelWindowController: NSObject, NSWindowDelegate {
 
     private func panelSize(for screen: NSScreen) -> NSSize {
         let maxSessions = CGFloat(max(2, UserDefaults.standard.integer(forKey: SettingsKey.maxVisibleSessions)))
-        let maxH = max(300, maxSessions * 90 + 60)
+        // 110/session is closer to a real multi-line row than the old 90; the +70
+        // covers the header and usage footer.
+        let requested = max(300, maxSessions * 110 + 70)
+        // Never taller than the screen below the menu bar. Without this clamp a
+        // high maxVisibleSessions (or several tall rows) pushed the panel — and
+        // its Now/Today/Tools nav — off the top of the screen.
+        let usable = max(300, screen.visibleFrame.height - 8)
+        let maxH = min(requested, usable)
         let screenW = screen.frame.width
         let width = min(620, screenW - 40)
         return NSSize(width: width, height: maxH)
