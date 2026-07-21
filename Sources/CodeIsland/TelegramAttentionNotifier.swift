@@ -12,8 +12,11 @@ final class TelegramAttentionNotifier: ObservableObject {
     @Published private(set) var isSending = false
 
     private let log = Logger(subsystem: "com.codeisland", category: "telegram")
+    private let credentialStore: TelegramCredentialStore
 
-    private init() {}
+    private init(credentialStore: TelegramCredentialStore = TelegramCredentialStore()) {
+        self.credentialStore = credentialStore
+    }
 
     func notify(envelope: RemoteAttentionPushEnvelope) {
         guard envelope.state == .pending
@@ -43,17 +46,25 @@ final class TelegramAttentionNotifier: ObservableObject {
 
     private func sendInBackground(text: String, reportMissingConfiguration: Bool = false) {
         guard !isSending else { return }
-        guard let configuration = configuration() else {
-            if reportMissingConfiguration {
-                lastError = TelegramError.incompleteConfiguration.localizedDescription
+        let resolvedConfiguration: Configuration
+        do {
+            guard let configured = try configuration() else {
+                if reportMissingConfiguration {
+                    lastError = TelegramError.incompleteConfiguration.localizedDescription
+                }
+                return
             }
+            resolvedConfiguration = configured
+        } catch {
+            lastError = TelegramError.credentialUnavailable.localizedDescription
+            log.error("telegram credentials are unavailable")
             return
         }
         isSending = true
         Task {
             defer { isSending = false }
             do {
-                try await send(text: text, configuration: configuration)
+                try await send(text: text, configuration: resolvedConfiguration)
                 lastDeliveryAt = Date()
                 lastError = nil
             } catch {
@@ -70,6 +81,7 @@ final class TelegramAttentionNotifier: ObservableObject {
 
     private enum TelegramError: LocalizedError {
         case incompleteConfiguration
+        case credentialUnavailable
         case invalidResponse
         case rejected(status: Int, reason: String)
 
@@ -77,6 +89,8 @@ final class TelegramAttentionNotifier: ObservableObject {
             switch self {
             case .incompleteConfiguration:
                 return "Telegram needs a bot token and chat ID in CodeIsland Settings"
+            case .credentialUnavailable:
+                return "Telegram could not access its saved bot credential"
             case .invalidResponse:
                 return "Telegram returned an invalid response"
             case .rejected(let status, let reason):
@@ -85,12 +99,12 @@ final class TelegramAttentionNotifier: ObservableObject {
         }
     }
 
-    private func configuration() -> Configuration? {
+    private func configuration() throws -> Configuration? {
         let defaults = UserDefaults.standard
         let enabled = defaults.object(forKey: SettingsKey.remoteApprovalTelegramEnabled) == nil
             ? SettingsDefaults.remoteApprovalTelegramEnabled
             : defaults.bool(forKey: SettingsKey.remoteApprovalTelegramEnabled)
-        let botToken = (defaults.string(forKey: SettingsKey.remoteApprovalTelegramBotToken)
+        let botToken = try (credentialStore.loadMigratingLegacyValue()
             ?? SettingsDefaults.remoteApprovalTelegramBotToken).trimmingCharacters(in: .whitespacesAndNewlines)
         let chatID = (defaults.string(forKey: SettingsKey.remoteApprovalTelegramChatID)
             ?? SettingsDefaults.remoteApprovalTelegramChatID).trimmingCharacters(in: .whitespacesAndNewlines)

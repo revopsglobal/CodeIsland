@@ -128,6 +128,7 @@ enum SettingsKey {
     static let remoteApprovalAPNSPrivateKeyPath = "remoteApprovalAPNSPrivateKeyPath"
     static let remoteApprovalAPNSTopic = "remoteApprovalAPNSTopic"
     static let remoteApprovalTelegramEnabled = "remoteApprovalTelegramEnabled"
+    // Legacy migration key. New bot-token writes belong in TelegramCredentialStore.
     static let remoteApprovalTelegramBotToken = "remoteApprovalTelegramBotToken"
     static let remoteApprovalTelegramChatID = "remoteApprovalTelegramChatID"
     static let remoteApprovalExpectedClientVersion = "remoteApprovalExpectedClientVersion"
@@ -226,6 +227,7 @@ struct SettingsDefaults {
     static let remoteApprovalAPNSPrivateKeyPath = ""
     static let remoteApprovalAPNSTopic = "com.revopsglobal.codeisland.buddy"
     static let remoteApprovalTelegramEnabled = false
+    // Retained only so older installs can migrate the preference into Keychain.
     static let remoteApprovalTelegramBotToken = ""
     static let remoteApprovalTelegramChatID = ""
     static let remoteApprovalExpectedClientVersion = ""
