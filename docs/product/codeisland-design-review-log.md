@@ -7,6 +7,206 @@ objection addressed, never as a renamed near-duplicate.
 
 ---
 
+## 2026-07-20 — Batch 02: after the redesign — pipeline, parity, and polish
+
+**Artifact:** https://claude.ai/code/artifact/93b97243-9883-4dc1-af80-17a904756085
+
+Ten proposals, ranked most-severe first, generated the same evening 1.0.62 shipped.
+The through-line: Batch 01 changed what the island *says*; this batch closes the
+places where the underlying system does not yet match what the redesign promises
+(the risk gate, the invisible desktop sessions, the idle cost) plus the parity and
+hygiene debts the redesign exposed. Artifact items are numbered 01–10; logged here
+as B2-01…B2-10 to avoid colliding with Batch 01's M/I labels.
+
+**Grounding method:**
+
+- Live app: v1.0.62 running as PID 13771 on the notch Mac. Screen captures of the
+  collapsed island and expanded panel (embedded in the artifact) taken 22:5x PST
+  while two Claude Code Desktop sessions and one Codex CLI session were active —
+  only the Codex session appeared. Island expanded/collapsed via real clicks
+  (cliclick), machine left as found.
+- Live measurement: `ps` (18–25% CPU at idle-collapsed) plus a 4-second `sample`
+  of the process (hot frames: `__proc_info` 51, `__sysctl` 28, Foundation string
+  search — the discovery process-scan) as evidence for B2-04.
+- Hook config read from `~/.claude/settings.json` (CodeIsland hook v5 registered
+  on all events; retired `claude-island-state.py` also still registered — live
+  evidence for B2-05); `CLAUDE_CODE_ENTRYPOINT=claude-desktop` with empty
+  `TERM_PROGRAM` confirmed from inside a ccd session for B2-02.
+- Full source reads on main @ d078a77: NotchPanelView.swift (3,611 lines),
+  AppState.swift (5,045), SettingsView.swift, NotchDesignTokens.swift, the 17 CLI
+  mascot views, HookServer/ConfigInstaller, Sources/CodeIslandBridge/main.swift,
+  Resources/codeisland-pi.ts, CodeIslandCore (CommandRisk, RemoteApprovalProtocol),
+  ios/CodeIslandCompanion (ContentView, PersonalHubView, RemoteApprovalView,
+  LiveActivityController, Watch app), .github/workflows, appcast.xml, scripts/.
+- Mockups reuse NotchTokens values verbatim (#08090B–#1E222A surfaces, #FFB04D
+  signal + #241505 onSignal, #FF6B5E danger + #2A0806 onDanger, #4DD966 live,
+  SF Pro / SF Mono split). iOS claims cite CITheme/HubTheme values read from
+  source; iOS surfaces still lack real renders because the simulator smoke path
+  is broken — that is itself batch item B2-08.
+
+**Deduplicated against:** Batch 01 and the visual-proof batch (M4 and DS2 remain
+rejected-closed; light mode remains parked pending a physical-notch pass — nothing
+here touches the wordmark, the badge rail, or appearance). Checked against all
+in-flight worktrees before proposing: telegram-secure-approval-sheet (active
+tonight), harden-app-intent-validation, stabilize-iphone-refresh,
+physical-acceptance-verifier-fixes, harned-testflight-reinvite,
+eventkit-health-diagnostics, completion-proof. No Telegram-approval, App Intent,
+iPhone-refresh, or acceptance-verifier work is proposed.
+
+### Status table
+
+| # | Platform | Idea | Effort | Impact | Status |
+|---|---|---|---|---|---|
+| B2-01 | Pipeline | Close the destructive-command hole at the hook gate (pi/omp) | S | Very high | proposed |
+| B2-02 | Mac | Make Claude Code Desktop sessions first-class citizens | M | Very high | proposed |
+| B2-03 | Mac+iOS+Watch | One decision language: finish M3 on every deciding surface | M | Very high | proposed |
+| B2-04 | Mac | Stop paying 20% CPU to look idle | M | High | proposed |
+| B2-05 | Mac | Pipeline health surface + first-run checklist | M | High | proposed |
+| B2-06 | Mac | Turn session rows into a control surface | M | High | proposed |
+| B2-07 | iOS | Cut the dead iOS subtree; fix the three live tap targets | S | High | proposed |
+| B2-08 | Ops | iOS verification gap: CI tests + working screenshot path | M | High | proposed |
+| B2-09 | Ops | Retire the dead updater instead of shipping its ghost | S | Medium | proposed |
+| B2-10 | Mac | Panel chrome hygiene: guard Quit, localize tabs, drop dead keys | S | Medium | proposed |
+
+### Rationale
+
+**B2-01 — Close the destructive-command hole at the hook gate.** The hook-side
+gate (`Resources/codeisland-pi.ts:79-87`) checks 3 patterns and lets non-matches
+run fire-and-forget (:496-505); the Mac's own classifier
+(`CodeIslandCore/CommandRisk.swift:27-36`) knows 8 destructive patterns and
+`CommandRiskTests.swift:35-44` asserts force-push / `reset --hard` /
+`curl|sh` / `rm -fr` are destructive — but it is display-only. For pi/omp
+sessions those commands never raise a blocking approval, so the 1.0.62 changelog's
+"destructive Deny is the single filled action" holds only for Claude (whose engine
+forwards all PermissionRequests). The hook regex also misses `rm -fr` / `rm -f` /
+`rm --force`. Fix: mirror or codegen the CommandRisk pattern set into
+`isDangerous()` plus a parity test.
+
+**B2-02 — Make Claude Code Desktop sessions first-class.** Live observation, not
+inference: two active ccd sessions, island shows only the Codex CLI. Hooks
+verifiably fire in ccd (this session's own hook receipts), the bridge only drops
+events without a session_id, but discovery binds sessions to CLI processes via
+proc/sysctl arg scans (AppState.swift:2288+, :3001-3005 tightens unknown-process
+freshness to 30s) and jump/Smart-Suppress are terminal-centric
+(bridge main.swift:414). Proposal: accept `entrypoint=claude-desktop` as a
+session source, badge it DESKTOP, jump activates the Claude app. The exact
+drop point (discovery binding vs display filter) needs an instrumented debugging
+hour first — effort M includes it.
+
+**B2-03 — One decision language everywhere.** M3's consequence-matched emphasis
+shipped to the Mac auto-card and iPhone approval card only. Still contradicting
+it: the Mac inline card's raw-RGB rainbow with no risk tier
+(NotchPanelView.swift:2572-2592), ApprovalBar re-typing dangerFill/onDanger/
+signalFill as literals (:1170-1185), the Watch's fixed filled-orange Approve on
+destructive commands (WatchContentView.swift:385-400), and every glanceable
+surface — Live Activity, Dynamic Island, StandBy, widgets — because
+`CompanionStatePayload` (CompanionModels.swift:268) and
+`ActivityAttributes.ContentState` (:60-74) carry no risk field even though
+`RemoteApprovalItem.risk` already rides the authenticated path
+(RemoteApprovalProtocol.swift:168). Additive wire change + reuse of existing
+components.
+
+**B2-04 — Stop paying 20% CPU to look idle.** Measured tonight: 25.5% CPU
+collapsed-idle; sample shows proc_info/sysctl churn. Three mechanical causes:
+`MascotAnimationGate.animationsActive = isPanelVisible && isAwake`
+(MascotAnimationGate.swift:34-47) never pauses visible-but-idle, so the default
+config redraws the pixel mascot at ~8fps forever (SheldonView.swift:11-19,
+PixelCharacterView.swift:128-141, two layers); `autoScreenPoller` runs
+`CGWindowListCopyWindowInfo` every 5s default-on (PanelWindowController.swift:442,
+its own comment cites Energy Impact #92); and 17 CLI mascot views kept the raw
+`.repeatForever` glow the #225 fix removed from Clawd/Sheldon (StepFunView:162,
+DroidView:223, CursorView:247, GeminiView:218, et al.). Fix: idle-timeout freeze
+in the gate, NSWorkspace/NSScreen notifications instead of the poll, sweep the 17
+glows onto gatedTimeline. Verify with the same ps/sample method.
+
+**B2-05 — Pipeline health + first-run checklist.** Every core failure mode is
+silent: HookServer listener failures only log (HookServer.swift:38-41, 58-60),
+no hookHealth/lastEventAt state exists anywhere in AppState, ConfigInstaller
+installs/repairs silently (AppDelegate.swift:104, :327), the status-item menu is
+Settings+Quit and hidden by default (StatusItemController.swift:89-111), and
+there is zero onboarding code. Glances has GRANT/PRIVACY recovery buttons; the
+agent pipeline — the actual product — has none. Live proof of the class of
+failure this would catch: the retired Claude Island app's
+`claude-island-state.py` hook is still registered on this Mac, spawning python3
+on every hook event of every session to hit a socket that no longer exists.
+Proposal: tri-state health rows (socket/hooks/Accessibility/notifications) in
+Tools + status-menu diagnostics + stale-foreign-hook detection; same checklist
+doubles as first-run.
+
+**B2-06 — Session rows become a control surface.** `.contextMenu` appears
+nowhere in the codebase; the only row verbs are click-to-jump
+(NotchPanelView.swift:2695-2740) and project-name-to-Finder; keyboard reach is
+one digit handler in QuestionBar (:1530); remote rows do nothing (:2706). The
+live card also says "revops-global" twice (header subtitle + identity-line chip,
+observed in tonight's capture). Proposal: context menu (Jump / Reveal / Copy cwd
+/ Dismiss / confirm-gated Kill), arrow-Return-Esc keys, identity line owns
+project·branch once.
+
+**B2-07 — Cut the dead iOS subtree; fix the live tap targets.** ~740 unreachable
+lines across the two biggest iOS files: PortraitIslandView (ContentView:114-278),
+PersonalNowOverview (:409-551), PersonalHubSurface (PersonalHubView:439-704),
+CompanionPrimaryNavigation, CompactIslandBar, DiscoveryFill — a full parallel
+Now/Hub implementation. Demo mode's only entry point is inside the dead
+DiscoveryFill (:777-784); the stale copy "Tap the top-right to keep searching"
+(:1123) points at a control that now exists only in dead code. Correction to the
+07-19 note: AppearanceMenu is NOT dead (live via StandByIsland, ContentView:1471).
+Live sub-44pt targets: submitButton minHeight 40 (ContentView:754), attachment
+xmark with no frame (PersonalHubView:1276-1281), HubSecondaryButtonStyle lacking
+the intrinsic 44 its siblings bake in (:2251-2258).
+
+**B2-08 — Close the iOS verification gap.** `build-macos-arm-dmg.yml:147-154`
+builds the companion but never runs `xcodebuild test`; the log above (:64-67)
+records a regression that shipped through exactly that gap.
+`scripts/smoke-companion-ui.sh` fails before its first capture because its
+DEVELOPER_DIR autodetect prefers stable Xcode over the beta toolchain the
+companion requires — the reason iOS findings still have no real renders.
+TelegramAttentionNotifier, TailscaleServeManager, and UpdateChecker have zero
+tests. Proposal: beta-first toolchain detection, a companion test lane in the DMG
+workflow, seed tests for the transports.
+
+**B2-09 — Retire the dead updater.** Sparkle 2.9.1 is bundled but Info.plist has
+no SUFeedURL and no SUPublicEDKey; appcast.xml is frozen at 1.0.30 with all URLs
+pointing at wxtsky; release.yml downloads from and pushes to wxtsky repos.
+CHANGELOG jumps 1.0.58 → 1.0.30 (1.0.31–57 undocumented). The real ship path —
+CI DMG artifact installed over /Applications with the same identity so TCC
+persists — is sound; make reality the design. Recommended: remove Sparkle +
+appcast + release.yml, add a lightweight "latest CI build" check, mark the
+CHANGELOG gap. Documented alternative if in-app updates ever matter: fork-owned
+appcast + EdDSA key (M).
+
+**B2-10 — Panel chrome hygiene.** The red power button one icon from the gear is
+an unconfirmed `NSApplication.shared.terminate(nil)`
+(NotchPanelView.swift:707-712) — the one interaction that silently ends the
+product's passive vigilance. ALL/STA/CLI are English literals with no L10n
+(:575) and the newer Now/Today/Tools tabs repeat the same class of bug
+(GlancesView.swift:527-529) in a 7-locale app; `scroll_for_more`/`scroll_hidden`
+are localized in all locales and referenced nowhere. Confirmation popover reuses
+the B2-03 decision language; M4/DS2 stay untouched.
+
+### Also found, not written up as batch items
+
+- Mac: ~70 persisted settings keys across 11 pages with five overlapping
+  visibility toggles (`hideWhenNoSession`, `hideInFullscreen`, `smartSuppress`,
+  `collapseOnMouseLeave`, `autoCollapseAfterSessionJump`) and a sidebar group
+  confusingly titled "CodeIsland"; legacy `autoExpandOnCompletion` key persists
+  alongside its successor. A Settings IA pass is a future candidate.
+- iOS: Live Activity `staleDate` has three different values (300/180/90s —
+  LiveActivityController.swift:128/:215/:377); no unified "Mac is asleep" state
+  across the three transports; no accent token in CITheme (submit blue #61ADFF
+  vs HubTheme orange, both ad hoc); `ciSurface` used as a foreground
+  (ContentView:1276); broken `#Preview` (missing RemoteApprovalClient env object).
+- Notifications are tap-to-open only (no UNNotificationCategory anywhere).
+  Actionable approve/deny from a notification is deliberately NOT proposed while
+  the telegram-secure-approval-sheet work is in flight — same surface area;
+  revisit after it lands (push → authenticated refresh → local actionable
+  notification would preserve the content-free APNS design).
+- Doc drift: `docs/remote-approvals.md:33` still says watch targets don't exist;
+  they do. `CODEX_HANDOFF.md` describes 1.0.52.
+- The `sample` also showed multipeerconnectivity threads alive at idle;
+  not investigated further (B2-04 covers the measured burn).
+
+---
+
 ## 2026-07-19 — Batch 01: Mac notch panel + iPhone companion, benchmarked against Crest 4.9.0
 
 **Artifact:** https://claude.ai/code/artifact/280d9d3e-6fe1-41ba-8fb6-03b9478b606d
