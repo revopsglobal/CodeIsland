@@ -318,6 +318,32 @@ public struct RemoteTaskSummary: Codable, Equatable, Identifiable, Sendable {
             evidence: receipt.evidence ?? evidence
         )
     }
+
+    /// Returns a copy transitioned to `.cancelled` without advancing the
+    /// receipt sequence. Used for optimistic local cancellation so a task the
+    /// user cancelled stops surfacing even when the Mac cannot confirm the
+    /// cancel round-trip (offline / restarting). A later host receipt still
+    /// wins via `applying(_:)` because the sequence is preserved here.
+    public func markedCancelled() -> RemoteTaskSummary {
+        guard state != .cancelled else { return self }
+        return RemoteTaskSummary(
+            id: id,
+            clientTaskID: clientTaskID,
+            idempotencyKey: idempotencyKey,
+            title: title,
+            workspaceID: workspaceID,
+            workspaceName: workspaceName,
+            provider: provider,
+            authority: authority,
+            state: .cancelled,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            lastReceiptSequence: lastReceiptSequence,
+            latestSummary: latestSummary,
+            providerSessionID: providerSessionID,
+            evidence: evidence
+        )
+    }
 }
 
 public struct RemoteTaskSnapshot: Codable, Equatable, Sendable {

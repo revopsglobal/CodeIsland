@@ -1,5 +1,13 @@
 # Changelog
 
+## [v1.0.63] - 2026-07-21
+
+### English
+- Fix a cancelled "Needs you" task lingering on the Now tab, with its badge stuck, when the paired Mac was offline or had just restarted. Cancelling a task now clears it from the card, the Now badge, the signal tiles, and the Live Activity immediately instead of waiting for a round-trip the Mac may be unable to confirm. The optimistic cancel reconciles automatically once the Mac catches up, and never permanently hides a task the Mac later resurrects.
+
+### 中文
+- 修复配对的 Mac 离线或刚重启时，已取消的「需要你」任务仍停留在 Now 标签页、且角标不清零的问题。取消任务后，卡片、Now 角标、信号磁贴与实时活动会立即清除，不再等待 Mac 可能无法确认的往返请求。乐观取消会在 Mac 恢复后自动对账，也不会永久隐藏 Mac 之后重新恢复的任务。
+
 ## [v1.0.62] - 2026-07-20
 
 ### English

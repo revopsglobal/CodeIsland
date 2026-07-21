@@ -26,6 +26,29 @@ struct RemoteTaskAttentionCandidate: Equatable, Identifiable {
 }
 
 enum RemoteTaskPresentationModel {
+    /// Reconciles an optimistic set of locally cancelled task IDs against the
+    /// latest server task list. Any still-present, non-terminal task whose ID
+    /// the user cancelled is rewritten to `.cancelled` so it drops out of every
+    /// attention surface (card, badge, signal tiles, live activity) even when
+    /// the Mac never confirmed the cancel. IDs are pruned once the server has
+    /// caught up (task reached a terminal state) or the task is gone, so the
+    /// set cannot grow unbounded or hide a task the Mac later resurrects.
+    /// Returns the reconciled tasks and the pruned ID set the caller should keep.
+    static func applyingLocalCancellations(
+        to tasks: [RemoteTaskSummary],
+        cancelledIDs: Set<UUID>
+    ) -> (tasks: [RemoteTaskSummary], remainingIDs: Set<UUID>) {
+        guard !cancelledIDs.isEmpty else { return (tasks, cancelledIDs) }
+        let tasksByID = Dictionary(tasks.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let remainingIDs = cancelledIDs.filter { id in
+            guard let task = tasksByID[id] else { return false }
+            return !task.state.isTerminal
+        }
+        guard !remainingIDs.isEmpty else { return (tasks, remainingIDs) }
+        let reconciled = tasks.map { remainingIDs.contains($0.id) ? $0.markedCancelled() : $0 }
+        return (reconciled, remainingIDs)
+    }
+
     static func immediateAttentionCount<S: Sequence>(
         in candidates: S
     ) -> Int where S.Element == RemoteTaskAttentionCandidate {

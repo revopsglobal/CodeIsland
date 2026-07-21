@@ -65,6 +65,11 @@ final class RemoteApprovalClient: ObservableObject {
     @Published var quickJotSeedText: String?
     @Published private(set) var remoteTaskDeepLinkDestination: RemoteTaskDeepLinkDestination?
     @Published private(set) var remoteTasks: [RemoteTaskSummary] = []
+    /// Task IDs the user cancelled locally, applied optimistically over every
+    /// server task publication so a cancelled "Needs you" card and its badge
+    /// clear immediately even when the Mac cannot confirm the cancel. Pruned
+    /// automatically once the server reports the task terminal or removed.
+    private var locallyCancelledTaskIDs: Set<UUID> = []
     @Published private(set) var remoteTaskWorkspaces: [RemoteWorkspaceSummary] = []
     @Published private(set) var remoteTaskDrafts: [RemoteTaskDraft] = []
     @Published private(set) var remoteTaskError: String?
@@ -360,15 +365,31 @@ final class RemoteApprovalClient: ObservableObject {
         preparedAction = nil
         consecutiveApprovalRefreshFailures = 0
         remoteTasks = []
+        locallyCancelledTaskIDs.removeAll()
         remoteTaskDrafts = remoteTaskClient.localDrafts
         state = .unpaired
+    }
+
+    /// Applies optimistic local cancellations to a raw server task list, prunes
+    /// reconciled IDs, stores the result on `remoteTasks`, and returns it so the
+    /// caller can fan the same reconciled list out to the live-activity callback.
+    @discardableResult
+    private func publishRemoteTasks(_ rawTasks: [RemoteTaskSummary]) -> [RemoteTaskSummary] {
+        let result = RemoteTaskPresentationModel.applyingLocalCancellations(
+            to: rawTasks,
+            cancelledIDs: locallyCancelledTaskIDs
+        )
+        locallyCancelledTaskIDs = result.remainingIDs
+        remoteTasks = result.tasks
+        return result.tasks
     }
 
     private func bindRemoteTaskClient() {
         remoteTaskClient.$tasks
             .sink { [weak self] tasks in
-                self?.remoteTasks = tasks
-                self?.onRemoteTasksReceived?(tasks)
+                guard let self else { return }
+                let reconciled = self.publishRemoteTasks(tasks)
+                self.onRemoteTasksReceived?(reconciled)
             }
             .store(in: &remoteTaskCancellables)
         remoteTaskClient.$localDrafts
@@ -510,7 +531,7 @@ final class RemoteApprovalClient: ObservableObject {
             bearerToken: deviceToken,
             force: force
         )
-        remoteTasks = remoteTaskClient.tasks
+        publishRemoteTasks(remoteTaskClient.tasks)
         remoteTaskDrafts = remoteTaskClient.localDrafts
         remoteTaskError = remoteTaskClient.lastError
         if remoteTaskClient.workspaces.isEmpty {
@@ -540,6 +561,13 @@ final class RemoteApprovalClient: ObservableObject {
     }
 
     func cancelRemoteTask(taskID: UUID) async {
+        // Optimistically suppress the task on every attention surface before the
+        // round-trip, so the "Needs you" card and badge clear immediately even
+        // if the Mac is offline/restarting and can't confirm the cancel. The ID
+        // is pruned automatically once the server reports the task terminal.
+        locallyCancelledTaskIDs.insert(taskID)
+        let reconciled = publishRemoteTasks(remoteTaskClient.tasks)
+        onRemoteTasksReceived?(reconciled)
         guard let deviceToken, let baseURL = normalizedServerURL else { return }
         let result = await remoteTaskClient.cancel(
             taskID: taskID,
