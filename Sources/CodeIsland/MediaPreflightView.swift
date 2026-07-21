@@ -3,7 +3,7 @@ import AVFoundation
 import SwiftUI
 
 struct MediaPreflightView: View {
-    @Environment(\.dismiss) private var dismiss
+    let onDismiss: () -> Void
     @StateObject private var model = MediaPreflightModel()
 
     var body: some View {
@@ -24,7 +24,7 @@ struct MediaPreflightView: View {
                 Spacer()
                 Button("Done") {
                     model.stop(reason: .dismissed)
-                    dismiss()
+                    onDismiss()
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.orange)
