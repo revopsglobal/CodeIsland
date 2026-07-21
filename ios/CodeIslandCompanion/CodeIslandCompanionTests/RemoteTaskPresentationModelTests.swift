@@ -114,6 +114,58 @@ final class RemoteTaskPresentationModelTests: XCTestCase {
         XCTAssertEqual(RemoteTaskReviewPersistence.decode("not-json"), [])
     }
 
+    func testLocalCancellationRewritesActiveTaskAndDropsFromAttention() {
+        let needsYou = task(id: "10000000-0000-0000-0000-000000000004", state: .needsYou)
+
+        let result = RemoteTaskPresentationModel.applyingLocalCancellations(
+            to: [needsYou],
+            cancelledIDs: [needsYou.id]
+        )
+
+        // Rewritten to .cancelled, and the ID is retained because the server
+        // still reports the task as non-terminal (cancel not yet confirmed).
+        XCTAssertEqual(result.tasks.map(\.state), [.cancelled])
+        XCTAssertEqual(result.remainingIDs, [needsYou.id])
+
+        let candidates = RemoteTaskPresentationModel.candidates(
+            approvalIDs: [],
+            questionIDs: [],
+            tasks: result.tasks,
+            drafts: [],
+            followedTaskID: nil,
+            reviewedVerifiedTaskIDs: []
+        )
+        XCTAssertTrue(candidates.isEmpty)
+        XCTAssertEqual(RemoteTaskPresentationModel.immediateAttentionCount(in: candidates), 0)
+    }
+
+    func testLocalCancellationPrunesWhenServerReachesTerminalOrTaskGone() {
+        let confirmed = task(id: "10000000-0000-0000-0000-000000000004", state: .cancelled)
+        let goneID = UUID(uuidString: "10000000-0000-0000-0000-000000000009")!
+
+        let result = RemoteTaskPresentationModel.applyingLocalCancellations(
+            to: [confirmed],
+            cancelledIDs: [confirmed.id, goneID]
+        )
+
+        // Terminal server state and absent task both prune the suppression ID.
+        XCTAssertEqual(result.remainingIDs, [])
+        XCTAssertEqual(result.tasks.map(\.state), [.cancelled])
+    }
+
+    func testEmptyLocalCancellationsLeaveTasksUnchanged() {
+        let needsYou = task(id: "10000000-0000-0000-0000-000000000004", state: .needsYou)
+
+        let result = RemoteTaskPresentationModel.applyingLocalCancellations(
+            to: [needsYou],
+            cancelledIDs: []
+        )
+
+        XCTAssertEqual(result.tasks.map(\.id), [needsYou.id])
+        XCTAssertEqual(result.tasks.map(\.state), [.needsYou])
+        XCTAssertTrue(result.remainingIDs.isEmpty)
+    }
+
     private func task(
         id: String,
         state: RemoteTaskState,
