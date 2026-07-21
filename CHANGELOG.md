@@ -3,10 +3,12 @@
 ## [v1.0.59] - 2026-07-20
 
 ### English
-- Fix a Mac crash when reviewing Open Settings and other Tools actions from the auto-collapsing notch panel. Tools now uses stable in-panel review, rack-editor, and camera-preflight surfaces instead of SwiftUI sheets attached to the transient panel.
+- Light mode for the notch panel: the expanded panel now follows the system appearance instead of being hardcoded black. Muted foregrounds resolve white-on-dark / near-black-on-light, and the accent colours that fail WCAG on white (bright green, amber) darken to contrast-checked variants while fills keep one hex in both modes. The collapsed island stays dark, since it abuts the physical notch (#145)
+- Fix a Mac crash when reviewing Open Settings and other Tools actions from the auto-collapsing notch panel. Tools now uses stable in-panel review, rack-editor, and camera-preflight surfaces instead of SwiftUI sheets attached to the transient panel (#144)
 
 ### 中文
-- 修复从自动收起的刘海面板中审核「打开设置」及其他工具操作时可能发生的 Mac 崩溃。工具审核、模块编辑器和相机预检现改为稳定的面板内界面，不再使用附着于临时面板的 SwiftUI 弹窗。
+- 刘海面板浅色模式：展开的面板现跟随系统外观，不再硬编码为黑色。次要前景色按「深色底白字／浅色底近黑字」解析，在白底上不达 WCAG 的强调色（亮绿、琥珀）降为经过对比度校验的深色变体，而填充色在两种模式下保持同一色值。收起的小岛因紧贴物理刘海仍保持深色（#145）
+- 修复从自动收起的刘海面板中审核「打开设置」及其他工具操作时可能发生的 Mac 崩溃。工具审核、模块编辑器和相机预检现改为稳定的面板内界面，不再使用附着于临时面板的 SwiftUI 弹窗（#144）
 
 ## [v1.0.58] - 2026-07-20
 
