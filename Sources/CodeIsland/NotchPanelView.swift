@@ -777,51 +777,35 @@ private struct CompactRightWing: View {
                 }
 
                 if showToolStatus {
-                    // Detailed mode. At rest (no sessions) show a quiet wordmark
-                    // instead of a bare "0" — the first-impression surface. (M4)
-                    let total = appState.totalSessionCount
-                    if total == 0 {
-                        Text("CodeIsland")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(NotchTokens.ink(0.5))
-                    } else {
-                        HStack(spacing: 1) {
-                            let active = appState.activeSessionCount
-                            if active > 0 {
-                                Text("\(active)")
-                                    .foregroundStyle(Color(red: 0.4, green: 1.0, blue: 0.5))
-                                Text("/")
-                                    .foregroundStyle(.white.opacity(0.4))
-                            }
-                            Text("\(total)")
-                                .foregroundStyle(.white.opacity(0.9))
+                    // Detailed mode: session count (project name is shown in center on non-notch)
+                    HStack(spacing: 1) {
+                        let active = appState.activeSessionCount
+                        let total = appState.totalSessionCount
+                        if active > 0 {
+                            Text("\(active)")
+                                .foregroundStyle(Color(red: 0.4, green: 1.0, blue: 0.5))
+                            Text("/")
+                                .foregroundStyle(.white.opacity(0.4))
                         }
-                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        Text("\(total)")
+                            .foregroundStyle(.white.opacity(0.9))
                     }
+                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
                 } else {
-                    // Simple mode. At rest (no sessions) the island used to show a
-                    // bare "0" — the first-impression surface said nothing. Show a
-                    // quiet wordmark instead; the count returns the moment an agent
-                    // starts. (M4)
-                    let total = appState.totalSessionCount
-                    if total == 0 {
-                        Text("CodeIsland")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(NotchTokens.ink(0.5))
-                    } else {
-                        HStack(spacing: 1) {
-                            let active = appState.activeSessionCount
-                            if active > 0 {
-                                Text("\(active)")
-                                    .foregroundStyle(Color(red: 0.4, green: 1.0, blue: 0.5))
-                                Text("/")
-                                    .foregroundStyle(.white.opacity(0.4))
-                            }
-                            Text("\(total)")
-                                .foregroundStyle(.white.opacity(0.9))
+                    // Simple mode: original session count only
+                    HStack(spacing: 1) {
+                        let active = appState.activeSessionCount
+                        let total = appState.totalSessionCount
+                        if active > 0 {
+                            Text("\(active)")
+                                .foregroundStyle(Color(red: 0.4, green: 1.0, blue: 0.5))
+                            Text("/")
+                                .foregroundStyle(.white.opacity(0.4))
                         }
-                        .font(.system(size: 13, weight: .bold, design: .monospaced))
+                        Text("\(total)")
+                            .foregroundStyle(.white.opacity(0.9))
                     }
+                    .font(.system(size: 13, weight: .bold, design: .monospaced))
                 }
             }
         }
@@ -2546,16 +2530,16 @@ private struct SessionCard: View {
 
                     HStack(spacing: 4) {
                         if let remote = session.remoteDisplayName {
-                            SessionTag("@\(remote)", color: NotchTokens.ink(0.5))
+                            SessionTag("@\(remote)", color: Color(red: 0.45, green: 0.72, blue: 1.0))
                         }
                         if !session.subagents.isEmpty {
-                            SessionTag("+\(session.subagents.count) Sub", color: NotchTokens.ink(0.5))
+                            SessionTag("+\(session.subagents.count) Sub", color: Color(red: 0.65, green: 0.55, blue: 0.95))
                         }
                         if session.interrupted {
-                            SessionTag("INT", color: NotchTokens.ink(0.5))
+                            SessionTag("INT", color: Color(red: 1.0, green: 0.6, blue: 0.2))
                         }
                         if session.isYoloMode == true {
-                            SessionTag("YOLO", color: NotchTokens.ink(0.5))
+                            SessionTag("YOLO", color: Color(red: 1.0, green: 0.35, blue: 0.35))
                         }
                         SessionTag(ageLabel, color: ageColor)
                         TerminalBadge(session: session)
