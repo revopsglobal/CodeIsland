@@ -24,18 +24,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let launchArgs = ProcessInfo.processInfo.arguments
         if let idx = launchArgs.firstIndex(of: "--render-snapshot"), idx + 1 < launchArgs.count {
             let dir = URL(fileURLWithPath: launchArgs[idx + 1])
-            let scenario = PreviewScenario(rawValue: idx + 2 < launchArgs.count ? launchArgs[idx + 2] : "multi") ?? .multi
-            DebugHarness.apply(scenario, to: appState)
+            Self.buildShowcase(into: appState)
             appState.surface = .sessionList
+            let blocked = appState.sessions["showcase-api"] ?? SessionSnapshot()
             Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 500_000_000)
                 for (dark, name) in [(true, "dark"), (false, "light")] {
                     if let img = PanelSnapshot.render(appState: appState, dark: dark) {
-                        PanelSnapshot.writePNG(img, to: dir.appendingPathComponent("panel-\(name).png"))
-                        FileHandle.standardError.write(Data("wrote panel-\(name).png\n".utf8))
-                    } else {
-                        FileHandle.standardError.write(Data("render \(name) returned nil\n".utf8))
+                        PanelSnapshot.writePNG(img, to: dir.appendingPathComponent("list-\(name).png"))
                     }
+                    if let img = PanelSnapshot.renderApproval(session: blocked, dark: dark) {
+                        PanelSnapshot.writePNG(img, to: dir.appendingPathComponent("approval-\(name).png"))
+                    }
+                    FileHandle.standardError.write(Data("wrote \(name)\n".utf8))
                 }
                 exit(0)
             }
@@ -313,3 +314,52 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
 }
+
+#if DEBUG
+extension AppDelegate {
+    /// A representative multi-agent state for the snapshot tool: one session
+    /// blocked on a destructive command, one working, one idle — so the
+    /// attention bands, blocked-first ordering, the "Blocked" age badge and the
+    /// approval card's risk pill all appear.
+    @MainActor
+    static func buildShowcase(into state: AppState) {
+        let now = Date()
+
+        var api = SessionSnapshot()
+        api.status = .waitingApproval
+        api.cwd = "/Users/dev/api-server"
+        api.gitBranch = "main"
+        api.source = "claude"
+        api.currentTool = "Bash"
+        api.lastUserPrompt = "Clean and redeploy"
+        api.startTime = now.addingTimeInterval(-7200)      // opened 2h ago
+        api.lastActivity = now.addingTimeInterval(-246)    // blocked 4m ago
+        api.termApp = "Ghostty"
+
+        var web = SessionSnapshot()
+        web.status = .running
+        web.cwd = "/Users/dev/web"
+        web.gitBranch = "feat/nav"
+        web.source = "codex"
+        web.currentTool = "Bash"
+        web.toolDescription = "terraform plan"
+        web.lastUserPrompt = "Ship the infra change"
+        web.startTime = now.addingTimeInterval(-3600)
+        web.lastActivity = now.addingTimeInterval(-2)
+        web.termApp = "iTerm.app"
+
+        var docs = SessionSnapshot()
+        docs.status = .idle
+        docs.cwd = "/Users/dev/docs"
+        docs.source = "gemini"
+        docs.lastUserPrompt = "Fix the README images"
+        docs.startTime = now.addingTimeInterval(-9000)
+        docs.lastActivity = now.addingTimeInterval(-7020)  // done ~1h57m ago
+        docs.addRecentMessage(ChatMessage(isUser: false, text: "Installed. Anything else?"))
+        docs.termApp = "iTerm.app"
+
+        state.sessions = ["showcase-api": api, "showcase-web": web, "showcase-docs": docs]
+        state.activeSessionId = "showcase-api"
+    }
+}
+#endif

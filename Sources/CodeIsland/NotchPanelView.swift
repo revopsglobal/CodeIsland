@@ -3479,7 +3479,28 @@ private func stripDirectives(_ text: String) -> String {
 @MainActor
 enum PanelSnapshot {
     static func render(appState: AppState, dark: Bool, width: CGFloat = 580) -> NSImage? {
-        let content = SessionListView(appState: appState, onlySessionId: nil)
+        image(of: SessionListView(appState: appState, onlySessionId: nil), dark: dark, width: width)
+    }
+
+    /// The approval card in isolation — where the DESTRUCTIVE risk pill and the
+    /// project identity land (R3). Built directly from tool/input, which is what
+    /// ApprovalBar takes, so no PermissionRequest continuation is needed.
+    static func renderApproval(session: SessionSnapshot, dark: Bool, width: CGFloat = 580) -> NSImage? {
+        let bar = ApprovalBar(
+            tool: "Bash",
+            toolInput: ["command": "rm -rf ./dist && git push --force origin main"],
+            queuePosition: 2,
+            queueTotal: 5,
+            session: session,
+            sessionId: "showcase",
+            appState: AppState(),
+            onAllow: {}, onAlwaysAllow: {}, onDeny: {}, onDismiss: {}
+        )
+        return image(of: bar, dark: dark, width: width)
+    }
+
+    private static func image<V: View>(of view: V, dark: Bool, width: CGFloat) -> NSImage? {
+        let content = view
             .frame(width: width)
             .background(NotchTokens.panelGround)
             .padding(.bottom, 10)
