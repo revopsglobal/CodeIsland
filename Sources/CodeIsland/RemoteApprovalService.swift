@@ -414,6 +414,7 @@ final class RemoteApprovalService: ObservableObject {
             )
         }
         for requestID in resolvedIDs {
+            telegramApprovalController.reconcileResolved(requestID: requestID, decision: nil)
             APNSNotificationSender.shared.notify(
                 requestID: requestID,
                 kind: .approval,

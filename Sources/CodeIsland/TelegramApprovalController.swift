@@ -1,5 +1,6 @@
 import CodeIslandCore
 import Foundation
+import os.log
 
 struct TelegramPreparedApprovalLaunch: Equatable {
     let launch: TelegramApprovalLaunch
@@ -58,18 +59,22 @@ struct TelegramApprovalRouteError: Error, Equatable {
 final class TelegramApprovalController {
     static let shared = TelegramApprovalController()
 
+    private let log = Logger(subsystem: "com.codeisland", category: "telegram-approval")
     private var vault: TelegramApprovalSessionVault
     private let credentialStore: TelegramCredentialStore
+    private let botClient: any TelegramBotAPIClientProtocol
     private let defaults: UserDefaults
 
     init(
         vault: TelegramApprovalSessionVault = TelegramApprovalSessionVault(),
         credentialStore: TelegramCredentialStore? = nil,
+        botClient: any TelegramBotAPIClientProtocol = TelegramBotAPIClient(),
         defaults: UserDefaults = .standard
     ) {
         self.vault = vault
         self.defaults = defaults
         self.credentialStore = credentialStore ?? TelegramCredentialStore(defaults: defaults)
+        self.botClient = botClient
     }
 
     func prepareLaunch(
@@ -215,7 +220,7 @@ final class TelegramApprovalController {
         )
         switch result {
         case .resolved:
-            _ = vault.resolve(requestID: requestID)
+            reconcileResolved(requestID: requestID, decision: request.decision)
             return TelegramDecisionRouteResponse(
                 resolved: true,
                 requestID: requestID,
@@ -224,13 +229,50 @@ final class TelegramApprovalController {
                     ? "Approved once on your Mac."
                     : "Denied on your Mac."
             )
-        case .expired, .stale:
-            _ = vault.resolve(requestID: requestID)
+        case .expired:
+            throw TelegramApprovalRouteError.conflict
+        case .stale:
+            reconcileResolved(requestID: requestID, decision: nil)
             throw TelegramApprovalRouteError.conflict
         case .unauthorized:
             throw TelegramApprovalRouteError.forbidden
         case .invalid:
             throw TelegramApprovalRouteError.badRequest
+        }
+    }
+
+    /// Invalidates all launch/session material immediately, then edits the one
+    /// original Telegram alert in place. The edit contains no private request
+    /// data and removes the button, so old notifications cannot look actionable.
+    func reconcileResolved(
+        requestID: String,
+        decision: RemoteApprovalDecision?
+    ) {
+        guard let launch = vault.resolve(requestID: requestID),
+              let messageID = launch.messageID,
+              let configuration = try? privateConfiguration(),
+              launch.chatID == configuration.chatID
+        else { return }
+
+        let outcome: String
+        switch decision {
+        case .approve: outcome = "Approved once in CodeIsland."
+        case .deny: outcome = "Denied in CodeIsland."
+        case nil: outcome = "Resolved in CodeIsland."
+        }
+        let payload = TelegramEditMessagePayload(
+            chatID: String(configuration.chatID),
+            messageID: messageID,
+            text: "CodeIsland approval resolved.\n\(outcome)",
+            replyMarkup: .empty
+        )
+        let botToken = configuration.botToken
+        Task {
+            do {
+                try await botClient.editMessage(payload, botToken: botToken)
+            } catch {
+                log.error("telegram resolution edit failed")
+            }
         }
     }
 
