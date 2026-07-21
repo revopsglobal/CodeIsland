@@ -1,3 +1,4 @@
+import CodeIslandCore
 import Foundation
 
 struct TelegramPreparedApprovalLaunch: Equatable {
@@ -5,14 +6,70 @@ struct TelegramPreparedApprovalLaunch: Equatable {
     let reviewURL: URL
 }
 
+struct TelegramSessionRequest: Codable, Equatable {
+    let initData: String
+    let launchNonce: String
+}
+
+struct TelegramDecisionRouteRequest: Codable, Equatable {
+    let initData: String
+    let launchNonce: String
+    let sessionNonce: String
+    let actionToken: String
+    let decision: RemoteApprovalDecision
+}
+
+struct TelegramApprovalSessionResponse: Codable, Equatable {
+    let sessionNonce: String
+    let requestID: String
+    let headline: String
+    let summary: String
+    let agent: String
+    let workspace: String?
+    let risk: CommandRisk
+    let riskReason: String
+    let changedScope: [String]
+    let details: [TelegramApprovalDetail]
+    let fingerprint: String
+    let createdAt: Date
+    let actionToken: String
+    let actionExpiresAt: Date
+}
+
+struct TelegramDecisionRouteResponse: Codable, Equatable {
+    let resolved: Bool
+    let requestID: String
+    let decision: RemoteApprovalDecision
+    let message: String
+}
+
+struct TelegramApprovalRouteError: Error, Equatable {
+    let status: Int
+    let message: String
+
+    static let badRequest = Self(status: 400, message: "Secure approval request is invalid")
+    static let forbidden = Self(status: 403, message: "Telegram authorization could not be verified")
+    static let notFound = Self(status: 404, message: "Secure approval link is invalid or expired")
+    static let conflict = Self(status: 409, message: "Approval is no longer pending")
+    static let unavailable = Self(status: 503, message: "Secure Telegram review is unavailable")
+}
+
 @MainActor
 final class TelegramApprovalController {
     static let shared = TelegramApprovalController()
 
     private var vault: TelegramApprovalSessionVault
+    private let credentialStore: TelegramCredentialStore
+    private let defaults: UserDefaults
 
-    init(vault: TelegramApprovalSessionVault = TelegramApprovalSessionVault()) {
+    init(
+        vault: TelegramApprovalSessionVault = TelegramApprovalSessionVault(),
+        credentialStore: TelegramCredentialStore? = nil,
+        defaults: UserDefaults = .standard
+    ) {
         self.vault = vault
+        self.defaults = defaults
+        self.credentialStore = credentialStore ?? TelegramCredentialStore(defaults: defaults)
     }
 
     func prepareLaunch(
@@ -25,18 +82,18 @@ final class TelegramApprovalController {
               chatID > 0,
               baseURL.scheme?.lowercased() == "https"
         else {
-            throw ControllerError.unavailable
+            throw TelegramApprovalRouteError.unavailable
         }
 
         let launch = vault.issueLaunch(requestID: requestID, chatID: chatID, now: now)
         let endpoint = baseURL.appendingPathComponent("telegram/approval", isDirectory: false)
         guard var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false) else {
-            throw ControllerError.unavailable
+            throw TelegramApprovalRouteError.unavailable
         }
         components.fragment = nil
         components.queryItems = [URLQueryItem(name: "launch", value: launch.nonce)]
         guard let reviewURL = components.url else {
-            throw ControllerError.unavailable
+            throw TelegramApprovalRouteError.unavailable
         }
         return TelegramPreparedApprovalLaunch(launch: launch, reviewURL: reviewURL)
     }
@@ -45,11 +102,163 @@ final class TelegramApprovalController {
         vault.attachMessageID(messageID, to: launchNonce)
     }
 
-    private enum ControllerError: LocalizedError {
-        case unavailable
-
-        var errorDescription: String? {
-            "Secure Telegram review is unavailable"
+    func createSession(
+        _ request: TelegramSessionRequest,
+        appState: AppState,
+        coordinator: RemoteApprovalCoordinator,
+        now: Date = Date()
+    ) throws -> TelegramApprovalSessionResponse {
+        let configuration = try privateConfiguration()
+        let identity: TelegramIdentity
+        do {
+            identity = try TelegramInitDataValidator(botToken: configuration.botToken).validate(
+                request.initData,
+                allowedUserID: configuration.userID,
+                now: now
+            )
+        } catch {
+            throw TelegramApprovalRouteError.forbidden
         }
+
+        let session: TelegramApprovalSession
+        do {
+            session = try vault.openSession(
+                launchNonce: request.launchNonce,
+                telegramUserID: identity.userID,
+                expectedChatID: configuration.chatID,
+                now: now
+            )
+        } catch {
+            throw TelegramApprovalRouteError.notFound
+        }
+
+        let deviceID = telegramDeviceID(userID: identity.userID)
+        let snapshot = coordinator.snapshot(appState: appState, deviceID: deviceID)
+        guard let approval = snapshot.approvals.first(where: { $0.id == session.requestID }),
+              let pending = appState.permissionQueue.first(where: { $0.id == session.requestID })
+        else {
+            _ = vault.resolve(requestID: session.requestID)
+            throw TelegramApprovalRouteError.conflict
+        }
+        let presentation = TelegramApprovalPresentationBuilder.build(
+            request: pending,
+            approval: approval
+        )
+        return TelegramApprovalSessionResponse(
+            sessionNonce: session.nonce,
+            requestID: presentation.requestID,
+            headline: presentation.headline,
+            summary: presentation.summary,
+            agent: presentation.agent,
+            workspace: presentation.workspace,
+            risk: presentation.risk,
+            riskReason: presentation.riskReason,
+            changedScope: presentation.changedScope,
+            details: presentation.details,
+            fingerprint: presentation.fingerprint,
+            createdAt: presentation.createdAt,
+            actionToken: presentation.actionToken,
+            actionExpiresAt: presentation.actionExpiresAt
+        )
+    }
+
+    func decide(
+        _ request: TelegramDecisionRouteRequest,
+        requestID: String,
+        appState: AppState,
+        coordinator: RemoteApprovalCoordinator,
+        now: Date = Date()
+    ) throws -> TelegramDecisionRouteResponse {
+        guard !requestID.isEmpty,
+              !request.actionToken.isEmpty,
+              !request.sessionNonce.isEmpty,
+              !request.launchNonce.isEmpty
+        else {
+            throw TelegramApprovalRouteError.badRequest
+        }
+        let configuration = try privateConfiguration()
+        let session: TelegramApprovalSession
+        do {
+            session = try vault.authorize(
+                sessionNonce: request.sessionNonce,
+                requestID: requestID,
+                userID: configuration.userID,
+                now: now
+            )
+        } catch {
+            throw TelegramApprovalRouteError.forbidden
+        }
+        guard session.launchNonce == request.launchNonce else {
+            throw TelegramApprovalRouteError.forbidden
+        }
+
+        // Telegram supplies one signed initData value for the lifetime of a Mini App.
+        // Session creation proved it fresh; revalidate the same signature against that
+        // issuance time while the shorter, single-use CodeIsland session is still valid.
+        do {
+            _ = try TelegramInitDataValidator(botToken: configuration.botToken).validate(
+                request.initData,
+                allowedUserID: configuration.userID,
+                now: session.issuedAt
+            )
+        } catch {
+            throw TelegramApprovalRouteError.forbidden
+        }
+
+        let result = coordinator.resolve(
+            appState: appState,
+            requestID: requestID,
+            actionToken: request.actionToken,
+            deviceID: telegramDeviceID(userID: configuration.userID),
+            deviceName: "Telegram",
+            decision: request.decision
+        )
+        switch result {
+        case .resolved:
+            _ = vault.resolve(requestID: requestID)
+            return TelegramDecisionRouteResponse(
+                resolved: true,
+                requestID: requestID,
+                decision: request.decision,
+                message: request.decision == .approve
+                    ? "Approved once on your Mac."
+                    : "Denied on your Mac."
+            )
+        case .expired, .stale:
+            _ = vault.resolve(requestID: requestID)
+            throw TelegramApprovalRouteError.conflict
+        case .unauthorized:
+            throw TelegramApprovalRouteError.forbidden
+        case .invalid:
+            throw TelegramApprovalRouteError.badRequest
+        }
+    }
+
+    private func privateConfiguration() throws -> (
+        botToken: String,
+        chatID: Int64,
+        userID: Int64
+    ) {
+        let enabled = defaults.object(forKey: SettingsKey.remoteApprovalTelegramEnabled) == nil
+            ? SettingsDefaults.remoteApprovalTelegramEnabled
+            : defaults.bool(forKey: SettingsKey.remoteApprovalTelegramEnabled)
+        guard enabled,
+              let botToken = try? credentialStore.loadMigratingLegacyValue(),
+              !botToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let chatID = Int64((defaults.string(forKey: SettingsKey.remoteApprovalTelegramChatID) ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)),
+              let userID = Int64((defaults.string(forKey: SettingsKey.remoteApprovalTelegramUserID) ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)),
+              chatID > 0,
+              userID > 0,
+              chatID == userID
+        else {
+            throw TelegramApprovalRouteError.unavailable
+        }
+        return (botToken, chatID, userID)
+    }
+
+    private func telegramDeviceID(userID: Int64) -> String {
+        "telegram:\(userID)"
     }
 }
