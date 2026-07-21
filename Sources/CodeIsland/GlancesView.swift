@@ -17,8 +17,8 @@ struct GlancesView: View {
     private var weatherLocation = SettingsDefaults.glancesWeatherLocation
     @FocusState private var reminderFieldFocused: Bool
 
-    private static let accent = Color(red: 0.3, green: 0.85, blue: 0.4)
-    private static let actionAccent = Color(red: 1.0, green: 0.69, blue: 0.0)
+    private static let accent = NotchTokens.runningText
+    private static let actionAccent = NotchTokens.signalFill
     private static let mono = Font.system(size: 12, weight: .medium, design: .monospaced)
     private static let monoSmall = Font.system(size: 10, weight: .regular, design: .monospaced)
 
@@ -27,20 +27,20 @@ struct GlancesView: View {
             VStack(alignment: .leading, spacing: 12) {
                 weatherRow
                 if !personalUtilities.downloads.isEmpty || personalUtilities.recentDownloadCompleted != nil {
-                    Divider().overlay(Color.white.opacity(0.08))
+                    Divider().overlay(NotchTokens.ink(0.08))
                     downloadsSection
                 }
-                Divider().overlay(Color.white.opacity(0.08))
+                Divider().overlay(NotchTokens.ink(0.08))
                 meetingSection
                 if model.calendarAuthorized, let calendarMonthInfo {
-                    Divider().overlay(Color.white.opacity(0.08))
+                    Divider().overlay(NotchTokens.ink(0.08))
                     calendarMonthSection(calendarMonthInfo)
                 }
                 if !personalUtilities.deviceBatteries.isEmpty {
-                    Divider().overlay(Color.white.opacity(0.08))
+                    Divider().overlay(NotchTokens.ink(0.08))
                     devicesSection
                 }
-                Divider().overlay(Color.white.opacity(0.08))
+                Divider().overlay(NotchTokens.ink(0.08))
                 remindersSection
             }
             .padding(14)
@@ -73,11 +73,11 @@ struct GlancesView: View {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(event.title)
                                 .font(Self.monoSmall.weight(.semibold))
-                                .foregroundStyle(.white.opacity(0.82))
+                                .foregroundStyle(NotchTokens.ink(0.82))
                                 .lineLimit(1)
                             Text(Self.timeText(for: event))
                                 .font(.system(size: 8, weight: .medium, design: .monospaced))
-                                .foregroundStyle(.white.opacity(0.34))
+                                .foregroundStyle(NotchTokens.ink(0.34))
                         }
                         Spacer(minLength: 4)
                         if let url = event.joinURL {
@@ -117,15 +117,15 @@ struct GlancesView: View {
                     .symbolRenderingMode(.hierarchical)
                 Text("\(weather.temperatureF)°")
                     .font(.system(size: 24, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(NotchTokens.text1)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(weather.summary)
                         .font(Self.monoSmall)
-                        .foregroundStyle(.white.opacity(0.55))
+                        .foregroundStyle(NotchTokens.ink(0.55))
                     if let label = model.weatherLocationLabel {
                         Text(label)
                             .font(.system(size: 8, weight: .regular, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.3))
+                            .foregroundStyle(NotchTokens.ink(0.3))
                             .lineLimit(1)
                     }
                 }
@@ -134,10 +134,10 @@ struct GlancesView: View {
             } else {
                 Image(systemName: "location.slash")
                     .font(.system(size: 16))
-                    .foregroundStyle(.white.opacity(0.3))
+                    .foregroundStyle(NotchTokens.ink(0.3))
                 Text(model.statusLine ?? "Weather unavailable")
                     .font(Self.monoSmall)
-                    .foregroundStyle(.white.opacity(0.4))
+                    .foregroundStyle(NotchTokens.ink(0.4))
                 Spacer()
                 if let action = weatherRecoveryAction {
                     miniActionButton(action.title, action: action.perform)
@@ -155,12 +155,12 @@ struct GlancesView: View {
             if let event = model.nextEvent {
                 Text(event.title)
                     .font(Self.mono)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(NotchTokens.text1)
                     .lineLimit(2)
                 HStack(spacing: 8) {
                     Text(Self.timeText(for: event))
                         .font(Self.monoSmall)
-                        .foregroundStyle(.white.opacity(0.55))
+                        .foregroundStyle(NotchTokens.ink(0.55))
                     Spacer()
                     if let url = event.joinURL {
                         Button {
@@ -168,7 +168,7 @@ struct GlancesView: View {
                         } label: {
                             Text("JOIN")
                                 .font(.system(size: 10, weight: .bold, design: .monospaced))
-                                .foregroundStyle(.black)
+                                .foregroundStyle(NotchTokens.onSignal)
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 6)
                                 .background(
@@ -214,15 +214,15 @@ struct GlancesView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 8) {
                         Image(systemName: download.isStalled ? "pause.circle" : "arrow.down.circle.fill")
-                            .foregroundStyle(download.isStalled ? .white.opacity(0.35) : Self.accent)
+                            .foregroundStyle(download.isStalled ? NotchTokens.ink(0.35) : Self.accent)
                         Text(download.name)
                             .font(Self.monoSmall)
-                            .foregroundStyle(.white.opacity(0.85))
+                            .foregroundStyle(NotchTokens.ink(0.85))
                             .lineLimit(1)
                         Spacer()
                         Text(downloadStatus(download))
                             .font(.system(size: 9, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.45))
+                            .foregroundStyle(NotchTokens.ink(0.45))
                     }
                     if let progress = download.progress {
                         ProgressView(value: progress)
@@ -263,15 +263,15 @@ struct GlancesView: View {
                 HStack(spacing: 8) {
                     Image(systemName: batterySymbol(device.primaryPercent))
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(device.primaryPercent <= 20 ? .orange : Self.accent)
+                        .foregroundStyle(device.primaryPercent <= 20 ? NotchTokens.signalText : Self.accent)
                     Text(device.name)
                         .font(Self.monoSmall)
-                        .foregroundStyle(.white.opacity(0.85))
+                        .foregroundStyle(NotchTokens.ink(0.85))
                         .lineLimit(1)
                     Spacer()
                     Text(device.summary)
                         .font(.system(size: 9, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.5))
+                        .foregroundStyle(NotchTokens.ink(0.5))
                 }
             }
         }
@@ -308,18 +308,18 @@ struct GlancesView: View {
                     TextField("New task", text: $newReminderTitle)
                         .textFieldStyle(.plain)
                         .font(Self.monoSmall)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(NotchTokens.text1)
                         .focused($reminderFieldFocused)
                         .onSubmit(addReminder)
                         .padding(.horizontal, 9)
                         .padding(.vertical, 7)
                         .background(
                             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(Color.white.opacity(0.07))
+                                .fill(NotchTokens.ink(0.07))
                         )
                     Button("ADD", action: addReminder)
                         .font(.system(size: 9, weight: .bold, design: .monospaced))
-                        .foregroundStyle(.black)
+                        .foregroundStyle(NotchTokens.onSignal)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 7)
                         .background(
@@ -333,7 +333,7 @@ struct GlancesView: View {
                 if let error = model.reminderMutationError {
                     Text(error)
                         .font(.system(size: 9, design: .monospaced))
-                        .foregroundStyle(.red.opacity(0.85))
+                        .foregroundStyle(NotchTokens.dangerText)
                 }
             }
             if !model.reminders.isEmpty {
@@ -349,13 +349,13 @@ struct GlancesView: View {
                         .buttonStyle(.plain)
                         Text(reminder.title)
                             .font(Self.monoSmall)
-                            .foregroundStyle(.white.opacity(0.85))
+                            .foregroundStyle(NotchTokens.ink(0.85))
                             .lineLimit(1)
                         Spacer()
                         if let due = reminder.due {
                             Text(Self.dueText(due))
                                 .font(.system(size: 9, weight: .regular, design: .monospaced))
-                                .foregroundStyle(.white.opacity(0.4))
+                                .foregroundStyle(NotchTokens.ink(0.4))
                         }
                     }
                 }
@@ -390,14 +390,14 @@ struct GlancesView: View {
     private func sectionLabel(_ text: String) -> some View {
         Text(text)
             .font(.system(size: 9, weight: .bold, design: .monospaced))
-            .foregroundStyle(.white.opacity(0.35))
+            .foregroundStyle(NotchTokens.ink(0.35))
             .tracking(1.5)
     }
 
     private func emptyText(_ text: String) -> some View {
         Text(text)
             .font(Self.monoSmall)
-            .foregroundStyle(.white.opacity(0.4))
+            .foregroundStyle(NotchTokens.ink(0.4))
     }
 
     private func settingsButton(label: String) -> some View {
@@ -418,7 +418,7 @@ struct GlancesView: View {
         Button(action: action) {
             Text(title)
                 .font(.system(size: 8, weight: .black, design: .monospaced))
-                .foregroundStyle(.black)
+                .foregroundStyle(NotchTokens.onSignal)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 5)
                 .background(
@@ -522,8 +522,6 @@ enum HomePanelSelection: String, CaseIterable, Identifiable {
 struct GlancesToggleRow: View {
     @Binding var selection: HomePanelSelection
 
-    private static let accent = Color.orange
-
     var body: some View {
         HStack(spacing: 1) {
             tab(label: "Now", selection: .sessions)
@@ -542,12 +540,15 @@ struct GlancesToggleRow: View {
         } label: {
             Text(label)
                 .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundStyle(selection == target ? Self.accent : .white.opacity(0.3))
+                // Navigation is not "Needs you" — the selected tab reads in full-
+                // strength ink on a faint well, not the signal accent. Keeps the
+                // amber reserved for attention. (M5)
+                .foregroundStyle(selection == target ? NotchTokens.text1 : NotchTokens.ink(0.3))
                 .padding(.horizontal, 10)
                 .frame(minHeight: 32)
                 .background(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(selection == target ? Self.accent.opacity(0.14) : .clear)
+                        .fill(selection == target ? NotchTokens.ink(0.12) : .clear)
                 )
         }
         .buttonStyle(.plain)

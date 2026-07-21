@@ -1231,12 +1231,39 @@ private struct ApprovalBar: View {
                     .onTapGesture { handleCardClick() }
             }
 
-            // Pixel-style buttons — badge the global shortcut when one is enabled
+            // Risk-aware buttons. The old four-colour rainbow gave Allow Once a
+            // friendly green even on a destructive command. Now emphasis follows
+            // risk: on destructive, Deny is the filled action and Allow recedes
+            // to a quiet ghost; on a safe request, Allow leads. One accent, not
+            // four. (M3)
             HStack(spacing: 6) {
-                PixelButton(label: L10n.shared["deny"], fg: Color.white.opacity(0.95), bg: Color(red: 0.45, green: 0.12, blue: 0.12), border: Color(red: 0.7, green: 0.25, blue: 0.25), hint: Self.shortcutHint(.deny), action: onDeny)
-                PixelButton(label: L10n.shared["dismiss"], fg: Color.white.opacity(0.95), bg: Color(red: 0.25, green: 0.25, blue: 0.25), border: Color.white.opacity(0.28), action: onDismiss)
-                PixelButton(label: L10n.shared["allow_once"], fg: Color.white.opacity(0.95), bg: Color(red: 0.16, green: 0.38, blue: 0.18), border: Color(red: 0.28, green: 0.62, blue: 0.32), hint: Self.shortcutHint(.approve), action: onAllow)
-                PixelButton(label: L10n.shared["always"], fg: Color.white.opacity(0.95), bg: Color(red: 0.14, green: 0.28, blue: 0.52), border: Color(red: 0.28, green: 0.48, blue: 0.82), hint: Self.shortcutHint(.approveAlways), action: onAlwaysAllow)
+                let destructive = risk == .destructive
+                let ghostFg = NotchTokens.ink(0.6)
+                let ghostBg = NotchTokens.ink(0.06)
+                let ghostBorder = NotchTokens.ink(0.14)
+                PixelButton(
+                    label: L10n.shared["deny"],
+                    fg: destructive ? NotchTokens.onDanger : NotchTokens.ink(0.9),
+                    bg: destructive ? NotchTokens.dangerFill : ghostBg,
+                    border: destructive ? NotchTokens.dangerFill : ghostBorder,
+                    hint: Self.shortcutHint(.deny), action: onDeny
+                )
+                PixelButton(
+                    label: L10n.shared["dismiss"],
+                    fg: ghostFg, bg: ghostBg, border: ghostBorder, action: onDismiss
+                )
+                PixelButton(
+                    label: L10n.shared["allow_once"],
+                    fg: destructive ? ghostFg : Color(red: 0.05, green: 0.06, blue: 0.07),
+                    bg: destructive ? ghostBg : Color.white.opacity(0.92),
+                    border: destructive ? ghostBorder : Color.white.opacity(0.92),
+                    hint: Self.shortcutHint(.approve), action: onAllow
+                )
+                PixelButton(
+                    label: L10n.shared["always"],
+                    fg: NotchTokens.ink(0.5), bg: NotchTokens.ink(0.05), border: NotchTokens.ink(0.1),
+                    hint: Self.shortcutHint(.approveAlways), action: onAlwaysAllow
+                )
             }
             .padding(.horizontal, 14)
         }
@@ -2609,7 +2636,7 @@ private struct SessionCard: View {
                 if let prompt = session.lastUserPrompt,
                    session.recentMessages.isEmpty {
                     Text(prompt)
-                        .font(.system(size: fontSize, design: .monospaced))
+                        .font(.system(size: fontSize))
                         .foregroundStyle(NotchTokens.ink(0.45))
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -3409,7 +3436,7 @@ private struct ChatMessageRow: View, Equatable {
                     .font(.system(size: fontSize, weight: .bold, design: .monospaced))
                     .foregroundStyle(NotchTokens.runningText)
                 Text(ChatMessageTextFormatter.literalText(text))
-                    .font(.system(size: fontSize, weight: .medium, design: .monospaced))
+                    .font(.system(size: fontSize, weight: .medium))
                     .foregroundStyle(NotchTokens.ink(0.9))
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -3420,7 +3447,7 @@ private struct ChatMessageRow: View, Equatable {
                     .font(.system(size: fontSize, weight: .bold, design: .monospaced))
                     .foregroundStyle(Color(red: 0.85, green: 0.47, blue: 0.34))
                 Text(ChatMessageTextFormatter.inlineMarkdown(compactText(stripDirectives(text))))
-                    .font(.system(size: fontSize, design: .monospaced))
+                    .font(.system(size: fontSize))
                     .foregroundStyle(NotchTokens.ink(0.85))
                     .lineLimit(aiLineLimit)
                     .truncationMode(.tail)
@@ -3488,7 +3515,15 @@ private func stripDirectives(_ text: String) -> String {
 @MainActor
 enum PanelSnapshot {
     static func render(appState: AppState, dark: Bool, width: CGFloat = 580) -> NSImage? {
-        image(of: SessionListView(appState: appState, onlySessionId: nil), dark: dark, width: width)
+        // The list now always wraps in a ThinScrollView (1.0.61), which collapses
+        // to nothing in a headless render with no ambient height — so give it a
+        // fixed height to fill and top-align. The real app gets this from the
+        // panel window.
+        image(
+            of: SessionListView(appState: appState, onlySessionId: nil)
+                .frame(height: 560, alignment: .top),
+            dark: dark, width: width
+        )
     }
 
     /// The approval card in isolation — where the DESTRUCTIVE risk pill and the
@@ -3506,6 +3541,44 @@ enum PanelSnapshot {
             onAllow: {}, onAlwaysAllow: {}, onDeny: {}, onDismiss: {}
         )
         return image(of: bar, dark: dark, width: width)
+    }
+
+    /// The collapsed island at rest (idle, no sessions) — the first-impression
+    /// surface. Renders the two wings flanking a mock notch gap for M4.
+    static func renderCollapsed(appState: AppState, dark: Bool) -> NSImage? {
+        let island = HStack(spacing: 0) {
+            CompactLeftWing(appState: appState, expanded: false, mascotSize: 24, hasNotch: true, showToolStatus: false)
+            Spacer().frame(width: 150)
+            CompactRightWing(appState: appState, expanded: false, hasNotch: true)
+        }
+        .padding(.horizontal, 10)
+        .frame(width: 430, height: 38)
+        .background(Color.black)
+        return image(of: island, dark: dark, width: 430)
+    }
+
+    /// The Now/Today/Tools nav (M5): the selected tab moves off the alert
+    /// accent onto neutral ink. Rendered with a fixed selection.
+    static func renderToggle(selection: HomePanelSelection, width: CGFloat = 420) -> NSImage? {
+        image(of: GlancesToggleRow(selection: .constant(selection))
+                .frame(width: width, alignment: .leading),
+              dark: true, width: width)
+    }
+
+    /// The Today / Glances secondary surface (M5). Rendered in its empty state
+    /// (no run loop, so onAppear never fires) — which still exercises the amber
+    /// recovery buttons, section labels and dividers the migration touched.
+    static func renderGlances(width: CGFloat = 420) -> NSImage? {
+        image(of: GlancesView().frame(width: width, height: 520, alignment: .top),
+              dark: true, width: width)
+    }
+
+    /// The Tools / Hub secondary surface (M5). With no snapshot yet it shows the
+    /// mode strip — the exact site of the hardcoded black-on-amber button text.
+    static func renderHub(width: CGFloat = 420) -> NSImage? {
+        image(of: PersonalHubMacView(appState: AppState())
+                .frame(width: width, height: 120, alignment: .top),
+              dark: true, width: width)
     }
 
     private static func image<V: View>(of view: V, dark: Bool, width: CGFloat) -> NSImage? {

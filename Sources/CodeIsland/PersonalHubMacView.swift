@@ -21,7 +21,7 @@ struct PersonalHubMacView: View {
     @State private var calendarSelectedDate = Date()
 
     private let service = PersonalHubService.shared
-    private let accent = Color(red: 1.0, green: 0.69, blue: 0.0)
+    private let accent = NotchTokens.signalFill
 
     var body: some View {
         VStack(spacing: 8) {
@@ -46,11 +46,11 @@ struct PersonalHubMacView: View {
                             .foregroundStyle(accent)
                         Text(snapshot.serverName)
                             .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.34))
+                            .foregroundStyle(NotchTokens.ink(0.34))
                         Spacer()
                         Text(snapshot.generatedAt, style: .time)
                             .font(.system(size: 9, weight: .medium, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.25))
+                            .foregroundStyle(NotchTokens.ink(0.25))
                         Button {
                             toggleDashboard(snapshot)
                         } label: {
@@ -60,7 +60,7 @@ struct PersonalHubMacView: View {
                                 .font(.system(size: 10, weight: .bold))
                         }
                         .buttonStyle(.plain)
-                        .foregroundStyle(.white.opacity(0.48))
+                        .foregroundStyle(NotchTokens.ink(0.48))
                         .help(snapshot.configuration?.dashboardEnabled == false
                             ? "Show day dashboard"
                             : "Hide day dashboard")
@@ -96,7 +96,7 @@ struct PersonalHubMacView: View {
                                 Text("\(Int((dayProgress * 100).rounded()))%")
                             }
                             .font(.system(size: 8, weight: .black, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.36))
+                            .foregroundStyle(NotchTokens.ink(0.36))
                             ProgressView(value: dayProgress)
                                 .tint(accent)
                                 .controlSize(.mini)
@@ -131,7 +131,7 @@ struct PersonalHubMacView: View {
                 if let actionMessage {
                     Text(actionMessage)
                         .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.48))
+                        .foregroundStyle(NotchTokens.ink(0.48))
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 12)
                         .padding(.bottom, 6)
@@ -167,10 +167,10 @@ struct PersonalHubMacView: View {
                 } label: {
                     Text(mode.rawValue.capitalized)
                         .font(.system(size: 10, weight: .semibold, design: .rounded))
-                        .foregroundStyle(requestedMode == mode ? .black : .white.opacity(0.38))
+                        .foregroundStyle(requestedMode == mode ? NotchTokens.onSignal : NotchTokens.ink(0.38))
                         .frame(maxWidth: .infinity, minHeight: 30)
                         .background(
-                            requestedMode == mode ? accent : Color.white.opacity(0.055),
+                            requestedMode == mode ? accent : NotchTokens.ink(0.055),
                             in: RoundedRectangle(cornerRadius: 8, style: .continuous)
                         )
                 }
@@ -209,11 +209,11 @@ struct PersonalHubMacView: View {
         } label: {
             Label(definition.title, systemImage: definition.symbol)
                 .font(.system(size: 10, weight: .semibold, design: .rounded))
-                .foregroundStyle(selected ? Color.black : Color.white.opacity(0.56))
+                .foregroundStyle(selected ? NotchTokens.onSignal : NotchTokens.ink(0.56))
                 .padding(.horizontal, 10)
                 .frame(minHeight: 32)
                 .background(
-                    selected ? accent : Color.white.opacity(0.055),
+                    selected ? accent : NotchTokens.ink(0.055),
                     in: RoundedRectangle(cornerRadius: 9, style: .continuous)
                 )
         }
@@ -521,15 +521,15 @@ private struct MacHubModuleCard: View {
             HStack(spacing: 7) {
                 Image(systemName: definition.symbol)
                     .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(NotchTokens.signalText)
                     .frame(width: 20)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(definition.title)
                         .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.86))
+                        .foregroundStyle(NotchTokens.ink(0.86))
                     Text(module.summary)
                         .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.4))
+                        .foregroundStyle(NotchTokens.ink(0.4))
                         .lineLimit(2)
                 }
                 Spacer(minLength: 4)
@@ -540,14 +540,14 @@ private struct MacHubModuleCard: View {
                 HStack(alignment: .top, spacing: 6) {
                     Image(systemName: module.id == .notifications ? "eye.slash" : "info.circle")
                         .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(module.id == .notifications ? Color.orange : Color.white.opacity(0.34))
+                        .foregroundStyle(module.id == .notifications ? NotchTokens.signalText : NotchTokens.ink(0.34))
                     Text(detail)
                         .font(.system(size: 8, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.4))
+                        .foregroundStyle(NotchTokens.ink(0.4))
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(6)
-                .background(Color.black.opacity(0.2), in: RoundedRectangle(cornerRadius: 6))
+                .background(NotchTokens.panelGround.opacity(0.2), in: RoundedRectangle(cornerRadius: 6))
             }
 
             if showsTaskComposer {
@@ -573,7 +573,7 @@ private struct MacHubModuleCard: View {
                             .frame(minHeight: 80)
                             .scrollContentBackground(.hidden)
                             .padding(5)
-                            .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 5))
+                            .background(NotchTokens.ink(0.06), in: RoundedRectangle(cornerRadius: 5))
                         reviewButton(
                             actionID: "set",
                             value: taskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -621,7 +621,7 @@ private struct MacHubModuleCard: View {
                 Text(month.selectedEvents.isEmpty ? "NO EVENTS" : "SELECTED DAY")
                     .font(.system(size: 7, weight: .black, design: .monospaced))
                     .tracking(0.7)
-                    .foregroundStyle(.white.opacity(0.28))
+                    .foregroundStyle(NotchTokens.ink(0.28))
                 ForEach(month.selectedEvents) { item in
                     itemCard(item)
                 }
@@ -629,7 +629,7 @@ private struct MacHubModuleCard: View {
                     Text("UPCOMING")
                         .font(.system(size: 7, weight: .black, design: .monospaced))
                         .tracking(0.7)
-                        .foregroundStyle(.white.opacity(0.28))
+                        .foregroundStyle(NotchTokens.ink(0.28))
                 }
             }
 
@@ -640,8 +640,8 @@ private struct MacHubModuleCard: View {
             actionRow(module.actions, itemID: nil, itemDetail: nil)
         }
         .padding(8)
-        .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 9))
-        .overlay(RoundedRectangle(cornerRadius: 9).stroke(Color.white.opacity(0.07), lineWidth: 1))
+        .background(NotchTokens.ink(0.045), in: RoundedRectangle(cornerRadius: 9))
+        .overlay(RoundedRectangle(cornerRadius: 9).stroke(NotchTokens.ink(0.07), lineWidth: 1))
         .onAppear {
             if selectedReminderCalendarID.isEmpty {
                 selectedReminderCalendarID = reminderLists.first?.id ?? ""
@@ -674,18 +674,18 @@ private struct MacHubModuleCard: View {
                         .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                         .overlay(
                             RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                                .stroke(NotchTokens.ink(0.1), lineWidth: 1)
                         )
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(item.title)
                         .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.72))
+                        .foregroundStyle(NotchTokens.ink(0.72))
                         .lineLimit(1)
                     if let subtitle = item.subtitle {
                         Text(subtitle)
                             .font(.system(size: 8, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.3))
+                            .foregroundStyle(NotchTokens.ink(0.3))
                             .lineLimit(1)
                     }
                 }
@@ -696,14 +696,14 @@ private struct MacHubModuleCard: View {
                !detail.isEmpty {
                 Text(detail)
                     .font(.system(size: 9, weight: .regular, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.68))
+                    .foregroundStyle(NotchTokens.ink(0.68))
                     .lineSpacing(2)
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
                     .accessibilityIdentifier("hub.item.detail.\(module.id.rawValue).\(item.id)")
             }
             if let progress = item.progress {
-                ProgressView(value: progress).tint(.orange)
+                ProgressView(value: progress).tint(NotchTokens.signalText)
             }
             if let duration = item.mediaDuration, duration.isFinite, duration > 0 {
                 Slider(
@@ -725,7 +725,7 @@ private struct MacHubModuleCard: View {
                         )
                     }
                 )
-                .tint(.orange)
+                .tint(NotchTokens.signalText)
                 .controlSize(.mini)
                 .accessibilityLabel("Playback position")
                 HStack {
@@ -734,7 +734,7 @@ private struct MacHubModuleCard: View {
                     Text(playbackTime(duration))
                 }
                 .font(.system(size: 7, weight: .medium, design: .monospaced))
-                .foregroundStyle(.white.opacity(0.3))
+                .foregroundStyle(NotchTokens.ink(0.3))
                 .onAppear {
                     mediaSeekPosition = min(max(item.mediaPosition ?? 0, 0), duration)
                 }
@@ -746,7 +746,7 @@ private struct MacHubModuleCard: View {
             actionRow(item.actions, itemID: item.id, itemDetail: item.detail)
         }
         .padding(6)
-        .background(Color.black.opacity(0.24), in: RoundedRectangle(cornerRadius: 6))
+        .background(NotchTokens.panelGround.opacity(0.24), in: RoundedRectangle(cornerRadius: 6))
     }
 
     @ViewBuilder
@@ -788,17 +788,17 @@ private struct MacHubModuleCard: View {
     private var availability: some View {
         switch module.availability {
         case .ready:
-            Image(systemName: "checkmark.circle.fill").foregroundStyle(.orange)
+            Image(systemName: "checkmark.circle.fill").foregroundStyle(NotchTokens.signalText)
         case .partial:
-            Text("PARTIAL").foregroundStyle(.orange)
+            Text("PARTIAL").foregroundStyle(NotchTokens.signalText)
         case .loading:
             ProgressView().controlSize(.mini)
         case .permissionRequired:
-            Image(systemName: "lock.trianglebadge.exclamationmark").foregroundStyle(.orange)
+            Image(systemName: "lock.trianglebadge.exclamationmark").foregroundStyle(NotchTokens.signalText)
         case .offline:
             Image(systemName: "wifi.slash").foregroundStyle(.secondary)
         case .unavailable:
-            Text("NEXT").foregroundStyle(.white.opacity(0.25))
+            Text("NEXT").foregroundStyle(NotchTokens.ink(0.25))
         }
     }
 
@@ -807,7 +807,7 @@ private struct MacHubModuleCard: View {
             .textFieldStyle(.plain)
             .font(.system(size: 10, weight: .medium))
             .padding(6)
-            .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 5))
+            .background(NotchTokens.ink(0.06), in: RoundedRectangle(cornerRadius: 5))
     }
 
     private var claudeComposer: some View {
@@ -822,12 +822,12 @@ private struct MacHubModuleCard: View {
         }
         .padding(7)
         .background(
-            (isClaudeDropTarget ? Color.orange.opacity(0.12) : Color.black.opacity(0.18)),
+            (isClaudeDropTarget ? NotchTokens.signalFill.opacity(0.12) : NotchTokens.panelGround.opacity(0.18)),
             in: RoundedRectangle(cornerRadius: 7)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 7)
-                .stroke(isClaudeDropTarget ? Color.orange.opacity(0.8) : Color.white.opacity(0.05), lineWidth: 1)
+                .stroke(isClaudeDropTarget ? NotchTokens.signalFill.opacity(0.8) : NotchTokens.ink(0.05), lineWidth: 1)
         )
     }
 
@@ -868,7 +868,7 @@ private struct MacHubModuleCard: View {
         }
         .buttonStyle(.bordered)
         .controlSize(.mini)
-        .tint(claudeVoice.state.mode == mode ? .orange : .gray)
+        .tint(claudeVoice.state.mode == mode ? NotchTokens.signalText : .gray)
     }
 
     @ViewBuilder
@@ -879,10 +879,10 @@ private struct MacHubModuleCard: View {
                 systemImage: claudeVoice.isListening ? "waveform" : "mic.fill"
             )
             .font(.system(size: 8, weight: .bold))
-            .foregroundStyle(claudeVoice.isListening ? Color.orange : Color.white.opacity(0.64))
+            .foregroundStyle(claudeVoice.isListening ? NotchTokens.signalText : NotchTokens.ink(0.64))
             .padding(.horizontal, 8)
             .frame(height: 24)
-            .background(Color.white.opacity(0.07), in: Capsule())
+            .background(NotchTokens.ink(0.07), in: Capsule())
             .contentShape(Capsule())
             .onLongPressGesture(
                 minimumDuration: 0,
@@ -905,7 +905,7 @@ private struct MacHubModuleCard: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.mini)
-            .tint(.orange)
+            .tint(NotchTokens.signalText)
         }
     }
 
@@ -914,11 +914,11 @@ private struct MacHubModuleCard: View {
         if claudeVoice.state.phase == .requestingPermission {
             Label("Requesting private microphone access…", systemImage: "lock.shield")
                 .font(.system(size: 8, weight: .medium))
-                .foregroundStyle(.white.opacity(0.46))
+                .foregroundStyle(NotchTokens.ink(0.46))
         } else if let error = claudeVoice.state.errorMessage {
             Label(error, systemImage: "exclamationmark.triangle.fill")
                 .font(.system(size: 8, weight: .semibold))
-                .foregroundStyle(.orange)
+                .foregroundStyle(NotchTokens.signalText)
         }
     }
 
@@ -947,10 +947,10 @@ private struct MacHubModuleCard: View {
             .buttonStyle(.plain)
         }
         .font(.system(size: 8, weight: .semibold))
-        .foregroundStyle(context.wasTruncated ? Color.orange : Color.white.opacity(0.65))
+        .foregroundStyle(context.wasTruncated ? NotchTokens.signalText : NotchTokens.ink(0.65))
         .padding(.horizontal, 7)
         .frame(height: 23)
-        .background(Color.white.opacity(0.07), in: Capsule())
+        .background(NotchTokens.ink(0.07), in: Capsule())
     }
 
     private var claudeAttachmentRow: some View {
@@ -966,7 +966,7 @@ private struct MacHubModuleCard: View {
 
             Text(isClaudeDropTarget ? "DROP TO ATTACH" : "5 files max · text only")
                 .font(.system(size: 7, weight: .black, design: .monospaced))
-                .foregroundStyle(isClaudeDropTarget ? Color.orange : Color.white.opacity(0.3))
+                .foregroundStyle(isClaudeDropTarget ? NotchTokens.signalText : NotchTokens.ink(0.3))
         }
     }
 
@@ -975,14 +975,14 @@ private struct MacHubModuleCard: View {
         if let claudeContextError {
             Text(claudeContextError)
                 .font(.system(size: 8, weight: .semibold))
-                .foregroundStyle(.orange)
+                .foregroundStyle(NotchTokens.signalText)
         }
     }
 
     private var claudePrivacyDisclosure: some View {
         Label(ClaudeSharingPrivacy.disclosure, systemImage: "rectangle.inset.filled.and.person.filled")
             .font(.system(size: 7, weight: .medium))
-            .foregroundStyle(.white.opacity(0.3))
+            .foregroundStyle(NotchTokens.ink(0.3))
             .fixedSize(horizontal: false, vertical: true)
     }
 
@@ -1037,7 +1037,7 @@ private struct MacHubModuleCard: View {
             addText(module.id, actionID, value)
         }
         .buttonStyle(.borderedProminent)
-        .tint(.orange)
+        .tint(NotchTokens.signalText)
         .controlSize(.small)
         .disabled(value == nil || taskTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
@@ -1060,7 +1060,7 @@ private struct MacShelfCaptureControls: View {
     @State private var isDropTarget = false
 
     private let data = PersonalHubDataModel.shared
-    private let accent = Color(red: 1.0, green: 0.69, blue: 0.0)
+    private let accent = NotchTokens.signalFill
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -1089,15 +1089,15 @@ private struct MacShelfCaptureControls: View {
                 Text(isDropTarget ? "RELEASE TO ADD" : "DROP FILES INTO SHELF")
             }
             .font(.system(size: 7, weight: .black, design: .monospaced))
-            .foregroundStyle(isDropTarget ? .black : .white.opacity(0.36))
+            .foregroundStyle(isDropTarget ? NotchTokens.onSignal : NotchTokens.ink(0.36))
             .frame(maxWidth: .infinity, minHeight: 28)
             .background(
-                isDropTarget ? accent : Color.white.opacity(0.035),
+                isDropTarget ? accent : NotchTokens.ink(0.035),
                 in: RoundedRectangle(cornerRadius: 7, style: .continuous)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .stroke(isDropTarget ? accent : Color.white.opacity(0.08), lineWidth: 1)
+                    .stroke(isDropTarget ? accent : NotchTokens.ink(0.08), lineWidth: 1)
             )
             .dropDestination(for: URL.self) { urls, _ in
                 urls.reduce(false) { imported, url in
@@ -1110,7 +1110,7 @@ private struct MacShelfCaptureControls: View {
             if capture.isPresentingPicker {
                 Text("Choose a window, app, or display in the system picker")
                     .font(.system(size: 8, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.38))
+                    .foregroundStyle(NotchTokens.ink(0.38))
             } else if capture.isRecording {
                 Text("Recording selected content · Stop when finished")
                     .font(.system(size: 8, weight: .semibold))
@@ -1118,11 +1118,11 @@ private struct MacShelfCaptureControls: View {
             } else if let error = capture.lastError {
                 Text(error)
                     .font(.system(size: 8, weight: .medium))
-                    .foregroundStyle(Color.red.opacity(0.82))
+                    .foregroundStyle(NotchTokens.dangerText)
             }
         }
         .padding(7)
-        .background(Color.black.opacity(0.24), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(NotchTokens.panelGround.opacity(0.24), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
     private func captureButton(
@@ -1136,8 +1136,8 @@ private struct MacShelfCaptureControls: View {
                 .frame(maxWidth: .infinity, minHeight: 24)
         }
         .buttonStyle(.plain)
-        .foregroundStyle(label == "Stop" ? Color.red.opacity(0.9) : .white.opacity(0.66))
-        .background(Color.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 6))
+        .foregroundStyle(label == "Stop" ? NotchTokens.dangerText : NotchTokens.ink(0.66))
+        .background(NotchTokens.ink(0.055), in: RoundedRectangle(cornerRadius: 6))
     }
 
     private func chooseFiles() {
@@ -1159,7 +1159,7 @@ struct MacCalendarMonthView: View {
     let onSelection: (Date, Date) -> Void
 
     private let calendar = Calendar.current
-    private let accent = Color(red: 1.0, green: 0.69, blue: 0.0)
+    private let accent = NotchTokens.signalFill
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 3), count: 7)
 
     var body: some View {
@@ -1172,7 +1172,7 @@ struct MacCalendarMonthView: View {
                 Spacer()
                 Text(month.displayedMonth.formatted(.dateTime.month(.wide).year()))
                     .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(.white.opacity(0.82))
+                    .foregroundStyle(NotchTokens.ink(0.82))
                 Spacer()
                 Button("Today") { onSelection(Date(), Date()) }
                     .font(.system(size: 8, weight: .bold))
@@ -1189,7 +1189,7 @@ struct MacCalendarMonthView: View {
                 ForEach(weekdaySymbols, id: \.self) { symbol in
                     Text(symbol.uppercased())
                         .font(.system(size: 7, weight: .black, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.26))
+                        .foregroundStyle(NotchTokens.ink(0.26))
                         .frame(maxWidth: .infinity)
                 }
                 ForEach(month.days) { day in
@@ -1206,7 +1206,7 @@ struct MacCalendarMonthView: View {
                             }
                             .frame(height: 3)
                         }
-                        .foregroundStyle(day.isInDisplayedMonth ? .white.opacity(0.82) : .white.opacity(0.2))
+                        .foregroundStyle(day.isInDisplayedMonth ? NotchTokens.ink(0.82) : NotchTokens.ink(0.2))
                         .frame(maxWidth: .infinity, minHeight: 25)
                         .background(
                             RoundedRectangle(cornerRadius: 6, style: .continuous)
@@ -1224,7 +1224,7 @@ struct MacCalendarMonthView: View {
             }
         }
         .padding(7)
-        .background(Color.black.opacity(0.28), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(NotchTokens.panelGround.opacity(0.28), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
     private var weekdaySymbols: [String] {
@@ -1255,15 +1255,15 @@ private struct MacHubActionReview: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.72)
+            NotchTokens.panelGround.opacity(0.72)
 
             VStack(alignment: .leading, spacing: 13) {
                 HStack(spacing: 10) {
                     Image(systemName: "checkmark.shield.fill")
                         .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(NotchTokens.signalText)
                         .frame(width: 34, height: 34)
-                        .background(Color.orange.opacity(0.13), in: RoundedRectangle(cornerRadius: 9))
+                        .background(NotchTokens.signalFill.opacity(0.13), in: RoundedRectangle(cornerRadius: 9))
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Review action")
@@ -1288,7 +1288,7 @@ private struct MacHubActionReview: View {
                         .keyboardShortcut(.cancelAction)
                     Button("Do it", action: onConfirm)
                         .buttonStyle(.borderedProminent)
-                        .tint(.orange)
+                        .tint(NotchTokens.signalText)
                         .keyboardShortcut(.defaultAction)
                 }
             }
@@ -1297,7 +1297,7 @@ private struct MacHubActionReview: View {
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(Color.white.opacity(0.11), lineWidth: 1)
+                    .stroke(NotchTokens.ink(0.11), lineWidth: 1)
             )
             .shadow(color: .black.opacity(0.42), radius: 24, y: 12)
         }
@@ -1341,7 +1341,7 @@ private struct MacModeRackEditor: View {
                 Button("Cancel", action: onCancel)
                 Button("Review") { onSave(modules) }
                     .buttonStyle(.borderedProminent)
-                    .tint(.orange)
+                    .tint(NotchTokens.signalText)
                     .disabled(modules.isEmpty)
             }
 
@@ -1405,7 +1405,7 @@ private struct MacModeRackEditor: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, maxHeight: 410, alignment: .top)
-        .background(Color.black.opacity(0.22), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(NotchTokens.panelGround.opacity(0.22), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .padding(.horizontal, 10)
         .padding(.bottom, 10)
     }
