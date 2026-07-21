@@ -43,6 +43,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                     FileHandle.standardError.write(Data("wrote \(name)\n".utf8))
                 }
+                // Secondary surfaces (M5) — dark only (panel is dark-only).
+                // Toggle first: it has no singleton dependencies, so it lands
+                // even if a later surface stalls on a shared model.
+                if let img = PanelSnapshot.renderToggle(selection: .glances) {
+                    PanelSnapshot.writePNG(img, to: dir.appendingPathComponent("toggle.png"))
+                }
+                if let img = PanelSnapshot.renderGlances() {
+                    PanelSnapshot.writePNG(img, to: dir.appendingPathComponent("glances.png"))
+                }
+                if let img = PanelSnapshot.renderHub() {
+                    PanelSnapshot.writePNG(img, to: dir.appendingPathComponent("hub.png"))
+                }
+                FileHandle.standardError.write(Data("wrote surfaces\n".utf8))
                 exit(0)
             }
             return

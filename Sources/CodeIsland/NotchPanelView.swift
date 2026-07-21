@@ -3557,6 +3557,30 @@ enum PanelSnapshot {
         return image(of: island, dark: dark, width: 430)
     }
 
+    /// The Now/Today/Tools nav (M5): the selected tab moves off the alert
+    /// accent onto neutral ink. Rendered with a fixed selection.
+    static func renderToggle(selection: HomePanelSelection, width: CGFloat = 420) -> NSImage? {
+        image(of: GlancesToggleRow(selection: .constant(selection))
+                .frame(width: width, alignment: .leading),
+              dark: true, width: width)
+    }
+
+    /// The Today / Glances secondary surface (M5). Rendered in its empty state
+    /// (no run loop, so onAppear never fires) — which still exercises the amber
+    /// recovery buttons, section labels and dividers the migration touched.
+    static func renderGlances(width: CGFloat = 420) -> NSImage? {
+        image(of: GlancesView().frame(width: width, height: 520, alignment: .top),
+              dark: true, width: width)
+    }
+
+    /// The Tools / Hub secondary surface (M5). With no snapshot yet it shows the
+    /// mode strip — the exact site of the hardcoded black-on-amber button text.
+    static func renderHub(width: CGFloat = 420) -> NSImage? {
+        image(of: PersonalHubMacView(appState: AppState())
+                .frame(width: width, height: 120, alignment: .top),
+              dark: true, width: width)
+    }
+
     private static func image<V: View>(of view: V, dark: Bool, width: CGFloat) -> NSImage? {
         let content = view
             .frame(width: width)
