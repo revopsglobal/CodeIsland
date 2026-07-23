@@ -72,6 +72,32 @@ final class AppState {
     var permissionQueue: [PermissionRequest] = []
     var questionQueue: [QuestionRequest] = []
 
+    /// Settling window between a PermissionRequest arriving and its approval card
+    /// being surfaced.
+    ///
+    /// Some CLIs ask for a permission they are about to grant themselves: OpenCode
+    /// emits `permission.asked` and replies a few milliseconds later when the
+    /// permission is preconfigured to "allow". Surfacing on arrival means every one
+    /// of those pops a "Blocked / Approval 1/1" card that the reply immediately
+    /// tears down — a few hundred times in a headless swarm run it reads as a
+    /// flickering approval. Requests resolved inside this window are drained where
+    /// they sit and never reach the UI at all.
+    static let defaultPermissionSurfaceDebounce: TimeInterval = 0.3
+
+    /// Instance override for the settling window. Tests set it to 0 for a
+    /// deterministic synchronous surface.
+    @ObservationIgnored
+    var permissionSurfaceDebounce: TimeInterval = AppState.defaultPermissionSurfaceDebounce
+
+    /// Requests inside the settling window: received, continuation parked, not yet
+    /// visible anywhere (no queue entry, no `.waitingApproval` status, no sound, no
+    /// notification). Every path that resolves `permissionQueue` must resolve these
+    /// too, or the CLI waits forever on a card that never showed.
+    @ObservationIgnored
+    private(set) var stagedPermissions: [PermissionRequest] = []
+    @ObservationIgnored
+    private var stagedPermissionTimers: [String: Task<Void, Never>] = [:]
+
     @ObservationIgnored
     private(set) var recentHookEvents: [DiagnosticHookEvent] = []
     @ObservationIgnored
@@ -1251,10 +1277,95 @@ final class AppState {
         // Extract metadata so blocking-first parent sessions have cwd/source/PID.
         // Subagent events are routed through the parent session ID; their metadata
         // can describe the child session and should not overwrite the parent.
+        // Safe to do before the settling window: it only fills in cwd/source/PID and
+        // never puts the session into an attention-seeking state.
         if event.agentId == nil {
             extractMetadata(into: &sessions, sessionId: sessionId, event: event)
         }
         tryMonitorSession(sessionId)
+
+        let request = PermissionRequest(event: event, continuation: continuation)
+
+        guard permissionSurfaceDebounce > 0 else {
+            surfacePermissionRequest(request)
+            return
+        }
+
+        // A replay landing while an earlier copy is still settling swaps the
+        // continuation in place and keeps the original deadline, so repeated replays
+        // can't push the card out indefinitely.
+        if mergeDuplicateStagedPermission(request) { return }
+
+        stagedPermissions.append(request)
+        let requestId = request.id
+        let window = permissionSurfaceDebounce
+        stagedPermissionTimers[requestId] = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(window * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            self?.promoteStagedPermission(id: requestId)
+        }
+    }
+
+    /// Settling window elapsed with the request unresolved — it is a real block, so
+    /// move it into the visible queue.
+    private func promoteStagedPermission(id: String) {
+        stagedPermissionTimers.removeValue(forKey: id)
+        guard let index = stagedPermissions.firstIndex(where: { $0.id == id }) else { return }
+        surfacePermissionRequest(stagedPermissions.remove(at: index))
+    }
+
+    /// Remove staged requests matching `predicate`, cancelling their timers. Returns
+    /// them so the caller can resume each continuation with its own decision.
+    @discardableResult
+    func removeStagedPermissions(where predicate: (PermissionRequest) -> Bool) -> [PermissionRequest] {
+        var removed: [PermissionRequest] = []
+        stagedPermissions.removeAll { request in
+            guard predicate(request) else { return false }
+            stagedPermissionTimers.removeValue(forKey: request.id)?.cancel()
+            removed.append(request)
+            return true
+        }
+        return removed
+    }
+
+    func hasStagedPermission(forSession sessionId: String) -> Bool {
+        stagedPermissions.contains { ($0.event.sessionId ?? "default") == sessionId }
+    }
+
+    /// Staged counterpart of `mergeDuplicatePermissionRequest`. Same replay rule —
+    /// identical tool_use_id *and* identical input — but the merged entry inherits the
+    /// original id and creation time so its in-flight timer keeps owning the slot.
+    private func mergeDuplicateStagedPermission(_ request: PermissionRequest) -> Bool {
+        guard let toolUseId = request.toolUseId, !toolUseId.isEmpty else { return false }
+        guard let index = stagedPermissions.firstIndex(where: { $0.toolUseId == toolUseId })
+        else { return false }
+
+        let existing = stagedPermissions[index]
+        let existingInput = existing.event.toolInput ?? [:]
+        let newInput = request.event.toolInput ?? [:]
+        guard NSDictionary(dictionary: existingInput).isEqual(to: NSDictionary(dictionary: newInput)) else {
+            return false
+        }
+        log.notice("⚠️ permission deny reason=mergeDuplicateStagedPermission session=\(existing.event.sessionId ?? "nil", privacy: .public) toolUseId=\(toolUseId, privacy: .public) tool=\(existing.event.toolName ?? "nil", privacy: .public)")
+        let denyBody = #"{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny"}}}"#
+        existing.continuation.resume(returning: Data(denyBody.utf8))
+        stagedPermissions[index] = PermissionRequest(
+            id: existing.id,
+            createdAt: existing.createdAt,
+            event: request.event,
+            continuation: request.continuation
+        )
+        return true
+    }
+
+    /// Make a permission request visible: queue it, flip the session to
+    /// `.waitingApproval`, and fire the sound / notification / auto-open surface.
+    private func surfacePermissionRequest(_ request: PermissionRequest) {
+        let event = request.event
+        let sessionId = event.sessionId ?? "default"
+        if sessions[sessionId] == nil {
+            sessions[sessionId] = SessionSnapshot()
+        }
 
         // New incoming permission request means session needs user decision again.
         dismissedPermissionSessionIds.remove(sessionId)
@@ -1268,8 +1379,6 @@ final class AppState {
         sessions[sessionId]?.lastActivity = Date()
         // Backfill tool name/description from cached PreToolUse when the payload is thin.
         enrichPermissionRequestFromCache(sessionId: sessionId, event: event)
-
-        let request = PermissionRequest(event: event, continuation: continuation)
 
         // Replay deduplication: if the same tool_use_id is already queued, swap the
         // continuation in place and deny the previous waiter. Preserves card order.
@@ -1908,6 +2017,12 @@ final class AppState {
         dismissedPermissionSessionIds.remove(sessionId)
         NotificationManager.shared.clearPending(sessionId: sessionId)
         let denyResponse = Data(#"{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny"}}}"#.utf8)
+        // Requests still settling never surfaced, but their continuations are just as
+        // parked as the queued ones — drop them on the same terms.
+        for staged in removeStagedPermissions(where: { ($0.event.sessionId ?? "default") == sessionId }) {
+            log.notice("⚠️ permission deny reason=drainPermissions-staged(\(reason, privacy: .public)) session=\(sessionId, privacy: .public) toolUseId=\(staged.toolUseId ?? "nil", privacy: .public) tool=\(staged.event.toolName ?? "nil", privacy: .public)")
+            staged.continuation.resume(returning: denyResponse)
+        }
         permissionQueue.removeAll { item in
             guard item.event.sessionId == sessionId else { return false }
             log.notice("⚠️ permission deny reason=drainPermissions(\(reason, privacy: .public)) session=\(sessionId, privacy: .public) toolUseId=\(item.toolUseId ?? "nil", privacy: .public) tool=\(item.event.toolName ?? "nil", privacy: .public)")
@@ -1920,6 +2035,7 @@ final class AppState {
     func handlePeerDisconnect(sessionId: String) {
         let hadPending = questionQueue.contains(where: { $0.event.sessionId == sessionId })
             || permissionQueue.contains(where: { $0.event.sessionId == sessionId })
+            || hasStagedPermission(forSession: sessionId)
         guard hadPending else { return }
 
         drainQuestions(forSession: sessionId, reason: "peer-disconnect")

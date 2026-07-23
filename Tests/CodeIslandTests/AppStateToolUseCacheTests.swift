@@ -8,7 +8,7 @@ final class AppStateToolUseCacheTests: XCTestCase {
     // MARK: - Cache lifecycle
 
     func testPreToolUseCachesRecord() throws {
-        let appState = AppState()
+        let appState = makeTestAppState()
         let event = try makeHookEvent(
             name: "PreToolUse",
             sessionId: "s1",
@@ -25,7 +25,7 @@ final class AppStateToolUseCacheTests: XCTestCase {
     }
 
     func testPostToolUseClearsCache() throws {
-        let appState = AppState()
+        let appState = makeTestAppState()
         appState.handleEvent(try makeHookEvent(name: "PreToolUse", sessionId: "s1", toolName: "Bash", toolUseId: "toolu_1"))
         XCTAssertNotNil(appState.pendingToolUses["toolu_1"])
 
@@ -35,7 +35,7 @@ final class AppStateToolUseCacheTests: XCTestCase {
     }
 
     func testPostToolUseFailureAlsoClearsCache() throws {
-        let appState = AppState()
+        let appState = makeTestAppState()
         appState.handleEvent(try makeHookEvent(name: "PreToolUse", sessionId: "s1", toolName: "Bash", toolUseId: "toolu_1"))
 
         appState.handleEvent(try makeHookEvent(name: "PostToolUseFailure", sessionId: "s1", toolName: "Bash", toolUseId: "toolu_1"))
@@ -44,7 +44,7 @@ final class AppStateToolUseCacheTests: XCTestCase {
     }
 
     func testPruneRemovesExpiredRecords() throws {
-        let appState = AppState()
+        let appState = makeTestAppState()
         appState.pendingToolUses["ancient"] = PreToolUseRecord(
             sessionId: "s1",
             toolName: "Bash",
@@ -69,7 +69,7 @@ final class AppStateToolUseCacheTests: XCTestCase {
     // MARK: - Duplicate PermissionRequest replay
 
     func testDuplicatePermissionRequestReplacesContinuationAndDeniesOld() async throws {
-        let appState = AppState()
+        let appState = makeTestAppState()
         let first = try makePermissionEvent(sessionId: "s1", toolName: "Bash", toolUseId: "dup_1")
         let second = try makePermissionEvent(sessionId: "s1", toolName: "Bash", toolUseId: "dup_1")
 
@@ -103,7 +103,7 @@ final class AppStateToolUseCacheTests: XCTestCase {
     /// another. Merging by id alone denied all but the last, which users saw as
     /// "denied by PermissionRequest hook" on tools they never rejected.
     func testParallelRequestsSharingIdButDifferentInputAreNotMerged() async throws {
-        let appState = AppState()
+        let appState = makeTestAppState()
         let readA = try makeHookEvent(
             name: "PermissionRequest", sessionId: "s1", toolName: "Read",
             toolUseId: "shared_id", toolInput: ["file_path": "/a.txt"]
@@ -144,7 +144,7 @@ final class AppStateToolUseCacheTests: XCTestCase {
     // MARK: - Stale queue drain via PostToolUse
 
     func testPostToolUseDrainsQueuedPermissionForSameId() async throws {
-        let appState = AppState()
+        let appState = makeTestAppState()
         let pending = try makePermissionEvent(sessionId: "s1", toolName: "Bash", toolUseId: "toolu_drain")
 
         let responseTask = Task<Data, Never> {
@@ -169,7 +169,7 @@ final class AppStateToolUseCacheTests: XCTestCase {
     }
 
     func testPostToolUseDoesNotAffectUnrelatedQueueEntries() async throws {
-        let appState = AppState()
+        let appState = makeTestAppState()
         let kept = try makePermissionEvent(sessionId: "s1", toolName: "Bash", toolUseId: "keep_me")
         let drained = try makePermissionEvent(sessionId: "s1", toolName: "Bash", toolUseId: "drop_me")
 
@@ -210,7 +210,7 @@ final class AppStateToolUseCacheTests: XCTestCase {
     /// the card up until the user closed it manually. After the fix, a follow-up
     /// same-session activity event resolves the orphan as approved-in-terminal.
     func testOrphanPermissionResolvedByFollowUpActivity() async throws {
-        let appState = AppState()
+        let appState = makeTestAppState()
         let orphan = try makeHookEvent(
             name: "PermissionRequest",
             sessionId: "s1",
@@ -247,7 +247,7 @@ final class AppStateToolUseCacheTests: XCTestCase {
     /// those still wait for proper correlation so parallel tool calls don't deny
     /// each other.
     func testOrphanDrainDoesNotResolvePermissionWithToolUseId() async throws {
-        let appState = AppState()
+        let appState = makeTestAppState()
         let correlated = try makePermissionEvent(sessionId: "s1", toolName: "Bash", toolUseId: "toolu_keep")
 
         let responseTask = Task<Data, Never> {
@@ -285,7 +285,7 @@ final class AppStateToolUseCacheTests: XCTestCase {
     /// After the fix, only surgical (tool_use_id) drains may remove a queued
     /// permission — unrelated activity events leave the queue alone.
     func testStopEventDoesNotDenyPendingPermission() async throws {
-        let appState = AppState()
+        let appState = makeTestAppState()
         let pending = try makePermissionEvent(sessionId: "s1", toolName: "Bash", toolUseId: "toolu_keep")
 
         let responseTask = Task<Data, Never> {
@@ -322,7 +322,7 @@ final class AppStateToolUseCacheTests: XCTestCase {
     /// drain would deny the pending second request; the UI flashed a card and
     /// users saw "denied by PermissionRequest hook" before they could react.
     func testParallelPostToolUseDoesNotDenyUnrelatedPendingPermission() async throws {
-        let appState = AppState()
+        let appState = makeTestAppState()
         let pendingForToolB = try makePermissionEvent(
             sessionId: "s1",
             toolName: "mcp__notion__notion-fetch",
@@ -358,7 +358,7 @@ final class AppStateToolUseCacheTests: XCTestCase {
     }
 
     func testTraePostToolUseKeepsQueuedPermissionUntilUserResponds() async throws {
-        let appState = AppState()
+        let appState = makeTestAppState()
         let pending = try makePermissionEvent(
             sessionId: "s1",
             toolName: "Bash",
@@ -393,7 +393,7 @@ final class AppStateToolUseCacheTests: XCTestCase {
     // MARK: - Cline task lifecycle
 
     func testClineTaskCompleteEndsSessionImmediately() throws {
-        let appState = AppState()
+        let appState = makeTestAppState()
         appState.handleEvent(try makeHookEvent(
             name: "TaskResume",
             sessionId: "cline-1",
@@ -418,7 +418,7 @@ final class AppStateToolUseCacheTests: XCTestCase {
     }
 
     func testClineDropsStaleToolEventsAfterTaskComplete() throws {
-        let appState = AppState()
+        let appState = makeTestAppState()
         appState.handleEvent(try makeHookEvent(
             name: "TaskResume",
             sessionId: "cline-1",
@@ -457,7 +457,7 @@ final class AppStateToolUseCacheTests: XCTestCase {
     // MARK: - Backfill from cache
 
     func testEnrichBackfillsMissingToolNameFromCache() throws {
-        let appState = AppState()
+        let appState = makeTestAppState()
         appState.handleEvent(try makeHookEvent(
             name: "PreToolUse",
             sessionId: "s1",

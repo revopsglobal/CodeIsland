@@ -29,7 +29,7 @@ final class AppStatePermissionFlowTests: XCTestCase {
 
     func testSmartSuppressKeepsPendingSurfaceCollapsedWhenTerminalIsFrontmost() {
         UserDefaults.standard.set(true, forKey: SettingsKey.smartSuppress)
-        let appState = AppState()
+        let appState = makeTestAppState()
         var session = SessionSnapshot()
         session.termApp = "Ghostty"
         appState.sessions["s-smart"] = session
@@ -40,7 +40,7 @@ final class AppStatePermissionFlowTests: XCTestCase {
 
     func testPendingSurfaceAutoOpensWhenSmartSuppressIsOff() {
         UserDefaults.standard.set(false, forKey: SettingsKey.smartSuppress)
-        let appState = AppState()
+        let appState = makeTestAppState()
         var session = SessionSnapshot()
         session.termApp = "Ghostty"
         appState.sessions["s-smart-off"] = session
@@ -49,7 +49,7 @@ final class AppStatePermissionFlowTests: XCTestCase {
     }
 
     func testDismissPermissionSkipsAlreadyDismissedSessions() async throws {
-        let appState = AppState()
+        let appState = makeTestAppState()
 
         let eventA = try makePermissionRequestEvent(sessionId: "s1", toolName: "Bash")
         let eventB = try makePermissionRequestEvent(sessionId: "s2", toolName: "Read")
@@ -93,7 +93,7 @@ final class AppStatePermissionFlowTests: XCTestCase {
     }
 
     func testDismissSinglePermissionCollapsesAndKeepsPending() async throws {
-        let appState = AppState()
+        let appState = makeTestAppState()
         let sessionId = "s-single"
         let event = try makePermissionRequestEvent(sessionId: sessionId, toolName: "Bash")
 
@@ -123,7 +123,7 @@ final class AppStatePermissionFlowTests: XCTestCase {
     }
 
     func testDismissedSessionGetsShownAgainWhenNewPermissionArrivesAfterDrain() async throws {
-        let appState = AppState()
+        let appState = makeTestAppState()
         let sessionId = "s-reappear"
 
         let firstEvent = try makePermissionRequestEvent(sessionId: sessionId, toolName: "Edit")
@@ -163,7 +163,7 @@ final class AppStatePermissionFlowTests: XCTestCase {
     }
 
     func testBuddyApproveCommandResolvesPendingPermission() async throws {
-        let appState = AppState()
+        let appState = makeTestAppState()
         let event = try makePermissionRequestEvent(sessionId: "s-buddy-approve", toolName: "Bash")
 
         let responseTask = Task<Data, Never> {
@@ -183,7 +183,7 @@ final class AppStatePermissionFlowTests: XCTestCase {
     }
 
     func testBuddyDenyCommandResolvesPendingPermission() async throws {
-        let appState = AppState()
+        let appState = makeTestAppState()
         let event = try makePermissionRequestEvent(sessionId: "s-buddy-deny", toolName: "Bash")
 
         let responseTask = Task<Data, Never> {
@@ -203,7 +203,7 @@ final class AppStatePermissionFlowTests: XCTestCase {
     }
 
     func testRemoteDecisionResolvesOnlyTheSelectedPermission() async throws {
-        let appState = AppState()
+        let appState = makeTestAppState()
         let firstEvent = try makePermissionRequestEvent(sessionId: "s-remote-first", toolName: "Read")
         let secondEvent = try makePermissionRequestEvent(sessionId: "s-remote-second", toolName: "Bash")
 
@@ -260,7 +260,7 @@ final class AppStatePermissionFlowTests: XCTestCase {
     }
 
     func testPendingApprovalPreviewSplitsLongDescriptionAcrossMultipleWatchFrames() async throws {
-        let appState = AppState()
+        let appState = makeTestAppState()
         let sessionId = "s-buddy-preview"
         let description = "Allow npm run build --filter watch package and update generated artifacts before merge"
         let command = "npm run build --filter watch -- --mode production"
@@ -293,7 +293,7 @@ final class AppStatePermissionFlowTests: XCTestCase {
     }
 
     func testInteractiveDeliveryKeyChangesWhenApprovalDescriptionChanges() {
-        let appState = AppState()
+        let appState = makeTestAppState()
         let first = appState.esp32MessagePreviewSegments(text: "Need approval for npm run build --filter watch")
         let second = appState.esp32MessagePreviewSegments(text: "Need approval for npm run build --filter watch and package")
 
@@ -304,7 +304,7 @@ final class AppStatePermissionFlowTests: XCTestCase {
         let codexHome = makeTemporaryCodexHome()
         defer { try? FileManager.default.removeItem(at: codexHome) }
 
-        let appState = AppState()
+        let appState = makeTestAppState()
         let event = try makePermissionRequestEvent(
             sessionId: "s-codex-always-allow",
             toolName: "Bash",
@@ -357,7 +357,7 @@ final class AppStatePermissionFlowTests: XCTestCase {
         let codexHome = makeTemporaryCodexHome()
         defer { try? FileManager.default.removeItem(at: codexHome) }
 
-        let appState = AppState()
+        let appState = makeTestAppState()
         let event = try makePermissionRequestEvent(
             sessionId: "s-codex-mcp-always",
             toolName: "mcp__sh_wiki__fetch_page",
@@ -389,7 +389,7 @@ final class AppStatePermissionFlowTests: XCTestCase {
     /// assembles `mcp__server__tool(*)`, which never matches a real MCP call, so
     /// the rule silently fails to persist and the same approval re-prompts.
     func testAlwaysAllowMCPToolOmitsRuleSpecifier() async throws {
-        let appState = AppState()
+        let appState = makeTestAppState()
         let event = try makePermissionRequestEvent(
             sessionId: "s-mcp-always",
             toolName: "mcp__sh_wiki__fetch_page",
@@ -413,7 +413,7 @@ final class AppStatePermissionFlowTests: XCTestCase {
     /// Non-MCP tools keep the wildcard specifier so "always allow" still applies
     /// to every future call of that tool. The #224 fix must not change them.
     func testAlwaysAllowNonMCPToolKeepsWildcardSpecifier() async throws {
-        let appState = AppState()
+        let appState = makeTestAppState()
         let event = try makePermissionRequestEvent(
             sessionId: "s-bash-always",
             toolName: "Bash"
