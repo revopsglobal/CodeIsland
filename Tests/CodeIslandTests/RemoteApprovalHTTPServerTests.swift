@@ -22,7 +22,7 @@ final class RemoteApprovalHTTPServerTests: XCTestCase {
             enabledOverride: true,
             tailscaleConfigurator: { _, _ in "https://codeisland-health.invalid" }
         )
-        let appState = AppState()
+        let appState = makeTestAppState()
         service.start(appState: appState)
         defer { service.stop() }
 
@@ -61,7 +61,7 @@ final class RemoteApprovalHTTPServerTests: XCTestCase {
             enabledOverride: true,
             tailscaleConfigurator: { _, _ in "https://codeisland-web-assets.invalid" }
         )
-        let appState = AppState()
+        let appState = makeTestAppState()
         service.start(appState: appState)
         defer { service.stop() }
         let port = try await waitForPort(service)
@@ -236,7 +236,7 @@ final class RemoteApprovalHTTPServerTests: XCTestCase {
             enabledOverride: true,
             tailscaleConfigurator: { _, _ in "https://codeisland-download-e2e.invalid" }
         )
-        let appState = AppState()
+        let appState = makeTestAppState()
         utilities.start()
         let scanDeadline = ContinuousClock.now + .seconds(10)
         while !utilities.downloadsScanComplete, ContinuousClock.now < scanDeadline {
@@ -366,7 +366,7 @@ final class RemoteApprovalHTTPServerTests: XCTestCase {
             enabledOverride: true,
             tailscaleConfigurator: { _, _ in "https://codeisland-shelf-e2e.invalid" }
         )
-        let appState = AppState()
+        let appState = makeTestAppState()
         service.start(appState: appState)
         defer { service.stop() }
         let port = try await waitForPort(service)
@@ -447,7 +447,7 @@ final class RemoteApprovalHTTPServerTests: XCTestCase {
             enabledOverride: true,
             tailscaleConfigurator: { _, _ in "https://codeisland-e2e.invalid" }
         )
-        let appState = AppState()
+        let appState = makeTestAppState()
         service.start(appState: appState)
         defer { service.stop() }
 

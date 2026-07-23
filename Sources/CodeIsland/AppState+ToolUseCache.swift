@@ -52,16 +52,25 @@ extension AppState {
 
         pendingToolUses.removeValue(forKey: toolUseId)
 
-        guard let staleIndex = permissionQueue.firstIndex(where: { $0.toolUseId == toolUseId })
-        else { return }
-
         if shouldKeepQueuedPermissionForCompletedEvent(event, normalizedEventName: normalized) {
             return
         }
 
+        let denyBody = #"{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny"}}}"#
+
+        // A request still inside the surface debounce is resolved before it was ever
+        // shown: drop it where it sits so no card appears, and resume the waiter so the
+        // agent isn't left hanging on a prompt that will never be displayed.
+        for staged in removeStagedPermissions(where: { $0.toolUseId == toolUseId }) {
+            log.notice("⚠️ permission deny reason=resolveToolUseIfCompleted-staged session=\(staged.event.sessionId ?? "nil", privacy: .public) toolUseId=\(toolUseId, privacy: .public) tool=\(staged.event.toolName ?? "nil", privacy: .public) triggerEvent=\(normalized, privacy: .public)")
+            staged.continuation.resume(returning: Data(denyBody.utf8))
+        }
+
+        guard let staleIndex = permissionQueue.firstIndex(where: { $0.toolUseId == toolUseId })
+        else { return }
+
         let stale = permissionQueue.remove(at: staleIndex)
         log.notice("⚠️ permission deny reason=resolveToolUseIfCompleted session=\(stale.event.sessionId ?? "nil", privacy: .public) toolUseId=\(toolUseId, privacy: .public) tool=\(stale.event.toolName ?? "nil", privacy: .public) triggerEvent=\(normalized, privacy: .public)")
-        let denyBody = #"{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny"}}}"#
         stale.continuation.resume(returning: Data(denyBody.utf8))
 
         // If the card we were showing was the drained one, advance to the next pending
@@ -101,6 +110,19 @@ extension AppState {
         guard activityEvents.contains(normalized) else { return }
 
         let sessionId = event.sessionId ?? "default"
+        let allowBody = #"{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}"#
+
+        // Same rule applied to requests still inside the surface debounce. This is the
+        // hot path for ask-then-instantly-resolve CLIs: OpenCode's `permission.replied`
+        // reaches us as an activity event milliseconds after the ask, so the request is
+        // retired here and the flickering approval card is never drawn at all.
+        for staged in removeStagedPermissions(where: {
+            ($0.event.sessionId ?? "default") == sessionId && ($0.toolUseId?.isEmpty ?? true)
+        }) {
+            log.notice("✅ permission approve reason=resolveOrphanPermissionsOnActivity-staged session=\(sessionId, privacy: .public) tool=\(staged.event.toolName ?? "nil", privacy: .public) triggerEvent=\(normalized, privacy: .public)")
+            staged.continuation.resume(returning: Data(allowBody.utf8))
+        }
+
         guard permissionQueue.contains(where: {
             ($0.event.sessionId ?? "default") == sessionId && ($0.toolUseId?.isEmpty ?? true)
         }) else { return }
@@ -109,7 +131,6 @@ extension AppState {
             (head.event.sessionId ?? "default") == sessionId && (head.toolUseId?.isEmpty ?? true)
         } ?? false
 
-        let allowBody = #"{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}"#
         permissionQueue.removeAll { item in
             guard (item.event.sessionId ?? "default") == sessionId,
                   item.toolUseId?.isEmpty ?? true

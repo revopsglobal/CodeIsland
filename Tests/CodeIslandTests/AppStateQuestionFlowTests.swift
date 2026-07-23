@@ -24,7 +24,7 @@ final class AppStateQuestionFlowTests: XCTestCase {
     // MARK: - Multi-question answers
 
     func testAskUserQuestionMultiQuestionReturnsQuestionsAndAnswers() async throws {
-        let appState = AppState()
+        let appState = makeTestAppState()
         let questions = [
             question(header: "工作模式", text: "你希望我接下来以哪种方式协作？", options: ["直接执行", "先给方案"]),
             question(header: "输出风格", text: "你更喜欢我用哪种回答风格？", options: ["极简", "平衡"]),
@@ -63,7 +63,7 @@ final class AppStateQuestionFlowTests: XCTestCase {
     // MARK: - Single question
 
     func testAskUserQuestionSingleQuestionWorks() async throws {
-        let appState = AppState()
+        let appState = makeTestAppState()
         let event = try makeAskUserQuestionEvent(
             sessionId: "s-2",
             questions: [
@@ -89,7 +89,7 @@ final class AppStateQuestionFlowTests: XCTestCase {
 
     func testAskUserQuestionOpensQuestionCardWhenSmartSuppressSeesGhosttyFrontmost() async throws {
         UserDefaults.standard.set(true, forKey: SettingsKey.smartSuppress)
-        let appState = AppState()
+        let appState = makeTestAppState()
         let sessionId = "s-smart-question"
         var session = SessionSnapshot()
         session.termApp = "Ghostty"
@@ -126,7 +126,7 @@ final class AppStateQuestionFlowTests: XCTestCase {
 
     func testAskUserQuestionQueueOpensNextQuestionCardWhenSmartSuppressSeesGhosttyFrontmost() async throws {
         UserDefaults.standard.set(true, forKey: SettingsKey.smartSuppress)
-        let appState = AppState()
+        let appState = makeTestAppState()
         let frontmostBundleId = try XCTUnwrap(NSWorkspace.shared.frontmostApplication?.bundleIdentifier)
         let firstSessionId = "s-smart-question-first"
         let secondSessionId = "s-smart-question-second"
@@ -189,7 +189,7 @@ final class AppStateQuestionFlowTests: XCTestCase {
     // MARK: - Skip returns deny
 
     func testSkipAskUserQuestionReturnsDeny() async throws {
-        let appState = AppState()
+        let appState = makeTestAppState()
         let event = try makeAskUserQuestionEvent(
             sessionId: "s-skip",
             questions: [
@@ -215,7 +215,7 @@ final class AppStateQuestionFlowTests: XCTestCase {
     // MARK: - Disconnect drains with deny
 
     func testDisconnectDuringAskUserQuestionReturnsDeny() async throws {
-        let appState = AppState()
+        let appState = makeTestAppState()
         let sessionId = "s-disconnect"
         let event = try makeAskUserQuestionEvent(
             sessionId: sessionId,
@@ -242,7 +242,7 @@ final class AppStateQuestionFlowTests: XCTestCase {
     // MARK: - Permission queue does not overwrite
 
     func testTwoPermissionRequestsKeepFirstVisibleUntilHandled() async throws {
-        let appState = AppState()
+        let appState = makeTestAppState()
         let sessionId = "s-perm"
 
         let event1 = try makePermissionRequestEvent(
@@ -289,7 +289,7 @@ final class AppStateQuestionFlowTests: XCTestCase {
     }
 
     func testPermissionRequestKeepsSessionListSurfaceWhenAlreadyOpen() async throws {
-        let appState = AppState()
+        let appState = makeTestAppState()
         appState.surface = .sessionList
 
         let event = try makePermissionRequestEvent(
@@ -338,7 +338,7 @@ final class AppStateQuestionFlowTests: XCTestCase {
         // Answer keys are the question text (matching Claude Code's
         // `answers[question.question]` lookup). Two questions sharing the same
         // text get a suffixed key so each answer stays addressable.
-        let appState = AppState()
+        let appState = makeTestAppState()
         let event = try makeAskUserQuestionEvent(
             sessionId: "s-dup",
             questions: [
@@ -371,7 +371,7 @@ final class AppStateQuestionFlowTests: XCTestCase {
         // header used to be the answer key but no longer participates. Even
         // when header is nil or empty, the key stays the question text so
         // Claude Code's `answers[question.question]` lookup resolves.
-        let appState = AppState()
+        let appState = makeTestAppState()
         let event = try makeAskUserQuestionEvent(
             sessionId: "s-nohdr",
             questions: [
@@ -401,7 +401,7 @@ final class AppStateQuestionFlowTests: XCTestCase {
     // MARK: - Direct answerQuestion blocked
 
     func testDirectAnswerQuestionIgnoredForAskUserQuestion() async throws {
-        let appState = AppState()
+        let appState = makeTestAppState()
         let event = try makeAskUserQuestionEvent(
             sessionId: "s-block",
             questions: [
@@ -423,7 +423,7 @@ final class AppStateQuestionFlowTests: XCTestCase {
     // MARK: - iPhone Buddy question mirror
 
     func testAppleCompanionPayloadMirrorsPendingAskUserQuestion() async throws {
-        let appState = AppState()
+        let appState = makeTestAppState()
         let event = try makeAskUserQuestionEvent(
             sessionId: "s-companion-payload",
             questions: [
@@ -463,7 +463,7 @@ final class AppStateQuestionFlowTests: XCTestCase {
     }
 
     func testCompanionAnswerAdvancesAskUserQuestionAndCompletes() async throws {
-        let appState = AppState()
+        let appState = makeTestAppState()
         let event = try makeAskUserQuestionEvent(
             sessionId: "s-companion-answer",
             questions: [
@@ -501,7 +501,7 @@ final class AppStateQuestionFlowTests: XCTestCase {
     }
 
     func testRemoteAnswerResolvesOnlyTheSelectedQuestion() async throws {
-        let appState = AppState()
+        let appState = makeTestAppState()
         let firstEvent = try makeAskUserQuestionEvent(
             sessionId: "s-remote-question-first",
             questions: [question(header: "First", text: "First choice?", options: ["A", "B"])]
@@ -533,7 +533,7 @@ final class AppStateQuestionFlowTests: XCTestCase {
     }
 
     func testRemoteAnswerNeverResolvesSecretQuestion() throws {
-        let appState = AppState()
+        let appState = makeTestAppState()
         let event = try makeAskUserQuestionEvent(
             sessionId: "s-secret-remote",
             questions: [question(header: "Secret", text: "Placeholder", options: [])]
