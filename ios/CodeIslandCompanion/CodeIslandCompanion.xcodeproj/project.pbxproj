@@ -62,6 +62,7 @@
 		AB197B458D906CA80DE838DD /* StandByLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F1C7AD9BDAF97493D0648FE /* StandByLayout.swift */; };
 		AF04FA0B6B595450B609DCBA /* LiveActivityPrivacyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FB2E261F2FE8B6CE0B5E67B /* LiveActivityPrivacyTests.swift */; };
 		AF508E52E331531A53A2EA2B /* ClineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F96CB90CA9C700A293F0F841 /* ClineView.swift */; };
+		A1B2C3D4E5F60718293A4B5C /* CompanionPushPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F1E2D3C4B5A69788796A5B4 /* CompanionPushPresentationTests.swift */; };
 		B670B6680116E6F25D54A4BE /* RemoteTaskPresentationModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47209C7DEEC6D999BA96F959 /* RemoteTaskPresentationModelTests.swift */; };
 		B6D725A91443A9EC1E4F95A2 /* CompanionFirst.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AA55AECDA9A1FBAE05477F7 /* CompanionFirst.swift */; };
 		B6E51EE8DB8BF988DACB1276 /* CopilotView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F7787F642A8E89A5AA5FFFC /* CopilotView.swift */; };
@@ -172,6 +173,7 @@
 		3B828985819DA6B54488EE88 /* CodeIslandShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CodeIslandShareExtension.entitlements; sourceTree = "<group>"; };
 		451D9CD32F9422E4DF1FA1F8 /* RemoteTaskPresentationModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteTaskPresentationModel.swift; sourceTree = "<group>"; };
 		4708FC8D74184A554015C647 /* CompanionDisplayText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionDisplayText.swift; sourceTree = "<group>"; };
+		0F1E2D3C4B5A69788796A5B4 /* CompanionPushPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionPushPresentationTests.swift; sourceTree = "<group>"; };
 		47209C7DEEC6D999BA96F959 /* RemoteTaskPresentationModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteTaskPresentationModelTests.swift; sourceTree = "<group>"; };
 		4978BAC1D31033F1CFFA542C /* QwenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QwenView.swift; sourceTree = "<group>"; };
 		4F2D0C28F9B521F6A0F93CAC /* PersonalHubProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalHubProtocol.swift; sourceTree = "<group>"; };
@@ -293,6 +295,7 @@
 				26E78E543985CED85D547F94 /* RemoteTaskClientTests.swift */,
 				26CAA42FF97468F40A695657 /* RemoteTaskDraftStoreTests.swift */,
 				47209C7DEEC6D999BA96F959 /* RemoteTaskPresentationModelTests.swift */,
+				0F1E2D3C4B5A69788796A5B4 /* CompanionPushPresentationTests.swift */,
 				6C36C170280FD8EC84BFF05E /* SharedDraftInboxTests.swift */,
 			);
 			path = CodeIslandCompanionTests;
@@ -665,6 +668,7 @@
 				8482851DDA50BEB92C429199 /* RemoteTaskClientTests.swift in Sources */,
 				48D08AC36EBE0CAF9CDC82F7 /* RemoteTaskDraftStoreTests.swift in Sources */,
 				B670B6680116E6F25D54A4BE /* RemoteTaskPresentationModelTests.swift in Sources */,
+				A1B2C3D4E5F60718293A4B5C /* CompanionPushPresentationTests.swift in Sources */,
 				8A64C36048AEFE0D88246603 /* SharedDraftInboxTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
