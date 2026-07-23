@@ -42,6 +42,7 @@ final class RemoteApprovalService: ObservableObject {
     private var claudeTaskRunner: ClaudeRemoteTaskRunner?
     private var remoteTaskStoreCancellable: AnyCancellable?
     private var lastRemoteTaskStates: [UUID: RemoteTaskState] = [:]
+    private static let remoteTaskWorkspaceRootsKey = "CodeIslandRemoteTaskWorkspaceRoots"
 
     init(
         deviceStore: RemoteApprovalDeviceStore? = nil,
@@ -174,7 +175,7 @@ final class RemoteApprovalService: ObservableObject {
             )
         }
         let saved = UserDefaults.standard
-            .stringArray(forKey: "CodeIslandRemoteTaskWorkspaceRoots")?
+            .stringArray(forKey: Self.remoteTaskWorkspaceRootsKey)?
             .map {
                 RemoteWorkspaceCandidate(
                     url: URL(fileURLWithPath: $0, isDirectory: true),
@@ -218,6 +219,9 @@ final class RemoteApprovalService: ObservableObject {
         remoteTaskStore = store
         remoteTaskCoordinator = coordinator
         remoteTaskWorkspaces = coordinator.workspaces
+        persistRemoteTaskWorkspaceRoots(
+            coordinator.workspaces.compactMap { coordinator.workspaceURL(id: $0.id) }
+        )
         do {
             try coordinator.recover()
         } catch {
@@ -270,6 +274,9 @@ final class RemoteApprovalService: ObservableObject {
             requestedProof: "Run focused tests and report exact evidence"
         )
         let record = try remoteTaskCoordinator.create(request: request, deviceID: "local-mac")
+        if let workspaceURL = remoteTaskCoordinator.workspaceURL(id: record.summary.workspaceID) {
+            persistRemoteTaskWorkspaceRoots([workspaceURL])
+        }
         refreshRemoteTaskPublishedState()
         return record.summary
     }
@@ -384,6 +391,7 @@ final class RemoteApprovalService: ObservableObject {
     /// separate power assertion so the host is reachable before attention arrives.
     func stateDidChange() {
         guard let appState else { return }
+        syncRemoteTaskWorkspaces(from: appState)
         let currentIDs = Set(appState.permissionQueue.map(\.id))
         let currentQuestionIDs = Set(appState.questionQueue.map(\.id))
 
@@ -426,6 +434,44 @@ final class RemoteApprovalService: ObservableObject {
                 devices: deviceStore.devices
             )
         }
+    }
+
+    /// Login items frequently start before any CLI session exists. As sessions
+    /// arrive, make their workspaces available to Buddy immediately and retain
+    /// the canonical roots locally so durable tasks remain resolvable after the
+    /// next Mac restart.
+    private func syncRemoteTaskWorkspaces(from appState: AppState) {
+        guard let remoteTaskCoordinator else { return }
+        let candidates = appState.sessions.values.compactMap { session -> RemoteWorkspaceCandidate? in
+            guard let cwd = session.cwd, !cwd.isEmpty else { return nil }
+            return RemoteWorkspaceCandidate(
+                url: URL(fileURLWithPath: cwd, isDirectory: true),
+                source: .recentSession,
+                lastUsedAt: session.lastActivity
+            )
+        }
+        guard !candidates.isEmpty else { return }
+        do {
+            try remoteTaskCoordinator.registerWorkspaces(candidates)
+            persistRemoteTaskWorkspaceRoots(
+                remoteTaskCoordinator.workspaces.compactMap {
+                    remoteTaskCoordinator.workspaceURL(id: $0.id)
+                }
+            )
+            remoteTaskWorkspaces = remoteTaskCoordinator.workspaces
+            refreshRemoteTaskPublishedState()
+        } catch {
+            lastError = "Remote workspace refresh failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func persistRemoteTaskWorkspaceRoots(_ urls: [URL]) {
+        guard !urls.isEmpty else { return }
+        let defaults = UserDefaults.standard
+        let existing = defaults.stringArray(forKey: Self.remoteTaskWorkspaceRootsKey) ?? []
+        let merged = RemoteWorkspaceRootPersistence.merging(urls, into: existing)
+        guard merged != existing else { return }
+        defaults.set(merged, forKey: Self.remoteTaskWorkspaceRootsKey)
     }
 
     func refreshSleepActivity() {
@@ -802,6 +848,9 @@ final class RemoteApprovalService: ObservableObject {
                 }
                 do {
                     let created = try taskCoordinator.create(request: create, deviceID: deviceID)
+                    if let workspaceURL = taskCoordinator.workspaceURL(id: created.summary.workspaceID) {
+                        persistRemoteTaskWorkspaceRoots([workspaceURL])
+                    }
                     return .json(status: 201, encodable: created.summary)
                 } catch {
                     return remoteTaskErrorResponse(error)
