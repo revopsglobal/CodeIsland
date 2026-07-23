@@ -9,10 +9,12 @@ final class RemoteTaskDraftStoreTests: XCTestCase {
         defer { fixture.remove() }
         let clientTaskID = UUID()
         let idempotencyKey = UUID()
+        let agentOpsTaskID = UUID()
 
         let draft = try fixture.store.enqueue(.init(
             clientTaskID: clientTaskID,
             idempotencyKey: idempotencyKey,
+            agentOpsTaskID: agentOpsTaskID,
             prompt: "Implement and test the task composer",
             workspaceID: "workspace-a",
             provider: .codex
@@ -21,6 +23,7 @@ final class RemoteTaskDraftStoreTests: XCTestCase {
 
         XCTAssertEqual(draft.request.clientTaskID, clientTaskID)
         XCTAssertEqual(reloaded.drafts.first?.request.idempotencyKey, idempotencyKey)
+        XCTAssertEqual(reloaded.drafts.first?.request.agentOpsTaskID, agentOpsTaskID)
         XCTAssertEqual(reloaded.drafts.first?.localState, .waitingForMac)
         XCTAssertNil(reloaded.drafts.first?.hostTaskID)
     }

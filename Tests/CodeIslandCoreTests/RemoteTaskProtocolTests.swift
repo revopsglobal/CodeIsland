@@ -31,10 +31,12 @@ final class RemoteTaskProtocolTests: XCTestCase {
     func testReceiptSequenceRejectsOlderState() throws {
         let taskID = UUID(uuidString: "6FDE42F1-B39A-488A-9FC8-4A747F0D7A03")!
         let idempotencyKey = UUID(uuidString: "B2C9ED95-7D0E-40F0-BC72-93B88F39A52E")!
+        let agentOpsTaskID = UUID(uuidString: "8E51B101-2B3F-455B-9637-9787641ADCB3")!
         let base = RemoteTaskSummary(
             id: taskID,
             clientTaskID: taskID,
             idempotencyKey: idempotencyKey,
+            agentOpsTaskID: agentOpsTaskID,
             title: "Update the tests",
             workspaceID: "workspace-1",
             workspaceName: "CodeIsland",
@@ -67,6 +69,45 @@ final class RemoteTaskProtocolTests: XCTestCase {
         XCTAssertEqual(updated.state, .verified)
         XCTAssertEqual(updated.lastReceiptSequence, 5)
         XCTAssertEqual(updated.updatedAt, current.observedAt)
+        XCTAssertEqual(updated.agentOpsTaskID, agentOpsTaskID)
+    }
+
+    func testAgentOpsLinkRoundTripsAndOlderLocalOnlyPayloadStillDecodes() throws {
+        let agentOpsTaskID = UUID(uuidString: "7551AF6B-2EED-4C1C-8763-4BE2FE6D364F")!
+        let linked = RemoteTaskCreateRequest(
+            clientTaskID: UUID(),
+            idempotencyKey: UUID(),
+            agentOpsTaskID: agentOpsTaskID,
+            prompt: "Repair the linked task",
+            workspaceID: "workspace-1",
+            provider: .codex,
+            authority: .editAndTest
+        )
+
+        let encoded = try JSONEncoder().encode(linked)
+        XCTAssertEqual(
+            try JSONDecoder().decode(RemoteTaskCreateRequest.self, from: encoded).agentOpsTaskID,
+            agentOpsTaskID
+        )
+
+        let olderPayload = """
+        {
+          "version": 1,
+          "clientTaskID": "B06C4A7D-030E-44D8-B866-2F30D9518717",
+          "idempotencyKey": "04FF4B4E-2388-4CB0-BEA4-51B016093D6A",
+          "prompt": "Local-only task",
+          "workspaceID": "workspace-1",
+          "provider": "codex",
+          "authority": "edit-and-test",
+          "attachments": [],
+          "createdAt": 0
+        }
+        """
+        let localOnly = try JSONDecoder().decode(
+            RemoteTaskCreateRequest.self,
+            from: Data(olderPayload.utf8)
+        )
+        XCTAssertNil(localOnly.agentOpsTaskID)
     }
 
     func testTaskDeepLinkRoundTripsTaskAndNewTaskRoutes() throws {

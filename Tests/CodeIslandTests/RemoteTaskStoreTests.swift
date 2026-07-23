@@ -23,6 +23,28 @@ final class RemoteTaskStoreTests: XCTestCase {
         XCTAssertEqual(try ledgerLines(at: fixture.receiptsURL).count, 1)
     }
 
+    func testCreateReturnsCanonicalTaskForRepeatedAgentOpsTaskIDAcrossReload() throws {
+        let fixture = try makeFixture()
+        defer { fixture.remove() }
+        let agentOpsTaskID = UUID(uuidString: "59D447B5-46B7-455A-8D3C-48866F3B2519")!
+        let firstStore = fixture.makeStore()
+        let first = try firstStore.create(
+            makeRequest(prompt: "First delivery", agentOpsTaskID: agentOpsTaskID),
+            deviceID: "iphone-1"
+        )
+        let restarted = fixture.makeStore()
+        let repeated = try restarted.create(
+            makeRequest(prompt: "Retry delivery", agentOpsTaskID: agentOpsTaskID),
+            deviceID: "iphone-1"
+        )
+
+        XCTAssertEqual(repeated.id, first.id)
+        XCTAssertEqual(repeated.request.prompt, "First delivery")
+        XCTAssertEqual(repeated.summary.agentOpsTaskID, agentOpsTaskID)
+        XCTAssertEqual(restarted.tasks.count, 1)
+        XCTAssertEqual(try ledgerLines(at: fixture.receiptsURL).count, 1)
+    }
+
     func testReceiptSequenceIsMonotonicAndAppendOnly() throws {
         let fixture = try makeFixture()
         defer { fixture.remove() }
@@ -109,10 +131,14 @@ final class RemoteTaskStoreTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.snapshotURL.path))
     }
 
-    private func makeRequest(prompt: String = "Update focused tests") -> RemoteTaskCreateRequest {
+    private func makeRequest(
+        prompt: String = "Update focused tests",
+        agentOpsTaskID: UUID? = nil
+    ) -> RemoteTaskCreateRequest {
         RemoteTaskCreateRequest(
             clientTaskID: UUID(),
             idempotencyKey: UUID(),
+            agentOpsTaskID: agentOpsTaskID,
             prompt: prompt,
             workspaceID: "workspace-1",
             provider: .codex,

@@ -141,6 +141,10 @@ final class RemoteTaskCoordinator {
         store.tasks.first { $0.request.idempotencyKey == idempotencyKey }
     }
 
+    func task(agentOpsTaskID: UUID) -> RemoteTaskRecord? {
+        store.tasks.first { $0.request.agentOpsTaskID == agentOpsTaskID }
+    }
+
     func snapshot(deviceID: String) -> RemoteTaskSnapshot {
         let current = store.snapshot()
         let ownedIDs = Set(store.tasks.lazy.filter { $0.deviceID == deviceID }.map(\.id))
@@ -155,6 +159,10 @@ final class RemoteTaskCoordinator {
     @discardableResult
     func create(request: RemoteTaskCreateRequest, deviceID: String) throws -> RemoteTaskRecord {
         if let existing = store.tasks.first(where: { $0.request.idempotencyKey == request.idempotencyKey }) {
+            return existing
+        }
+        if let agentOpsTaskID = request.agentOpsTaskID,
+           let existing = store.tasks.first(where: { $0.request.agentOpsTaskID == agentOpsTaskID }) {
             return existing
         }
 
@@ -353,6 +361,7 @@ final class RemoteTaskCoordinator {
             version: request.version,
             clientTaskID: request.clientTaskID,
             idempotencyKey: request.idempotencyKey,
+            agentOpsTaskID: request.agentOpsTaskID,
             prompt: request.prompt,
             workspaceID: request.workspaceID,
             provider: provider,
@@ -401,7 +410,7 @@ final class RemoteTaskCoordinator {
             try runner.start(
                 taskID: taskID,
                 workspaceURL: workspaceURL,
-                prompt: record.request.prompt,
+                prompt: lifecyclePrompt(for: record.request),
                 attachments: attachments
             )
         } catch {
@@ -513,6 +522,28 @@ final class RemoteTaskCoordinator {
         case .claude: return "Claude"
         case .auto: return "Coding provider"
         }
+    }
+
+    private func lifecyclePrompt(for request: RemoteTaskCreateRequest) -> String {
+        let contract: String
+        if let agentOpsTaskID = request.agentOpsTaskID {
+            contract = """
+            [CodeIsland lifecycle contract]
+            Execution scope: AgentOps-managed
+            Canonical AgentOps task UUID: \(agentOpsTaskID.uuidString.lowercased())
+            Reuse and claim this exact AgentOps task; never capture a replacement task.
+            Record progress and the final outcome only on this exact task.
+            Submit at most one terminal outcome for this task.
+            """
+        } else {
+            contract = """
+            [CodeIsland lifecycle contract]
+            Execution scope: local-only
+            No AgentOps task UUID is linked to this dispatch.
+            Do not capture, claim, update, or submit any AgentOps task or outcome for this dispatch.
+            """
+        }
+        return "\(contract)\n\n[Requested work]\n\(request.prompt)"
     }
 }
 

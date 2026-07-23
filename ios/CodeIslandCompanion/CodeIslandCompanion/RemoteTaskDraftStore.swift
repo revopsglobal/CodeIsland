@@ -20,6 +20,7 @@ struct RemoteTaskDraftAttachmentInput: Equatable {
 struct RemoteTaskDraftInput: Equatable {
     let clientTaskID: UUID
     let idempotencyKey: UUID
+    let agentOpsTaskID: UUID?
     let prompt: String
     let workspaceID: String?
     let provider: RemoteTaskProvider
@@ -30,6 +31,7 @@ struct RemoteTaskDraftInput: Equatable {
     init(
         clientTaskID: UUID = UUID(),
         idempotencyKey: UUID = UUID(),
+        agentOpsTaskID: UUID? = nil,
         prompt: String,
         workspaceID: String?,
         provider: RemoteTaskProvider,
@@ -39,6 +41,7 @@ struct RemoteTaskDraftInput: Equatable {
     ) {
         self.clientTaskID = clientTaskID
         self.idempotencyKey = idempotencyKey
+        self.agentOpsTaskID = agentOpsTaskID
         self.prompt = prompt
         self.workspaceID = workspaceID
         self.provider = provider
@@ -175,6 +178,7 @@ final class RemoteTaskDraftStore {
             let request = RemoteTaskCreateRequest(
                 clientTaskID: input.clientTaskID,
                 idempotencyKey: input.idempotencyKey,
+                agentOpsTaskID: input.agentOpsTaskID,
                 prompt: prompt,
                 workspaceID: input.workspaceID,
                 provider: input.provider,

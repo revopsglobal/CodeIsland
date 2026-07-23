@@ -76,6 +76,10 @@ final class RemoteTaskStore: ObservableObject {
         if let existing = tasks.first(where: { $0.request.idempotencyKey == request.idempotencyKey }) {
             return existing
         }
+        if let agentOpsTaskID = request.agentOpsTaskID,
+           let existing = tasks.first(where: { $0.request.agentOpsTaskID == agentOpsTaskID }) {
+            return existing
+        }
 
         let sanitizedRequest = Self.sanitized(request)
         let taskID = UUID()
@@ -89,6 +93,7 @@ final class RemoteTaskStore: ObservableObject {
                 id: taskID,
                 clientTaskID: sanitizedRequest.clientTaskID,
                 idempotencyKey: sanitizedRequest.idempotencyKey,
+                agentOpsTaskID: sanitizedRequest.agentOpsTaskID,
                 title: Self.title(from: sanitizedRequest.prompt),
                 workspaceID: workspaceID,
                 workspaceName: workspaceID.isEmpty ? "Choose workspace" : (workspaceName ?? workspaceID),
@@ -297,6 +302,7 @@ final class RemoteTaskStore: ObservableObject {
             version: request.version,
             clientTaskID: request.clientTaskID,
             idempotencyKey: request.idempotencyKey,
+            agentOpsTaskID: request.agentOpsTaskID,
             prompt: redact(request.prompt),
             workspaceID: request.workspaceID,
             provider: request.provider,
