@@ -51,16 +51,24 @@ final class RemoteTaskCoordinatorTests: XCTestCase {
             request: fixture.request(provider: .codex),
             deviceID: "iphone"
         )
+        try fixture.coordinator.registerWorkspaces([
+            .init(url: fixture.workspace, source: .recentSession, lastUsedAt: Date())
+        ])
+        try fixture.coordinator.registerWorkspaces([
+            .init(url: fixture.workspace, source: .recentSession, lastUsedAt: Date())
+        ])
 
         XCTAssertEqual(fixture.store.task(id: task.id)?.summary.state, .needsYou)
         XCTAssertEqual(fixture.store.task(id: task.id)?.summary.latestSummary, "Codex is unavailable on this Mac")
+        XCTAssertEqual(fixture.store.task(id: task.id)?.summary.lastReceiptSequence, 2)
         XCTAssertTrue(fixture.claude.starts.isEmpty)
     }
 
-    func testRestartRecoveryRestoresExactSessionsAndNeverDuplicatesExecution() throws {
+    func testRestartRecoveryCancelsAlreadyStartedTasksInsteadOfLeavingNeedsYouStuck() throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
         let codexTask = try fixture.store.create(fixture.request(provider: .codex), deviceID: "iphone")
+        _ = try fixture.store.markExecutionStarted(taskID: codexTask.id)
         try fixture.append(
             taskID: codexTask.id,
             provider: .codex,
@@ -69,6 +77,7 @@ final class RemoteTaskCoordinatorTests: XCTestCase {
             summary: "Codex working"
         )
         let claudeTask = try fixture.store.create(fixture.request(provider: .claude), deviceID: "iphone")
+        _ = try fixture.store.markExecutionStarted(taskID: claudeTask.id)
         try fixture.append(
             taskID: claudeTask.id,
             provider: .claude,
@@ -81,12 +90,43 @@ final class RemoteTaskCoordinatorTests: XCTestCase {
         try fixture.coordinator.recover()
         try fixture.coordinator.recover()
 
-        XCTAssertEqual(fixture.codex.restores.map(\.sessionID), ["thread-1"])
-        XCTAssertEqual(fixture.claude.restores.map(\.sessionID), ["session-1"])
-        XCTAssertEqual(fixture.store.task(id: uncertain.id)?.summary.state, .needsYou)
-        XCTAssertEqual(fixture.store.task(id: uncertain.id)?.summary.latestSummary, "Provider state is uncertain after Mac restart")
-        XCTAssertTrue(fixture.codex.starts.isEmpty)
+        XCTAssertTrue(fixture.codex.restores.isEmpty)
+        XCTAssertTrue(fixture.claude.restores.isEmpty)
+        XCTAssertEqual(fixture.store.task(id: codexTask.id)?.summary.state, .cancelled)
+        XCTAssertEqual(fixture.store.task(id: claudeTask.id)?.summary.state, .cancelled)
+        XCTAssertEqual(
+            fixture.store.task(id: codexTask.id)?.summary.latestSummary,
+            "Task stopped when the Mac restarted; start a new task to retry safely"
+        )
+        XCTAssertEqual(fixture.codex.starts.map(\.taskID), [uncertain.id])
         XCTAssertTrue(fixture.claude.starts.isEmpty)
+    }
+
+    func testLateWorkspaceRegistrationStartsAnUnstartedTaskExactlyOnce() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let lateWorkspace = fixture.root.appendingPathComponent("late", isDirectory: true)
+        try FileManager.default.createDirectory(at: lateWorkspace, withIntermediateDirectories: true)
+        let identityCatalog = RemoteWorkspaceCatalog(
+            allowedRoots: [lateWorkspace],
+            candidates: [.init(url: lateWorkspace, source: .recentSession)],
+            homeDirectory: fixture.root.appendingPathComponent("home")
+        )
+        let task = try fixture.store.create(
+            fixture.request(provider: .codex, workspaceID: identityCatalog.entries[0].id),
+            deviceID: "iphone"
+        )
+
+        try fixture.coordinator.recover()
+        try fixture.coordinator.registerWorkspaces([
+            .init(url: lateWorkspace, source: .recentSession, lastUsedAt: Date())
+        ])
+        try fixture.coordinator.registerWorkspaces([
+            .init(url: lateWorkspace, source: .recentSession, lastUsedAt: Date())
+        ])
+
+        XCTAssertEqual(fixture.codex.starts.map(\.taskID).filter { $0 == task.id }, [task.id])
+        XCTAssertEqual(fixture.store.task(id: task.id)?.executionStarted, true)
     }
 
     func testFollowUpTargetsTheExactProviderSession() throws {

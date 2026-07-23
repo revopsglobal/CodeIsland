@@ -1,5 +1,15 @@
 # Changelog
 
+## [v1.0.64] - 2026-07-23
+
+### English
+- Fix Buddy-created tasks getting stranded in "Needs you" after the Mac app restarts. CodeIsland now learns and retains workspaces that appear after login, starts a pending task only once when its workspace becomes available, and closes an interrupted run with an explicit restart reason instead of pretending the provider session is still active.
+- Stop repeated workspace refreshes from appending duplicate "Choose an available Mac workspace" or provider-unavailable receipts.
+
+### 中文
+- 修复 Mac 应用重启后，Buddy 创建的任务长期卡在「需要你」的问题。CodeIsland 现在会识别并保留登录后出现的工作区，在工作区可用时仅启动一次待处理任务，并以明确的重启原因关闭被中断的运行，不再假装提供商会话仍处于活动状态。
+- 防止重复的工作区刷新反复追加「选择可用的 Mac 工作区」或提供商不可用回执。
+
 ## [v1.0.63] - 2026-07-21
 
 ### English

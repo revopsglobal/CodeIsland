@@ -45,7 +45,7 @@ enum RemoteWorkspaceMatch: Equatable, Sendable {
 final class RemoteWorkspaceCatalog {
     private(set) var entries: [RemoteWorkspaceEntry]
 
-    private let allowedRoots: [URL]
+    private var allowedRoots: [URL]
     private let homeDirectory: URL
     private let fileManager: FileManager
 
@@ -58,13 +58,35 @@ final class RemoteWorkspaceCatalog {
         self.allowedRoots = allowedRoots.map(RemoteCwdFilter.canonical)
         self.homeDirectory = RemoteCwdFilter.canonical(homeDirectory)
         self.fileManager = fileManager
+        entries = []
+        register(candidates, extendingAllowedRoots: false)
+    }
 
-        var byPath: [String: RemoteWorkspaceEntry] = [:]
+    /// Adds workspaces observed after the remote service started. Login items
+    /// commonly start before the first CLI session, so the initial catalog can
+    /// legitimately be empty. Registering later session roots keeps Buddy
+    /// usable without restarting CodeIsland.
+    func register(_ candidates: [RemoteWorkspaceCandidate]) {
+        register(candidates, extendingAllowedRoots: true)
+    }
+
+    private func register(
+        _ candidates: [RemoteWorkspaceCandidate],
+        extendingAllowedRoots: Bool
+    ) {
+        if extendingAllowedRoots {
+            let newRoots = candidates.map { RemoteCwdFilter.canonical($0.url) }
+            allowedRoots = Self.deduplicated(allowedRoots + newRoots)
+        }
+        var byPath = Dictionary(
+            entries.map { ($0.url.path, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
         for candidate in candidates {
             guard RemoteCwdFilter.isSafeWorkspace(
                 candidate.url,
-                allowedRoots: self.allowedRoots,
-                homeDirectory: self.homeDirectory,
+                allowedRoots: allowedRoots,
+                homeDirectory: homeDirectory,
                 fileManager: fileManager
             ) else { continue }
             let canonicalURL = RemoteCwdFilter.canonical(candidate.url)
@@ -133,7 +155,22 @@ final class RemoteWorkspaceCatalog {
         return lhs.id < rhs.id
     }
 
+    private static func deduplicated(_ urls: [URL]) -> [URL] {
+        var seen = Set<String>()
+        return urls.filter { seen.insert($0.path).inserted }
+    }
+
     private static func opaqueID(for url: URL) -> String {
         SHA256.hash(data: Data(url.path.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+}
+
+enum RemoteWorkspaceRootPersistence {
+    static func merging(_ urls: [URL], into existing: [String], limit: Int = 50) -> [String] {
+        let canonical = (existing.map { URL(fileURLWithPath: $0, isDirectory: true) } + urls)
+            .map { RemoteCwdFilter.canonical($0).path }
+        var seen = Set<String>()
+        let unique = canonical.filter { seen.insert($0).inserted }
+        return Array(unique.suffix(max(1, limit)))
     }
 }

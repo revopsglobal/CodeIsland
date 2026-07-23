@@ -125,6 +125,16 @@ final class RemoteTaskCoordinator {
         workspaceCatalog.resolve(id: id)
     }
 
+    /// Refreshes the workspace catalog from sessions that appeared after the
+    /// login-item service started, then safely starts only tasks whose provider
+    /// has never been invoked. Already-started prompts are never replayed.
+    func registerWorkspaces(_ candidates: [RemoteWorkspaceCandidate]) throws {
+        workspaceCatalog.register(candidates)
+        for record in store.tasks where !record.summary.state.isTerminal && record.executionStarted != true {
+            try startIfReady(taskID: record.id)
+        }
+    }
+
     func task(id: UUID) -> RemoteTaskRecord? { store.task(id: id) }
 
     func task(idempotencyKey: UUID) -> RemoteTaskRecord? {
@@ -189,41 +199,25 @@ final class RemoteTaskCoordinator {
         return store.task(id: taskID) ?? record
     }
 
-    /// Reattaches durable nonterminal tasks to provider session identifiers.
-    /// It never replays the original prompt, so calling recovery repeatedly
-    /// cannot duplicate execution.
+    /// Recovers durable work without pretending a provider turn survived a Mac
+    /// restart. Unstarted tasks may begin safely; already-started tasks become
+    /// cancelled history because neither provider adapter can prove that the
+    /// prior turn or exact approval request is still live.
     func recover() throws {
         for record in store.tasks where !record.summary.state.isTerminal {
             guard recoveredTaskIDs.insert(record.id).inserted else { continue }
-            let provider = record.summary.provider
-            guard provider == .codex || provider == .claude,
-                  let runner = runners[provider], runner.isAvailable,
-                  let workspaceURL = workspaceCatalog.resolve(id: record.summary.workspaceID),
-                  let sessionID = record.summary.providerSessionID,
-                  !sessionID.isEmpty
-            else {
-                try appendNeedsYou(
-                    taskID: record.id,
-                    summary: "Provider state is uncertain after Mac restart"
-                )
+            if record.executionStarted != true {
+                try startIfReady(taskID: record.id)
                 continue
             }
-            do {
-                try runner.restore(taskID: record.id, workspaceURL: workspaceURL, sessionID: sessionID)
-                try append(
-                    taskID: record.id,
-                    kind: .started,
-                    state: .working,
-                    summary: "Reattached to \(providerName(provider)) after Mac restart",
-                    provider: provider,
-                    providerSessionID: sessionID
-                )
-            } catch {
-                try appendNeedsYou(
-                    taskID: record.id,
-                    summary: "Could not safely restore \(providerName(provider)): \(error.localizedDescription)"
-                )
-            }
+            try append(
+                taskID: record.id,
+                kind: .cancelled,
+                state: .cancelled,
+                summary: "Task stopped when the Mac restarted; start a new task to retry safely",
+                provider: record.summary.provider,
+                providerSessionID: record.summary.providerSessionID
+            )
         }
     }
 
@@ -373,11 +367,14 @@ final class RemoteTaskCoordinator {
         guard let record = store.task(id: taskID), record.executionStarted != true else { return }
         let provider = record.summary.provider
         guard let workspaceURL = workspaceCatalog.resolve(id: record.summary.workspaceID) else {
-            try appendNeedsYou(taskID: taskID, summary: "Choose an available Mac workspace")
+            try appendNeedsYouIfChanged(taskID: taskID, summary: "Choose an available Mac workspace")
             return
         }
         guard let runner = runners[provider], runner.isAvailable else {
-            try appendNeedsYou(taskID: taskID, summary: "\(providerName(provider)) is unavailable on this Mac")
+            try appendNeedsYouIfChanged(
+                taskID: taskID,
+                summary: "\(providerName(provider)) is unavailable on this Mac"
+            )
             return
         }
         guard let stagedAttachments = stagedAttachmentURLs(for: record) else {
@@ -416,6 +413,13 @@ final class RemoteTaskCoordinator {
                 provider: provider
             )
         }
+    }
+
+    private func appendNeedsYouIfChanged(taskID: UUID, summary: String) throws {
+        guard let record = store.task(id: taskID),
+              record.summary.state != .needsYou || record.summary.latestSummary != summary
+        else { return }
+        try appendNeedsYou(taskID: taskID, summary: summary)
     }
 
     private func stagedAttachmentURLs(for record: RemoteTaskRecord) -> [URL]? {

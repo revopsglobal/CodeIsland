@@ -123,6 +123,44 @@ final class RemoteWorkspaceCatalogTests: XCTestCase {
         XCTAssertEqual(entry.summary.id, entry.id)
         XCTAssertEqual(entry.id.count, 64)
     }
+
+    func testLateSessionWorkspaceBecomesResolvableWithoutRestartingService() throws {
+        let fixture = try WorkspaceFixture()
+        defer { fixture.remove() }
+        let project = try fixture.directory("work/revops-global")
+        let identity = RemoteWorkspaceCatalog(
+            allowedRoots: [project],
+            candidates: [.init(url: project, source: .recentSession)],
+            homeDirectory: fixture.url("home")
+        ).entries[0].id
+        let catalog = RemoteWorkspaceCatalog(
+            allowedRoots: [],
+            candidates: [],
+            homeDirectory: fixture.url("home")
+        )
+
+        catalog.register([
+            .init(url: project, source: .recentSession, lastUsedAt: Date())
+        ])
+
+        XCTAssertEqual(catalog.resolve(id: identity), project.standardizedFileURL)
+        XCTAssertEqual(catalog.entries.map(\.name), ["revops-global"])
+    }
+
+    func testWorkspaceRootPersistenceIsCanonicalDeduplicatedAndBounded() throws {
+        let fixture = try WorkspaceFixture()
+        defer { fixture.remove() }
+        let first = try fixture.directory("work/first")
+        let second = try fixture.directory("work/second")
+
+        let roots = RemoteWorkspaceRootPersistence.merging(
+            [second, first, second],
+            into: [first.path],
+            limit: 2
+        )
+
+        XCTAssertEqual(roots, [first.standardizedFileURL.path, second.standardizedFileURL.path])
+    }
 }
 
 private final class WorkspaceFixture {
