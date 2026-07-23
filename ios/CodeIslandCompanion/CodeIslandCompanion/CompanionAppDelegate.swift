@@ -8,6 +8,21 @@ final class CompanionAppDelegate: NSObject, UIApplicationDelegate, UNUserNotific
     private static let pushHistoryKey = "codeisland.remote.pushHistory.v1"
     private static let taskStateHistoryKey = "codeisland.remote.taskPushState.v1"
 
+    internal enum PushProcessingOutcome {
+        case accepted
+        case rejectedStale
+        case unrecognized
+    }
+
+    internal static func presentationOptions(for outcome: PushProcessingOutcome) -> UNNotificationPresentationOptions {
+        switch outcome {
+        case .accepted, .unrecognized:
+            return [.banner, .list, .sound]
+        case .rejectedStale:
+            return []
+        }
+    }
+
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
@@ -44,8 +59,8 @@ final class CompanionAppDelegate: NSObject, UIApplicationDelegate, UNUserNotific
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        _ = process(notification.request.content.userInfo)
-        completionHandler([.banner, .list, .sound])
+        let outcome = process(notification.request.content.userInfo)
+        completionHandler(Self.presentationOptions(for: outcome))
     }
 
     func application(
@@ -53,7 +68,12 @@ final class CompanionAppDelegate: NSObject, UIApplicationDelegate, UNUserNotific
         didReceiveRemoteNotification userInfo: [AnyHashable: Any],
         fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
     ) {
-        completionHandler(process(userInfo) ? .newData : .noData)
+        switch process(userInfo) {
+        case .accepted:
+            completionHandler(.newData)
+        case .rejectedStale, .unrecognized:
+            completionHandler(.noData)
+        }
     }
 
     func userNotificationCenter(
@@ -66,14 +86,14 @@ final class CompanionAppDelegate: NSObject, UIApplicationDelegate, UNUserNotific
     }
 
     @discardableResult
-    private func process(_ userInfo: [AnyHashable: Any]) -> Bool {
+    private func process(_ userInfo: [AnyHashable: Any]) -> PushProcessingOutcome {
         let fields = Dictionary(uniqueKeysWithValues: userInfo.compactMap { key, value in
             (key as? String).map { ($0, value) }
         })
 
         guard let envelope = RemoteAttentionPushEnvelope(payloadFields: fields) else {
             // Backward compatibility with the first internal Buddy build.
-            guard let approvalID = fields["approvalId"] as? String, !approvalID.isEmpty else { return false }
+            guard let approvalID = fields["approvalId"] as? String, !approvalID.isEmpty else { return .unrecognized }
             UserDefaults.standard.set(approvalID, forKey: Self.pendingApprovalIDKey)
             LiveActivityTokenMailbox.storeReceipt(
                 source: .notification,
@@ -83,17 +103,17 @@ final class CompanionAppDelegate: NSObject, UIApplicationDelegate, UNUserNotific
                 activityState: nil
             )
             postAttention(kind: .approval, state: .pending, requestID: approvalID)
-            return true
+            return .accepted
         }
 
         var history = UserDefaults.standard.dictionary(forKey: Self.pushHistoryKey) as? [String: Double] ?? [:]
         let previous = history[envelope.requestKey].map(Date.init(timeIntervalSince1970:))
-        guard envelope.isFresh(lastIssuedAt: previous) else { return false }
+        guard envelope.isFresh(lastIssuedAt: previous) else { return .rejectedStale }
         if envelope.kind == .task, let incomingState = envelope.taskState {
             var taskStates = UserDefaults.standard.dictionary(forKey: Self.taskStateHistoryKey) as? [String: String] ?? [:]
             let previousState = taskStates[envelope.requestID].flatMap(RemoteTaskState.init(rawValue:))
             guard RemoteTaskAttentionPolicy.accepts(previousState: previousState, incomingState: incomingState) else {
-                return false
+                return .rejectedStale
             }
             taskStates[envelope.requestID] = incomingState.rawValue
             if taskStates.count > 64 {
@@ -140,7 +160,7 @@ final class CompanionAppDelegate: NSObject, UIApplicationDelegate, UNUserNotific
             requestID: envelope.requestID,
             taskState: envelope.taskState
         )
-        return true
+        return .accepted
     }
 
     private func postAttention(
