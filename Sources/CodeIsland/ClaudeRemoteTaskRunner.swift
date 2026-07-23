@@ -526,11 +526,13 @@ final class ClaudeRemoteTaskRunner {
                 )
             }
         }
-        contexts[taskID] = context
+        if store.task(id: taskID)?.summary.state.isTerminal != true {
+            contexts[taskID] = context
+        }
     }
 
     private func handleResult(taskID: UUID, result: ClaudeResultEvent) {
-        guard var context = contexts[taskID] else { return }
+        guard var context = contexts[taskID], !context.sawResultForCurrentTurn else { return }
         context.sawResultForCurrentTurn = true
         contexts[taskID] = context
         if result.isError || result.subtype != "success" {
@@ -549,8 +551,8 @@ final class ClaudeRemoteTaskRunner {
         try? appendReceipt(
             taskID: taskID,
             kind: .finished,
-            state: .working,
-            summary: "Claude finished; verification evidence is ready for the coordinator"
+            state: .verified,
+            summary: "Claude completed the requested Edit & Test turn"
         )
     }
 
@@ -671,6 +673,11 @@ final class ClaudeRemoteTaskRunner {
         evidence: RemoteTaskEvidence? = nil
     ) throws {
         guard let task = store.task(id: taskID) else { throw RunnerError.unknownTask(taskID) }
+        guard !task.summary.state.isTerminal else {
+            finishContext(taskID: taskID)
+            return
+        }
+        let providerSessionID = contexts[taskID]?.sessionID
         try store.append(RemoteTaskReceipt(
             taskID: taskID,
             sequence: task.summary.lastReceiptSequence + 1,
@@ -678,13 +685,26 @@ final class ClaudeRemoteTaskRunner {
             state: state,
             summary: summary,
             provider: .claude,
-            providerSessionID: contexts[taskID]?.sessionID,
+            providerSessionID: providerSessionID,
             evidence: evidence
         ))
+        if state.isTerminal {
+            finishContext(taskID: taskID)
+        }
     }
 
     private func fail(taskID: UUID, summary: String) {
         try? appendReceipt(taskID: taskID, kind: .failed, state: .failed, summary: summary)
+    }
+
+    private func finishContext(taskID: UUID) {
+        if var context = contexts.removeValue(forKey: taskID) {
+            context.stoppedByUser = true
+            context.processGeneration += 1
+            context.process?.terminate()
+            context.process = nil
+        }
+        pendingApprovals = pendingApprovals.filter { $0.value.taskID != taskID }
     }
 }
 

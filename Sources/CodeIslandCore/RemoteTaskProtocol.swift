@@ -84,6 +84,9 @@ public struct RemoteTaskCreateRequest: Codable, Equatable, Sendable {
     public let version: Int
     public let clientTaskID: UUID
     public let idempotencyKey: UUID
+    /// The canonical durable AgentOps task when this dispatch is managed by
+    /// AgentOps. `nil` is an explicit local-only dispatch.
+    public let agentOpsTaskID: UUID?
     public let prompt: String
     public let workspaceID: String?
     public let provider: RemoteTaskProvider
@@ -96,6 +99,7 @@ public struct RemoteTaskCreateRequest: Codable, Equatable, Sendable {
         version: Int = Self.currentVersion,
         clientTaskID: UUID,
         idempotencyKey: UUID,
+        agentOpsTaskID: UUID? = nil,
         prompt: String,
         workspaceID: String?,
         provider: RemoteTaskProvider,
@@ -107,6 +111,7 @@ public struct RemoteTaskCreateRequest: Codable, Equatable, Sendable {
         self.version = version
         self.clientTaskID = clientTaskID
         self.idempotencyKey = idempotencyKey
+        self.agentOpsTaskID = agentOpsTaskID
         self.prompt = prompt
         self.workspaceID = workspaceID
         self.provider = provider
@@ -248,6 +253,7 @@ public struct RemoteTaskSummary: Codable, Equatable, Identifiable, Sendable {
     public let id: UUID
     public let clientTaskID: UUID
     public let idempotencyKey: UUID
+    public let agentOpsTaskID: UUID?
     public let title: String
     public let workspaceID: String
     public let workspaceName: String
@@ -265,6 +271,7 @@ public struct RemoteTaskSummary: Codable, Equatable, Identifiable, Sendable {
         id: UUID,
         clientTaskID: UUID,
         idempotencyKey: UUID,
+        agentOpsTaskID: UUID? = nil,
         title: String,
         workspaceID: String,
         workspaceName: String,
@@ -281,6 +288,7 @@ public struct RemoteTaskSummary: Codable, Equatable, Identifiable, Sendable {
         self.id = id
         self.clientTaskID = clientTaskID
         self.idempotencyKey = idempotencyKey
+        self.agentOpsTaskID = agentOpsTaskID
         self.title = title
         self.workspaceID = workspaceID
         self.workspaceName = workspaceName
@@ -304,6 +312,7 @@ public struct RemoteTaskSummary: Codable, Equatable, Identifiable, Sendable {
             id: id,
             clientTaskID: clientTaskID,
             idempotencyKey: idempotencyKey,
+            agentOpsTaskID: agentOpsTaskID,
             title: title,
             workspaceID: workspaceID,
             workspaceName: workspaceName,
@@ -330,6 +339,7 @@ public struct RemoteTaskSummary: Codable, Equatable, Identifiable, Sendable {
             id: id,
             clientTaskID: clientTaskID,
             idempotencyKey: idempotencyKey,
+            agentOpsTaskID: agentOpsTaskID,
             title: title,
             workspaceID: workspaceID,
             workspaceName: workspaceName,

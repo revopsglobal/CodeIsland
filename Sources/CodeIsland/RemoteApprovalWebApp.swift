@@ -562,7 +562,7 @@ enum RemoteApprovalWebApp {
           if(!await confirmSheet(`${prompt}\n\nWorkspace: ${workspace.name}\nAgent: ${provider}\nAuthority: Edit & Test`,{title:'Dispatch this exact task?',confirmLabel:'Dispatch'})) return;
           taskCreate.disabled=true;
           try {
-            const response=await fetch('/api/tasks',{method:'POST',headers:{...authHeaders(),'Content-Type':'application/json'},body:JSON.stringify({version:1,clientTaskID:crypto.randomUUID(),idempotencyKey:crypto.randomUUID(),prompt,workspaceID,provider,authority:'edit-and-test',attachments:[],requestedProof:'Run focused tests and report exact evidence',createdAt:new Date().toISOString()})});
+            const response=await fetch('/api/tasks',{method:'POST',headers:{...authHeaders(),'Content-Type':'application/json'},body:JSON.stringify({version:1,clientTaskID:crypto.randomUUID(),idempotencyKey:crypto.randomUUID(),agentOpsTaskID:null,prompt,workspaceID,provider,authority:'edit-and-test',attachments:[],requestedProof:'Run focused tests and report exact evidence',createdAt:new Date().toISOString()})});
             const body=await response.json(); if(!response.ok) throw new Error(body.error||'Task dispatch failed');
             taskPrompt.value=''; notify('Coding task dispatched'); await refreshTasks();
           } catch(error) { notify(error.message,true); }

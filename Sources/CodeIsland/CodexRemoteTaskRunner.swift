@@ -381,10 +381,12 @@ final class CodexRemoteTaskRunner {
         case "turn/completed":
             let turn = params["turn"]?.asObject ?? [:]
             let status = turn["status"]?.asString
-            if var context = contexts[taskID], context.activeTurnID == turn["id"]?.asString {
-                context.activeTurnID = nil
-                contexts[taskID] = context
-            }
+            guard var context = contexts[taskID],
+                  let turnID = turn["id"]?.asString,
+                  context.activeTurnID == turnID
+            else { return }
+            context.activeTurnID = nil
+            contexts[taskID] = context
             switch status {
             case "completed":
                 try? appendReceipt(
@@ -488,6 +490,11 @@ final class CodexRemoteTaskRunner {
         evidence: RemoteTaskEvidence? = nil
     ) throws {
         guard let task = store.task(id: taskID) else { throw RunnerError.unknownTask(taskID) }
+        guard !task.summary.state.isTerminal else {
+            finishContext(taskID: taskID)
+            return
+        }
+        let providerSessionID = contexts[taskID]?.threadID
         try store.append(RemoteTaskReceipt(
             taskID: taskID,
             sequence: task.summary.lastReceiptSequence + 1,
@@ -495,12 +502,24 @@ final class CodexRemoteTaskRunner {
             state: state,
             summary: summary,
             provider: .codex,
-            providerSessionID: contexts[taskID]?.threadID,
+            providerSessionID: providerSessionID,
             evidence: evidence
         ))
+        if state.isTerminal {
+            finishContext(taskID: taskID)
+        }
     }
 
     private func fail(taskID: UUID, summary: String) {
         try? appendReceipt(taskID: taskID, kind: .failed, state: .failed, summary: summary)
+    }
+
+    private func finishContext(taskID: UUID) {
+        if let threadID = contexts.removeValue(forKey: taskID)?.threadID,
+           taskIDsByThread[threadID] == taskID {
+            taskIDsByThread.removeValue(forKey: threadID)
+        }
+        pendingRequests = pendingRequests.filter { $0.value.taskID != taskID }
+        pendingApprovals = pendingApprovals.filter { $0.value.taskID != taskID }
     }
 }

@@ -154,6 +154,25 @@ final class CodexRemoteTaskRunnerTests: XCTestCase {
         XCTAssertEqual(summary.evidence?.checks.last?.exitCode, 0)
     }
 
+    func testDuplicateTerminalCallbackDoesNotAppendAnotherReceiptAndCleansContext() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let task = try fixture.startedTask()
+        let completed = notification(method: "turn/completed", params: [
+            "threadId": "thread-1",
+            "turn": ["id": "turn-1", "items": [], "status": "completed"]
+        ])
+
+        fixture.runner.handle(completed)
+        fixture.runner.handle(completed)
+
+        XCTAssertEqual(fixture.store.task(id: task.id)?.summary.state, .verified)
+        XCTAssertEqual(fixture.store.task(id: task.id)?.summary.lastReceiptSequence, 3)
+        XCTAssertThrowsError(
+            try fixture.runner.followUp(taskID: task.id, text: "duplicate", attachments: [])
+        )
+    }
+
     func testFollowUpInterruptAndInterruptedCompletion() throws {
         let fixture = try Fixture()
         defer { fixture.remove() }

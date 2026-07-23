@@ -94,7 +94,7 @@ final class ClaudeRemoteTaskRunnerTests: XCTestCase {
         )
     }
 
-    func testSuccessfulToolResultsCreateChangedAndTestedReceiptsWithoutSelfVerifyingResult() throws {
+    func testSuccessfulResultVerifiesOnceAndCleansContext() throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
         let task = try fixture.startedTask()
@@ -112,20 +112,25 @@ final class ClaudeRemoteTaskRunnerTests: XCTestCase {
             .init(toolUseID: "edit-1", isError: false, content: "Updated", exitCode: nil),
             .init(toolUseID: "test-1", isError: false, content: "Passed", exitCode: 0),
         ], sessionID: fixture.sessionID))
-        fixture.emit(.result(.init(
+        let result = ClaudeResultEvent(
             subtype: "success",
             isError: false,
             result: "Done",
             sessionID: fixture.sessionID,
             permissionDenials: []
-        )))
+        )
+        fixture.emit(.result(result))
+        fixture.emit(.result(result))
 
         let summary = try XCTUnwrap(fixture.store.task(id: task.id)?.summary)
-        XCTAssertEqual(summary.state, .working)
-        XCTAssertEqual(summary.latestSummary, "Claude finished; verification evidence is ready for the coordinator")
+        XCTAssertEqual(summary.state, .verified)
+        XCTAssertEqual(summary.latestSummary, "Claude completed the requested Edit & Test turn")
         XCTAssertEqual(summary.lastReceiptSequence, 5)
         XCTAssertEqual(summary.evidence?.checks.last?.command, "swift test")
         XCTAssertEqual(summary.evidence?.checks.last?.exitCode, 0)
+        XCTAssertThrowsError(
+            try fixture.runner.followUp(taskID: task.id, text: "duplicate", attachments: [])
+        )
     }
 
     func testFollowUpUsesOpenStreamAndResumeUsesPersistedSessionAfterTermination() throws {

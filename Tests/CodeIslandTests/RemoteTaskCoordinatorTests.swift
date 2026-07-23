@@ -102,6 +102,82 @@ final class RemoteTaskCoordinatorTests: XCTestCase {
         XCTAssertTrue(fixture.claude.starts.isEmpty)
     }
 
+    func testAgentOpsLinkUsesCanonicalTaskAndLifecycleEnvelope() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let agentOpsTaskID = UUID(uuidString: "B5133A3F-0DAD-4741-8511-BED6E22BF17D")!
+
+        let first = try fixture.coordinator.create(
+            request: fixture.request(provider: .codex, agentOpsTaskID: agentOpsTaskID),
+            deviceID: "iphone"
+        )
+        let repeated = try fixture.coordinator.create(
+            request: fixture.request(provider: .codex, agentOpsTaskID: agentOpsTaskID),
+            deviceID: "iphone"
+        )
+
+        XCTAssertEqual(repeated.id, first.id)
+        XCTAssertEqual(fixture.codex.starts.count, 1)
+        let prompt = try XCTUnwrap(fixture.codex.starts.first?.prompt)
+        XCTAssertTrue(prompt.contains("Execution scope: AgentOps-managed"))
+        XCTAssertTrue(prompt.contains(agentOpsTaskID.uuidString.lowercased()))
+        XCTAssertTrue(prompt.contains("never capture a replacement"))
+        XCTAssertTrue(prompt.contains("Submit at most one terminal outcome"))
+    }
+
+    func testUnlinkedTaskIsExplicitlyLocalOnly() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+
+        _ = try fixture.coordinator.create(
+            request: fixture.request(provider: .claude),
+            deviceID: "iphone"
+        )
+
+        let prompt = try XCTUnwrap(fixture.claude.starts.first?.prompt)
+        XCTAssertTrue(prompt.contains("Execution scope: local-only"))
+        XCTAssertTrue(prompt.contains("Do not capture, claim, update, or submit"))
+    }
+
+    func testRecoveryPreservesAgentOpsLinkAndAppendsOnlyOneTerminalReceiptAcrossRestarts() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let agentOpsTaskID = UUID(uuidString: "2B2C5D33-C1B5-4926-8F48-77F4241DA921")!
+        let linked = try fixture.store.create(
+            fixture.request(provider: .codex, agentOpsTaskID: agentOpsTaskID),
+            deviceID: "iphone"
+        )
+        _ = try fixture.store.markExecutionStarted(taskID: linked.id)
+        try fixture.append(
+            taskID: linked.id,
+            provider: .codex,
+            providerSessionID: "thread-linked",
+            state: .working,
+            summary: "Codex working"
+        )
+
+        try fixture.coordinator.recover()
+        let restartedStore = RemoteTaskStore(
+            snapshotURL: fixture.root.appendingPathComponent("tasks.json"),
+            receiptsURL: fixture.root.appendingPathComponent("receipts.jsonl"),
+            serverName: "Test Mac"
+        )
+        let restartedCoordinator = RemoteTaskCoordinator(
+            store: restartedStore,
+            workspaceCatalog: fixture.catalog,
+            attachmentStore: fixture.attachments,
+            codex: fixture.codex.adapter,
+            claude: fixture.claude.adapter
+        )
+        try restartedCoordinator.recover()
+
+        let recovered = try XCTUnwrap(restartedStore.task(id: linked.id))
+        XCTAssertEqual(recovered.request.agentOpsTaskID, agentOpsTaskID)
+        XCTAssertEqual(recovered.summary.agentOpsTaskID, agentOpsTaskID)
+        XCTAssertEqual(recovered.summary.state, .cancelled)
+        XCTAssertEqual(recovered.summary.lastReceiptSequence, 3)
+    }
+
     func testLateWorkspaceRegistrationStartsAnUnstartedTaskExactlyOnce() throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
@@ -258,11 +334,13 @@ private final class Fixture {
 
     func request(
         provider: RemoteTaskProvider,
-        workspaceID: String? = nil
+        workspaceID: String? = nil,
+        agentOpsTaskID: UUID? = nil
     ) -> RemoteTaskCreateRequest {
         RemoteTaskCreateRequest(
             clientTaskID: UUID(),
             idempotencyKey: UUID(),
+            agentOpsTaskID: agentOpsTaskID,
             prompt: "Implement and test",
             workspaceID: workspaceID ?? catalog.entries[0].id,
             provider: provider,
@@ -296,7 +374,7 @@ private final class Fixture {
 
 @MainActor
 private final class MockProviderRunner {
-    struct Start { let taskID: UUID; let workspace: URL }
+    struct Start { let taskID: UUID; let workspace: URL; let prompt: String }
     struct Restore { let taskID: UUID; let sessionID: String }
     struct FollowUp { let taskID: UUID; let text: String }
 
@@ -315,8 +393,8 @@ private final class MockProviderRunner {
         RemoteTaskProviderRunner(
             provider: provider,
             isAvailable: { [weak self] in self?.available == true },
-            start: { [weak self] taskID, workspace, _, _ in
-                self?.starts.append(.init(taskID: taskID, workspace: workspace))
+            start: { [weak self] taskID, workspace, prompt, _ in
+                self?.starts.append(.init(taskID: taskID, workspace: workspace, prompt: prompt))
             },
             restore: { [weak self] taskID, _, sessionID in
                 self?.restores.append(.init(taskID: taskID, sessionID: sessionID))

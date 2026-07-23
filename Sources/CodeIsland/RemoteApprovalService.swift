@@ -846,6 +846,13 @@ final class RemoteApprovalService: ObservableObject {
                     }
                     return .json(status: 200, encodable: existing.summary)
                 }
+                if let agentOpsTaskID = create.agentOpsTaskID,
+                   let existing = taskCoordinator.task(agentOpsTaskID: agentOpsTaskID) {
+                    guard existing.deviceID == deviceID else {
+                        return .json(status: 403, object: ["error": "task belongs to another paired device"])
+                    }
+                    return .json(status: 200, encodable: existing.summary)
+                }
                 do {
                     let created = try taskCoordinator.create(request: create, deviceID: deviceID)
                     if let workspaceURL = taskCoordinator.workspaceURL(id: created.summary.workspaceID) {
