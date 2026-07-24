@@ -7,6 +7,7 @@ struct AgentOpsVoiceView: View {
     @EnvironmentObject private var agentOps: AgentOpsRootStore
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var email = ""
+    @State private var signInCode = ""
 
     var body: some View {
         ScrollView {
@@ -192,10 +193,47 @@ struct AgentOpsVoiceView: View {
             case .linkSent(let sentEmail):
                 Label("Check your email", systemImage: "envelope.badge")
                     .font(.title3.bold())
-                Text("Open the AgentOps sign-in link sent to \(sentEmail).")
+                Text(
+                    "Open the AgentOps sign-in link sent to \(sentEmail), or enter the numeric code from that email."
+                )
                     .font(.body)
+
+                TextField("Sign-in code", text: $signInCode)
+                    .textContentType(.oneTimeCode)
+                    .keyboardType(.numberPad)
+                    .padding(14)
+                    .background(
+                        Color.primary.opacity(0.06),
+                        in: RoundedRectangle(cornerRadius: 14)
+                    )
+                    .onChange(of: signInCode) { _, newValue in
+                        signInCode = String(newValue.filter(\.isNumber).prefix(10))
+                    }
+                    .accessibilityIdentifier("agentops.auth.code")
+
+                Button {
+                    Task {
+                        await agentOps.verifyCode(signInCode, for: sentEmail)
+                    }
+                } label: {
+                    Text("Verify code")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity, minHeight: 52)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!(6...10).contains(signInCode.count))
+                .accessibilityIdentifier("agentops.auth.verifyCode")
+
+                if let codeError = agentOps.auth.codeError {
+                    Text(codeError)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .accessibilityIdentifier("agentops.auth.codeError")
+                }
+
                 Button("Use another email") {
                     email = ""
+                    signInCode = ""
                     Task { await agentOps.auth.restore() }
                 }
                 .buttonStyle(.bordered)
