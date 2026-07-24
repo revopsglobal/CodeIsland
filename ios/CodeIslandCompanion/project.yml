@@ -17,6 +17,9 @@ packages:
   Supabase:
     url: https://github.com/supabase/supabase-swift.git
     exactVersion: 2.46.0
+  WebRTC:
+    url: https://github.com/stasel/WebRTC
+    from: "125.0.0"
 targets:
   CodeIslandCompanion:
     type: application
@@ -73,6 +76,7 @@ targets:
         embed: true
       - package: Supabase
         product: Auth
+      - package: WebRTC
       - sdk: AppIntents.framework
       - sdk: Speech.framework
   CodeIslandCompanionWidget:

@@ -91,6 +91,48 @@ final class AgentOpsClient {
         return response.approval
     }
 
+    func mintRealtimeCredential(
+        voice: String?
+    ) async throws -> RealtimeCredential {
+        struct Request: Encodable {
+            let voice: String?
+        }
+        struct Response: Decodable {
+            struct ClientSecret: Decodable {
+                let value: String
+                let expiresAt: Date
+            }
+
+            let sessionId: String
+            let model: String
+            let clientSecret: ClientSecret
+        }
+
+        let body = try encode(Request(voice: voice))
+        let response: Response = try await request(
+            path: "v1/realtime/session",
+            method: "POST",
+            body: body
+        )
+        return RealtimeCredential(
+            sessionId: response.sessionId,
+            clientSecret: response.clientSecret.value,
+            model: response.model,
+            connectDeadline: response.clientSecret.expiresAt
+        )
+    }
+
+    func performTurn(
+        _ turn: AgentOpsTurnRequest
+    ) async throws -> AgentOpsTurnResult {
+        let body = try encode(turn)
+        return try await request(
+            path: "v1/turn",
+            method: "POST",
+            body: body
+        )
+    }
+
     func cancelNonessentialNetworkWork() {
         let tasks = activeRequests.values
         activeRequests.removeAll()
