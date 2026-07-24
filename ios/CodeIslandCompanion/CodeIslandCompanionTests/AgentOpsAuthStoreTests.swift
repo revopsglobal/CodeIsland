@@ -40,6 +40,44 @@ final class AgentOpsAuthStoreTests: XCTestCase {
         XCTAssertFalse(String(reflecting: store.state).contains("callback-secret"))
     }
 
+    func testEmailOTPCodePublishesAuthenticatedIdentityWithoutPublishingCode() async {
+        let provider = MockAgentOpsAuthProvider()
+        await provider.setOTPVerificationSession(.fixture(accessToken: "otp-secret"))
+        let store = AgentOpsAuthStore(provider: provider)
+
+        await store.verifyCode("8850077", for: " greg@revopsglobal.com ")
+
+        XCTAssertEqual(
+            store.state,
+            .authenticated(
+                userID: UUID(uuidString: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")!,
+                email: "greg@revopsglobal.com"
+            )
+        )
+        let attempts = await provider.otpVerificationAttempts()
+        XCTAssertEqual(
+            attempts,
+            [.init(email: "greg@revopsglobal.com", token: "8850077")]
+        )
+        XCTAssertNil(store.codeError)
+        XCTAssertFalse(String(reflecting: store.state).contains("8850077"))
+        XCTAssertFalse(String(reflecting: store.state).contains("otp-secret"))
+    }
+
+    func testInvalidEmailOTPStaysOnCodeEntryWithoutCallingProvider() async {
+        let provider = MockAgentOpsAuthProvider()
+        let store = AgentOpsAuthStore(provider: provider)
+
+        await store.verifyCode("12ab", for: "greg@revopsglobal.com")
+
+        XCTAssertEqual(
+            store.codeError,
+            "Enter the numeric code from your sign-in email."
+        )
+        let attempts = await provider.otpVerificationAttempts()
+        XCTAssertTrue(attempts.isEmpty)
+    }
+
     func testRestoresRefreshesAndDeletesSessionOnLogout() async throws {
         let provider = MockAgentOpsAuthProvider()
         await provider.setCurrentSession(.fixture(accessToken: "first-secret"))
@@ -131,10 +169,17 @@ final class AgentOpsAuthStoreTests: XCTestCase {
 }
 
 private actor MockAgentOpsAuthProvider: AgentOpsAuthProviding {
+    struct OTPAttempt: Equatable {
+        let email: String
+        let token: String
+    }
+
     private var current: AgentOpsAuthSession?
     private var callback: AgentOpsAuthSession = .fixture(accessToken: "callback")
+    private var otpVerification: AgentOpsAuthSession = .fixture(accessToken: "otp")
     private var refreshed: AgentOpsAuthSession = .fixture(accessToken: "refreshed")
     private var callbacks: [URL] = []
+    private var otpAttempts: [OTPAttempt] = []
     private var refreshes = 0
     private var signOuts = 0
 
@@ -146,17 +191,28 @@ private actor MockAgentOpsAuthProvider: AgentOpsAuthProviding {
         callback = session
     }
 
+    func setOTPVerificationSession(_ session: AgentOpsAuthSession) {
+        otpVerification = session
+    }
+
     func setRefreshSession(_ session: AgentOpsAuthSession) {
         refreshed = session
     }
 
     func acceptedCallbacks() -> [URL] { callbacks }
+    func otpVerificationAttempts() -> [OTPAttempt] { otpAttempts }
     func refreshCount() -> Int { refreshes }
     func signOutCount() -> Int { signOuts }
 
     func currentSession() async throws -> AgentOpsAuthSession? { current }
 
     func requestMagicLink(email: String) async throws {}
+
+    func verifyOTP(email: String, token: String) async throws -> AgentOpsAuthSession {
+        otpAttempts.append(.init(email: email, token: token))
+        current = otpVerification
+        return otpVerification
+    }
 
     func acceptCallback(_ url: URL) async throws -> AgentOpsAuthSession {
         callbacks.append(url)

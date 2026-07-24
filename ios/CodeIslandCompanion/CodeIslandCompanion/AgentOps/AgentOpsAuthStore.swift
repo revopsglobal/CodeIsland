@@ -12,6 +12,7 @@ struct AgentOpsAuthSession: Equatable, Sendable {
 protocol AgentOpsAuthProviding: Sendable {
     func currentSession() async throws -> AgentOpsAuthSession?
     func requestMagicLink(email: String) async throws
+    func verifyOTP(email: String, token: String) async throws -> AgentOpsAuthSession
     func acceptCallback(_ url: URL) async throws -> AgentOpsAuthSession
     func refreshSession() async throws -> AgentOpsAuthSession
     func signOut() async throws
@@ -117,6 +118,18 @@ actor SupabaseAgentOpsAuthProvider: AgentOpsAuthProviding {
         )
     }
 
+    func verifyOTP(email: String, token: String) async throws -> AgentOpsAuthSession {
+        let response = try await auth.verifyOTP(
+            email: email,
+            token: token,
+            type: .email
+        )
+        guard let session = response.session else {
+            throw AgentOpsAuthError.sessionMissing
+        }
+        return map(session)
+    }
+
     func acceptCallback(_ url: URL) async throws -> AgentOpsAuthSession {
         map(try await auth.session(from: url))
     }
@@ -144,6 +157,9 @@ private actor UnavailableAgentOpsAuthProvider: AgentOpsAuthProviding {
     func requestMagicLink(email: String) async throws {
         throw AgentOpsAuthError.invalidConfiguration
     }
+    func verifyOTP(email: String, token: String) async throws -> AgentOpsAuthSession {
+        throw AgentOpsAuthError.invalidConfiguration
+    }
     func acceptCallback(_ url: URL) async throws -> AgentOpsAuthSession {
         throw AgentOpsAuthError.invalidConfiguration
     }
@@ -164,6 +180,7 @@ final class AgentOpsAuthStore: ObservableObject, AgentOpsCredentialProviding {
     }
 
     @Published private(set) var state: State = .restoring
+    @Published private(set) var codeError: String?
 
     private let provider: any AgentOpsAuthProviding
 
@@ -180,6 +197,7 @@ final class AgentOpsAuthStore: ObservableObject, AgentOpsCredentialProviding {
     }
 
     func restore() async {
+        codeError = nil
         do {
             guard let session = try await provider.currentSession() else {
                 state = .signedOut
@@ -192,6 +210,7 @@ final class AgentOpsAuthStore: ObservableObject, AgentOpsCredentialProviding {
     }
 
     func sendMagicLink(to email: String) async {
+        codeError = nil
         let normalized = email.trimmingCharacters(in: .whitespacesAndNewlines)
         guard normalized.contains("@"), normalized.count <= 254 else {
             state = .failed(message: "Enter a valid work email.")
@@ -202,6 +221,31 @@ final class AgentOpsAuthStore: ObservableObject, AgentOpsCredentialProviding {
             state = .linkSent(email: normalized)
         } catch {
             state = .failed(message: safeMessage(for: error))
+        }
+    }
+
+    func verifyCode(_ code: String, for email: String) async {
+        let normalizedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedCode = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard
+            normalizedEmail.contains("@"),
+            normalizedEmail.count <= 254,
+            (6...10).contains(normalizedCode.count),
+            normalizedCode.allSatisfy(\.isNumber)
+        else {
+            codeError = "Enter the numeric code from your sign-in email."
+            return
+        }
+
+        codeError = nil
+        do {
+            publish(try await provider.verifyOTP(
+                email: normalizedEmail,
+                token: normalizedCode
+            ))
+        } catch {
+            state = .linkSent(email: normalizedEmail)
+            codeError = "That code is invalid or expired. Request a fresh email and try again."
         }
     }
 
@@ -244,10 +288,12 @@ final class AgentOpsAuthStore: ObservableObject, AgentOpsCredentialProviding {
 
     func forceSignOut() async {
         try? await provider.signOut()
+        codeError = nil
         state = .signedOut
     }
 
     private func publish(_ session: AgentOpsAuthSession) {
+        codeError = nil
         state = .authenticated(userID: session.userID, email: session.email)
     }
 

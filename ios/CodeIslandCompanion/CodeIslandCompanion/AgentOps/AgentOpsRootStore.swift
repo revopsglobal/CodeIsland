@@ -88,11 +88,7 @@ final class AgentOpsRootStore: ObservableObject {
     func start() async {
         await auth.restore()
         guard isAuthenticated else { return }
-        eventStream?.start()
-        pushCoordinator?.invalidateRegistrationScope()
-        pushCoordinator?.start()
-        await refreshAll()
-        await retrySavedTurns()
+        await activateAuthenticatedSession()
     }
 
     func openURL(_ url: URL) {
@@ -100,12 +96,14 @@ final class AgentOpsRootStore: ObservableObject {
         Task {
             let handled = await auth.openAuthCallback(url)
             guard handled, isAuthenticated else { return }
-            eventStream?.start()
-            pushCoordinator?.invalidateRegistrationScope()
-            pushCoordinator?.start()
-            await refreshAll()
-            await retrySavedTurns()
+            await activateAuthenticatedSession()
         }
+    }
+
+    func verifyCode(_ code: String, for email: String) async {
+        await auth.verifyCode(code, for: email)
+        guard isAuthenticated else { return }
+        await activateAuthenticatedSession()
     }
 
     func openAgentOpsURL(_ url: URL) {
@@ -183,6 +181,14 @@ final class AgentOpsRootStore: ObservableObject {
     private func refreshAll() async {
         await refreshWork()
         await refreshApprovals()
+    }
+
+    private func activateAuthenticatedSession() async {
+        eventStream?.start()
+        pushCoordinator?.invalidateRegistrationScope()
+        pushCoordinator?.start()
+        await refreshAll()
+        await retrySavedTurns()
     }
 
     private func refresh(_ target: AgentOpsNavigationTarget) async {
