@@ -111,6 +111,83 @@ final class AgentOpsClientTests: XCTestCase {
         XCTAssertFalse(source.contains("AGENTOPS_ACCESS_TOKEN"))
         XCTAssertFalse(source.contains("AGENTOPS_REFRESH_TOKEN"))
     }
+
+    func testEventStreamRequestUsesBearerCursorAndSSEAcceptHeader() async throws {
+        let credentials = MockAgentOpsCredentials()
+        let client = AgentOpsClient(
+            baseURL: URL(string: "https://voice.agentops.test")!,
+            credentials: credentials
+        )
+        let cursor = "v1:1784846400000:33333333-3333-4333-8333-333333333333"
+
+        let request = try await client.eventStreamRequest(
+            cursor: cursor,
+            refreshCredentials: true
+        )
+
+        XCTAssertEqual(request.url?.path, "/v1/events")
+        XCTAssertEqual(
+            request.value(forHTTPHeaderField: "Authorization"),
+            "Bearer refreshed"
+        )
+        XCTAssertEqual(
+            request.value(forHTTPHeaderField: "Last-Event-ID"),
+            cursor
+        )
+        XCTAssertEqual(
+            request.value(forHTTPHeaderField: "Accept"),
+            "text/event-stream"
+        )
+        XCTAssertEqual(credentials.refreshes, 1)
+    }
+
+    func testResolveApprovalPostsExactDigestAndTapInteraction() async throws {
+        let credentials = MockAgentOpsCredentials()
+        let approvalID = UUID(
+            uuidString: "22222222-2222-4222-8222-222222222222"
+        )!
+        let transport = MockAgentOpsTransport(responses: [
+            .json(
+                status: 200,
+                AgentOpsApprovalResolutionResponse(
+                    approvalId: approvalID,
+                    status: .approved,
+                    resolved: true
+                )
+            ),
+        ])
+        let client = AgentOpsClient(
+            baseURL: URL(string: "https://voice.agentops.test")!,
+            credentials: credentials,
+            transport: transport
+        )
+        let resolution = AgentOpsApprovalResolutionRequest(
+            actionDigest: String(repeating: "a", count: 64),
+            resolution: .approved,
+            interaction: .onScreenTap,
+            decisionNote: nil
+        )
+
+        _ = try await client.resolveApproval(
+            id: approvalID,
+            request: resolution
+        )
+
+        let requests = await transport.capturedRequests()
+        let request = try XCTUnwrap(requests.first)
+        XCTAssertEqual(request.httpMethod, "POST")
+        XCTAssertEqual(
+            request.url?.path,
+            "/v1/approvals/\(approvalID.uuidString.lowercased())/resolve"
+        )
+        XCTAssertEqual(
+            try JSONDecoder().decode(
+                AgentOpsApprovalResolutionRequest.self,
+                from: try XCTUnwrap(request.httpBody)
+            ),
+            resolution
+        )
+    }
 }
 
 @MainActor

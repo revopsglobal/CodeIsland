@@ -5,6 +5,7 @@ import Foundation
 final class AgentOpsRootStore: ObservableObject {
     let auth: AgentOpsAuthStore
     let client: AgentOpsClient?
+    let draftStore: VoiceTurnDraftStore?
 
     @Published private(set) var work: [AgentOpsWorkSummary] = []
     @Published private(set) var approvals: [AgentOpsApprovalCard] = []
@@ -13,12 +14,38 @@ final class AgentOpsRootStore: ObservableObject {
 
     private(set) var isActive = true
     private var authObserver: AnyCancellable?
+    private var eventStream: AgentOpsEventStream?
 
-    init(auth: AgentOpsAuthStore, client: AgentOpsClient?) {
+    var onWorkUpdated: (([AgentOpsWorkSummary]) -> Void)?
+
+    init(
+        auth: AgentOpsAuthStore,
+        client: AgentOpsClient?,
+        draftStore: VoiceTurnDraftStore? = nil
+    ) {
         self.auth = auth
         self.client = client
+        self.draftStore = draftStore
         authObserver = auth.objectWillChange.sink { [weak self] _ in
             self?.objectWillChange.send()
+        }
+        if let client {
+            eventStream = AgentOpsEventStream(
+                requestProvider: { cursor, refresh in
+                    try await client.eventStreamRequest(
+                        cursor: cursor,
+                        refreshCredentials: refresh
+                    )
+                },
+                onUnauthorized: { [weak auth] in
+                    await auth?.forceSignOut()
+                },
+                onEvent: { [weak self] event in
+                    Task { @MainActor in
+                        await self?.consume(event)
+                    }
+                }
+            )
         }
     }
 
@@ -30,28 +57,49 @@ final class AgentOpsRootStore: ObservableObject {
             )
         }
         let auth = AgentOpsAuthStore.live(configuration: configuration)
+        guard let draftStore = try? VoiceTurnDraftStore() else {
+            return AgentOpsRootStore(auth: auth, client: nil)
+        }
         return AgentOpsRootStore(
             auth: auth,
             client: AgentOpsClient(
                 baseURL: configuration.baseURL,
                 credentials: auth
-            )
+            ),
+            draftStore: draftStore
         )
     }
 
     func start() async {
         await auth.restore()
+        guard isAuthenticated else { return }
+        eventStream?.start()
+        await refreshAll()
+        await retrySavedTurns()
     }
 
     func openURL(_ url: URL) {
         guard AgentOpsAuthStore.isAuthCallback(url) else { return }
-        Task { await auth.openAuthCallback(url) }
+        Task {
+            let handled = await auth.openAuthCallback(url)
+            guard handled, isAuthenticated else { return }
+            eventStream?.start()
+            await refreshAll()
+            await retrySavedTurns()
+        }
     }
 
     func setActive(_ active: Bool) {
         isActive = active
         if !active {
             client?.cancelNonessentialNetworkWork()
+            eventStream?.setForeground(false)
+        } else if isAuthenticated {
+            eventStream?.setForeground(true)
+            Task {
+                await refreshAll()
+                await retrySavedTurns()
+            }
         }
     }
 
@@ -59,6 +107,7 @@ final class AgentOpsRootStore: ObservableObject {
         guard isActive, let client else { return }
         do {
             work = try await client.listWork()
+            onWorkUpdated?(work)
             refreshError = nil
         } catch is CancellationError {
             return
@@ -81,6 +130,61 @@ final class AgentOpsRootStore: ObservableObject {
 
     func recordTurnResult(_ result: AgentOpsTurnResult) {
         latestTurnResult = result
+    }
+
+    func retrySavedTurns() async {
+        guard
+            isActive,
+            let client,
+            let draftStore,
+            !draftStore.drafts.isEmpty
+        else { return }
+        for draft in draftStore.drafts {
+            do {
+                try draftStore.markAttempted(draftID: draft.id)
+                let result = try await client.performTurn(draft.request)
+                try draftStore.finish(draftID: draft.id, result: result)
+                recordTurnResult(result)
+            } catch is CancellationError {
+                return
+            } catch {
+                continue
+            }
+        }
+        await refreshWork()
+    }
+
+    private func refreshAll() async {
+        await refreshWork()
+        await refreshApprovals()
+    }
+
+    private func consume(_ event: AgentOpsEvent) async {
+        guard isActive, let client else { return }
+        do {
+            let authoritative = try await client.work(id: event.taskId)
+            if let index = work.firstIndex(where: { $0.id == authoritative.id }) {
+                work[index] = authoritative
+            } else {
+                work.insert(authoritative, at: 0)
+            }
+            onWorkUpdated?(work)
+            if event.eventType.localizedCaseInsensitiveContains("approval") {
+                await refreshApprovals()
+            }
+            refreshError = nil
+        } catch is CancellationError {
+            return
+        } catch {
+            refreshError = safeRefreshMessage
+        }
+    }
+
+    private var isAuthenticated: Bool {
+        if case .authenticated = auth.state {
+            return true
+        }
+        return false
     }
 
     private var safeRefreshMessage: String {

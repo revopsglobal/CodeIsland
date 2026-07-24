@@ -180,16 +180,19 @@ struct AgentOpsTurnTool {
     private let sessionID: UUID
     private let clientMetadata: AgentOpsClientMetadata
     private let uuid: () -> UUID
+    private let draftStore: VoiceTurnDraftStore?
 
     init(
         client: AgentOpsClient,
         sessionID: UUID,
         clientMetadata: AgentOpsClientMetadata,
+        draftStore: VoiceTurnDraftStore? = nil,
         uuid: @escaping () -> UUID = UUID.init
     ) {
         self.client = client
         self.sessionID = sessionID
         self.clientMetadata = clientMetadata
+        self.draftStore = draftStore
         self.uuid = uuid
     }
 
@@ -223,6 +226,10 @@ struct AgentOpsTurnTool {
             conversation: [],
             client: clientMetadata
         )
+        let draft = try draftStore?.save(request)
+        if let draft {
+            try draftStore?.markAttempted(draftID: draft.id)
+        }
         let result = try await client.performTurn(request)
         guard
             !result.speechText.trimmingCharacters(
@@ -231,12 +238,44 @@ struct AgentOpsTurnTool {
         else {
             throw AgentOpsTurnToolError.invalidResult
         }
+        if let draft {
+            try draftStore?.finish(draftID: draft.id, result: result)
+        }
         let encoded = try JSONEncoder.agentOps.encode(result)
         guard let output = String(data: encoded, encoding: .utf8) else {
             throw AgentOpsTurnToolError.invalidResult
         }
         return AgentOpsTurnExecution(
             request: request,
+            result: result,
+            outputJSON: output
+        )
+    }
+
+    @MainActor
+    func replay(_ draft: VoiceTurnDraft) async throws -> AgentOpsTurnExecution {
+        guard
+            let persisted = draftStore?.replayRequest(for: draft.id),
+            persisted == draft.request
+        else {
+            throw AgentOpsTurnToolError.invalidArguments
+        }
+        try draftStore?.markAttempted(draftID: draft.id)
+        let result = try await client.performTurn(persisted)
+        guard
+            !result.speechText.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            ).isEmpty
+        else {
+            throw AgentOpsTurnToolError.invalidResult
+        }
+        try draftStore?.finish(draftID: draft.id, result: result)
+        let encoded = try JSONEncoder.agentOps.encode(result)
+        guard let output = String(data: encoded, encoding: .utf8) else {
+            throw AgentOpsTurnToolError.invalidResult
+        }
+        return AgentOpsTurnExecution(
+            request: persisted,
             result: result,
             outputJSON: output
         )

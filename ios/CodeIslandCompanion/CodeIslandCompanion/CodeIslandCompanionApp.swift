@@ -13,6 +13,7 @@ struct CodeIslandCompanionApp: App {
         let connection = CompanionConnection()
         let liveActivity = LiveActivityController()
         let remoteApprovals = RemoteApprovalClient()
+        let agentOps = AgentOpsRootStore.live()
         connection.onStateReceived = { [weak liveActivity] state in
             Task { @MainActor in
                 liveActivity?.updateIfRunning(with: state)
@@ -29,13 +30,18 @@ struct CodeIslandCompanionApp: App {
                 liveActivity?.syncRemoteTasks(tasks)
             }
         }
+        agentOps.onWorkUpdated = { [weak liveActivity] tasks in
+            Task { @MainActor in
+                liveActivity?.syncAgentOpsWork(tasks)
+            }
+        }
 #if DEBUG
         Self.configureSmokeTestHooks(connection: connection, liveActivity: liveActivity)
 #endif
         _connection = StateObject(wrappedValue: connection)
         _liveActivity = StateObject(wrappedValue: liveActivity)
         _remoteApprovals = StateObject(wrappedValue: remoteApprovals)
-        _agentOps = StateObject(wrappedValue: AgentOpsRootStore.live())
+        _agentOps = StateObject(wrappedValue: agentOps)
     }
 
     var body: some Scene {

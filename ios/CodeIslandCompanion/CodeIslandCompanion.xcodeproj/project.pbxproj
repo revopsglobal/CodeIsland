@@ -19,6 +19,12 @@
 		A10000000000000000000006 /* AgentOpsWorkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000006 /* AgentOpsWorkView.swift */; };
 		A10000000000000000000007 /* AgentOpsTaskView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* AgentOpsTaskView.swift */; };
 		A10000000000000000000008 /* AgentOpsAttentionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* AgentOpsAttentionView.swift */; };
+		A10000000000000000000009 /* AgentOpsEventStreamTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009 /* AgentOpsEventStreamTests.swift */; };
+		A1000000000000000000000A /* VoiceTurnDraftStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000A /* VoiceTurnDraftStoreTests.swift */; };
+		A1000000000000000000000B /* AgentOpsApprovalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000B /* AgentOpsApprovalTests.swift */; };
+		A1000000000000000000000C /* AgentOpsEventStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000C /* AgentOpsEventStream.swift */; };
+		A1000000000000000000000D /* VoiceTurnDraftStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000D /* VoiceTurnDraftStore.swift */; };
+		A1000000000000000000000E /* AgentOpsApprovalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000E /* AgentOpsApprovalView.swift */; };
 		136C1DFA4E4F80076A794410 /* QwenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4978BAC1D31033F1CFFA542C /* QwenView.swift */; };
 		156EAC31E1DA9EDD3541AFBF /* StaselWebRTCEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B658B743C84BCA4599B7D36D /* StaselWebRTCEngine.swift */; };
 		1A9B2D28C0B651802CC22E46 /* AntiGravityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 312741CE7E44499956C35C45 /* AntiGravityView.swift */; };
@@ -191,6 +197,12 @@
 		A20000000000000000000006 /* AgentOpsWorkView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentOpsWorkView.swift; sourceTree = "<group>"; };
 		A20000000000000000000007 /* AgentOpsTaskView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentOpsTaskView.swift; sourceTree = "<group>"; };
 		A20000000000000000000008 /* AgentOpsAttentionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentOpsAttentionView.swift; sourceTree = "<group>"; };
+		A20000000000000000000009 /* AgentOpsEventStreamTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentOpsEventStreamTests.swift; sourceTree = "<group>"; };
+		A2000000000000000000000A /* VoiceTurnDraftStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceTurnDraftStoreTests.swift; sourceTree = "<group>"; };
+		A2000000000000000000000B /* AgentOpsApprovalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentOpsApprovalTests.swift; sourceTree = "<group>"; };
+		A2000000000000000000000C /* AgentOpsEventStream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentOpsEventStream.swift; sourceTree = "<group>"; };
+		A2000000000000000000000D /* VoiceTurnDraftStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceTurnDraftStore.swift; sourceTree = "<group>"; };
+		A2000000000000000000000E /* AgentOpsApprovalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentOpsApprovalView.swift; sourceTree = "<group>"; };
 		0A1079D20C61C1AF51C7F24A /* CodeIslandLiveActivityWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeIslandLiveActivityWidget.swift; sourceTree = "<group>"; };
 		0A7D0B4EC41F3FEC24838746 /* TraeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TraeView.swift; sourceTree = "<group>"; };
 		0CD94C0DFD8C9C1E2D0FA2CD /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -319,8 +331,10 @@
 			children = (
 				177C387B9636C1905C0B56F7 /* AgentOpsAuthStore.swift */,
 				BCA84EF648EA6FEF1B6F776C /* AgentOpsClient.swift */,
+				A2000000000000000000000C /* AgentOpsEventStream.swift */,
 				6F61FEE04B4509044F26C063 /* AgentOpsModels.swift */,
 				80C9F6F9895FFF0B6D9295CF /* AgentOpsRootStore.swift */,
+				A2000000000000000000000D /* VoiceTurnDraftStore.swift */,
 				A30000000000000000000001 /* Work */,
 				A30000000000000000000002 /* Attention */,
 				5BD674E4D3E95BAF55FA9594 /* Voice */,
@@ -340,6 +354,7 @@
 		A30000000000000000000002 /* Attention */ = {
 			isa = PBXGroup;
 			children = (
+				A2000000000000000000000E /* AgentOpsApprovalView.swift */,
 				A20000000000000000000008 /* AgentOpsAttentionView.swift */,
 			);
 			path = Attention;
@@ -400,7 +415,9 @@
 			isa = PBXGroup;
 			children = (
 				32E3C515566D655299E2635C /* AgentOpsAuthStoreTests.swift */,
+				A2000000000000000000000B /* AgentOpsApprovalTests.swift */,
 				7DC2AAEF7A43980107498289 /* AgentOpsClientTests.swift */,
+				A20000000000000000000009 /* AgentOpsEventStreamTests.swift */,
 				227E9BB4BF84D577EC3F83D2 /* AgentOpsTurnToolTests.swift */,
 				A20000000000000000000001 /* AgentOpsVoiceViewModelTests.swift */,
 				5EF8F4C84C86055FEB1AFAA6 /* AudioSessionPolicyTests.swift */,
@@ -413,6 +430,7 @@
 				6C36C170280FD8EC84BFF05E /* SharedDraftInboxTests.swift */,
 				57B2DB14302DCA299AB4FE26 /* VoiceSessionCoordinatorTests.swift */,
 				45D3534AA2188A05A177A6A9 /* VoiceSessionReducerTests.swift */,
+				A2000000000000000000000A /* VoiceTurnDraftStoreTests.swift */,
 			);
 			path = CodeIslandCompanionTests;
 			sourceTree = "<group>";
@@ -698,8 +716,10 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10000000000000000000008 /* AgentOpsAttentionView.swift in Sources */,
+				A1000000000000000000000E /* AgentOpsApprovalView.swift in Sources */,
 				74E713537176F063A83E6D2B /* AgentOpsAuthStore.swift in Sources */,
 				4B47C3A5E2708E74C568ED0F /* AgentOpsClient.swift in Sources */,
+				A1000000000000000000000C /* AgentOpsEventStream.swift in Sources */,
 				D62F806D7BADA0A0E8A17110 /* AgentOpsModels.swift in Sources */,
 				DDCBBD7A935DB146F02BC61B /* AgentOpsRootStore.swift in Sources */,
 				A10000000000000000000007 /* AgentOpsTaskView.swift in Sources */,
@@ -763,6 +783,7 @@
 				8C278F617B8CC42C0FE193F3 /* VoiceSessionCoordinator.swift in Sources */,
 				1D11B16C1B210624D641AAC2 /* VoiceSessionReducer.swift in Sources */,
 				A10000000000000000000005 /* VoiceTranscriptView.swift in Sources */,
+				A1000000000000000000000D /* VoiceTurnDraftStore.swift in Sources */,
 				C28E22B3696BD872D48746E4 /* WatchStateStore.swift in Sources */,
 				5CC36A8128BA65E2481142C1 /* WorkBuddyView.swift in Sources */,
 			);
@@ -806,7 +827,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				8B65B8EA77888BF1177486AF /* AgentOpsAuthStoreTests.swift in Sources */,
+				A1000000000000000000000B /* AgentOpsApprovalTests.swift in Sources */,
 				44F0306BE05E191502825906 /* AgentOpsClientTests.swift in Sources */,
+				A10000000000000000000009 /* AgentOpsEventStreamTests.swift in Sources */,
 				0A63C2A309C80A5928E899AC /* AgentOpsTurnToolTests.swift in Sources */,
 				A10000000000000000000001 /* AgentOpsVoiceViewModelTests.swift in Sources */,
 				2FA3FC431FCD358EFF788B4B /* AudioSessionPolicyTests.swift in Sources */,
@@ -819,6 +842,7 @@
 				8A64C36048AEFE0D88246603 /* SharedDraftInboxTests.swift in Sources */,
 				216F47F88347C45BCC7A6B4E /* VoiceSessionCoordinatorTests.swift in Sources */,
 				91DE994E835A9FF0397C60EB /* VoiceSessionReducerTests.swift in Sources */,
+				A1000000000000000000000A /* VoiceTurnDraftStoreTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

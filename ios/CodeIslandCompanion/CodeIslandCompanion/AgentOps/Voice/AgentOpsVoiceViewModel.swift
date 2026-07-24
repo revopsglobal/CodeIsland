@@ -110,7 +110,8 @@ final class AgentOpsVoiceViewModel: ObservableObject {
         let tool = AgentOpsTurnTool(
             client: client,
             sessionID: sessionID,
-            clientMetadata: .current()
+            clientMetadata: .current(),
+            draftStore: rootStore.draftStore
         )
         let coordinator = VoiceSessionCoordinator(
             credentialProvider: { voice in
@@ -237,6 +238,14 @@ final class AgentOpsVoiceViewModel: ObservableObject {
                         )
                     )
                 } catch {
+                    if self.rootStore?.draftStore?.drafts.isEmpty == false {
+                        self.transcriptEntries.append(
+                            VoiceTranscriptEntry(
+                                role: .system,
+                                text: "Saved privately on this iPhone. It will retry with the same request identity when AgentOps reconnects."
+                            )
+                        )
+                    }
                     self.apply(
                         .toolExecutionFailed(
                             callId: callId,

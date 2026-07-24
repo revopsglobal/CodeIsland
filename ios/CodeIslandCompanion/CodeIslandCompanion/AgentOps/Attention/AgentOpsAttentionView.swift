@@ -31,7 +31,10 @@ struct AgentOpsAttentionView: View {
                         .accessibilityIdentifier("agentops.attention.empty")
                     } else {
                         ForEach(visibleApprovals) { approval in
-                            AgentOpsApprovalCardView(approval: approval)
+                            AgentOpsApprovalView(
+                                approval: approval,
+                                client: isMock ? nil : agentOps.client
+                            )
                         }
                     }
 
@@ -77,58 +80,7 @@ struct AgentOpsAttentionView: View {
         target: "voice.agentops.revopsglobal.com",
         consequence: "Deploy the verified AgentOps voice gateway to production.",
         expiresAt: Date(timeIntervalSince1970: 1_800_000_000),
-        actionDigest: "sha256:agentops-voice-production-deploy",
+        actionDigest: String(repeating: "a", count: 64),
         requiresExplicitTap: true
     )
-}
-
-private struct AgentOpsApprovalCardView: View {
-    let approval: AgentOpsApprovalCard
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Label("Approval required", systemImage: "hand.raised.fill")
-                    .font(.headline)
-                    .foregroundStyle(.orange)
-                Spacer()
-                Text(approval.type.replacingOccurrences(of: "_", with: " "))
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.secondary)
-            }
-
-            Text(approval.target)
-                .font(.title3.weight(.semibold))
-                .textSelection(.enabled)
-            Text(approval.consequence)
-                .font(.body)
-                .fixedSize(horizontal: false, vertical: true)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("ACTION DIGEST")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.secondary)
-                Text(approval.actionDigest)
-                    .font(.caption.monospaced())
-                    .textSelection(.enabled)
-            }
-
-            Label(
-                "Requires a deliberate on-screen tap",
-                systemImage: "hand.tap"
-            )
-            .font(.footnote.weight(.semibold))
-            .foregroundStyle(.secondary)
-        }
-        .padding(18)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 22))
-        .overlay {
-            RoundedRectangle(cornerRadius: 22)
-                .stroke(.orange.opacity(0.28), lineWidth: 1)
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier(
-            "agentops.attention.approval.\(approval.id.uuidString.lowercased())"
-        )
-    }
 }

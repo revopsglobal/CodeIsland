@@ -20,6 +20,10 @@ enum AgentOpsApprovalStatus: String, Codable, Sendable {
     case rejected
 }
 
+enum AgentOpsApprovalInteraction: String, Codable, Sendable {
+    case onScreenTap = "on_screen_tap"
+}
+
 struct AgentOpsSourceHandle: Codable, Equatable, Sendable {
     let kind: String
     let label: String
@@ -90,6 +94,19 @@ struct AgentOpsApprovalListResponse: Codable, Equatable, Sendable {
     let nextCursor: String?
 }
 
+struct AgentOpsApprovalResolutionRequest: Codable, Equatable, Sendable {
+    let actionDigest: String
+    let resolution: AgentOpsApprovalStatus
+    let interaction: AgentOpsApprovalInteraction
+    let decisionNote: String?
+}
+
+struct AgentOpsApprovalResolutionResponse: Codable, Equatable, Sendable {
+    let approvalId: UUID
+    let status: AgentOpsApprovalStatus
+    let resolved: Bool
+}
+
 struct AgentOpsEvent: Codable, Identifiable, Equatable, Sendable {
     let id: UUID
     let taskId: UUID
@@ -145,4 +162,11 @@ enum AgentOpsJSONValue: Codable, Equatable, Sendable {
 struct AgentOpsAPIError: Codable, Error, Equatable, Sendable {
     let error: String
     let retryable: Bool?
+}
+
+extension AgentOpsWorkSummary {
+    var hasVerifiedProof: Bool {
+        lifecycle.status.lowercased() == "verified"
+            && proof.state.lowercased() == "verified"
+    }
 }

@@ -91,6 +91,41 @@ final class AgentOpsClient {
         return response.approval
     }
 
+    func resolveApproval(
+        id: UUID,
+        request resolution: AgentOpsApprovalResolutionRequest
+    ) async throws -> AgentOpsApprovalResolutionResponse {
+        guard resolution.resolution != .pending else {
+            throw AgentOpsClientError.invalidRequest
+        }
+        return try await request(
+            path: "v1/approvals/\(id.uuidString.lowercased())/resolve",
+            method: "POST",
+            body: try encode(resolution)
+        )
+    }
+
+    func eventStreamRequest(
+        cursor: String?,
+        refreshCredentials: Bool
+    ) async throws -> URLRequest {
+        let token = refreshCredentials
+            ? try await credentials.refreshAccessToken()
+            : try await credentials.accessToken()
+        var request = try makeRequest(
+            path: "v1/events",
+            method: "GET",
+            body: nil,
+            accessToken: token
+        )
+        request.timeoutInterval = 60 * 60
+        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        if let cursor {
+            request.setValue(cursor, forHTTPHeaderField: "Last-Event-ID")
+        }
+        return request
+    }
+
     func mintRealtimeCredential(
         voice: String?
     ) async throws -> RealtimeCredential {
