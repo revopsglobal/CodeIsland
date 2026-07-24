@@ -7,6 +7,7 @@ struct CodeIslandCompanionApp: App {
     @StateObject private var connection: CompanionConnection
     @StateObject private var liveActivity: LiveActivityController
     @StateObject private var remoteApprovals: RemoteApprovalClient
+    @StateObject private var agentOps: AgentOpsRootStore
 
     init() {
         let connection = CompanionConnection()
@@ -34,6 +35,7 @@ struct CodeIslandCompanionApp: App {
         _connection = StateObject(wrappedValue: connection)
         _liveActivity = StateObject(wrappedValue: liveActivity)
         _remoteApprovals = StateObject(wrappedValue: remoteApprovals)
+        _agentOps = StateObject(wrappedValue: AgentOpsRootStore.live())
     }
 
     var body: some Scene {
@@ -42,13 +44,19 @@ struct CodeIslandCompanionApp: App {
                 .environmentObject(connection)
                 .environmentObject(liveActivity)
                 .environmentObject(remoteApprovals)
+                .environmentObject(agentOps)
+                .task { await agentOps.start() }
                 .onChange(of: scenePhase) { _, newPhase in
                     remoteApprovals.setActive(newPhase == .active)
+                    agentOps.setActive(newPhase == .active)
                 }
                 .onChange(of: remoteApprovals.state) { _, state in
                     liveActivity.hostAvailabilityChanged(isAvailable: state == .connected)
                 }
-                .onOpenURL { remoteApprovals.openDeepLink($0) }
+                .onOpenURL {
+                    agentOps.openURL($0)
+                    remoteApprovals.openDeepLink($0)
+                }
         }
     }
 

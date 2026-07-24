@@ -19,8 +19,10 @@
 		3AEB7FB2BC4A5B04E4FE6FEB /* LiveActivityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 030876B03E408787BD569C05 /* LiveActivityController.swift */; };
 		3EBBDE81898639CA26E3D38A /* CodeIslandShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = FF717DF0B64B4C9599DEC65A /* CodeIslandShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		4139C6B9F534280C1A27328C /* CommandRisk.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A2A1711F61AA745DBB16A7A /* CommandRisk.swift */; };
+		44F0306BE05E191502825906 /* AgentOpsClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DC2AAEF7A43980107498289 /* AgentOpsClientTests.swift */; };
 		454B79632040B38A8EE556B1 /* TraeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A7D0B4EC41F3FEC24838746 /* TraeView.swift */; };
 		48D08AC36EBE0CAF9CDC82F7 /* RemoteTaskDraftStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26CAA42FF97468F40A695657 /* RemoteTaskDraftStoreTests.swift */; };
+		4B47C3A5E2708E74C568ED0F /* AgentOpsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCA84EF648EA6FEF1B6F776C /* AgentOpsClient.swift */; };
 		53DCB0D0D0D9FBBF1E6E7560 /* MascotMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77D70D07D1A0B8E65A8B9C66 /* MascotMotion.swift */; };
 		53F367C8A64DCB73E33E1770 /* RemoteTaskClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29FCD8362DACCB58D3BACAD9 /* RemoteTaskClient.swift */; };
 		5595E2189BC2645718CEB77F /* RemoteApprovalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DE9B49B0CC8560A642B3750 /* RemoteApprovalView.swift */; };
@@ -34,11 +36,13 @@
 		61E65895CCEBAD88E0183D08 /* StepFunView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB1A12DC31BC8AC80FFB96D8 /* StepFunView.swift */; };
 		627A394BE38C43B7815C44B1 /* PersonalHubProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F2D0C28F9B521F6A0F93CAC /* PersonalHubProtocol.swift */; };
 		632DF62531C30A5489CE9819 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = DE41181FECB15FC695E14CCA /* LaunchScreen.storyboard */; };
+		64A404C2705D91907914EFBB /* CompanionPushPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86411E3D8E6337F894A6840C /* CompanionPushPresentationTests.swift */; };
 		6919B3BB7246E6928F77FF07 /* RemoteApprovalClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CD8A43D80EDE6E68D478FE3 /* RemoteApprovalClient.swift */; };
 		6C444954B6DA9F0B542304EE /* CursorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A637A87231D2C2493FF97990 /* CursorView.swift */; };
 		6CD3BCEA3F590C9B2DAF17A4 /* RemoteTaskViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C60E43F52F5E56EFEEAF8528 /* RemoteTaskViews.swift */; };
 		6D443E3978F822AB9834CB1D /* CompanionCommandCenterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FBBD6446372CD56ADFCE130 /* CompanionCommandCenterView.swift */; };
 		6DB070CD0CB5259D6341C29F /* StepFunView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB1A12DC31BC8AC80FFB96D8 /* StepFunView.swift */; };
+		74E713537176F063A83E6D2B /* AgentOpsAuthStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 177C387B9636C1905C0B56F7 /* AgentOpsAuthStore.swift */; };
 		75953A34987FA661A54B274E /* SharedDraftInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE848A90520F8F624AFB92E9 /* SharedDraftInbox.swift */; };
 		77548822FFD6282873D688CC /* StandByLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 683697BA44F284DC6FFD36DA /* StandByLayoutTests.swift */; };
 		786E71DFAABF2A42048E9091 /* CodeIslandCompanionWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 1CD9F5E97A2CDBC4E3F54478 /* CodeIslandCompanionWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -48,10 +52,13 @@
 		8087A336412F9084936AF405 /* BuddyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83B07028BAA056A1DA7C7791 /* BuddyView.swift */; };
 		81B4DE0F0C16357E0804F68F /* CompanionCommandCenterModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61373D31C48663C8C29AF003 /* CompanionCommandCenterModel.swift */; };
 		8482851DDA50BEB92C429199 /* RemoteTaskClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26E78E543985CED85D547F94 /* RemoteTaskClientTests.swift */; };
+		88529B6D10BD69574E792DC6 /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = 97DDD0069829875C6B93E9D0 /* Auth */; };
 		892225EA1A62EA16B21E2E36 /* CompanionDisplayText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4708FC8D74184A554015C647 /* CompanionDisplayText.swift */; };
 		8A64C36048AEFE0D88246603 /* SharedDraftInboxTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C36C170280FD8EC84BFF05E /* SharedDraftInboxTests.swift */; };
+		8B65B8EA77888BF1177486AF /* AgentOpsAuthStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32E3C515566D655299E2635C /* AgentOpsAuthStoreTests.swift */; };
 		8DDDF81D31DDBF87F1470A97 /* KimiView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53EE587DE1B0740F9A5B0B19 /* KimiView.swift */; };
 		8E04B2E58164AA89E6D92AE6 /* LiveActivityLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F9D10CCE9485D7AE2F88931 /* LiveActivityLifecycle.swift */; };
+		918BED71A2A430BE1E1BD9BB /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = 466771A9FC33CB2A83749024 /* Auth */; };
 		977FDE1B19E4DF1F5985EC0D /* QoderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5393F6AABCBEEDA6A832553 /* QoderView.swift */; };
 		9C43FBF323733C72F963E4EE /* CodeIslandCompanionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D78FA9B17D5BB160C8E714F6 /* CodeIslandCompanionUITests.swift */; };
 		9F7CB1CDE599F3DF71E5738C /* CompanionDisplayText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4708FC8D74184A554015C647 /* CompanionDisplayText.swift */; };
@@ -62,7 +69,6 @@
 		AB197B458D906CA80DE838DD /* StandByLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F1C7AD9BDAF97493D0648FE /* StandByLayout.swift */; };
 		AF04FA0B6B595450B609DCBA /* LiveActivityPrivacyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FB2E261F2FE8B6CE0B5E67B /* LiveActivityPrivacyTests.swift */; };
 		AF508E52E331531A53A2EA2B /* ClineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F96CB90CA9C700A293F0F841 /* ClineView.swift */; };
-		A1B2C3D4E5F60718293A4B5C /* CompanionPushPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F1E2D3C4B5A69788796A5B4 /* CompanionPushPresentationTests.swift */; };
 		B670B6680116E6F25D54A4BE /* RemoteTaskPresentationModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47209C7DEEC6D999BA96F959 /* RemoteTaskPresentationModelTests.swift */; };
 		B6D725A91443A9EC1E4F95A2 /* CompanionFirst.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AA55AECDA9A1FBAE05477F7 /* CompanionFirst.swift */; };
 		B6E51EE8DB8BF988DACB1276 /* CopilotView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F7787F642A8E89A5AA5FFFC /* CopilotView.swift */; };
@@ -79,8 +85,10 @@
 		D37C3157D91B8B67E80B095D /* WatchStateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCDD1EEEF11FA911FA8E42BF /* WatchStateStore.swift */; };
 		D47274A29745CA64E55F1C21 /* CodeIslandActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCA23CC7B351415E136CC947 /* CodeIslandActivityAttributes.swift */; };
 		D582784A60899FA99920FCAC /* CompanionCommandCenterModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEEBFB6E14D862A168D28F28 /* CompanionCommandCenterModelTests.swift */; };
+		D62F806D7BADA0A0E8A17110 /* AgentOpsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F61FEE04B4509044F26C063 /* AgentOpsModels.swift */; };
 		D6346705BBF85F63A3C032D8 /* CodeIslandCompanionWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 014DEC37F3B34948F2B630E4 /* CodeIslandCompanionWidgetBundle.swift */; };
 		D91E181A929AA9ED8ABEE03E /* AppIntents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1D6BFE9B5287EE06D2FB3938 /* AppIntents.framework */; };
+		DDCBBD7A935DB146F02BC61B /* AgentOpsRootStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80C9F6F9895FFF0B6D9295CF /* AgentOpsRootStore.swift */; };
 		DEACE91A83CD52B2B6394CC9 /* DroidView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E1D4BD6D6F35284006F9354 /* DroidView.swift */; };
 		DECE043D8EAE0EEEA3417557 /* PixelCharacterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6345881A14A90FBB79C7453 /* PixelCharacterView.swift */; };
 		DF8181D3224DFA462CB9E0FA /* TraeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A7D0B4EC41F3FEC24838746 /* TraeView.swift */; };
@@ -158,6 +166,7 @@
 		0A7D0B4EC41F3FEC24838746 /* TraeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TraeView.swift; sourceTree = "<group>"; };
 		0CD94C0DFD8C9C1E2D0FA2CD /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		0E1D4BD6D6F35284006F9354 /* DroidView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DroidView.swift; sourceTree = "<group>"; };
+		177C387B9636C1905C0B56F7 /* AgentOpsAuthStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentOpsAuthStore.swift; sourceTree = "<group>"; };
 		17C1C2BC8FB75A71D24DBB1B /* RemoteTaskProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteTaskProtocol.swift; sourceTree = "<group>"; };
 		18FD5E698E776728E6018927 /* SharedMascotView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedMascotView.swift; sourceTree = "<group>"; };
 		1CD9F5E97A2CDBC4E3F54478 /* CodeIslandCompanionWidget.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = CodeIslandCompanionWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -170,10 +179,10 @@
 		2F1C7AD9BDAF97493D0648FE /* StandByLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StandByLayout.swift; sourceTree = "<group>"; };
 		312741CE7E44499956C35C45 /* AntiGravityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AntiGravityView.swift; sourceTree = "<group>"; };
 		32BE6F03B699E8406163EBA2 /* CompanionAppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionAppDelegate.swift; sourceTree = "<group>"; };
+		32E3C515566D655299E2635C /* AgentOpsAuthStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentOpsAuthStoreTests.swift; sourceTree = "<group>"; };
 		3B828985819DA6B54488EE88 /* CodeIslandShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CodeIslandShareExtension.entitlements; sourceTree = "<group>"; };
 		451D9CD32F9422E4DF1FA1F8 /* RemoteTaskPresentationModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteTaskPresentationModel.swift; sourceTree = "<group>"; };
 		4708FC8D74184A554015C647 /* CompanionDisplayText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionDisplayText.swift; sourceTree = "<group>"; };
-		0F1E2D3C4B5A69788796A5B4 /* CompanionPushPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionPushPresentationTests.swift; sourceTree = "<group>"; };
 		47209C7DEEC6D999BA96F959 /* RemoteTaskPresentationModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteTaskPresentationModelTests.swift; sourceTree = "<group>"; };
 		4978BAC1D31033F1CFFA542C /* QwenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QwenView.swift; sourceTree = "<group>"; };
 		4F2D0C28F9B521F6A0F93CAC /* PersonalHubProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalHubProtocol.swift; sourceTree = "<group>"; };
@@ -186,15 +195,19 @@
 		6516178F733B86DDF5CD26E0 /* CodeIslandCompanionUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = CodeIslandCompanionUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		683697BA44F284DC6FFD36DA /* StandByLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StandByLayoutTests.swift; sourceTree = "<group>"; };
 		6C36C170280FD8EC84BFF05E /* SharedDraftInboxTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedDraftInboxTests.swift; sourceTree = "<group>"; };
+		6F61FEE04B4509044F26C063 /* AgentOpsModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentOpsModels.swift; sourceTree = "<group>"; };
 		6F9D10CCE9485D7AE2F88931 /* LiveActivityLifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityLifecycle.swift; sourceTree = "<group>"; };
 		76D8A0775C5E0593E6BD3927 /* PersonalHubView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalHubView.swift; sourceTree = "<group>"; };
 		77D70D07D1A0B8E65A8B9C66 /* MascotMotion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotMotion.swift; sourceTree = "<group>"; };
 		78474E5ED47A37C22FB49F33 /* CompanionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionModels.swift; sourceTree = "<group>"; };
 		7AA55AECDA9A1FBAE05477F7 /* CompanionFirst.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionFirst.swift; sourceTree = "<group>"; };
 		7CA2D1F95A933787580CCAA6 /* GeminiView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiView.swift; sourceTree = "<group>"; };
+		7DC2AAEF7A43980107498289 /* AgentOpsClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentOpsClientTests.swift; sourceTree = "<group>"; };
 		7F7787F642A8E89A5AA5FFFC /* CopilotView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CopilotView.swift; sourceTree = "<group>"; };
+		80C9F6F9895FFF0B6D9295CF /* AgentOpsRootStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentOpsRootStore.swift; sourceTree = "<group>"; };
 		827D708763E7622166DF3F8B /* CompanionBluetoothCentral.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionBluetoothCentral.swift; sourceTree = "<group>"; };
 		83B07028BAA056A1DA7C7791 /* BuddyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuddyView.swift; sourceTree = "<group>"; };
+		86411E3D8E6337F894A6840C /* CompanionPushPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionPushPresentationTests.swift; sourceTree = "<group>"; };
 		8843E069F081B15AE433EA8D /* CodeIslandCompanionApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeIslandCompanionApp.swift; sourceTree = "<group>"; };
 		8DE9B49B0CC8560A642B3750 /* RemoteApprovalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteApprovalView.swift; sourceTree = "<group>"; };
 		92F2FBDC2CDC04ABD7B7CCB4 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
@@ -205,6 +218,7 @@
 		A6470A3909D478701A3B07E5 /* DexView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DexView.swift; sourceTree = "<group>"; };
 		BAC098A964E741CB93516695 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		BCA23CC7B351415E136CC947 /* CodeIslandActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeIslandActivityAttributes.swift; sourceTree = "<group>"; };
+		BCA84EF648EA6FEF1B6F776C /* AgentOpsClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentOpsClient.swift; sourceTree = "<group>"; };
 		BE12267AF913F735B14B643A /* HermesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HermesView.swift; sourceTree = "<group>"; };
 		C5393F6AABCBEEDA6A832553 /* QoderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QoderView.swift; sourceTree = "<group>"; };
 		C60E43F52F5E56EFEEAF8528 /* RemoteTaskViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteTaskViews.swift; sourceTree = "<group>"; };
@@ -235,8 +249,17 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				88529B6D10BD69574E792DC6 /* Auth in Frameworks */,
 				D91E181A929AA9ED8ABEE03E /* AppIntents.framework in Frameworks */,
 				00C27C14DC7CD3479D678422 /* Speech.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E02C02E1F619C3D86813667A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				918BED71A2A430BE1E1BD9BB /* Auth in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -251,6 +274,17 @@
 				5F8B728EC484A892286E9460 /* Info.plist */,
 			);
 			path = CodeIslandCompanionWidget;
+			sourceTree = "<group>";
+		};
+		41E67AD02EED25797D82B1BE /* AgentOps */ = {
+			isa = PBXGroup;
+			children = (
+				177C387B9636C1905C0B56F7 /* AgentOpsAuthStore.swift */,
+				BCA84EF648EA6FEF1B6F776C /* AgentOpsClient.swift */,
+				6F61FEE04B4509044F26C063 /* AgentOpsModels.swift */,
+				80C9F6F9895FFF0B6D9295CF /* AgentOpsRootStore.swift */,
+			);
+			path = AgentOps;
 			sourceTree = "<group>";
 		};
 		4B5DC446285A66B2D47E6894 /* Shared */ = {
@@ -290,12 +324,14 @@
 		6D21008F0646C13F20FD24E3 /* CodeIslandCompanionTests */ = {
 			isa = PBXGroup;
 			children = (
+				32E3C515566D655299E2635C /* AgentOpsAuthStoreTests.swift */,
+				7DC2AAEF7A43980107498289 /* AgentOpsClientTests.swift */,
 				FEEBFB6E14D862A168D28F28 /* CompanionCommandCenterModelTests.swift */,
+				86411E3D8E6337F894A6840C /* CompanionPushPresentationTests.swift */,
 				4FB2E261F2FE8B6CE0B5E67B /* LiveActivityPrivacyTests.swift */,
 				26E78E543985CED85D547F94 /* RemoteTaskClientTests.swift */,
 				26CAA42FF97468F40A695657 /* RemoteTaskDraftStoreTests.swift */,
 				47209C7DEEC6D999BA96F959 /* RemoteTaskPresentationModelTests.swift */,
-				0F1E2D3C4B5A69788796A5B4 /* CompanionPushPresentationTests.swift */,
 				6C36C170280FD8EC84BFF05E /* SharedDraftInboxTests.swift */,
 			);
 			path = CodeIslandCompanionTests;
@@ -330,6 +366,7 @@
 				451D9CD32F9422E4DF1FA1F8 /* RemoteTaskPresentationModel.swift */,
 				C60E43F52F5E56EFEEAF8528 /* RemoteTaskViews.swift */,
 				2F1C7AD9BDAF97493D0648FE /* StandByLayout.swift */,
+				41E67AD02EED25797D82B1BE /* AgentOps */,
 			);
 			path = CodeIslandCompanion;
 			sourceTree = "<group>";
@@ -416,6 +453,7 @@
 			buildConfigurationList = 04AA0F1210C8B2115E8ED693 /* Build configuration list for PBXNativeTarget "CodeIslandCompanionTests" */;
 			buildPhases = (
 				723FD7F80E3B4F96773DE5AC /* Sources */,
+				E02C02E1F619C3D86813667A /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -424,6 +462,7 @@
 			);
 			name = CodeIslandCompanionTests;
 			packageProductDependencies = (
+				466771A9FC33CB2A83749024 /* Auth */,
 			);
 			productName = CodeIslandCompanionTests;
 			productReference = EF87924363E319F5C648F0C0 /* CodeIslandCompanionTests.xctest */;
@@ -498,6 +537,7 @@
 			);
 			name = CodeIslandCompanion;
 			packageProductDependencies = (
+				97DDD0069829875C6B93E9D0 /* Auth */,
 			);
 			productName = CodeIslandCompanion;
 			productReference = 9A2B84F4F96272BE5A760B08 /* CodeIslandCompanion.app */;
@@ -541,6 +581,9 @@
 			);
 			mainGroup = D4F4B4DFF32FD06A20C575CA;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				649EAE55C9E6EDA1EE54162A /* XCRemoteSwiftPackageReference "supabase-swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = B7C74B58379C162633B0AB71 /* Products */;
 			projectDirPath = "";
@@ -572,6 +615,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				74E713537176F063A83E6D2B /* AgentOpsAuthStore.swift in Sources */,
+				4B47C3A5E2708E74C568ED0F /* AgentOpsClient.swift in Sources */,
+				D62F806D7BADA0A0E8A17110 /* AgentOpsModels.swift in Sources */,
+				DDCBBD7A935DB146F02BC61B /* AgentOpsRootStore.swift in Sources */,
 				F6BF2F0FBFE41711C6160DFE /* AntiGravityView.swift in Sources */,
 				FC9D256D2F2BC3010E633FBF /* BuddyView.swift in Sources */,
 				AF508E52E331531A53A2EA2B /* ClineView.swift in Sources */,
@@ -663,12 +710,14 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				8B65B8EA77888BF1177486AF /* AgentOpsAuthStoreTests.swift in Sources */,
+				44F0306BE05E191502825906 /* AgentOpsClientTests.swift in Sources */,
 				D582784A60899FA99920FCAC /* CompanionCommandCenterModelTests.swift in Sources */,
+				64A404C2705D91907914EFBB /* CompanionPushPresentationTests.swift in Sources */,
 				AF04FA0B6B595450B609DCBA /* LiveActivityPrivacyTests.swift in Sources */,
 				8482851DDA50BEB92C429199 /* RemoteTaskClientTests.swift in Sources */,
 				48D08AC36EBE0CAF9CDC82F7 /* RemoteTaskDraftStoreTests.swift in Sources */,
 				B670B6680116E6F25D54A4BE /* RemoteTaskPresentationModelTests.swift in Sources */,
-				A1B2C3D4E5F60718293A4B5C /* CompanionPushPresentationTests.swift in Sources */,
 				8A64C36048AEFE0D88246603 /* SharedDraftInboxTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -721,6 +770,9 @@
 		08C809767E51DD6F2FDD2E2C /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				AGENTOPS_BASE_URL = "https://voice.agentops.revopsglobal.com";
+				AGENTOPS_SUPABASE_ANON_KEY = "";
+				AGENTOPS_SUPABASE_URL = "https://yyizocyaehmqrottmnaz.supabase.co";
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
@@ -800,6 +852,9 @@
 		4C0F87C6E1B001694C287EB6 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				AGENTOPS_BASE_URL = "https://voice.agentops.revopsglobal.com";
+				AGENTOPS_SUPABASE_ANON_KEY = "";
+				AGENTOPS_SUPABASE_URL = "https://yyizocyaehmqrottmnaz.supabase.co";
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
@@ -1097,6 +1152,30 @@
 			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		649EAE55C9E6EDA1EE54162A /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift.git";
+			requirement = {
+				kind = exactVersion;
+				version = 2.46.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		466771A9FC33CB2A83749024 /* Auth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 649EAE55C9E6EDA1EE54162A /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Auth;
+		};
+		97DDD0069829875C6B93E9D0 /* Auth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 649EAE55C9E6EDA1EE54162A /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Auth;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = C86DC231658B41C7E38FF15A /* Project object */;
 }
