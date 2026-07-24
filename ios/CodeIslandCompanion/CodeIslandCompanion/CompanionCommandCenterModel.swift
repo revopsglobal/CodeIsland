@@ -70,6 +70,21 @@ struct CompanionAttentionSummary: Equatable {
     }
 }
 
+enum CompanionAgentAttention {
+    static func needsAttention(flag: Bool?, title: String, subtitle: String?, detail: String?) -> Bool {
+        // Newer Mac payloads provide the authoritative state, so copy text is ignored.
+        if let flag {
+            return flag
+        }
+
+        // Older Mac payloads omit the flag; preserve the legacy text heuristic.
+        let signal = [title, subtitle ?? "", detail ?? ""]
+            .joined(separator: " ")
+            .lowercased()
+        return ["approval", "question", "needs", "waiting"].contains { signal.contains($0) }
+    }
+}
+
 extension CompanionMotionPolicy {
     static let animatesRoutinePoll = false
 

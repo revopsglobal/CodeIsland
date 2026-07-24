@@ -540,6 +540,9 @@ public struct PersonalHubItem: Codable, Equatable, Identifiable, Sendable {
     /// Optional semantic date used by calendar-style clients. Existing module
     /// items remain date-free and legacy payloads decode this as nil.
     public let date: Date?
+    /// Optional authoritative attention flag. Legacy payloads decode this as nil,
+    /// so clients must fall back when it is absent.
+    public let needsAttention: Bool?
     public let actions: [PersonalHubAction]
 
     public init(
@@ -553,6 +556,7 @@ public struct PersonalHubItem: Codable, Equatable, Identifiable, Sendable {
         mediaPosition: Double? = nil,
         mediaDuration: Double? = nil,
         date: Date? = nil,
+        needsAttention: Bool? = nil,
         actions: [PersonalHubAction] = []
     ) {
         self.id = id
@@ -565,6 +569,7 @@ public struct PersonalHubItem: Codable, Equatable, Identifiable, Sendable {
         self.mediaPosition = mediaPosition
         self.mediaDuration = mediaDuration
         self.date = date
+        self.needsAttention = needsAttention
         self.actions = actions
     }
 }

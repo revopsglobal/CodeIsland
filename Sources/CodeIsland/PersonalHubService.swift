@@ -1293,7 +1293,8 @@ final class PersonalHubService {
                         title: session.displayName,
                         subtitle: "\(Self.agentAttentionLabel(session.status)) · \(session.sourceLabel)",
                         detail: String(describing: session.status),
-                        symbol: Self.agentAttentionSymbol(session.status)
+                        symbol: Self.agentAttentionSymbol(session.status),
+                        needsAttention: session.status == .waitingApproval || session.status == .waitingQuestion
                     )
                 }
             )

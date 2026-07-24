@@ -821,13 +821,12 @@ private struct CompanionTodayTimeline: View {
     private var hasAgentAttention: Bool {
         rows.contains { row in
             guard row.moduleID == .agents else { return false }
-            let signal = [row.item.title, row.item.subtitle ?? "", row.item.detail ?? ""]
-                .joined(separator: " ")
-                .lowercased()
-            return signal.contains("approval")
-                || signal.contains("question")
-                || signal.contains("needs")
-                || signal.contains("waiting")
+            return CompanionAgentAttention.needsAttention(
+                flag: row.item.needsAttention,
+                title: row.item.title,
+                subtitle: row.item.subtitle,
+                detail: row.item.detail
+            )
         }
     }
 
