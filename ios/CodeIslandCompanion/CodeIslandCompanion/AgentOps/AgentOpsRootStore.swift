@@ -6,11 +6,13 @@ final class AgentOpsRootStore: ObservableObject {
     let auth: AgentOpsAuthStore
     let client: AgentOpsClient?
     let draftStore: VoiceTurnDraftStore?
+    private(set) var pushCoordinator: AgentOpsPushCoordinator?
 
     @Published private(set) var work: [AgentOpsWorkSummary] = []
     @Published private(set) var approvals: [AgentOpsApprovalCard] = []
     @Published private(set) var latestTurnResult: AgentOpsTurnResult?
     @Published private(set) var refreshError: String?
+    @Published private(set) var navigationTarget: AgentOpsNavigationTarget?
 
     private(set) var isActive = true
     private var authObserver: AnyCancellable?
@@ -30,6 +32,19 @@ final class AgentOpsRootStore: ObservableObject {
             self?.objectWillChange.send()
         }
         if let client {
+            pushCoordinator = AgentOpsPushCoordinator(
+                client: client,
+                tokenStore: .shared,
+                onWork: { [weak self] authoritative in
+                    self?.acceptPush(work: authoritative)
+                },
+                onApproval: { [weak self] authoritative in
+                    self?.acceptPush(approval: authoritative)
+                },
+                onOpen: { [weak self] target in
+                    self?.navigationTarget = target
+                }
+            )
             eventStream = AgentOpsEventStream(
                 requestProvider: { cursor, refresh in
                     try await client.eventStreamRequest(
@@ -74,6 +89,8 @@ final class AgentOpsRootStore: ObservableObject {
         await auth.restore()
         guard isAuthenticated else { return }
         eventStream?.start()
+        pushCoordinator?.invalidateRegistrationScope()
+        pushCoordinator?.start()
         await refreshAll()
         await retrySavedTurns()
     }
@@ -84,9 +101,17 @@ final class AgentOpsRootStore: ObservableObject {
             let handled = await auth.openAuthCallback(url)
             guard handled, isAuthenticated else { return }
             eventStream?.start()
+            pushCoordinator?.invalidateRegistrationScope()
+            pushCoordinator?.start()
             await refreshAll()
             await retrySavedTurns()
         }
+    }
+
+    func openAgentOpsURL(_ url: URL) {
+        guard let target = AgentOpsNavigationTarget(url: url) else { return }
+        navigationTarget = target
+        Task { await refresh(target) }
     }
 
     func setActive(_ active: Bool) {
@@ -96,6 +121,7 @@ final class AgentOpsRootStore: ObservableObject {
             eventStream?.setForeground(false)
         } else if isAuthenticated {
             eventStream?.setForeground(true)
+            pushCoordinator?.start()
             Task {
                 await refreshAll()
                 await retrySavedTurns()
@@ -159,16 +185,47 @@ final class AgentOpsRootStore: ObservableObject {
         await refreshApprovals()
     }
 
+    private func refresh(_ target: AgentOpsNavigationTarget) async {
+        guard isAuthenticated, let client else { return }
+        do {
+            switch target {
+            case .task(let id):
+                acceptPush(work: try await client.work(id: id))
+            case .approval(let id):
+                acceptPush(approval: try await client.approval(id: id))
+            }
+            refreshError = nil
+        } catch is CancellationError {
+            return
+        } catch {
+            refreshError = safeRefreshMessage
+        }
+    }
+
+    private func acceptPush(work authoritative: AgentOpsWorkSummary) {
+        if let index = work.firstIndex(where: { $0.id == authoritative.id }) {
+            work[index] = authoritative
+        } else {
+            work.insert(authoritative, at: 0)
+        }
+        onWorkUpdated?(work)
+    }
+
+    private func acceptPush(approval authoritative: AgentOpsApprovalCard) {
+        if let index = approvals.firstIndex(where: {
+            $0.id == authoritative.id
+        }) {
+            approvals[index] = authoritative
+        } else {
+            approvals.insert(authoritative, at: 0)
+        }
+    }
+
     private func consume(_ event: AgentOpsEvent) async {
         guard isActive, let client else { return }
         do {
             let authoritative = try await client.work(id: event.taskId)
-            if let index = work.firstIndex(where: { $0.id == authoritative.id }) {
-                work[index] = authoritative
-            } else {
-                work.insert(authoritative, at: 0)
-            }
-            onWorkUpdated?(work)
+            acceptPush(work: authoritative)
             if event.eventType.localizedCaseInsensitiveContains("approval") {
                 await refreshApprovals()
             }

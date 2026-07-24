@@ -19,6 +19,22 @@ struct AgentOpsAttentionView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
 
+                    if let push = agentOps.pushCoordinator {
+                        notificationOptIn(
+                            permissionGranted: push.permissionGranted,
+                            registrationError: push.registrationError,
+                            requestAccess: {
+                                await push.requestNotificationAccess()
+                            }
+                        )
+                    } else if isMock {
+                        notificationOptIn(
+                            permissionGranted: nil,
+                            registrationError: nil,
+                            requestAccess: {}
+                        )
+                    }
+
                     if visibleApprovals.isEmpty {
                         ContentUnavailableView(
                             "Nothing needs you",
@@ -62,7 +78,14 @@ struct AgentOpsAttentionView: View {
 
     private var visibleApprovals: [AgentOpsApprovalCard] {
         let pending = agentOps.approvals.filter { $0.status == .pending }
-        return pending.isEmpty && isMock ? [Self.mockApproval] : pending
+        let values = pending.isEmpty && isMock ? [Self.mockApproval] : pending
+        guard case .approval(let highlighted) = agentOps.navigationTarget else {
+            return values
+        }
+        return values.sorted {
+            ($0.id == highlighted ? 0 : 1)
+                < ($1.id == highlighted ? 0 : 1)
+        }
     }
 
     private var isAuthenticated: Bool {
@@ -70,6 +93,39 @@ struct AgentOpsAttentionView: View {
             return true
         }
         return false
+    }
+
+    @ViewBuilder
+    private func notificationOptIn(
+        permissionGranted: Bool?,
+        registrationError: String?,
+        requestAccess: @escaping @MainActor () async -> Void
+    ) -> some View {
+        if permissionGranted != true {
+            Button {
+                Task { await requestAccess() }
+            } label: {
+                Label(
+                    permissionGranted == false
+                        ? "Review AgentOps alert permission"
+                        : "Enable AgentOps alerts",
+                    systemImage: "bell.badge"
+                )
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .accessibilityIdentifier("agentops.attention.enableAlerts")
+        } else {
+            Label("AgentOps alerts enabled", systemImage: "bell.fill")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+        }
+
+        if let error = registrationError {
+            Text(error)
+                .font(.footnote)
+                .foregroundStyle(.orange)
+        }
     }
 
     private static let mockApproval = AgentOpsApprovalCard(

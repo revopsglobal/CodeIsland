@@ -14,6 +14,8 @@ struct CodeIslandCompanionApp: App {
         let liveActivity = LiveActivityController()
         let remoteApprovals = RemoteApprovalClient()
         let agentOps = AgentOpsRootStore.live()
+        CompanionAppDelegate.agentOpsPushCoordinator =
+            agentOps.pushCoordinator
         connection.onStateReceived = { [weak liveActivity] state in
             Task { @MainActor in
                 liveActivity?.updateIfRunning(with: state)
@@ -60,7 +62,11 @@ struct CodeIslandCompanionApp: App {
                     liveActivity.hostAvailabilityChanged(isAvailable: state == .connected)
                 }
                 .onOpenURL {
-                    agentOps.openURL($0)
+                    if AgentOpsAuthStore.isAuthCallback($0) {
+                        agentOps.openURL($0)
+                    } else {
+                        agentOps.openAgentOpsURL($0)
+                    }
                     remoteApprovals.openDeepLink($0)
                 }
         }

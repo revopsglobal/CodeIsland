@@ -99,7 +99,24 @@ struct CompanionCommandCenterView: View {
             LegacyCompanionCommandCenterView(topPadding: 22)
                 .accessibilityIdentifier("agentops.buddy.sheet")
         }
+        .onAppear { applyAgentOpsNavigation(agentOps.navigationTarget) }
+        .onChange(of: agentOps.navigationTarget) { _, target in
+            applyAgentOpsNavigation(target)
+        }
         .accessibilityIdentifier("agentops.shell")
+    }
+
+    private func applyAgentOpsNavigation(
+        _ target: AgentOpsNavigationTarget?
+    ) {
+        switch target {
+        case .approval:
+            destination = .attention
+        case .task:
+            destination = .work
+        case nil:
+            break
+        }
     }
 }
 

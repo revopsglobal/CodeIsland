@@ -134,12 +134,14 @@ final class LiveActivityController: ObservableObject {
         Task {
             await applyAgentOpsTask(task, createIfNeeded: true)
             let state = Self.agentOpsState(for: task)
-            if state == .verified || state == .failed || state == .cancelled {
+            if Self.shouldEndAgentOpsActivity(
+                followedTaskID: followedTaskID,
+                eventTaskID: task.id,
+                state: state
+            ) {
                 try? await Task.sleep(for: .seconds(8))
                 guard self.followedTaskID == task.id else { return }
-                self.followedTaskID = nil
-                UserDefaults.standard.removeObject(forKey: Self.followedTaskKey)
-                self.stopAll()
+                await self.endAgentOpsActivity(taskID: task.id)
             }
         }
     }
@@ -295,6 +297,17 @@ final class LiveActivityController: ObservableObject {
         default:
             return .working
         }
+    }
+
+    static func shouldEndAgentOpsActivity(
+        followedTaskID: UUID?,
+        eventTaskID: UUID,
+        state: AgentOpsFollowedTaskState
+    ) -> Bool {
+        guard followedTaskID == eventTaskID else { return false }
+        return state == .verified
+            || state == .failed
+            || state == .cancelled
     }
 
     private func applyAgentOpsTask(
@@ -613,6 +626,16 @@ final class LiveActivityController: ObservableObject {
             for await discovered in Activity<CodeIslandActivityAttributes>.activityUpdates {
                 guard !Task.isCancelled, let self else { return }
                 await self.recoverExistingActivity(endingDuplicates: true)
+                if discovered.content.state.source == "agentops",
+                   let taskText = discovered.attributes.sessionId,
+                   let taskID = UUID(uuidString: taskText)
+                {
+                    self.followedTaskID = taskID
+                    UserDefaults.standard.set(
+                        taskID.uuidString.lowercased(),
+                        forKey: Self.followedTaskKey
+                    )
+                }
                 guard let requestID = discovered.attributes.sessionId,
                       let kind = RemoteAttentionKind(rawValue: discovered.content.state.pendingAction ?? "")
                 else { continue }
@@ -646,6 +669,12 @@ final class LiveActivityController: ObservableObject {
             for await token in activity.pushTokenUpdates {
                 guard !Task.isCancelled else { return }
                 LiveActivityTokenMailbox.storeUpdateToken(token, requestID: requestID)
+                if let taskID = UUID(uuidString: requestID) {
+                    AgentOpsPushTokenStore.shared.storeLiveActivityToken(
+                        token,
+                        taskID: taskID
+                    )
+                }
             }
         }
 
@@ -674,12 +703,36 @@ final class LiveActivityController: ObservableObject {
     ) -> Bool {
         guard let token = activity.pushToken else { return false }
         LiveActivityTokenMailbox.storeUpdateToken(token, requestID: requestID)
+        if let taskID = UUID(uuidString: requestID) {
+            AgentOpsPushTokenStore.shared.storeLiveActivityToken(
+                token,
+                taskID: taskID
+            )
+        }
         return true
     }
 
     @available(iOS 17.2, *)
     private func publishPushToStartToken(_ token: Data) {
         LiveActivityTokenMailbox.storePushToStartToken(token)
+        AgentOpsPushTokenStore.shared.storePushToStartToken(token)
+    }
+
+    private func endAgentOpsActivity(taskID: UUID) async {
+        let taskKey = taskID.uuidString.lowercased()
+        for candidate in Activity<CodeIslandActivityAttributes>.activities
+        where candidate.attributes.sessionId?.lowercased() == taskKey {
+            await candidate.end(nil, dismissalPolicy: .immediate)
+            if candidate.id == activityID {
+                clearActivity(id: candidate.id, resetCursor: true)
+            }
+        }
+        AgentOpsPushTokenStore.shared.removeLiveActivityToken(taskID: taskID)
+        guard followedTaskID == taskID else { return }
+        followedTaskID = nil
+        UserDefaults.standard.removeObject(forKey: Self.followedTaskKey)
+        existingActivityCount =
+            Activity<CodeIslandActivityAttributes>.activities.count
     }
 
     private func clearActivity(id: String?, resetCursor: Bool = false) {

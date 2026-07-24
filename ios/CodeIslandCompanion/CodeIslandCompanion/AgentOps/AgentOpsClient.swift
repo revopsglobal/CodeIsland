@@ -126,6 +126,17 @@ final class AgentOpsClient {
         return request
     }
 
+    func registerDevice(
+        _ registration: AgentOpsDeviceRegistrationRequest
+    ) async throws -> AgentOpsDeviceRegistration {
+        let response: AgentOpsDeviceRegistrationEnvelope = try await request(
+            path: "v1/devices",
+            method: "POST",
+            body: try encode(registration)
+        )
+        return response.device
+    }
+
     func mintRealtimeCredential(
         voice: String?
     ) async throws -> RealtimeCredential {
