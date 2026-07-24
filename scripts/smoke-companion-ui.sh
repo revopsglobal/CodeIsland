@@ -91,6 +91,24 @@ COMMON_ARGS=(
   -CodeIslandCompanionMockHubMode code
 )
 
+# AgentOps Voice uses its own deterministic, network-free launch surface.
+# Capture the default and every primary state before the legacy Buddy receipts.
+AGENTOPS_ARGS=(
+  -AgentOpsVoiceMock listening
+)
+
+xcrun simctl launch "$UDID" "$BUNDLE_ID" "${AGENTOPS_ARGS[@]}" >/dev/null
+sleep 4
+xcrun simctl terminate "$UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true
+
+capture agentops-voice-light light "${AGENTOPS_ARGS[@]}"
+capture agentops-voice-dark dark "${AGENTOPS_ARGS[@]}"
+capture agentops-work-light light -AgentOpsVoiceMock durable -AgentOpsMockDestination work
+capture agentops-attention-dark dark -AgentOpsVoiceMock durable -AgentOpsMockDestination attention
+capture agentops-clarify-light light -AgentOpsVoiceMock clarify
+capture agentops-durable-light light -AgentOpsVoiceMock durable
+capture agentops-offline-dark dark -AgentOpsVoiceMock offline-draft
+
 # The first launch after installing a new simulator build can spend several
 # seconds registering extensions and restoring the scene. Warm it once so the
 # first acceptance image has the same settled conditions as every later state.

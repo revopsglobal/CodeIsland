@@ -1,5 +1,176 @@
 import SwiftUI
 
+private enum AgentOpsPrimaryDestination: String, CaseIterable, Identifiable {
+    case voice
+    case work
+    case attention
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .voice: return "Voice"
+        case .work: return "Work"
+        case .attention: return "Attention"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .voice: return "waveform"
+        case .work: return "checklist"
+        case .attention: return "exclamationmark.bubble"
+        }
+    }
+}
+
+private enum AgentOpsShellSheet: String, Identifiable {
+    case buddy
+
+    var id: String { rawValue }
+}
+
+struct CompanionCommandCenterView: View {
+    let topPadding: CGFloat
+
+    @EnvironmentObject private var agentOps: AgentOpsRootStore
+    @StateObject private var voiceModel: AgentOpsVoiceViewModel
+    @State private var destination: AgentOpsPrimaryDestination
+    @State private var presentedSheet: AgentOpsShellSheet?
+
+    private let usesLegacyTestShell: Bool
+
+    init(topPadding: CGFloat) {
+        self.topPadding = topPadding
+        let arguments = ProcessInfo.processInfo.arguments
+        usesLegacyTestShell = arguments.contains {
+            $0.hasPrefix("-CodeIslandCompanion")
+        }
+        let scenario = AgentOpsVoiceMockScenario.from(arguments: arguments)
+        _voiceModel = StateObject(
+            wrappedValue: AgentOpsVoiceViewModel(mockScenario: scenario)
+        )
+        if let index = arguments.firstIndex(of: "-AgentOpsMockDestination"),
+           arguments.indices.contains(index + 1),
+           let requested = AgentOpsPrimaryDestination(
+               rawValue: arguments[index + 1].lowercased()
+           ) {
+            _destination = State(initialValue: requested)
+        } else {
+            _destination = State(initialValue: .voice)
+        }
+    }
+
+    var body: some View {
+        if usesLegacyTestShell {
+            LegacyCompanionCommandCenterView(topPadding: topPadding)
+        } else {
+            agentOpsShell
+        }
+    }
+
+    private var agentOpsShell: some View {
+        ZStack {
+            Color.ciBackground.ignoresSafeArea()
+
+            Group {
+                switch destination {
+                case .voice:
+                    AgentOpsVoiceView(model: voiceModel, topPadding: topPadding)
+                case .work:
+                    AgentOpsWorkView()
+                case .attention:
+                    AgentOpsAttentionView()
+                }
+            }
+            .frame(maxWidth: 720, maxHeight: .infinity)
+            .frame(maxWidth: .infinity)
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            AgentOpsDestinationDock(
+                destination: $destination,
+                attentionCount: agentOps.approvals.filter {
+                    $0.status == .pending
+                }.count,
+                openBuddy: { presentedSheet = .buddy }
+            )
+        }
+        .sheet(item: $presentedSheet) { _ in
+            LegacyCompanionCommandCenterView(topPadding: 22)
+                .accessibilityIdentifier("agentops.buddy.sheet")
+        }
+        .accessibilityIdentifier("agentops.shell")
+    }
+}
+
+private struct AgentOpsDestinationDock: View {
+    @Binding var destination: AgentOpsPrimaryDestination
+    let attentionCount: Int
+    let openBuddy: () -> Void
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(AgentOpsPrimaryDestination.allCases) { item in
+                Button {
+                    destination = item
+                } label: {
+                    VStack(spacing: 3) {
+                        Image(systemName: item.symbol)
+                            .font(.system(size: 17, weight: .semibold))
+                            .overlay(alignment: .topTrailing) {
+                                if item == .attention, attentionCount > 0 {
+                                    Circle()
+                                        .fill(.orange)
+                                        .frame(width: 8, height: 8)
+                                        .offset(x: 5, y: -3)
+                                }
+                            }
+                        Text(item.title)
+                            .font(.caption2.weight(.semibold))
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 50)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(
+                    destination == item
+                        ? Color.accentColor
+                        : Color.ciForeground.opacity(0.62)
+                )
+                .accessibilityIdentifier(
+                    "agentops.destination.\(item.rawValue)"
+                )
+                .accessibilityAddTraits(
+                    destination == item ? .isSelected : []
+                )
+            }
+
+            Button(action: openBuddy) {
+                VStack(spacing: 3) {
+                    Image(systemName: "person.crop.circle")
+                        .font(.system(size: 17, weight: .semibold))
+                    Text("Buddy")
+                        .font(.caption2.weight(.semibold))
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, minHeight: 50)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.ciForeground.opacity(0.62))
+            .accessibilityIdentifier("agentops.openBuddy")
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(.ultraThinMaterial)
+        .overlay(alignment: .top) {
+            Divider()
+        }
+        .dynamicTypeSize(.xSmall ... .accessibility3)
+    }
+}
+
 private enum CommandCenterDestination: String, CaseIterable, Identifiable {
     case now
     case sessions
@@ -35,7 +206,7 @@ private enum CommandCenterSheet: Identifiable {
     }
 }
 
-struct CompanionCommandCenterView: View {
+struct LegacyCompanionCommandCenterView: View {
     let topPadding: CGFloat
 
     @EnvironmentObject private var connection: CompanionConnection

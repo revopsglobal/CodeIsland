@@ -29,8 +29,13 @@ final class CompanionAppDelegate: NSObject, UIApplicationDelegate, UNUserNotific
     ) -> Bool {
         let center = UNUserNotificationCenter.current()
         center.delegate = self
-        center.requestAuthorization(options: [.alert, .badge, .sound]) { granted, _ in
-            guard granted else { return }
+        // Do not surprise the user with a permission sheet at app launch.
+        // Existing authorized installs still register immediately; Task 14's
+        // explicit Attention opt-in owns the first permission request.
+        center.getNotificationSettings { settings in
+            guard [.authorized, .provisional, .ephemeral]
+                .contains(settings.authorizationStatus)
+            else { return }
             DispatchQueue.main.async {
                 application.registerForRemoteNotifications()
             }
