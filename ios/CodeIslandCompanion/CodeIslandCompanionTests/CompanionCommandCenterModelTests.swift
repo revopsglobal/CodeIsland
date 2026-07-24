@@ -69,6 +69,50 @@ final class CompanionCommandCenterModelTests: XCTestCase {
         )
     }
 
+    func testAgentAttentionUsesAuthoritativeFalseFlagOverFreeText() {
+        XCTAssertFalse(
+            CompanionAgentAttention.needsAttention(
+                flag: false,
+                title: "approval-dashboard",
+                subtitle: "Running - Claude",
+                detail: "running"
+            )
+        )
+    }
+
+    func testAgentAttentionUsesAuthoritativeTrueFlag() {
+        XCTAssertTrue(
+            CompanionAgentAttention.needsAttention(
+                flag: true,
+                title: "steady-session",
+                subtitle: "Running - Claude",
+                detail: "running"
+            )
+        )
+    }
+
+    func testAgentAttentionLegacyFallbackDetectsApprovalCopy() {
+        XCTAssertTrue(
+            CompanionAgentAttention.needsAttention(
+                flag: nil,
+                title: "steady-session",
+                subtitle: "Needs approval",
+                detail: "running"
+            )
+        )
+    }
+
+    func testAgentAttentionLegacyFallbackIgnoresPlainIdleCopy() {
+        XCTAssertFalse(
+            CompanionAgentAttention.needsAttention(
+                flag: nil,
+                title: "steady-session",
+                subtitle: "Running - Claude",
+                detail: "running"
+            )
+        )
+    }
+
     func testAttentionSelectionKeepsTheVisibleItemAcrossReorderedPolls() {
         XCTAssertEqual(
             CompanionAttentionSelection.resolve(
