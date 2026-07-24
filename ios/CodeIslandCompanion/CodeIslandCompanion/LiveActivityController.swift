@@ -2,6 +2,15 @@ import ActivityKit
 import Foundation
 import UserNotifications
 
+enum AgentOpsFollowedTaskState: Equatable {
+    case queued
+    case working
+    case needsYou
+    case verified
+    case failed
+    case cancelled
+}
+
 @MainActor
 final class LiveActivityController: ObservableObject {
     private static let layoutVersionKey = "CodeIslandLiveActivityLayoutVersion"
@@ -104,6 +113,35 @@ final class LiveActivityController: ObservableObject {
                 self.followedTaskID = nil
                 UserDefaults.standard.removeObject(forKey: Self.followedTaskKey)
                 self.stopAll()
+            }
+        }
+    }
+
+    func followAgentOps(_ task: AgentOpsWorkSummary) {
+        followedTaskID = task.id
+        UserDefaults.standard.set(
+            task.id.uuidString.lowercased(),
+            forKey: Self.followedTaskKey
+        )
+        Task { await applyAgentOpsTask(task, createIfNeeded: true) }
+    }
+
+    func syncAgentOpsWork(_ tasks: [AgentOpsWorkSummary]) {
+        guard let followedTaskID else { return }
+        guard let task = tasks.first(where: { $0.id == followedTaskID }) else {
+            return
+        }
+        Task {
+            await applyAgentOpsTask(task, createIfNeeded: true)
+            let state = Self.agentOpsState(for: task)
+            if Self.shouldEndAgentOpsActivity(
+                followedTaskID: followedTaskID,
+                eventTaskID: task.id,
+                state: state
+            ) {
+                try? await Task.sleep(for: .seconds(8))
+                guard self.followedTaskID == task.id else { return }
+                await self.endAgentOpsActivity(taskID: task.id)
             }
         }
     }
@@ -235,6 +273,137 @@ final class LiveActivityController: ObservableObject {
             lastError = nil
         } catch {
             lastError = error.localizedDescription
+        }
+    }
+
+    static func agentOpsState(
+        for task: AgentOpsWorkSummary
+    ) -> AgentOpsFollowedTaskState {
+        let lifecycle = task.lifecycle.status.lowercased()
+        if lifecycle == "verified" {
+            return task.proof.state.lowercased() == "verified"
+                ? .verified
+                : .working
+        }
+        switch lifecycle {
+        case "queued", "pending", "created":
+            return .queued
+        case "blocked", "needs_person", "needs_approval":
+            return .needsYou
+        case "failed":
+            return .failed
+        case "cancelled", "canceled":
+            return .cancelled
+        default:
+            return .working
+        }
+    }
+
+    static func shouldEndAgentOpsActivity(
+        followedTaskID: UUID?,
+        eventTaskID: UUID,
+        state: AgentOpsFollowedTaskState
+    ) -> Bool {
+        guard followedTaskID == eventTaskID else { return false }
+        return state == .verified
+            || state == .failed
+            || state == .cancelled
+    }
+
+    private func applyAgentOpsTask(
+        _ task: AgentOpsWorkSummary,
+        createIfNeeded: Bool
+    ) async {
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else {
+            lastError = "This iPhone doesn't have Live Activities enabled."
+            return
+        }
+        let state = Self.agentOpsState(for: task)
+        do {
+            await recoverExistingActivity(endingDuplicates: true)
+            let taskID = task.id.uuidString.lowercased()
+            if let activity, activity.attributes.sessionId != taskID {
+                await activity.end(nil, dismissalPolicy: .immediate)
+                clearActivity(id: activity.id, resetCursor: true)
+            }
+            let contentState = CodeIslandActivityAttributes.ContentState(
+                sequence: UInt64(
+                    max(0, task.lifecycle.updatedAt.timeIntervalSince1970)
+                ),
+                source: "agentops",
+                status: Self.activityStatus(for: state),
+                toolName: nil,
+                workspaceName: nil,
+                message: Self.taskSummary(for: state),
+                pendingAction: state == .needsYou ? RemoteAttentionKind.task.rawValue : nil,
+                taskID: taskID,
+                taskState: task.lifecycle.status,
+                questionText: nil,
+                questionHeader: nil,
+                questionProgress: nil,
+                sessions: [],
+                updatedAt: task.lifecycle.updatedAt
+            )
+            let content = ActivityContent(
+                state: contentState,
+                staleDate: Date().addingTimeInterval(180),
+                relevanceScore: state == .needsYou || state == .failed ? 1 : 0.75
+            )
+            if let activity {
+                await activity.update(content)
+            } else if createIfNeeded {
+                let attributes = CodeIslandActivityAttributes(sessionId: taskID)
+                let created: Activity<CodeIslandActivityAttributes>
+                do {
+                    created = try Activity.request(
+                        attributes: attributes,
+                        content: content,
+                        pushType: .token
+                    )
+                } catch {
+                    created = try Activity.request(
+                        attributes: attributes,
+                        content: content,
+                        pushType: nil
+                    )
+                }
+                activity = created
+                activityID = created.id
+                observeState(of: created)
+                observePushToken(of: created)
+            }
+            lastContentState = contentState
+            existingActivityCount =
+                Activity<CodeIslandActivityAttributes>.activities.count
+            lastError = nil
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    private static func activityStatus(
+        for state: AgentOpsFollowedTaskState
+    ) -> String {
+        switch state {
+        case .queued: return "processing"
+        case .working: return "running"
+        case .needsYou: return "waitingApproval"
+        case .verified: return "taskVerified"
+        case .failed: return "taskFailed"
+        case .cancelled: return "idle"
+        }
+    }
+
+    private static func taskSummary(
+        for state: AgentOpsFollowedTaskState
+    ) -> String {
+        switch state {
+        case .queued: return "Queued in AgentOps"
+        case .working: return "Working; verified proof is still pending"
+        case .needsYou: return "A decision is waiting in Buddy"
+        case .verified: return "AgentOps verified the proof"
+        case .failed: return "Review the failure in AgentOps"
+        case .cancelled: return "Task cancelled"
         }
     }
 
@@ -457,6 +626,16 @@ final class LiveActivityController: ObservableObject {
             for await discovered in Activity<CodeIslandActivityAttributes>.activityUpdates {
                 guard !Task.isCancelled, let self else { return }
                 await self.recoverExistingActivity(endingDuplicates: true)
+                if discovered.content.state.source == "agentops",
+                   let taskText = discovered.attributes.sessionId,
+                   let taskID = UUID(uuidString: taskText)
+                {
+                    self.followedTaskID = taskID
+                    UserDefaults.standard.set(
+                        taskID.uuidString.lowercased(),
+                        forKey: Self.followedTaskKey
+                    )
+                }
                 guard let requestID = discovered.attributes.sessionId,
                       let kind = RemoteAttentionKind(rawValue: discovered.content.state.pendingAction ?? "")
                 else { continue }
@@ -490,6 +669,12 @@ final class LiveActivityController: ObservableObject {
             for await token in activity.pushTokenUpdates {
                 guard !Task.isCancelled else { return }
                 LiveActivityTokenMailbox.storeUpdateToken(token, requestID: requestID)
+                if let taskID = UUID(uuidString: requestID) {
+                    AgentOpsPushTokenStore.shared.storeLiveActivityToken(
+                        token,
+                        taskID: taskID
+                    )
+                }
             }
         }
 
@@ -518,12 +703,36 @@ final class LiveActivityController: ObservableObject {
     ) -> Bool {
         guard let token = activity.pushToken else { return false }
         LiveActivityTokenMailbox.storeUpdateToken(token, requestID: requestID)
+        if let taskID = UUID(uuidString: requestID) {
+            AgentOpsPushTokenStore.shared.storeLiveActivityToken(
+                token,
+                taskID: taskID
+            )
+        }
         return true
     }
 
     @available(iOS 17.2, *)
     private func publishPushToStartToken(_ token: Data) {
         LiveActivityTokenMailbox.storePushToStartToken(token)
+        AgentOpsPushTokenStore.shared.storePushToStartToken(token)
+    }
+
+    private func endAgentOpsActivity(taskID: UUID) async {
+        let taskKey = taskID.uuidString.lowercased()
+        for candidate in Activity<CodeIslandActivityAttributes>.activities
+        where candidate.attributes.sessionId?.lowercased() == taskKey {
+            await candidate.end(nil, dismissalPolicy: .immediate)
+            if candidate.id == activityID {
+                clearActivity(id: candidate.id, resetCursor: true)
+            }
+        }
+        AgentOpsPushTokenStore.shared.removeLiveActivityToken(taskID: taskID)
+        guard followedTaskID == taskID else { return }
+        followedTaskID = nil
+        UserDefaults.standard.removeObject(forKey: Self.followedTaskKey)
+        existingActivityCount =
+            Activity<CodeIslandActivityAttributes>.activities.count
     }
 
     private func clearActivity(id: String?, resetCursor: Bool = false) {

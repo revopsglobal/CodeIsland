@@ -1,6 +1,7 @@
 import XCTest
 @testable import CodeIslandCompanion
 
+@MainActor
 final class LiveActivityPrivacyTests: XCTestCase {
     func testCompactConnectionPrefersAuthenticatedTailscaleOverNearbySearch() {
         let presentation = CompanionConnectionPresentation.resolve(
@@ -285,6 +286,50 @@ final class LiveActivityPrivacyTests: XCTestCase {
             CodeIslandActivityAttributes.ContentState.orderedSessions([olderRunning, newerRunning]).map(\.id),
             CodeIslandActivityAttributes.ContentState.orderedSessions([newerRunning, olderRunning]).map(\.id)
         )
+    }
+
+    func testAgentOpsPushEnvelopeContainsNoTaskTitleTranscriptOrApprovalDetails() throws {
+        let payload: [String: Any] = [
+            "aps": ["content-available": 1],
+            "taskId": "11111111-1111-4111-8111-111111111111",
+            "approvalId": "22222222-2222-4222-8222-222222222222",
+            "eventType": "approval.required",
+            "version": 7,
+            "deepLink":
+                "codeisland://agentops/approvals/22222222-2222-4222-8222-222222222222?taskId=11111111-1111-4111-8111-111111111111",
+        ]
+
+        let envelope = try XCTUnwrap(
+            AgentOpsPushEnvelope(payloadFields: payload)
+        )
+        XCTAssertTrue(envelope.customPayloadIsContentFree)
+        let serialized = try JSONSerialization.data(
+            withJSONObject: payload,
+            options: [.sortedKeys]
+        )
+        let text = String(decoding: serialized, as: UTF8.self)
+        for secret in [
+            "Private task title",
+            "Secret transcript",
+            "Deploy a verified production release.",
+            String(repeating: "a", count: 64),
+        ] {
+            XCTAssertFalse(text.contains(secret))
+        }
+    }
+
+    func testAgentOpsParserRejectsSensitiveCustomPushFields() {
+        let payload: [String: Any] = [
+            "aps": ["content-available": 1],
+            "taskId": "11111111-1111-4111-8111-111111111111",
+            "eventType": "task.needs_you",
+            "version": 7,
+            "deepLink":
+                "codeisland://agentops/tasks/11111111-1111-4111-8111-111111111111",
+            "transcript": "must not leave the server",
+        ]
+
+        XCTAssertNil(AgentOpsPushEnvelope(payloadFields: payload))
     }
 
     private func liveActivitySession(

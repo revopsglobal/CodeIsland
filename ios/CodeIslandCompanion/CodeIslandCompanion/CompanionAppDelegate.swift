@@ -2,6 +2,9 @@ import UIKit
 import UserNotifications
 
 final class CompanionAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+    nonisolated(unsafe) static weak var agentOpsPushCoordinator:
+        AgentOpsPushCoordinator?
+
     private static let pendingPushTokenKey = "codeisland.remote.pendingPushToken"
     private static let pendingApprovalIDKey = "codeisland.remote.pendingApprovalID"
     private static let pendingQuestionIDKey = "codeisland.remote.pendingQuestionID"
@@ -23,20 +26,40 @@ final class CompanionAppDelegate: NSObject, UIApplicationDelegate, UNUserNotific
         }
     }
 
+    internal static func agentOpsPresentationOptions(
+        for outcome: AgentOpsPushProcessingOutcome
+    ) -> UNNotificationPresentationOptions {
+        outcome == .acceptedVisible ? [.banner, .list, .sound] : []
+    }
+
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         let center = UNUserNotificationCenter.current()
         center.delegate = self
-        center.requestAuthorization(options: [.alert, .badge, .sound]) { granted, _ in
-            guard granted else { return }
+        // Do not surprise the user with a permission sheet at app launch.
+        // Existing authorized installs still register immediately; Task 14's
+        // explicit Attention opt-in owns the first permission request.
+        center.getNotificationSettings { settings in
+            guard [.authorized, .provisional, .ephemeral]
+                .contains(settings.authorizationStatus)
+            else { return }
             DispatchQueue.main.async {
                 application.registerForRemoteNotifications()
             }
         }
         if let notification = launchOptions?[.remoteNotification] as? [AnyHashable: Any] {
-            _ = process(notification)
+            if let envelope = agentOpsEnvelope(notification) {
+                Task { @MainActor in
+                    _ = await Self.agentOpsPushCoordinator?.process(
+                        envelope,
+                        userTapped: true
+                    )
+                }
+            } else {
+                _ = processLegacy(notification)
+            }
         }
         return true
     }
@@ -44,6 +67,7 @@ final class CompanionAppDelegate: NSObject, UIApplicationDelegate, UNUserNotific
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         let token = deviceToken.map { String(format: "%02x", $0) }.joined()
         UserDefaults.standard.set(token, forKey: Self.pendingPushTokenKey)
+        AgentOpsPushTokenStore.shared.storeAPNsToken(deviceToken)
         NotificationCenter.default.post(name: .codeIslandPushTokenAvailable, object: nil)
     }
 
@@ -59,8 +83,23 @@ final class CompanionAppDelegate: NSObject, UIApplicationDelegate, UNUserNotific
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        let outcome = process(notification.request.content.userInfo)
-        completionHandler(Self.presentationOptions(for: outcome))
+        let userInfo = notification.request.content.userInfo
+        guard let envelope = agentOpsEnvelope(userInfo) else {
+            let outcome = processLegacy(userInfo)
+            completionHandler(Self.presentationOptions(for: outcome))
+            return
+        }
+        Task { @MainActor in
+            guard let coordinator = Self.agentOpsPushCoordinator else {
+                completionHandler([])
+                return
+            }
+            let outcome = await coordinator.process(
+                envelope,
+                userTapped: false
+            )
+            completionHandler(Self.agentOpsPresentationOptions(for: outcome))
+        }
     }
 
     func application(
@@ -68,11 +107,28 @@ final class CompanionAppDelegate: NSObject, UIApplicationDelegate, UNUserNotific
         didReceiveRemoteNotification userInfo: [AnyHashable: Any],
         fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
     ) {
-        switch process(userInfo) {
-        case .accepted:
-            completionHandler(.newData)
-        case .rejectedStale, .unrecognized:
-            completionHandler(.noData)
+        guard let envelope = agentOpsEnvelope(userInfo) else {
+            switch processLegacy(userInfo) {
+            case .accepted:
+                completionHandler(.newData)
+            case .rejectedStale, .unrecognized:
+                completionHandler(.noData)
+            }
+            return
+        }
+        Task { @MainActor in
+            guard let coordinator = Self.agentOpsPushCoordinator else {
+                completionHandler(.failed)
+                return
+            }
+            switch await coordinator.process(envelope, userTapped: false) {
+            case .acceptedVisible, .acceptedSilent:
+                completionHandler(.newData)
+            case .rejectedStale, .rejectedRegressive:
+                completionHandler(.noData)
+            case .unavailable:
+                completionHandler(.failed)
+            }
         }
     }
 
@@ -81,12 +137,25 @@ final class CompanionAppDelegate: NSObject, UIApplicationDelegate, UNUserNotific
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        _ = process(response.notification.request.content.userInfo)
-        completionHandler()
+        let userInfo = response.notification.request.content.userInfo
+        guard let envelope = agentOpsEnvelope(userInfo) else {
+            _ = processLegacy(userInfo)
+            completionHandler()
+            return
+        }
+        Task { @MainActor in
+            _ = await Self.agentOpsPushCoordinator?.process(
+                envelope,
+                userTapped: true
+            )
+            completionHandler()
+        }
     }
 
     @discardableResult
-    private func process(_ userInfo: [AnyHashable: Any]) -> PushProcessingOutcome {
+    private func processLegacy(
+        _ userInfo: [AnyHashable: Any]
+    ) -> PushProcessingOutcome {
         let fields = Dictionary(uniqueKeysWithValues: userInfo.compactMap { key, value in
             (key as? String).map { ($0, value) }
         })
@@ -161,6 +230,17 @@ final class CompanionAppDelegate: NSObject, UIApplicationDelegate, UNUserNotific
             taskState: envelope.taskState
         )
         return .accepted
+    }
+
+    private func agentOpsEnvelope(
+        _ userInfo: [AnyHashable: Any]
+    ) -> AgentOpsPushEnvelope? {
+        let fields = Dictionary(
+            uniqueKeysWithValues: userInfo.compactMap { key, value in
+                (key as? String).map { ($0, value) }
+            }
+        )
+        return AgentOpsPushEnvelope(payloadFields: fields)
     }
 
     private func postAttention(

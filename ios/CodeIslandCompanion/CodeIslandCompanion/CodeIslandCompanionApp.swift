@@ -7,11 +7,15 @@ struct CodeIslandCompanionApp: App {
     @StateObject private var connection: CompanionConnection
     @StateObject private var liveActivity: LiveActivityController
     @StateObject private var remoteApprovals: RemoteApprovalClient
+    @StateObject private var agentOps: AgentOpsRootStore
 
     init() {
         let connection = CompanionConnection()
         let liveActivity = LiveActivityController()
         let remoteApprovals = RemoteApprovalClient()
+        let agentOps = AgentOpsRootStore.live()
+        CompanionAppDelegate.agentOpsPushCoordinator =
+            agentOps.pushCoordinator
         connection.onStateReceived = { [weak liveActivity] state in
             Task { @MainActor in
                 liveActivity?.updateIfRunning(with: state)
@@ -28,12 +32,18 @@ struct CodeIslandCompanionApp: App {
                 liveActivity?.syncRemoteTasks(tasks)
             }
         }
+        agentOps.onWorkUpdated = { [weak liveActivity] tasks in
+            Task { @MainActor in
+                liveActivity?.syncAgentOpsWork(tasks)
+            }
+        }
 #if DEBUG
         Self.configureSmokeTestHooks(connection: connection, liveActivity: liveActivity)
 #endif
         _connection = StateObject(wrappedValue: connection)
         _liveActivity = StateObject(wrappedValue: liveActivity)
         _remoteApprovals = StateObject(wrappedValue: remoteApprovals)
+        _agentOps = StateObject(wrappedValue: agentOps)
     }
 
     var body: some Scene {
@@ -42,13 +52,23 @@ struct CodeIslandCompanionApp: App {
                 .environmentObject(connection)
                 .environmentObject(liveActivity)
                 .environmentObject(remoteApprovals)
+                .environmentObject(agentOps)
+                .task { await agentOps.start() }
                 .onChange(of: scenePhase) { _, newPhase in
                     remoteApprovals.setActive(newPhase == .active)
+                    agentOps.setActive(newPhase == .active)
                 }
                 .onChange(of: remoteApprovals.state) { _, state in
                     liveActivity.hostAvailabilityChanged(isAvailable: state == .connected)
                 }
-                .onOpenURL { remoteApprovals.openDeepLink($0) }
+                .onOpenURL {
+                    if AgentOpsAuthStore.isAuthCallback($0) {
+                        agentOps.openURL($0)
+                    } else {
+                        agentOps.openAgentOpsURL($0)
+                    }
+                    remoteApprovals.openDeepLink($0)
+                }
         }
     }
 
