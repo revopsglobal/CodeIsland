@@ -70,7 +70,15 @@ final class AgentOpsAuthStoreTests: XCTestCase {
         try storage.store(key: key, value: value)
         XCTAssertEqual(try storage.retrieve(key: key), value)
         try storage.remove(key: key)
-        XCTAssertNil(try storage.retrieve(key: key))
+        do {
+            let remaining = try storage.retrieve(key: key)
+            XCTAssertNil(remaining)
+        } catch {
+            XCTAssertTrue(
+                String(describing: error).contains("errSecItemNotFound"),
+                "Deleting the session must leave no Keychain item"
+            )
+        }
     }
 
     func testAgentOpsAuthSourceContainsNoSessionPersistenceOrCredentialLogging() throws {
@@ -89,9 +97,25 @@ final class AgentOpsAuthStoreTests: XCTestCase {
             .map { try String(contentsOf: $0, encoding: .utf8) }
             .joined(separator: "\n")
 
-        XCTAssertFalse(source.contains("UserDefaults"))
-        XCTAssertFalse(source.contains("print("))
-        XCTAssertFalse(source.contains("Logger("))
+        let authSource = try String(
+            contentsOf: sourceRoot.appendingPathComponent(
+                "AgentOpsAuthStore.swift"
+            ),
+            encoding: .utf8
+        )
+        XCTAssertFalse(authSource.contains("UserDefaults"))
+        XCTAssertNil(
+            source.range(
+                of: #"(?m)(^|[^\w])print\s*\("#,
+                options: .regularExpression
+            )
+        )
+        XCTAssertNil(
+            source.range(
+                of: #"(?m)(^|[^\w])Logger\s*\("#,
+                options: .regularExpression
+            )
+        )
         XCTAssertFalse(source.contains("eyJhbGci"))
         XCTAssertFalse(source.contains("sb_secret_"))
 

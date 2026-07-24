@@ -28,7 +28,6 @@ struct AgentOpsVoiceView: View {
         .task {
             model.configure(rootStore: agentOps)
         }
-        .accessibilityIdentifier("agentops.voice.screen")
     }
 
     private var header: some View {
@@ -40,6 +39,7 @@ struct AgentOpsVoiceView: View {
                             ? .title3.bold()
                             : .title.bold()
                     )
+                    .accessibilityIdentifier("agentops.voice.screen")
                 if !dynamicTypeSize.isAccessibilitySize {
                     Text("Wiki context. Durable work. Exact proof.")
                         .font(.subheadline)
@@ -109,7 +109,6 @@ struct AgentOpsVoiceView: View {
                 controlButtons
             }
         }
-        .accessibilityIdentifier("agentops.voice.controls")
     }
 
     @ViewBuilder

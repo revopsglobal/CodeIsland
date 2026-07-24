@@ -14,6 +14,13 @@ enum AgentOpsVoiceMockScenario: String, CaseIterable, Sendable {
     case clarify
     case durable
     case offlineDraft = "offline-draft"
+    case realtimeUnavailable = "realtime-unavailable"
+    case gatewayUnavailable = "gateway-unavailable"
+    case claudeUnavailable = "claude-unavailable"
+    case contextUnavailable = "context-unavailable"
+    case captureUnavailable = "capture-unavailable"
+    case lockedWorkerUnavailable = "locked-worker-unavailable"
+    case failedVerification = "failed-verification"
 
     static func from(arguments: [String]) -> AgentOpsVoiceMockScenario? {
         guard
@@ -346,6 +353,42 @@ final class AgentOpsVoiceViewModel: ObservableObject {
                     text: "Saved locally. This request will sync when AgentOps reconnects."
                 ),
             ]
+        case .realtimeUnavailable:
+            phase = .failed(
+                "AgentOps could not open the voice session. Your request was not sent."
+            )
+        case .gatewayUnavailable:
+            phase = .reconnecting
+            transcriptEntries = [
+                VoiceTranscriptEntry(
+                    role: .system,
+                    text: "AgentOps is reconnecting. Any unsent request stays privately on this iPhone."
+                ),
+            ]
+        case .claudeUnavailable:
+            phase = .failed(
+                "Claude Max is temporarily unavailable. AgentOps did not switch providers or create a task."
+            )
+        case .contextUnavailable:
+            phase = .failed(
+                "Required Wiki context is unavailable. AgentOps did not create durable work."
+            )
+        case .captureUnavailable:
+            phase = .failed(
+                "AgentOps could not capture durable work. The request is saved privately on this iPhone."
+            )
+            transcriptEntries = [
+                VoiceTranscriptEntry(
+                    role: .system,
+                    text: "Saved locally with the same request identity for a safe retry."
+                ),
+            ]
+        case .lockedWorkerUnavailable:
+            phase = .failed(
+                "The locked worker is unavailable. AgentOps did not fall back to another provider."
+            )
+        case .failedVerification:
+            phase = .listening
         }
     }
 

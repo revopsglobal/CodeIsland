@@ -13,6 +13,9 @@ struct AgentOpsAttentionView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Attention")
                             .font(.largeTitle.bold())
+                            .accessibilityIdentifier(
+                                "agentops.attention.screen"
+                            )
                         Text("Explicit decisions. Voice can never approve.")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
@@ -73,7 +76,6 @@ struct AgentOpsAttentionView: View {
             guard !isMock, isAuthenticated else { return }
             await agentOps.refreshApprovals()
         }
-        .accessibilityIdentifier("agentops.attention.screen")
     }
 
     private var visibleApprovals: [AgentOpsApprovalCard] {

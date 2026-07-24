@@ -103,7 +103,6 @@ struct CompanionCommandCenterView: View {
         .onChange(of: agentOps.navigationTarget) { _, target in
             applyAgentOpsNavigation(target)
         }
-        .accessibilityIdentifier("agentops.shell")
     }
 
     private func applyAgentOpsNavigation(

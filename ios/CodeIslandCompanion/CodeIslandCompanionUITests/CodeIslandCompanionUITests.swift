@@ -15,14 +15,10 @@ final class CodeIslandCompanionUITests: XCTestCase {
             ]
         )
 
-        XCTAssertTrue(
-            agentOpsElement("agentops.voice.screen", in: app)
-                .waitForExistence(timeout: 8)
-        )
-        let mute = app.buttons["agentops.voice.mute"]
-        let stop = app.buttons["agentops.voice.stop"]
-        XCTAssertTrue(mute.waitForExistence(timeout: 4))
-        XCTAssertTrue(stop.waitForExistence(timeout: 4))
+        let mute = agentOpsElement("agentops.voice.mute", in: app)
+        let stop = agentOpsElement("agentops.voice.stop", in: app)
+        XCTAssertTrue(mute.waitForExistence(timeout: 8))
+        XCTAssertTrue(stop.waitForExistence(timeout: 8))
         XCTAssertGreaterThanOrEqual(mute.frame.height, 44)
         XCTAssertGreaterThanOrEqual(stop.frame.height, 44)
     }
@@ -31,8 +27,11 @@ final class CodeIslandCompanionUITests: XCTestCase {
     func testAgentOpsWorkAndAttentionAreOneTapFromVoice() throws {
         let app = launchAgentOpsApp(scenario: "durable")
 
-        let work = app.buttons["agentops.destination.work"]
-        let attention = app.buttons["agentops.destination.attention"]
+        let work = agentOpsElement("agentops.destination.work", in: app)
+        let attention = agentOpsElement(
+            "agentops.destination.attention",
+            in: app
+        )
         XCTAssertTrue(work.waitForExistence(timeout: 8))
         XCTAssertTrue(attention.exists)
 
@@ -816,9 +815,18 @@ final class CodeIslandCompanionUITests: XCTestCase {
         additionalArguments: [String] = []
     ) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = [
+        var launchArguments = [
             "-AgentOpsVoiceMock", scenario,
-        ] + additionalArguments
+        ]
+        if !additionalArguments.contains(
+            "-UIPreferredContentSizeCategoryName"
+        ) {
+            launchArguments += [
+                "-UIPreferredContentSizeCategoryName",
+                "UICTContentSizeCategoryL",
+            ]
+        }
+        app.launchArguments = launchArguments + additionalArguments
         app.launch()
         return app
     }

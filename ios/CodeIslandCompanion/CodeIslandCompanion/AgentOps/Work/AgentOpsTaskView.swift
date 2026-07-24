@@ -28,6 +28,24 @@ struct AgentOpsTaskPresentation: Identifiable, Equatable {
         proofState = "awaiting verified receipt"
         self.sources = sources
     }
+
+    init(
+        id: UUID,
+        title: String,
+        status: String,
+        route: String,
+        reviewer: String?,
+        proofState: String,
+        sources: [AgentOpsSourceHandle]
+    ) {
+        self.id = id
+        self.title = title
+        self.status = status
+        self.route = route
+        self.reviewer = reviewer
+        self.proofState = proofState
+        self.sources = sources
+    }
 }
 
 struct AgentOpsTaskView: View {

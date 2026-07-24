@@ -13,6 +13,9 @@ struct AgentOpsWorkView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Work")
                             .font(.largeTitle.bold())
+                            .accessibilityIdentifier(
+                                "agentops.work.screen"
+                            )
                         Text("Canonical AgentOps tasks and proof state.")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
@@ -60,7 +63,6 @@ struct AgentOpsWorkView: View {
             guard mockScenario == nil, isAuthenticated else { return }
             await agentOps.refreshWork()
         }
-        .accessibilityIdentifier("agentops.work.screen")
     }
 
     private var presentations: [AgentOpsTaskPresentation] {
@@ -77,7 +79,7 @@ struct AgentOpsWorkView: View {
             )
         }
         if values.isEmpty, mockScenario != nil {
-            values = [Self.mockTask]
+            values = [Self.mockTask(for: mockScenario)]
         }
         return values
     }
@@ -89,22 +91,30 @@ struct AgentOpsWorkView: View {
         return false
     }
 
-    private static let mockTask = AgentOpsTaskPresentation(
-        turnTask: AgentOpsTurnTaskSummary(
-            id: UUID(uuidString: "e7e843c5-733d-4492-a863-1c337684653b")!,
+    private static func mockTask(
+        for scenario: AgentOpsVoiceMockScenario?
+    ) -> AgentOpsTaskPresentation {
+        let failed = scenario == .failedVerification
+        return AgentOpsTaskPresentation(
+            id: UUID(
+                uuidString: "e7e843c5-733d-4492-a863-1c337684653b"
+            )!,
             title: "Ship AgentOps native voice mode",
-            status: "in_progress"
-        ),
-        sources: [
-            AgentOpsSourceHandle(
-                kind: "task",
-                label: "Open in AgentOps",
-                url: URL(
-                    string: "https://agentops.revopsglobal.com/fleet/tasks/e7e843c5-733d-4492-a863-1c337684653b"
-                )!
-            ),
-        ]
-    )
+            status: failed ? "failed" : "in_progress",
+            route: "claude",
+            reviewer: "codex",
+            proofState: failed ? "failed" : "awaiting verified receipt",
+            sources: [
+                AgentOpsSourceHandle(
+                    kind: "task",
+                    label: "Open in AgentOps",
+                    url: URL(
+                        string: "https://agentops.revopsglobal.com/fleet/tasks/e7e843c5-733d-4492-a863-1c337684653b"
+                    )!
+                ),
+            ]
+        )
+    }
 }
 
 private struct AgentOpsWorkRow: View {
