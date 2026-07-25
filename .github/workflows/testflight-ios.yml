@@ -217,6 +217,60 @@ jobs:
           sudo xcode-select -s "$XCODE_APP/Contents/Developer"
           xcodebuild -version
 
+      - name: Install repository-pinned XcodeGen
+        shell: bash
+        run: |
+          XCODEGEN_VERSION="$(tr -d '[:space:]' < .xcodegen-version)"
+          XCODEGEN_ARCHIVE="$RUNNER_TEMP/xcodegen.zip"
+          XCODEGEN_SHA256="4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806"
+          curl --fail --location --silent --show-error \
+            "https://github.com/yonaskolb/XcodeGen/releases/download/${XCODEGEN_VERSION}/xcodegen.zip" \
+            --output "$XCODEGEN_ARCHIVE"
+          printf '%s  %s\n' "$XCODEGEN_SHA256" "$XCODEGEN_ARCHIVE" \
+            | shasum -a 256 --check
+          unzip -q "$XCODEGEN_ARCHIVE" -d "$RUNNER_TEMP/xcodegen"
+          echo "$RUNNER_TEMP/xcodegen/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/xcodegen/bin/xcodegen" --version
+
+      - name: Generate committed iPhone project
+        shell: bash
+        run: |
+          xcodegen generate --spec ios/CodeIslandCompanion/project.yml
+          git diff --exit-code -- \
+            ios/CodeIslandCompanion/CodeIslandCompanion.xcodeproj/project.pbxproj
+
+      - name: Resolve committed iPhone package versions
+        run: |
+          xcodebuild \
+            -resolvePackageDependencies \
+            -project ios/CodeIslandCompanion/CodeIslandCompanion.xcodeproj \
+            -scheme CodeIslandCompanion \
+            -clonedSourcePackagesDirPath "$RUNNER_TEMP/SourcePackages" \
+            -onlyUsePackageVersionsFromResolvedFile
+
+      - name: Select AgentOps Voice test simulator
+        shell: bash
+        run: |
+          SIMULATOR_UDID="$(
+            xcrun simctl list devices available -j \
+              | jq -r '[.devices[][] | select(.name | startswith("iPhone"))][0].udid'
+          )"
+          if [ -z "$SIMULATOR_UDID" ] || [ "$SIMULATOR_UDID" = "null" ]; then
+            echo "::error::No available iPhone Simulator was found"
+            exit 1
+          fi
+          echo "AGENTOPS_TEST_SIMULATOR_UDID=$SIMULATOR_UDID" >> "$GITHUB_ENV"
+
+      - name: Test AgentOps Voice before archive
+        run: |
+          xcodebuild test \
+            -project ios/CodeIslandCompanion/CodeIslandCompanion.xcodeproj \
+            -scheme CodeIslandCompanion \
+            -destination "platform=iOS Simulator,id=$AGENTOPS_TEST_SIMULATOR_UDID" \
+            -clonedSourcePackagesDirPath "$RUNNER_TEMP/SourcePackages" \
+            -disableAutomaticPackageResolution \
+            -only-testing:CodeIslandCompanionTests
+
       - name: Resolve build number
         shell: bash
         env:
@@ -318,6 +372,8 @@ jobs:
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/CodeIslandCompanion.xcarchive" \
+            -clonedSourcePackagesDirPath "$RUNNER_TEMP/SourcePackages" \
+            -disableAutomaticPackageResolution \
             CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
             AGENTOPS_SUPABASE_ANON_KEY="$AGENTOPS_PUBLISHABLE_KEY" \
             clean archive
