@@ -47,4 +47,5 @@ setup() {
   grep -Fq -- '-onlyUsePackageVersionsFromResolvedFile' "$WORKFLOW"
   grep -Fq -- '-disableAutomaticPackageResolution' "$WORKFLOW"
   grep -Fq -- '-only-testing:CodeIslandCompanionTests' "$WORKFLOW"
+  grep -Fq -- '"$RUNNER_TEMP/xcodegen/xcodegen/bin/xcodegen" --version' "$WORKFLOW"
 }

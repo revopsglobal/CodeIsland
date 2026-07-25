@@ -229,8 +229,8 @@ jobs:
           printf '%s  %s\n' "$XCODEGEN_SHA256" "$XCODEGEN_ARCHIVE" \
             | shasum -a 256 --check
           unzip -q "$XCODEGEN_ARCHIVE" -d "$RUNNER_TEMP/xcodegen"
-          echo "$RUNNER_TEMP/xcodegen/bin" >> "$GITHUB_PATH"
-          "$RUNNER_TEMP/xcodegen/bin/xcodegen" --version
+          echo "$RUNNER_TEMP/xcodegen/xcodegen/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/xcodegen/xcodegen/bin/xcodegen" --version
 
       - name: Generate committed iPhone project
         shell: bash
