@@ -93,6 +93,86 @@ final class VoiceSessionReducerTests: XCTestCase {
         ])
     }
 
+    func testRecentAssistantSpeechIsSuppressedBeforeAgentOpsExecution() {
+        var state = VoiceSessionState()
+        _ = VoiceSessionReducer.reduce(&state, .callEstablished)
+        _ = VoiceSessionReducer.reduce(
+            &state,
+            .server(.responseCreated(responseId: "response-echo"))
+        )
+        _ = VoiceSessionReducer.reduce(
+            &state,
+            .server(
+                .responseAudioTranscriptDelta(
+                    text: "No problem. Let me know what else you need help with."
+                )
+            )
+        )
+        _ = VoiceSessionReducer.reduce(&state, .server(.responseDone))
+
+        let effects = VoiceSessionReducer.reduce(
+            &state,
+            .server(
+                .functionCallArgumentsDone(
+                    callId: "call-echo",
+                    name: "agentops_turn",
+                    argumentsJSON: #"{"transcript":"No problem. Let me know what else you need help with."}"#
+                )
+            )
+        )
+
+        XCTAssertEqual(effects, [
+            .send(.functionCallOutput(
+                callId: "call-echo",
+                outputJSON: #"{"ignored":"speaker_echo"}"#
+            )),
+            .log("Suppressed probable speaker echo for Realtime call_id call-echo"),
+        ])
+        XCTAssertTrue(state.pendingCalls.isEmpty)
+        XCTAssertEqual(state.phase, .listening)
+    }
+
+    func testGenuineBargeInStillExecutesAgentOpsTurn() {
+        var state = VoiceSessionState()
+        _ = VoiceSessionReducer.reduce(&state, .callEstablished)
+        _ = VoiceSessionReducer.reduce(
+            &state,
+            .server(.responseCreated(responseId: "response-barge-in"))
+        )
+        _ = VoiceSessionReducer.reduce(
+            &state,
+            .server(
+                .responseAudioTranscriptDelta(
+                    text: "The current task is waiting for a verified receipt."
+                )
+            )
+        )
+        _ = VoiceSessionReducer.reduce(
+            &state,
+            .server(.inputAudioBufferSpeechStarted)
+        )
+
+        let effects = VoiceSessionReducer.reduce(
+            &state,
+            .server(
+                .functionCallArgumentsDone(
+                    callId: "call-barge-in",
+                    name: "agentops_turn",
+                    argumentsJSON: #"{"transcript":"Stop. Assign the implementation to Codex instead."}"#
+                )
+            )
+        )
+
+        XCTAssertEqual(effects, [
+            .executeTurn(
+                callId: "call-barge-in",
+                argumentsJSON: #"{"transcript":"Stop. Assign the implementation to Codex instead."}"#
+            ),
+        ])
+        XCTAssertEqual(state.pendingCalls.map(\.callId), ["call-barge-in"])
+        XCTAssertEqual(state.phase, .toolWorking)
+    }
+
     func testPauseDisablesMicrophoneAndDefersSpeechUntilResume() {
         var state = VoiceSessionState()
         _ = VoiceSessionReducer.reduce(&state, .callEstablished)

@@ -31,6 +31,7 @@ struct VoiceSessionState: Equatable, Sendable {
     var isCallEstablished = false
     var pendingCalls: [PendingVoiceToolCall] = []
     var lastAssistantTranscript = ""
+    var recentAssistantTranscript = ""
     var hasDeferredResponse = false
     var reconnectAttempt = 0
     var lastError: String?
@@ -150,7 +151,7 @@ enum VoiceSessionReducer {
                 return []
             }
             state.activeResponseId = nil
-            state.lastAssistantTranscript = ""
+            preserveAssistantTranscript(&state)
             state.phase = state.mode == .paused ? .paused : .listening
             return [
                 .send(.responseCancel(responseId: responseId)),
@@ -171,7 +172,7 @@ enum VoiceSessionReducer {
                 effects.append(.send(.outputAudioBufferClear))
             }
             state.activeResponseId = nil
-            state.lastAssistantTranscript = ""
+            preserveAssistantTranscript(&state)
             return effects
 
         case .resumeRequested:
@@ -203,7 +204,7 @@ enum VoiceSessionReducer {
             state.phase = .userSpeaking
             guard let responseId = state.activeResponseId else { return [] }
             state.activeResponseId = nil
-            state.lastAssistantTranscript = ""
+            preserveAssistantTranscript(&state)
             return [
                 .send(.responseCancel(responseId: responseId)),
                 .send(.outputAudioBufferClear),
@@ -238,6 +239,27 @@ enum VoiceSessionReducer {
                     .log("Rejected unexpected Realtime tool \(name)"),
                 ]
             }
+            if
+                let transcript = transcript(from: argumentsJSON),
+                isProbableSpeakerEcho(
+                    transcript,
+                    of: state.recentAssistantTranscript
+                )
+            {
+                state.recentAssistantTranscript = ""
+                state.phase = state.mode == .paused ? .paused : .listening
+                return [
+                    .send(.functionCallOutput(
+                        callId: callId,
+                        outputJSON: #"{"ignored":"speaker_echo"}"#
+                    )),
+                    .log(
+                        "Suppressed probable speaker echo for Realtime "
+                            + "call_id \(callId)"
+                    ),
+                ]
+            }
+            state.recentAssistantTranscript = ""
             state.pendingCalls.append(
                 PendingVoiceToolCall(
                     callId: callId,
@@ -260,7 +282,7 @@ enum VoiceSessionReducer {
 
         case .responseDone:
             state.activeResponseId = nil
-            state.lastAssistantTranscript = ""
+            preserveAssistantTranscript(&state)
             if state.mode == .paused {
                 state.phase = .paused
             } else {
@@ -292,5 +314,64 @@ enum VoiceSessionReducer {
             ?? Data(#"{"error":"unknown"}"#.utf8)
         return String(data: data, encoding: .utf8)
             ?? #"{"error":"unknown"}"#
+    }
+
+    private static func preserveAssistantTranscript(
+        _ state: inout VoiceSessionState
+    ) {
+        let transcript = state.lastAssistantTranscript.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        if !transcript.isEmpty {
+            state.recentAssistantTranscript = transcript
+        }
+        state.lastAssistantTranscript = ""
+    }
+
+    private static func transcript(from argumentsJSON: String) -> String? {
+        struct Arguments: Decodable {
+            let transcript: String
+        }
+
+        guard let data = argumentsJSON.data(using: .utf8) else {
+            return nil
+        }
+        return try? JSONDecoder().decode(Arguments.self, from: data).transcript
+    }
+
+    private static func isProbableSpeakerEcho(
+        _ candidate: String,
+        of assistant: String
+    ) -> Bool {
+        let candidate = normalizedSpeech(candidate)
+        let assistant = normalizedSpeech(assistant)
+        guard
+            candidate.count >= 20,
+            candidate.split(separator: " ").count >= 4,
+            assistant.count >= 20,
+            assistant.split(separator: " ").count >= 4
+        else {
+            return false
+        }
+        if candidate == assistant {
+            return true
+        }
+
+        let shorter = candidate.count <= assistant.count
+            ? candidate
+            : assistant
+        let longer = candidate.count > assistant.count
+            ? candidate
+            : assistant
+        return longer.contains(shorter)
+            && Double(shorter.count) / Double(longer.count) >= 0.85
+    }
+
+    private static func normalizedSpeech(_ value: String) -> String {
+        value
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
     }
 }
