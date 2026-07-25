@@ -7,6 +7,18 @@ struct AgentOpsVoiceRecording: Equatable, Sendable {
     let contentType: String
 }
 
+func agentOpsVoiceRecordingAudioSessionConfiguration() -> (
+    category: AVAudioSession.Category,
+    mode: AVAudioSession.Mode,
+    options: AVAudioSession.CategoryOptions
+) {
+    (
+        category: .playAndRecord,
+        mode: .measurement,
+        options: [.defaultToSpeaker]
+    )
+}
+
 @MainActor
 protocol AgentOpsVoiceAudioHandling: AnyObject {
     func startRecording() async throws
@@ -64,10 +76,12 @@ final class AgentOpsVoiceAudioController: NSObject,
             throw AgentOpsVoiceAudioError.microphonePermissionDenied
         }
 
+        let configuration =
+            agentOpsVoiceRecordingAudioSessionConfiguration()
         try audioSession.setCategory(
-            .record,
-            mode: .spokenAudio,
-            options: []
+            configuration.category,
+            mode: configuration.mode,
+            options: configuration.options
         )
         try audioSession.setActive(true)
 

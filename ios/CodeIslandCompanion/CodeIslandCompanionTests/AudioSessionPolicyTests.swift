@@ -3,6 +3,16 @@ import XCTest
 @testable import CodeIslandCompanion
 
 final class AudioSessionPolicyTests: XCTestCase {
+    func testAgentOpsVoiceRecordingUsesPhysicalDeviceCompatibleInputSession() {
+        let configuration =
+            agentOpsVoiceRecordingAudioSessionConfiguration()
+
+        XCTAssertEqual(configuration.category, .playAndRecord)
+        XCTAssertEqual(configuration.mode, .measurement)
+        XCTAssertTrue(configuration.options.contains(.defaultToSpeaker))
+        XCTAssertNotEqual(configuration.mode, .spokenAudio)
+    }
+
     func testSpeakerFirstAddsSpeakerWithoutRemovingWebRTCOptions() {
         let existing: AVAudioSession.CategoryOptions = [
             .allowBluetoothHFP,
