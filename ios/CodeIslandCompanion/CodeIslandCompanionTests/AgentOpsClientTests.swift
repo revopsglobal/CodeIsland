@@ -188,6 +188,87 @@ final class AgentOpsClientTests: XCTestCase {
             resolution
         )
     }
+
+    func testBoundedVoiceUsesAuthenticatedTranscriptionAndSpeechRoutes() async throws {
+        let credentials = MockAgentOpsCredentials()
+        let speech = Data([0x49, 0x44, 0x33, 0x04])
+        let transport = MockAgentOpsTransport(responses: [
+            .json(status: 200, ["text": "Canonical AgentOps request."]),
+            .init(statusCode: 200, data: speech),
+        ])
+        let client = AgentOpsClient(
+            baseURL: URL(string: "https://voice.agentops.test")!,
+            credentials: credentials,
+            transport: transport
+        )
+        let recording = Data([1, 2, 3, 4])
+
+        let transcript = try await client.transcribeVoice(
+            recording,
+            contentType: "audio/m4a"
+        )
+        let spoken = try await client.synthesizeVoice(
+            "AgentOps owns durable task state."
+        )
+
+        XCTAssertEqual(transcript, "Canonical AgentOps request.")
+        XCTAssertEqual(spoken, speech)
+        let requests = await transport.capturedRequests()
+        XCTAssertEqual(requests.count, 2)
+        XCTAssertEqual(requests[0].url?.path, "/v1/voice/transcriptions")
+        XCTAssertEqual(requests[0].httpBody, recording)
+        XCTAssertEqual(
+            requests[0].value(forHTTPHeaderField: "Content-Type"),
+            "audio/m4a"
+        )
+        XCTAssertEqual(
+            requests[0].value(forHTTPHeaderField: "Authorization"),
+            "Bearer expired"
+        )
+        XCTAssertEqual(requests[1].url?.path, "/v1/voice/speech")
+        XCTAssertEqual(
+            requests[1].value(forHTTPHeaderField: "Accept"),
+            "audio/mpeg"
+        )
+        XCTAssertEqual(
+            try JSONDecoder().decode(
+                VoiceSpeechRequest.self,
+                from: try XCTUnwrap(requests[1].httpBody)
+            ).text,
+            "AgentOps owns durable task state."
+        )
+    }
+
+    func testBoundedVoiceRejectsEmptyAudioAndSpeechBeforeNetwork() async {
+        let transport = MockAgentOpsTransport(responses: [])
+        let client = AgentOpsClient(
+            baseURL: URL(string: "https://voice.agentops.test")!,
+            credentials: MockAgentOpsCredentials(),
+            transport: transport
+        )
+
+        do {
+            _ = try await client.transcribeVoice(
+                Data(),
+                contentType: "audio/m4a"
+            )
+            XCTFail("Expected invalid recording")
+        } catch {
+            XCTAssertEqual(error as? AgentOpsClientError, .invalidRequest)
+        }
+        do {
+            _ = try await client.synthesizeVoice("  ")
+            XCTFail("Expected invalid speech")
+        } catch {
+            XCTAssertEqual(error as? AgentOpsClientError, .invalidRequest)
+        }
+        let requests = await transport.capturedRequests()
+        XCTAssertTrue(requests.isEmpty)
+    }
+}
+
+private struct VoiceSpeechRequest: Decodable {
+    let text: String
 }
 
 @MainActor

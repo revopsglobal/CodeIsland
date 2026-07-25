@@ -77,7 +77,18 @@ struct AgentOpsVoiceView: View {
                 AgentOpsVoiceOrb(phase: model.phase)
             }
 
-            if !model.isRunning || model.phase == .idle {
+            if model.isRecording {
+                Button {
+                    model.finishRecording()
+                } label: {
+                    Label("Stop & send", systemImage: "arrow.up.circle.fill")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity, minHeight: 54)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.red)
+                .accessibilityIdentifier("agentops.voice.send")
+            } else if model.canStart {
                 Button {
                     Task { await model.startVoice() }
                 } label: {
@@ -98,6 +109,12 @@ struct AgentOpsVoiceView: View {
             }
 
             VoiceTranscriptView(entries: model.transcriptEntries)
+
+            Text("Voice playback is AI-generated.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity)
+                .accessibilityIdentifier("agentops.voice.aiDisclosure")
         }
     }
 
@@ -114,23 +131,11 @@ struct AgentOpsVoiceView: View {
 
     @ViewBuilder
     private var controlButtons: some View {
-        Button(action: model.toggleMute) {
-            Label(
-                model.isMuted ? "Unmute" : "Mute",
-                systemImage: model.isMuted ? "mic.fill" : "mic.slash.fill"
-            )
-            .frame(maxWidth: .infinity, minHeight: 50)
-        }
-        .buttonStyle(.bordered)
-        .disabled(!model.isRunning)
-        .accessibilityIdentifier("agentops.voice.mute")
-
         Button(action: model.stopResponse) {
-            Label("Stop", systemImage: "stop.fill")
+            Label("Cancel", systemImage: "xmark.circle.fill")
                 .frame(maxWidth: .infinity, minHeight: 50)
         }
-        .buttonStyle(.borderedProminent)
-        .tint(.red)
+        .buttonStyle(.bordered)
         .disabled(!model.canStop)
         .accessibilityIdentifier("agentops.voice.stop")
 
