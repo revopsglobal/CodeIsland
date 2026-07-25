@@ -31,3 +31,20 @@ setup() {
   run grep -F -- 'REGISTER_APP_GROUPS=YES' "$WORKFLOW"
   [ "$status" -ne 0 ]
 }
+
+@test "TestFlight regenerates and tests AgentOps Voice before archive" {
+  [ "$(tr -d '[:space:]' < "$REPO_ROOT/.xcodegen-version")" = "2.46.0" ]
+
+  generate_line="$(grep -nF 'xcodegen generate --spec ios/CodeIslandCompanion/project.yml' "$WORKFLOW" | cut -d: -f1)"
+  resolve_line="$(grep -nF -- '-resolvePackageDependencies' "$WORKFLOW" | cut -d: -f1)"
+  voice_test_line="$(grep -nF 'Test AgentOps Voice before archive' "$WORKFLOW" | cut -d: -f1)"
+  archive_line="$(grep -nF 'Archive signed iPhone app' "$WORKFLOW" | cut -d: -f1)"
+
+  [ "$generate_line" -lt "$resolve_line" ]
+  [ "$resolve_line" -lt "$voice_test_line" ]
+  [ "$voice_test_line" -lt "$archive_line" ]
+
+  grep -Fq -- '-onlyUsePackageVersionsFromResolvedFile' "$WORKFLOW"
+  grep -Fq -- '-disableAutomaticPackageResolution' "$WORKFLOW"
+  grep -Fq -- '-only-testing:CodeIslandCompanionTests' "$WORKFLOW"
+}
