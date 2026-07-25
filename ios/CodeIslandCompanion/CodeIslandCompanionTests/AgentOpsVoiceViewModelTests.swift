@@ -5,9 +5,9 @@ import XCTest
 final class AgentOpsVoiceViewModelTests: XCTestCase {
     func testEveryRequiredVoiceStateHasAStableAccessibleLabel() {
         let expectations: [(AgentOpsVoiceMockScenario, VoiceSessionPhase, String)] = [
-            (.listening, .listening, "Listening"),
-            (.userSpeaking, .userSpeaking, "You are speaking"),
-            (.thinking, .thinking, "Thinking"),
+            (.listening, .listening, "Recording"),
+            (.userSpeaking, .userSpeaking, "Recording"),
+            (.thinking, .thinking, "Transcribing"),
             (.toolWorking, .toolWorking, "Working in AgentOps"),
             (.speaking, .speaking, "Speaking"),
             (.reconnecting, .reconnecting, "Reconnecting"),
@@ -48,14 +48,239 @@ final class AgentOpsVoiceViewModelTests: XCTestCase {
         )
     }
 
-    func testMuteAndStopRemainIndependentControls() {
-        let model = AgentOpsVoiceViewModel(mockScenario: .speaking)
+    func testOneRecordingProducesOneTurnAndNeverRestartsTheMicrophone() async {
+        let events = VoiceTestEvents()
+        let audio = FakeVoiceAudio(events: events)
+        let service = FakeVoiceService(events: events)
+        let model = AgentOpsVoiceViewModel(
+            audioController: audio,
+            service: service
+        )
 
-        XCTAssertTrue(model.canStop)
-        XCTAssertFalse(model.isMuted)
-        model.toggleMute()
+        await model.startVoice()
+        XCTAssertTrue(model.isRecording)
+        model.finishRecording()
+        await waitUntil { model.phase == .idle && !model.isRunning }
 
-        XCTAssertTrue(model.isMuted)
-        XCTAssertTrue(model.canStop)
+        XCTAssertEqual(events.values, [
+            "audio.start",
+            "audio.stop",
+            "service.transcribe",
+            "service.turn",
+            "service.speech",
+            "audio.play",
+        ])
+        XCTAssertEqual(audio.startCount, 1)
+        XCTAssertEqual(service.transcripts, ["Canonical AgentOps request."])
+        XCTAssertEqual(
+            model.transcriptEntries.map(\.role),
+            [.user, .assistant]
+        )
+        XCTAssertEqual(model.latestResult?.speechText, "Canonical answer.")
+        XCTAssertFalse(model.isRecording)
     }
+
+    func testMicrophoneStaysOffForEntirePlaybackAndNeedsAnotherTap() async {
+        let events = VoiceTestEvents()
+        let audio = FakeVoiceAudio(events: events, suspendPlayback: true)
+        let service = FakeVoiceService(events: events)
+        let model = AgentOpsVoiceViewModel(
+            audioController: audio,
+            service: service
+        )
+
+        await model.startVoice()
+        model.finishRecording()
+        await waitUntil { model.phase == .speaking && audio.isPlaying }
+
+        XCTAssertFalse(model.isRecording)
+        XCTAssertEqual(audio.startCount, 1)
+        XCTAssertEqual(events.values.filter { $0 == "service.turn" }.count, 1)
+
+        audio.completePlayback()
+        await waitUntil { model.phase == .idle && !model.isRunning }
+
+        XCTAssertEqual(audio.startCount, 1)
+        XCTAssertTrue(model.canStart)
+        XCTAssertEqual(events.values.filter { $0 == "service.turn" }.count, 1)
+    }
+
+    func testTranscriptionFailureCannotCreateAnAgentOpsTurnOrSpeech() async {
+        let events = VoiceTestEvents()
+        let audio = FakeVoiceAudio(events: events)
+        let service = FakeVoiceService(
+            events: events,
+            failure: .transcription
+        )
+        let model = AgentOpsVoiceViewModel(
+            audioController: audio,
+            service: service
+        )
+
+        await model.startVoice()
+        model.finishRecording()
+        await waitUntil {
+            if case .failed = model.phase { return true }
+            return false
+        }
+
+        XCTAssertEqual(events.values, [
+            "audio.start",
+            "audio.stop",
+            "service.transcribe",
+        ])
+        XCTAssertTrue(service.transcripts.isEmpty)
+        XCTAssertNil(model.latestResult)
+        XCTAssertFalse(model.isRecording)
+    }
+
+    private func waitUntil(
+        _ condition: @escaping @MainActor () -> Bool
+    ) async {
+        for _ in 0..<200 {
+            if condition() { return }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        XCTFail("Timed out waiting for voice state")
+    }
+}
+
+@MainActor
+private final class VoiceTestEvents {
+    var values: [String] = []
+}
+
+@MainActor
+private final class FakeVoiceAudio: AgentOpsVoiceAudioHandling {
+    let events: VoiceTestEvents
+    let suspendPlayback: Bool
+    private var playbackContinuation: CheckedContinuation<Void, Error>?
+    private(set) var startCount = 0
+    private(set) var isPlaying = false
+
+    init(events: VoiceTestEvents, suspendPlayback: Bool = false) {
+        self.events = events
+        self.suspendPlayback = suspendPlayback
+    }
+
+    func startRecording() async throws {
+        startCount += 1
+        events.values.append("audio.start")
+    }
+
+    func stopRecording() throws -> AgentOpsVoiceRecording {
+        events.values.append("audio.stop")
+        return AgentOpsVoiceRecording(
+            data: Data([1, 2, 3]),
+            contentType: "audio/m4a"
+        )
+    }
+
+    func play(_ audio: Data) async throws {
+        events.values.append("audio.play")
+        guard suspendPlayback else { return }
+        isPlaying = true
+        try await withCheckedThrowingContinuation { continuation in
+            playbackContinuation = continuation
+        }
+    }
+
+    func completePlayback() {
+        isPlaying = false
+        playbackContinuation?.resume()
+        playbackContinuation = nil
+    }
+
+    func cancel() {
+        isPlaying = false
+        playbackContinuation?.resume(throwing: CancellationError())
+        playbackContinuation = nil
+    }
+}
+
+private enum FakeVoiceFailure: Error {
+    case transcription
+}
+
+@MainActor
+private final class FakeVoiceService: AgentOpsVoiceServicing {
+    let events: VoiceTestEvents
+    let failure: FakeVoiceFailure?
+    private(set) var transcripts: [String] = []
+
+    init(
+        events: VoiceTestEvents,
+        failure: FakeVoiceFailure? = nil
+    ) {
+        self.events = events
+        self.failure = failure
+    }
+
+    func transcribe(
+        _ recording: AgentOpsVoiceRecording
+    ) async throws -> String {
+        events.values.append("service.transcribe")
+        if failure == .transcription {
+            throw FakeVoiceFailure.transcription
+        }
+        return "Canonical AgentOps request."
+    }
+
+    func executeTurn(
+        transcript: String
+    ) async throws -> AgentOpsTurnExecution {
+        transcripts.append(transcript)
+        events.values.append("service.turn")
+        return makeVoiceExecution()
+    }
+
+    func synthesize(_ text: String) async throws -> Data {
+        events.values.append("service.speech")
+        return Data([4, 5, 6])
+    }
+}
+
+private func makeVoiceExecution() -> AgentOpsTurnExecution {
+    let sessionID = UUID(
+        uuidString: "11111111-1111-4111-8111-111111111111"
+    )!
+    let turnID = UUID(
+        uuidString: "22222222-2222-4222-8222-222222222222"
+    )!
+    let request = AgentOpsTurnRequest(
+        sessionID: sessionID,
+        turnID: turnID,
+        idempotencyKey: turnID,
+        transcript: "Canonical AgentOps request.",
+        conversation: [],
+        client: AgentOpsClientMetadata(
+            platform: "ios",
+            appVersion: "1.0",
+            build: "test",
+            locale: "en-US"
+        )
+    )
+    let result = AgentOpsTurnResult(
+        kind: .answer,
+        speechText: "Canonical answer.",
+        displayText: "Canonical answer.",
+        sources: [],
+        routingIntent: AgentOpsTurnRoutingIntent(
+            mode: .auto,
+            implementer: nil,
+            reviewer: nil,
+            allowFallback: false,
+            fallbackRuntime: nil,
+            reason: "Answer only."
+        ),
+        approvalTier: .routineVoice,
+        executionBrief: nil,
+        task: nil,
+        unavailableSources: []
+    )
+    return AgentOpsTurnExecution(
+        request: request,
+        result: result,
+        outputJSON: "{}"
+    )
 }

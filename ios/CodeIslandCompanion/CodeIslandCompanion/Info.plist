@@ -46,7 +46,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>CodeIsland Buddy uses the front camera only for your private camera pre-check preview.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>CodeIsland Buddy uses the microphone only while you run a private local microphone pre-check or dictate a private Claude request.</string>
+	<string>CodeIsland Buddy uses the microphone only while you record a private AgentOps voice request or run a local microphone pre-check.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>CodeIsland Buddy turns your dictated Claude request into text for you to review before sending.</string>
 	<key>NSSupportsLiveActivities</key>

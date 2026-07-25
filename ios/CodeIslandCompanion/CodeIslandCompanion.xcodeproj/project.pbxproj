@@ -75,7 +75,6 @@
 		90DAB8AAF24A1084DF00B500 /* VoiceTurnDraftStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D3405BA545C84C943E99B9B /* VoiceTurnDraftStoreTests.swift */; };
 		918BED71A2A430BE1E1BD9BB /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = 466771A9FC33CB2A83749024 /* Auth */; };
 		91DE994E835A9FF0397C60EB /* VoiceSessionReducerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45D3534AA2188A05A177A6A9 /* VoiceSessionReducerTests.swift */; };
-		9374AB63D76D2A7EB26E1C48 /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = D178CBC0C494A14AAE010865 /* WebRTC */; };
 		967757FE0C6C075F82A21B2D /* RealtimeTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6212C19075888E301B655D4C /* RealtimeTransport.swift */; };
 		977FDE1B19E4DF1F5985EC0D /* QoderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5393F6AABCBEEDA6A832553 /* QoderView.swift */; };
 		9A46A7A4F1790AD9875A99D7 /* AgentOpsTurnTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05B71D7CD0657DCB80A1B6D4 /* AgentOpsTurnTool.swift */; };
@@ -305,7 +304,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				88529B6D10BD69574E792DC6 /* Auth in Frameworks */,
-				9374AB63D76D2A7EB26E1C48 /* WebRTC in Frameworks */,
 				D91E181A929AA9ED8ABEE03E /* AppIntents.framework in Frameworks */,
 				00C27C14DC7CD3479D678422 /* Speech.framework in Frameworks */,
 			);
@@ -645,7 +643,6 @@
 			name = CodeIslandCompanion;
 			packageProductDependencies = (
 				97DDD0069829875C6B93E9D0 /* Auth */,
-				D178CBC0C494A14AAE010865 /* WebRTC */,
 			);
 			productName = CodeIslandCompanion;
 			productReference = 9A2B84F4F96272BE5A760B08 /* CodeIslandCompanion.app */;
@@ -691,7 +688,6 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				649EAE55C9E6EDA1EE54162A /* XCRemoteSwiftPackageReference "supabase-swift" */,
-				309B7D09C1E4280B6FA6C97B /* XCRemoteSwiftPackageReference "WebRTC" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = B7C74B58379C162633B0AB71 /* Products */;
@@ -1290,14 +1286,6 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		309B7D09C1E4280B6FA6C97B /* XCRemoteSwiftPackageReference "WebRTC" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/stasel/WebRTC";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 125.0.0;
-			};
-		};
 		649EAE55C9E6EDA1EE54162A /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/supabase/supabase-swift.git";
@@ -1318,11 +1306,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 649EAE55C9E6EDA1EE54162A /* XCRemoteSwiftPackageReference "supabase-swift" */;
 			productName = Auth;
-		};
-		D178CBC0C494A14AAE010865 /* WebRTC */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 309B7D09C1E4280B6FA6C97B /* XCRemoteSwiftPackageReference "WebRTC" */;
-			productName = WebRTC;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

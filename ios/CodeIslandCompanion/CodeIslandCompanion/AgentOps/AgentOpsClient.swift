@@ -168,6 +168,53 @@ final class AgentOpsClient {
         )
     }
 
+    func transcribeVoice(
+        _ audio: Data,
+        contentType: String
+    ) async throws -> String {
+        struct Response: Decodable { let text: String }
+        guard
+            !audio.isEmpty,
+            audio.count <= 1024 * 1024,
+            ["audio/m4a", "audio/mp4"].contains(contentType)
+        else {
+            throw AgentOpsClientError.invalidRequest
+        }
+        let response = try await authorizedResponse(
+            path: "v1/voice/transcriptions",
+            method: "POST",
+            body: audio,
+            contentType: contentType,
+            accept: "application/json"
+        )
+        guard
+            let value = try? decoder.decode(Response.self, from: response.data),
+            !value.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+            throw AgentOpsClientError.invalidResponse
+        }
+        return value.text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    func synthesizeVoice(_ text: String) async throws -> Data {
+        struct Request: Encodable { let text: String }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed.count <= 4_096 else {
+            throw AgentOpsClientError.invalidRequest
+        }
+        let response = try await authorizedResponse(
+            path: "v1/voice/speech",
+            method: "POST",
+            body: try encode(Request(text: trimmed)),
+            contentType: "application/json",
+            accept: "audio/mpeg"
+        )
+        guard !response.data.isEmpty, response.data.count <= 10 * 1024 * 1024 else {
+            throw AgentOpsClientError.invalidResponse
+        }
+        return response.data
+    }
+
     func performTurn(
         _ turn: AgentOpsTurnRequest
     ) async throws -> AgentOpsTurnResult {
@@ -192,12 +239,74 @@ final class AgentOpsClient {
         method: String = "GET",
         body: Data? = nil
     ) async throws -> Response {
+        let response = try await authorizedResponse(
+            path: path,
+            method: method,
+            body: body,
+            contentType: body == nil ? nil : "application/json",
+            accept: "application/json"
+        )
+
+        do {
+            return try decoder.decode(Response.self, from: response.data)
+        } catch {
+            throw AgentOpsClientError.invalidResponse
+        }
+    }
+
+    func encode<Request: Encodable>(_ value: Request) throws -> Data {
+        try encoder.encode(value)
+    }
+
+    private func makeRequest(
+        path: String,
+        method: String,
+        body: Data?,
+        accessToken: String,
+        contentType: String? = nil,
+        accept: String = "application/json"
+    ) throws -> URLRequest {
+        let segments = path.split(separator: "/", omittingEmptySubsequences: true)
+        guard
+            !segments.isEmpty,
+            segments.allSatisfy({ $0 != "." && $0 != ".." }),
+            ["GET", "POST", "PUT", "PATCH", "DELETE"].contains(method)
+        else {
+            throw AgentOpsClientError.invalidRequest
+        }
+        let url = segments.reduce(baseURL) { partial, segment in
+            partial.appendingPathComponent(String(segment))
+        }
+        guard url.scheme == "https", url.host == baseURL.host else {
+            throw AgentOpsClientError.invalidRequest
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.httpBody = body
+        request.timeoutInterval = 125
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue(accept, forHTTPHeaderField: "Accept")
+        if let contentType {
+            request.setValue(contentType, forHTTPHeaderField: "Content-Type")
+        }
+        return request
+    }
+
+    private func authorizedResponse(
+        path: String,
+        method: String,
+        body: Data?,
+        contentType: String?,
+        accept: String
+    ) async throws -> AgentOpsTransportResponse {
         let firstToken = try await credentials.accessToken()
         var urlRequest = try makeRequest(
             path: path,
             method: method,
             body: body,
-            accessToken: firstToken
+            accessToken: firstToken,
+            contentType: contentType,
+            accept: accept
         )
         var response = try await execute(urlRequest)
 
@@ -220,7 +329,10 @@ final class AgentOpsClient {
         }
 
         guard (200..<300).contains(response.statusCode) else {
-            if let payload = try? decoder.decode(AgentOpsAPIError.self, from: response.data) {
+            if let payload = try? decoder.decode(
+                AgentOpsAPIError.self,
+                from: response.data
+            ) {
                 throw AgentOpsClientError.server(
                     code: payload.error,
                     retryable: payload.retryable ?? false
@@ -228,48 +340,7 @@ final class AgentOpsClient {
             }
             throw AgentOpsClientError.invalidResponse
         }
-
-        do {
-            return try decoder.decode(Response.self, from: response.data)
-        } catch {
-            throw AgentOpsClientError.invalidResponse
-        }
-    }
-
-    func encode<Request: Encodable>(_ value: Request) throws -> Data {
-        try encoder.encode(value)
-    }
-
-    private func makeRequest(
-        path: String,
-        method: String,
-        body: Data?,
-        accessToken: String
-    ) throws -> URLRequest {
-        let segments = path.split(separator: "/", omittingEmptySubsequences: true)
-        guard
-            !segments.isEmpty,
-            segments.allSatisfy({ $0 != "." && $0 != ".." }),
-            ["GET", "POST", "PUT", "PATCH", "DELETE"].contains(method)
-        else {
-            throw AgentOpsClientError.invalidRequest
-        }
-        let url = segments.reduce(baseURL) { partial, segment in
-            partial.appendingPathComponent(String(segment))
-        }
-        guard url.scheme == "https", url.host == baseURL.host else {
-            throw AgentOpsClientError.invalidRequest
-        }
-        var request = URLRequest(url: url)
-        request.httpMethod = method
-        request.httpBody = body
-        request.timeoutInterval = 125
-        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        if body != nil {
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        }
-        return request
+        return response
     }
 
     private func execute(_ request: URLRequest) async throws -> AgentOpsTransportResponse {

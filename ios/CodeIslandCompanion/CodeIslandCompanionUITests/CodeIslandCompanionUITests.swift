@@ -15,12 +15,12 @@ final class CodeIslandCompanionUITests: XCTestCase {
             ]
         )
 
-        let mute = agentOpsElement("agentops.voice.mute", in: app)
         let stop = agentOpsElement("agentops.voice.stop", in: app)
-        XCTAssertTrue(mute.waitForExistence(timeout: 8))
+        let end = agentOpsElement("agentops.voice.end", in: app)
         XCTAssertTrue(stop.waitForExistence(timeout: 8))
-        XCTAssertGreaterThanOrEqual(mute.frame.height, 44)
+        XCTAssertTrue(end.waitForExistence(timeout: 8))
         XCTAssertGreaterThanOrEqual(stop.frame.height, 44)
+        XCTAssertGreaterThanOrEqual(end.frame.height, 44)
     }
 
     @MainActor
