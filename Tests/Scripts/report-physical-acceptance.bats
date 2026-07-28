@@ -134,3 +134,50 @@ JSON
     .gates.complete == false'
   [[ "$output" != *"secret-push-token"* ]]
 }
+
+@test "AgentOps Voice acceptance gates bounded playback instead of Realtime barge-in" {
+  run "$REPO_ROOT/scripts/report-agentops-voice-physical-acceptance.sh" \
+    --build 20260725235601 \
+    --device "Physical iPhone" \
+    --ios-version "26.0" \
+    --gateway-version 1111111111111111111111111111111111111111 \
+    --testflight-run https://github.com/revopsglobal/CodeIsland/actions/runs/123 \
+    --testflight-sha 2222222222222222222222222222222222222222 \
+    --apple-state VALID \
+    --tester-verdict pass \
+    --tested-at 2026-07-28T00:00:00Z \
+    --scenario-file "$REPO_ROOT/Tests/Fixtures/agentops-voice-bounded-acceptance.json"
+
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | jq -e '
+    .complete == true and
+    any(.gates.supplemental.results[]; .id == "cancelPlayback" and .passed) and
+    any(.gates.supplemental.results[]; .id == "singleResponsePerTurn" and .passed) and
+    all(.gates.supplemental.results[]; .id != "bargeIn")'
+}
+
+@test "Realtime barge-in evidence cannot satisfy the bounded playback gate" {
+  jq '
+    .checks.cancelPlayback = false
+    | .checks.bargeIn = true
+  ' "$REPO_ROOT/Tests/Fixtures/agentops-voice-bounded-acceptance.json" \
+    >"$TEST_TMPDIR/stale-realtime-acceptance.json"
+
+  run "$REPO_ROOT/scripts/report-agentops-voice-physical-acceptance.sh" \
+    --build 20260725235601 \
+    --device "Physical iPhone" \
+    --ios-version "26.0" \
+    --gateway-version 1111111111111111111111111111111111111111 \
+    --testflight-run https://github.com/revopsglobal/CodeIsland/actions/runs/123 \
+    --testflight-sha 2222222222222222222222222222222222222222 \
+    --apple-state VALID \
+    --tester-verdict pass \
+    --tested-at 2026-07-28T00:00:00Z \
+    --scenario-file "$TEST_TMPDIR/stale-realtime-acceptance.json"
+
+  [ "$status" -eq 2 ]
+  printf '%s' "$output" | jq -e '
+    .complete == false and
+    any(.gates.supplemental.results[]; .id == "cancelPlayback" and (.passed | not)) and
+    all(.gates.supplemental.results[]; .id != "bargeIn")'
+}
