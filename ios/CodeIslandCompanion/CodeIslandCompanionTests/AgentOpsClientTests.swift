@@ -189,6 +189,168 @@ final class AgentOpsClientTests: XCTestCase {
         )
     }
 
+    func testResolveApprovalReconcilesMatchingTerminalState() async throws {
+        let approval = AgentOpsApprovalCard.testFixture(status: .approved)
+        let transport = MockAgentOpsTransport(responses: [
+            .json(
+                status: 409,
+                AgentOpsAPIError(
+                    error: "approval_already_resolved",
+                    retryable: false
+                )
+            ),
+            .json(status: 200, ["approval": approval]),
+        ])
+        let client = AgentOpsClient(
+            baseURL: URL(string: "https://voice.agentops.test")!,
+            credentials: MockAgentOpsCredentials(),
+            transport: transport
+        )
+        let request = AgentOpsApprovalResolutionRequest(
+            actionDigest: approval.actionDigest,
+            resolution: .approved,
+            interaction: .onScreenTap,
+            decisionNote: nil
+        )
+
+        let response = try await client.resolveApproval(
+            id: approval.id,
+            request: request
+        )
+
+        XCTAssertEqual(response.status, .approved)
+        XCTAssertTrue(response.resolved)
+        let paths = await transport.capturedRequests().map(\.url?.path)
+        XCTAssertEqual(paths, [
+            "/v1/approvals/\(approval.id.uuidString.lowercased())/resolve",
+            "/v1/approvals/\(approval.id.uuidString.lowercased())",
+        ])
+    }
+
+    func testResolveApprovalKeepsPendingDecisionRetryable() async {
+        let approval = AgentOpsApprovalCard.testFixture(status: .pending)
+        let transport = MockAgentOpsTransport(responses: [
+            .json(
+                status: 503,
+                AgentOpsAPIError(
+                    error: "approval_resolution_unavailable",
+                    retryable: true
+                )
+            ),
+            .json(status: 200, ["approval": approval]),
+        ])
+        let client = AgentOpsClient(
+            baseURL: URL(string: "https://voice.agentops.test")!,
+            credentials: MockAgentOpsCredentials(),
+            transport: transport
+        )
+        let request = AgentOpsApprovalResolutionRequest(
+            actionDigest: approval.actionDigest,
+            resolution: .approved,
+            interaction: .onScreenTap,
+            decisionNote: nil
+        )
+
+        do {
+            _ = try await client.resolveApproval(
+                id: approval.id,
+                request: request
+            )
+            XCTFail("Expected retryable pending decision")
+        } catch {
+            XCTAssertEqual(
+                error as? AgentOpsClientError,
+                .server(
+                    code: "approval_resolution_not_recorded",
+                    retryable: true
+                )
+            )
+        }
+    }
+
+    func testResolveApprovalPreservesOppositeTerminalConflict() async {
+        let approval = AgentOpsApprovalCard.testFixture(status: .rejected)
+        let transport = MockAgentOpsTransport(responses: [
+            .json(
+                status: 409,
+                AgentOpsAPIError(
+                    error: "approval_already_resolved",
+                    retryable: false
+                )
+            ),
+            .json(status: 200, ["approval": approval]),
+        ])
+        let client = AgentOpsClient(
+            baseURL: URL(string: "https://voice.agentops.test")!,
+            credentials: MockAgentOpsCredentials(),
+            transport: transport
+        )
+        let request = AgentOpsApprovalResolutionRequest(
+            actionDigest: approval.actionDigest,
+            resolution: .approved,
+            interaction: .onScreenTap,
+            decisionNote: nil
+        )
+
+        do {
+            _ = try await client.resolveApproval(
+                id: approval.id,
+                request: request
+            )
+            XCTFail("Expected confirmed terminal conflict")
+        } catch {
+            XCTAssertEqual(
+                error as? AgentOpsClientError,
+                .server(
+                    code: "approval_already_resolved",
+                    retryable: false
+                )
+            )
+        }
+    }
+
+    func testResolveApprovalPreservesDeterministicDigestMismatch() async {
+        let approval = AgentOpsApprovalCard.testFixture(status: .pending)
+        let transport = MockAgentOpsTransport(responses: [
+            .json(
+                status: 409,
+                AgentOpsAPIError(
+                    error: "approval_digest_mismatch",
+                    retryable: false
+                )
+            ),
+        ])
+        let client = AgentOpsClient(
+            baseURL: URL(string: "https://voice.agentops.test")!,
+            credentials: MockAgentOpsCredentials(),
+            transport: transport
+        )
+        let request = AgentOpsApprovalResolutionRequest(
+            actionDigest: approval.actionDigest,
+            resolution: .approved,
+            interaction: .onScreenTap,
+            decisionNote: nil
+        )
+
+        do {
+            _ = try await client.resolveApproval(
+                id: approval.id,
+                request: request
+            )
+            XCTFail("Expected deterministic digest mismatch")
+        } catch {
+            XCTAssertEqual(
+                error as? AgentOpsClientError,
+                .server(
+                    code: "approval_digest_mismatch",
+                    retryable: false
+                )
+            )
+        }
+        let requests = await transport.capturedRequests()
+        XCTAssertEqual(requests.count, 1)
+    }
+
     func testBoundedVoiceUsesAuthenticatedTranscriptionAndSpeechRoutes() async throws {
         let credentials = MockAgentOpsCredentials()
         let speech = Data([0x49, 0x44, 0x33, 0x04])
@@ -271,6 +433,28 @@ private struct VoiceSpeechRequest: Decodable {
     let text: String
 }
 
+private extension AgentOpsApprovalCard {
+    static func testFixture(
+        status: AgentOpsApprovalStatus
+    ) -> AgentOpsApprovalCard {
+        AgentOpsApprovalCard(
+            id: UUID(
+                uuidString: "22222222-2222-4222-8222-222222222222"
+            )!,
+            taskId: UUID(
+                uuidString: "11111111-1111-4111-8111-111111111111"
+            )!,
+            type: "production_data",
+            status: status,
+            target: "Selected production rows",
+            consequence: "Updates only the selected production rows.",
+            expiresAt: Date(timeIntervalSince1970: 1_800_000_000),
+            actionDigest: String(repeating: "a", count: 64),
+            requiresExplicitTap: true
+        )
+    }
+}
+
 @MainActor
 private final class MockAgentOpsCredentials: AgentOpsCredentialProviding {
     var refreshes = 0
@@ -325,9 +509,11 @@ private struct WorkEnvelope: Codable, Equatable {
 
 private extension AgentOpsTransportResponse {
     static func json<T: Encodable>(status: Int, _ value: T) -> AgentOpsTransportResponse {
-        AgentOpsTransportResponse(
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return AgentOpsTransportResponse(
             statusCode: status,
-            data: (try? JSONEncoder().encode(value)) ?? Data()
+            data: (try? encoder.encode(value)) ?? Data()
         )
     }
 }

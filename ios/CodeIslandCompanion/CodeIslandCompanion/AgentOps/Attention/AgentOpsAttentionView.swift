@@ -16,7 +16,7 @@ struct AgentOpsAttentionView: View {
                             .accessibilityIdentifier(
                                 "agentops.attention.screen"
                             )
-                        Text("Explicit decisions. Voice can never approve.")
+                        Text("Review decisions that need your tap.")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
@@ -52,7 +52,13 @@ struct AgentOpsAttentionView: View {
                         ForEach(visibleApprovals) { approval in
                             AgentOpsApprovalView(
                                 approval: approval,
-                                client: isMock ? nil : agentOps.client
+                                client: isMock ? nil : agentOps.client,
+                                onResolved: { status in
+                                    agentOps.markApprovalResolved(
+                                        id: approval.id,
+                                        status: status
+                                    )
+                                }
                             )
                         }
                     }

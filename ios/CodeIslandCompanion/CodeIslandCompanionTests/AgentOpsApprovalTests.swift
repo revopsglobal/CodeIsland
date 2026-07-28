@@ -94,6 +94,56 @@ final class AgentOpsApprovalTests: XCTestCase {
         XCTAssertEqual(model.state, .resolved(.rejected))
     }
 
+    func testRetryablePendingFailureCanBeRetried() async {
+        let resolver = RetryingApprovalResolver()
+        let model = AgentOpsApprovalViewModel(
+            approval: .fixture(),
+            now: { Date(timeIntervalSince1970: 1_784_846_400) },
+            resolve: { request in
+                try await resolver.resolve(request)
+            }
+        )
+
+        await model.resolveFromVisibleTap(.approved)
+
+        XCTAssertEqual(
+            model.state,
+            .failed("That didn’t go through. Try again.")
+        )
+        XCTAssertTrue(model.canResolve)
+
+        await model.resolveFromVisibleTap(.approved)
+
+        XCTAssertEqual(model.state, .resolved(.approved))
+        let requests = await resolver.requests
+        XCTAssertEqual(requests.count, 2)
+    }
+
+    func testRootStoreRemovesConfirmedApproval() async {
+        let approval = AgentOpsApprovalCard.fixture()
+        let transport = ApprovalListTransport(
+            response: AgentOpsApprovalListResponse(
+                approvals: [approval],
+                nextCursor: nil
+            )
+        )
+        let client = AgentOpsClient(
+            baseURL: URL(string: "https://voice.agentops.test")!,
+            credentials: ApprovalTestCredentials(),
+            transport: transport
+        )
+        let store = AgentOpsRootStore(
+            auth: .unconfigured(),
+            client: client
+        )
+        await store.refreshApprovals()
+        XCTAssertEqual(store.approvals.map(\.id), [approval.id])
+
+        store.markApprovalResolved(id: approval.id, status: .approved)
+
+        XCTAssertTrue(store.approvals.isEmpty)
+    }
+
     func testFollowedTaskBecomesVerifiedOnlyFromAgentOpsProof() {
         let pendingProof = AgentOpsWorkSummary.fixture(
             lifecycle: "verified",
@@ -141,6 +191,46 @@ private actor ApprovalResolverRecorder {
     ) -> AgentOpsApprovalResolutionResponse {
         requests.append(request)
         return .fixture(status: request.resolution)
+    }
+}
+
+private actor RetryingApprovalResolver {
+    private(set) var requests: [AgentOpsApprovalResolutionRequest] = []
+
+    func resolve(
+        _ request: AgentOpsApprovalResolutionRequest
+    ) throws -> AgentOpsApprovalResolutionResponse {
+        requests.append(request)
+        if requests.count == 1 {
+            throw AgentOpsClientError.server(
+                code: "approval_resolution_not_recorded",
+                retryable: true
+            )
+        }
+        return .fixture(status: request.resolution)
+    }
+}
+
+@MainActor
+private final class ApprovalTestCredentials: AgentOpsCredentialProviding {
+    func accessToken() async throws -> String { "test-token" }
+    func refreshAccessToken() async throws -> String { "test-token" }
+    func forceSignOut() async {}
+}
+
+private actor ApprovalListTransport: AgentOpsTransport {
+    private let data: Data
+
+    init(response: AgentOpsApprovalListResponse) {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        data = (try? encoder.encode(response)) ?? Data()
+    }
+
+    func data(
+        for request: URLRequest
+    ) async throws -> AgentOpsTransportResponse {
+        AgentOpsTransportResponse(statusCode: 200, data: data)
     }
 }
 
