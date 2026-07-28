@@ -98,11 +98,44 @@ final class AgentOpsClient {
         guard resolution.resolution != .pending else {
             throw AgentOpsClientError.invalidRequest
         }
-        return try await request(
-            path: "v1/approvals/\(id.uuidString.lowercased())/resolve",
-            method: "POST",
-            body: try encode(resolution)
-        )
+        let path = "v1/approvals/\(id.uuidString.lowercased())/resolve"
+        let body = try encode(resolution)
+        do {
+            return try await request(
+                path: path,
+                method: "POST",
+                body: body
+            )
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as AgentOpsClientError {
+            switch error {
+            case .invalidRequest, .unauthorized:
+                throw error
+            case .invalidResponse:
+                return try await reconcileApprovalResolution(
+                    id: id,
+                    requestedStatus: resolution.resolution
+                )
+            case .server(let code, let retryable):
+                guard
+                    retryable
+                        || code == "approval_already_resolved"
+                        || code == "approval_resolution_unavailable"
+                else {
+                    throw error
+                }
+                return try await reconcileApprovalResolution(
+                    id: id,
+                    requestedStatus: resolution.resolution
+                )
+            }
+        } catch {
+            return try await reconcileApprovalResolution(
+                id: id,
+                requestedStatus: resolution.resolution
+            )
+        }
     }
 
     func eventStreamRequest(
@@ -353,5 +386,40 @@ final class AgentOpsClient {
         activeRequests[id] = task
         defer { activeRequests[id] = nil }
         return try await task.value
+    }
+
+    private func reconcileApprovalResolution(
+        id: UUID,
+        requestedStatus: AgentOpsApprovalStatus
+    ) async throws -> AgentOpsApprovalResolutionResponse {
+        let authoritative: AgentOpsApprovalCard
+        do {
+            authoritative = try await approval(id: id)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            throw AgentOpsClientError.server(
+                code: "approval_resolution_not_recorded",
+                retryable: true
+            )
+        }
+
+        if authoritative.status == requestedStatus {
+            return AgentOpsApprovalResolutionResponse(
+                approvalId: authoritative.id,
+                status: authoritative.status,
+                resolved: true
+            )
+        }
+        if authoritative.status == .pending {
+            throw AgentOpsClientError.server(
+                code: "approval_resolution_not_recorded",
+                retryable: true
+            )
+        }
+        throw AgentOpsClientError.server(
+            code: "approval_already_resolved",
+            retryable: false
+        )
     }
 }

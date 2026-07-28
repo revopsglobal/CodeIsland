@@ -156,6 +156,17 @@ final class AgentOpsRootStore: ObservableObject {
         latestTurnResult = result
     }
 
+    func markApprovalResolved(
+        id: UUID,
+        status: AgentOpsApprovalStatus
+    ) {
+        guard status != .pending else { return }
+        approvals.removeAll { $0.id == id }
+        if navigationTarget == .approval(id) {
+            navigationTarget = nil
+        }
+    }
+
     func retrySavedTurns() async {
         guard
             isActive,
@@ -218,6 +229,13 @@ final class AgentOpsRootStore: ObservableObject {
     }
 
     private func acceptPush(approval authoritative: AgentOpsApprovalCard) {
+        guard authoritative.status == .pending else {
+            markApprovalResolved(
+                id: authoritative.id,
+                status: authoritative.status
+            )
+            return
+        }
         if let index = approvals.firstIndex(where: {
             $0.id == authoritative.id
         }) {

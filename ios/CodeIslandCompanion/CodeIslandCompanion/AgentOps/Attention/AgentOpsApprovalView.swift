@@ -17,20 +17,31 @@ final class AgentOpsApprovalViewModel: ObservableObject {
     private let resolve:
         @MainActor (AgentOpsApprovalResolutionRequest) async throws
             -> AgentOpsApprovalResolutionResponse
+    private let onResolved:
+        @MainActor (AgentOpsApprovalStatus) -> Void
 
     init(
         approval: AgentOpsApprovalCard,
         now: @escaping () -> Date = Date.init,
         resolve: @escaping @MainActor (AgentOpsApprovalResolutionRequest)
-            async throws -> AgentOpsApprovalResolutionResponse
+            async throws -> AgentOpsApprovalResolutionResponse,
+        onResolved: @escaping @MainActor (AgentOpsApprovalStatus) -> Void = { _ in }
     ) {
         self.approval = approval
         self.now = now
         self.resolve = resolve
+        self.onResolved = onResolved
     }
 
     var canResolve: Bool {
-        state == .idle
+        let stateAllowsResolution: Bool
+        switch state {
+        case .idle, .failed:
+            stateAllowsResolution = true
+        case .resolving, .resolved:
+            stateAllowsResolution = false
+        }
+        return stateAllowsResolution
             && approval.status == .pending
             && approval.requiresExplicitTap
             && approval.expiresAt > now()
@@ -71,6 +82,7 @@ final class AgentOpsApprovalViewModel: ObservableObject {
                 return
             }
             state = .resolved(decision)
+            onResolved(decision)
         } catch let error as AgentOpsClientError {
             state = .failed(Self.message(for: error))
         } catch {
@@ -89,6 +101,8 @@ final class AgentOpsApprovalViewModel: ObservableObject {
                 return "This approval expired. Refresh Attention."
             case "approval_already_resolved":
                 return "This approval was already resolved. Refresh Attention."
+            case "approval_resolution_not_recorded":
+                return "That didn’t go through. Try again."
             default:
                 break
             }
@@ -99,8 +113,13 @@ final class AgentOpsApprovalViewModel: ObservableObject {
 
 struct AgentOpsApprovalView: View {
     @StateObject private var model: AgentOpsApprovalViewModel
+    @State private var isShowingDenial = false
 
-    init(approval: AgentOpsApprovalCard, client: AgentOpsClient?) {
+    init(
+        approval: AgentOpsApprovalCard,
+        client: AgentOpsClient?,
+        onResolved: @escaping @MainActor (AgentOpsApprovalStatus) -> Void = { _ in }
+    ) {
         _model = StateObject(
             wrappedValue: AgentOpsApprovalViewModel(
                 approval: approval,
@@ -112,7 +131,8 @@ struct AgentOpsApprovalView: View {
                         id: approval.id,
                         request: request
                     )
-                }
+                },
+                onResolved: onResolved
             )
         )
     }
@@ -134,64 +154,91 @@ struct AgentOpsApprovalView: View {
                 .font(.body)
                 .fixedSize(horizontal: false, vertical: true)
 
-            exactField(
-                title: "TASK UUID",
-                value: model.approval.taskId.uuidString.lowercased()
-            )
-            exactField(
-                title: "ACTION DIGEST",
-                value: model.approval.actionDigest
-            )
             LabeledContent("Expires") {
                 Text(model.approval.expiresAt, style: .relative)
             }
             .font(.footnote)
 
             Label(
-                "Only the buttons below can decide this. Voice cannot approve.",
+                "For safety, approval requires one tap here.",
                 systemImage: "hand.tap"
             )
             .font(.footnote.weight(.semibold))
             .foregroundStyle(.secondary)
 
-            TextField(
-                "Optional denial reason",
-                text: $model.denialReason,
-                axis: .vertical
-            )
-            .textFieldStyle(.roundedBorder)
-            .lineLimit(1...3)
-            .accessibilityIdentifier(
-                "agentops.approval.\(model.approval.id.uuidString.lowercased()).reason"
-            )
-
-            HStack(spacing: 10) {
-                Button("Deny") {
-                    Task {
-                        await model.resolveFromVisibleTap(
-                            .rejected,
-                            decisionNote: model.denialReason
-                        )
-                    }
+            DisclosureGroup("Technical details") {
+                VStack(alignment: .leading, spacing: 10) {
+                    exactField(
+                        title: "TASK UUID",
+                        value: model.approval.taskId.uuidString.lowercased()
+                    )
+                    exactField(
+                        title: "ACTION DIGEST",
+                        value: model.approval.actionDigest
+                    )
+                    Text("Voice cannot approve this action.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.bordered)
-                .tint(.red)
-                .accessibilityIdentifier(
-                    "agentops.approval.\(model.approval.id.uuidString.lowercased()).deny"
-                )
-
-                Button("Approve exact action") {
-                    Task {
-                        await model.resolveFromVisibleTap(.approved)
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.orange)
-                .accessibilityIdentifier(
-                    "agentops.approval.\(model.approval.id.uuidString.lowercased()).approve"
-                )
+                .padding(.top, 6)
             }
-            .disabled(!model.canResolve)
+            .font(.footnote)
+
+            if isShowingDenial {
+                TextField(
+                    "Optional denial reason",
+                    text: $model.denialReason,
+                    axis: .vertical
+                )
+                .textFieldStyle(.roundedBorder)
+                .lineLimit(1...3)
+                .accessibilityIdentifier(
+                    "agentops.approval.\(model.approval.id.uuidString.lowercased()).reason"
+                )
+
+                HStack(spacing: 10) {
+                    Button("Cancel") {
+                        isShowingDenial = false
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button("Confirm deny") {
+                        Task {
+                            await model.resolveFromVisibleTap(
+                                .rejected,
+                                decisionNote: model.denialReason
+                            )
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.red)
+                    .disabled(!model.canResolve)
+                    .accessibilityIdentifier(
+                        "agentops.approval.\(model.approval.id.uuidString.lowercased()).deny"
+                    )
+                }
+            } else {
+                HStack(spacing: 10) {
+                    Button("Deny") {
+                        isShowingDenial = true
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.red)
+                    .disabled(!model.canResolve)
+
+                    Button("Approve once") {
+                        Task {
+                            await model.resolveFromVisibleTap(.approved)
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.orange)
+                    .disabled(!model.canResolve)
+                    .accessibilityIdentifier(
+                        "agentops.approval.\(model.approval.id.uuidString.lowercased()).approve"
+                    )
+                }
+            }
 
             resolutionState
         }
