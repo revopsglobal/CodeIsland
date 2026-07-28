@@ -1,0 +1,76 @@
+{
+  "scenarios": [
+    {
+      "id": "wiki-context",
+      "verdict": "pass",
+      "evidence": ["physical:wiki-answer"],
+      "sourceHandles": ["https://agentops.revopsglobal.com/wiki/decisions/example"]
+    },
+    {
+      "id": "durable-read-only",
+      "verdict": "pass",
+      "evidence": ["physical:task-card"],
+      "taskId": "00000000-0000-4000-8000-000000000001"
+    },
+    {
+      "id": "locked-codex",
+      "verdict": "pass",
+      "evidence": ["physical:routing-card"],
+      "taskId": "00000000-0000-4000-8000-000000000001",
+      "routingMode": "locked",
+      "implementer": "codex",
+      "allowFallback": false
+    },
+    {
+      "id": "receipt-verification",
+      "verdict": "pass",
+      "evidence": ["physical:receipt-card"],
+      "taskId": "00000000-0000-4000-8000-000000000001",
+      "receiptRunId": "voice-example-run",
+      "receiptVerdict": "PASS",
+      "workerStatementAloneVerified": false
+    },
+    {
+      "id": "explicit-tap-approval",
+      "verdict": "pass",
+      "evidence": ["physical:approval-card"],
+      "taskId": "00000000-0000-4000-8000-000000000002",
+      "approvalId": "00000000-0000-4000-8000-000000000003",
+      "actionDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "spokenYesChangedState": false,
+      "visibleTapResolved": true
+    },
+    {
+      "id": "idempotent-replay",
+      "verdict": "pass",
+      "evidence": ["physical:turn-replay"],
+      "taskId": "00000000-0000-4000-8000-000000000001",
+      "turnId": "00000000-0000-4000-8000-000000000004",
+      "taskCount": 1
+    }
+  ],
+  "checks": {
+    "loudspeaker": true,
+    "receiverRoute": true,
+    "bluetoothRoute": true,
+    "cancelPlayback": true,
+    "singleResponsePerTurn": true,
+    "backgroundForeground": true,
+    "notificationDedupe": true,
+    "liveActivityStart": true,
+    "liveActivityUpdate": true,
+    "liveActivityEnd": true,
+    "maxUnavailableNoFallback": true,
+    "localDraftRetention": true
+  },
+  "eventIds": [
+    "00000000-0000-4000-8000-000000000005"
+  ],
+  "dispatchReceipts": [
+    {
+      "eventId": "00000000-0000-4000-8000-000000000005",
+      "requestId": 1,
+      "httpStatus": 200
+    }
+  ]
+}
