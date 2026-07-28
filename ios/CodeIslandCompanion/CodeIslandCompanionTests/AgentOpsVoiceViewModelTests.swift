@@ -134,6 +134,55 @@ final class AgentOpsVoiceViewModelTests: XCTestCase {
         XCTAssertFalse(model.isRecording)
     }
 
+    func testCancelDuringPlaybackCreatesAContentFreePhysicalReceipt() async {
+        let events = VoiceTestEvents()
+        let audio = FakeVoiceAudio(events: events, suspendPlayback: true)
+        let journal = receiptJournal()
+        let model = AgentOpsVoiceViewModel(
+            audioController: audio,
+            service: FakeVoiceService(events: events),
+            receiptJournal: journal
+        )
+
+        await model.startVoice()
+        model.finishRecording()
+        await waitUntil { model.phase == .speaking && audio.isPlaying }
+        model.stopResponse()
+
+        XCTAssertEqual(
+            journal.pending.map(\.kind),
+            [.voicePlaybackCancelled]
+        )
+        XCTAssertEqual(journal.pending.first?.sessionId != nil, true)
+        XCTAssertEqual(model.phase, .idle)
+    }
+
+    func testBackgroundingStopsAudioAndReturnsToReadyOnForeground() async {
+        let events = VoiceTestEvents()
+        let audio = FakeVoiceAudio(events: events)
+        let journal = receiptJournal()
+        let model = AgentOpsVoiceViewModel(
+            audioController: audio,
+            service: FakeVoiceService(events: events),
+            receiptJournal: journal
+        )
+
+        await model.startVoice()
+        model.setSceneActive(false)
+
+        XCTAssertEqual(model.phase, .paused)
+        XCTAssertFalse(model.isRecording)
+        XCTAssertFalse(model.isRunning)
+        XCTAssertEqual(
+            journal.pending.map(\.kind),
+            [.voiceBackgroundCancelled]
+        )
+
+        model.resumeFromBackground()
+        XCTAssertEqual(model.phase, .idle)
+        XCTAssertTrue(model.canStart)
+    }
+
     private func waitUntil(
         _ condition: @escaping @MainActor () -> Bool
     ) async {
@@ -142,6 +191,25 @@ final class AgentOpsVoiceViewModelTests: XCTestCase {
             try? await Task.sleep(for: .milliseconds(10))
         }
         XCTFail("Timed out waiting for voice state")
+    }
+
+    private func receiptJournal() -> AgentOpsMobileReceiptJournal {
+        let suite = "AgentOpsVoiceViewModelTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        return AgentOpsMobileReceiptJournal(
+            defaults: defaults,
+            notificationCenter: NotificationCenter(),
+            now: { Date(timeIntervalSince1970: 1_785_260_083) },
+            clientProvider: {
+                AgentOpsMobileClientSnapshot(
+                    appVersion: "1.0.0",
+                    build: "test",
+                    osVersion: "26.5",
+                    deviceModel: "iPhone17,1"
+                )
+            }
+        )
     }
 }
 
@@ -157,6 +225,10 @@ private final class FakeVoiceAudio: AgentOpsVoiceAudioHandling {
     private var playbackContinuation: CheckedContinuation<Void, Error>?
     private(set) var startCount = 0
     private(set) var isPlaying = false
+    private(set) var outputPreference: AgentOpsVoiceOutputPreference = .speaker
+    private(set) var currentRoute: AgentOpsAudioRouteKind = .speaker
+    private var routeChangeHandler:
+        (@MainActor (AgentOpsAudioRouteKind) -> Void)?
 
     init(events: VoiceTestEvents, suspendPlayback: Bool = false) {
         self.events = events
@@ -189,6 +261,18 @@ private final class FakeVoiceAudio: AgentOpsVoiceAudioHandling {
         isPlaying = false
         playbackContinuation?.resume()
         playbackContinuation = nil
+    }
+
+    func setOutputPreference(_ preference: AgentOpsVoiceOutputPreference) {
+        outputPreference = preference
+        currentRoute = preference == .speaker ? .speaker : .receiver
+        routeChangeHandler?(currentRoute)
+    }
+
+    func setRouteChangeHandler(
+        _ handler: @escaping @MainActor (AgentOpsAudioRouteKind) -> Void
+    ) {
+        routeChangeHandler = handler
     }
 
     func cancel() {

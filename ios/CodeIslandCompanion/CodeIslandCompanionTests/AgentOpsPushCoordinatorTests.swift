@@ -4,6 +4,68 @@ import XCTest
 
 @MainActor
 final class AgentOpsPushCoordinatorTests: XCTestCase {
+    func testRegistrationUploadsAndClearsContentFreePhysicalReceipts() async throws {
+        let defaults = isolatedDefaults()
+        let receiptID = UUID(
+            uuidString: "99999999-9999-4999-8999-999999999999"
+        )!
+        let observedAt = Date(timeIntervalSince1970: 1_785_260_083)
+        let journal = AgentOpsMobileReceiptJournal(
+            defaults: defaults,
+            notificationCenter: NotificationCenter(),
+            now: { observedAt },
+            uuid: { receiptID },
+            clientProvider: {
+                AgentOpsMobileClientSnapshot(
+                    appVersion: "1.0.0",
+                    build: "20260728035630",
+                    osVersion: "26.5",
+                    deviceModel: "iPhone17,1"
+                )
+            }
+        )
+        journal.record(.appForegrounded)
+        let tokenStore = AgentOpsPushTokenStore(
+            defaults: defaults,
+            notificationCenter: NotificationCenter(),
+            receiptJournal: journal,
+            deviceID: { "greg-iphone-test" }
+        )
+        let transport = PushMockTransport(responses: [
+            .json(
+                status: 200,
+                AgentOpsDeviceRegistrationEnvelope(
+                    device: .init(
+                        id: UUID(),
+                        deviceId: "greg-iphone-test",
+                        lastSeenAt: observedAt
+                    )
+                )
+            ),
+        ])
+        let coordinator = AgentOpsPushCoordinator(
+            client: client(transport: transport),
+            tokenStore: tokenStore,
+            environment: .production,
+            notificationAuthorizer: PushNotificationAuthorizerStub(),
+            notificationCenter: NotificationCenter(),
+            receiptJournal: journal
+        )
+
+        await coordinator.registerPendingTokens()
+
+        let requests = await transport.requests()
+        let request = try XCTUnwrap(requests.first)
+        let body = try JSONDecoder.agentOps.decode(
+            AgentOpsDeviceRegistrationRequest.self,
+            from: try XCTUnwrap(request.httpBody)
+        )
+        XCTAssertEqual(body.client, journal.client)
+        XCTAssertEqual(body.receipts.map(\.id), [receiptID])
+        XCTAssertEqual(body.receipts.map(\.kind), [.appForegrounded])
+        XCTAssertTrue(journal.pending.isEmpty)
+    }
+
     func testRegistersAPNsPushToStartAndTaskUpdateTokensWithBearerAuth() async throws {
         let defaults = isolatedDefaults()
         let tokenStore = AgentOpsPushTokenStore(
@@ -64,7 +126,11 @@ final class AgentOpsPushCoordinatorTests: XCTestCase {
         let transport = PushMockTransport(responses: [
             .json(status: 200, WorkResponse(task: .fixture(status: "in_progress"))),
         ])
-        let coordinator = coordinator(transport: transport)
+        let journal = makeReceiptJournal()
+        let coordinator = coordinator(
+            transport: transport,
+            receiptJournal: journal
+        )
         let envelope = AgentOpsPushEnvelope.fixture(
             eventType: .taskWorking,
             version: 4
@@ -79,6 +145,10 @@ final class AgentOpsPushCoordinatorTests: XCTestCase {
         XCTAssertEqual(requests.map(\.url?.path), [
             "/v1/work/\(testTaskID.uuidString.lowercased())",
         ])
+        XCTAssertEqual(
+            journal.pending.map(\.kind),
+            [.pushAcceptedSilent, .pushRejectedStale]
+        )
     }
 
     func testLaterActivityTokenRegistrationPreservesExistingAPNsToken() async throws {
@@ -164,7 +234,11 @@ final class AgentOpsPushCoordinatorTests: XCTestCase {
             ),
             .json(status: 200, WorkResponse(task: .fixture(status: "in_progress"))),
         ])
-        let coordinator = coordinator(transport: transport)
+        let journal = makeReceiptJournal()
+        let coordinator = coordinator(
+            transport: transport,
+            receiptJournal: journal
+        )
 
         let verified = await coordinator.process(
             .fixture(eventType: .taskVerified, version: 10),
@@ -177,6 +251,10 @@ final class AgentOpsPushCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(verified, .acceptedVisible)
         XCTAssertEqual(regressive, .rejectedRegressive)
+        XCTAssertEqual(
+            journal.pending.map(\.kind),
+            [.pushAcceptedVisible, .pushRejectedRegressive]
+        )
     }
 
     func testTerminalProjectionEndsOnlyTheMatchingFollowedTask() {
@@ -307,17 +385,28 @@ final class AgentOpsPushCoordinatorTests: XCTestCase {
 
     private func coordinator(
         transport: PushMockTransport,
+        receiptJournal: AgentOpsMobileReceiptJournal? = nil,
         onApproval: @escaping @MainActor (AgentOpsApprovalCard) -> Void = { _ in },
         onOpen: @escaping @MainActor (AgentOpsNavigationTarget) -> Void = { _ in }
     ) -> AgentOpsPushCoordinator {
-        AgentOpsPushCoordinator(
+        let defaults = isolatedDefaults()
+        let notificationCenter = NotificationCenter()
+        let receiptJournal = receiptJournal ?? AgentOpsMobileReceiptJournal(
+            defaults: defaults,
+            notificationCenter: notificationCenter
+        )
+        return AgentOpsPushCoordinator(
             client: client(transport: transport),
             tokenStore: AgentOpsPushTokenStore(
-                defaults: isolatedDefaults(),
+                defaults: defaults,
+                notificationCenter: notificationCenter,
+                receiptJournal: receiptJournal,
                 deviceID: { "greg-iphone-test" }
             ),
             environment: .sandbox,
             notificationAuthorizer: PushNotificationAuthorizerStub(),
+            notificationCenter: notificationCenter,
+            receiptJournal: receiptJournal,
             onWork: { _ in },
             onApproval: onApproval,
             onOpen: onOpen
@@ -337,6 +426,13 @@ final class AgentOpsPushCoordinatorTests: XCTestCase {
         let defaults = UserDefaults(suiteName: suite)!
         defaults.removePersistentDomain(forName: suite)
         return defaults
+    }
+
+    private func makeReceiptJournal() -> AgentOpsMobileReceiptJournal {
+        AgentOpsMobileReceiptJournal(
+            defaults: isolatedDefaults(),
+            notificationCenter: NotificationCenter()
+        )
     }
 }
 

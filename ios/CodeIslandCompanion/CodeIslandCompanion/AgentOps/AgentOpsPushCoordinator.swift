@@ -145,6 +145,26 @@ struct AgentOpsDeviceRegistrationRequest: Codable, Equatable, Sendable {
     let apnsEnvironment: AgentOpsAPNsEnvironment
     let pushToStartToken: String?
     let liveActivityTokens: [String: String]
+    let client: AgentOpsMobileClientSnapshot?
+    let receipts: [AgentOpsMobileReceipt]
+
+    init(
+        deviceId: String,
+        apnsToken: String?,
+        apnsEnvironment: AgentOpsAPNsEnvironment,
+        pushToStartToken: String?,
+        liveActivityTokens: [String: String],
+        client: AgentOpsMobileClientSnapshot? = nil,
+        receipts: [AgentOpsMobileReceipt] = []
+    ) {
+        self.deviceId = deviceId
+        self.apnsToken = apnsToken
+        self.apnsEnvironment = apnsEnvironment
+        self.pushToStartToken = pushToStartToken
+        self.liveActivityTokens = liveActivityTokens
+        self.client = client
+        self.receipts = receipts
+    }
 }
 
 enum AgentOpsAPNsEnvironment: String, Codable, Sendable {
@@ -167,11 +187,14 @@ struct AgentOpsPushTokenSnapshot: Equatable, Sendable {
     let apnsToken: String?
     let pushToStartToken: String?
     let liveActivityTokens: [String: String]
+    let client: AgentOpsMobileClientSnapshot
+    let receipts: [AgentOpsMobileReceipt]
 
     var isEmpty: Bool {
         apnsToken == nil
             && pushToStartToken == nil
             && liveActivityTokens.isEmpty
+            && receipts.isEmpty
     }
 }
 
@@ -193,16 +216,22 @@ final class AgentOpsPushTokenStore {
     private let defaults: UserDefaults
     private let notificationCenter: NotificationCenter
     private let deviceIDProvider: () -> String
+    private let receiptJournal: AgentOpsMobileReceiptJournal
 
     init(
         defaults: UserDefaults = .standard,
         notificationCenter: NotificationCenter = .default,
+        receiptJournal: AgentOpsMobileReceiptJournal? = nil,
         deviceID: @escaping () -> String = {
             UUID().uuidString.lowercased()
         }
     ) {
         self.defaults = defaults
         self.notificationCenter = notificationCenter
+        self.receiptJournal = receiptJournal ?? AgentOpsMobileReceiptJournal(
+            defaults: defaults,
+            notificationCenter: notificationCenter
+        )
         deviceIDProvider = deviceID
     }
 
@@ -233,7 +262,9 @@ final class AgentOpsPushTokenStore {
             pushToStartToken: defaults.string(
                 forKey: Self.pushToStartTokenKey
             ),
-            liveActivityTokens: liveActivityTokens()
+            liveActivityTokens: liveActivityTokens(),
+            client: receiptJournal.client,
+            receipts: Array(receiptJournal.pending.prefix(32))
         )
     }
 
@@ -248,12 +279,14 @@ final class AgentOpsPushTokenStore {
 
     func needsRegistration(_ snapshot: AgentOpsPushTokenSnapshot) -> Bool {
         guard !snapshot.isEmpty else { return false }
-        return defaults.string(forKey: Self.registeredFingerprintKey)
-            != fingerprint(snapshot)
+        return !snapshot.receipts.isEmpty
+            || defaults.string(forKey: Self.registeredFingerprintKey)
+                != fingerprint(snapshot)
     }
 
     func markRegistered(_ snapshot: AgentOpsPushTokenSnapshot) {
         guard snapshot == self.snapshot() else { return }
+        receiptJournal.clear(snapshot.receipts)
         defaults.set(
             fingerprint(snapshot),
             forKey: Self.registeredFingerprintKey
@@ -334,6 +367,10 @@ final class AgentOpsPushTokenStore {
                 .sorted(by: { $0.key < $1.key })
                 .map { "\($0.key)=\($0.value)" }
                 .joined(separator: "&"),
+            snapshot.client.appVersion,
+            snapshot.client.build,
+            snapshot.client.osVersion,
+            snapshot.client.deviceModel,
         ].joined(separator: "|")
         return SHA256.hash(data: Data(material.utf8))
             .map { String(format: "%02x", $0) }
@@ -454,6 +491,7 @@ final class AgentOpsPushCoordinator: ObservableObject {
     private let environment: AgentOpsAPNsEnvironment
     private let notificationAuthorizer: any AgentOpsNotificationAuthorizing
     private let notificationCenter: NotificationCenter
+    private let receiptJournal: AgentOpsMobileReceiptJournal
     private let onWork: @MainActor (AgentOpsWorkSummary) -> Void
     private let onApproval: @MainActor (AgentOpsApprovalCard) -> Void
     private let onOpen: @MainActor (AgentOpsNavigationTarget) -> Void
@@ -473,6 +511,7 @@ final class AgentOpsPushCoordinator: ObservableObject {
         notificationAuthorizer: any AgentOpsNotificationAuthorizing =
             SystemAgentOpsNotificationAuthorizer(),
         notificationCenter: NotificationCenter = .default,
+        receiptJournal: AgentOpsMobileReceiptJournal? = nil,
         onWork: @escaping @MainActor (AgentOpsWorkSummary) -> Void = { _ in },
         onApproval: @escaping @MainActor (AgentOpsApprovalCard) -> Void = {
             _ in
@@ -486,6 +525,7 @@ final class AgentOpsPushCoordinator: ObservableObject {
         self.environment = environment
         self.notificationAuthorizer = notificationAuthorizer
         self.notificationCenter = notificationCenter
+        self.receiptJournal = receiptJournal ?? .shared
         self.onWork = onWork
         self.onApproval = onApproval
         self.onOpen = onOpen
@@ -505,6 +545,17 @@ final class AgentOpsPushCoordinator: ObservableObject {
         observers.append(
             notificationCenter.addObserver(
                 forName: .agentOpsPushTokenAvailable,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in
+                    await self?.registerPendingTokens()
+                }
+            }
+        )
+        observers.append(
+            notificationCenter.addObserver(
+                forName: .agentOpsMobileReceiptAvailable,
                 object: nil,
                 queue: .main
             ) { [weak self] _ in
@@ -553,7 +604,9 @@ final class AgentOpsPushCoordinator: ObservableObject {
                     apnsToken: snapshot.apnsToken,
                     apnsEnvironment: environment,
                     pushToStartToken: snapshot.pushToStartToken,
-                    liveActivityTokens: snapshot.liveActivityTokens
+                    liveActivityTokens: snapshot.liveActivityTokens,
+                    client: snapshot.client,
+                    receipts: snapshot.receipts
                 )
             )
             tokenStore.markRegistered(snapshot)
@@ -576,7 +629,7 @@ final class AgentOpsPushCoordinator: ObservableObject {
             if userTapped {
                 await openCurrentDetail(for: envelope)
             }
-            return .rejectedStale
+            return recordPush(.rejectedStale, envelope: envelope)
         }
 
         do {
@@ -587,7 +640,7 @@ final class AgentOpsPushCoordinator: ObservableObject {
                 previous: tokenStore.acceptedState(taskID: envelope.taskID),
                 incoming: state
             ) else {
-                return .rejectedRegressive
+                return recordPush(.rejectedRegressive, envelope: envelope)
             }
             guard eventIsConsistent(envelope.eventType, state: state) else {
                 return .unavailable
@@ -617,9 +670,12 @@ final class AgentOpsPushCoordinator: ObservableObject {
             ) {
                 onOpen(target)
             }
-            return envelope.eventType.isVisible
-                ? .acceptedVisible
-                : .acceptedSilent
+            return recordPush(
+                envelope.eventType.isVisible
+                    ? .acceptedVisible
+                    : .acceptedSilent,
+                envelope: envelope
+            )
         } catch is CancellationError {
             return .unavailable
         } catch {
@@ -683,6 +739,32 @@ final class AgentOpsPushCoordinator: ObservableObject {
         default:
             return false
         }
+    }
+
+    private func recordPush(
+        _ outcome: AgentOpsPushProcessingOutcome,
+        envelope: AgentOpsPushEnvelope
+    ) -> AgentOpsPushProcessingOutcome {
+        let kind: AgentOpsMobileReceiptKind
+        switch outcome {
+        case .acceptedVisible:
+            kind = .pushAcceptedVisible
+        case .acceptedSilent:
+            kind = .pushAcceptedSilent
+        case .rejectedStale:
+            kind = .pushRejectedStale
+        case .rejectedRegressive:
+            kind = .pushRejectedRegressive
+        case .unavailable:
+            return outcome
+        }
+        receiptJournal.record(
+            kind,
+            taskID: envelope.taskID,
+            pushEventType: envelope.eventType,
+            pushVersion: envelope.version
+        )
+        return outcome
     }
 }
 

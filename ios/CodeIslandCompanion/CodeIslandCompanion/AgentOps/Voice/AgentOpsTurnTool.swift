@@ -181,18 +181,22 @@ struct AgentOpsTurnTool {
     private let clientMetadata: AgentOpsClientMetadata
     private let uuid: () -> UUID
     private let draftStore: VoiceTurnDraftStore?
+    private let receiptJournal: AgentOpsMobileReceiptJournal
 
+    @MainActor
     init(
         client: AgentOpsClient,
         sessionID: UUID,
         clientMetadata: AgentOpsClientMetadata,
         draftStore: VoiceTurnDraftStore? = nil,
+        receiptJournal: AgentOpsMobileReceiptJournal? = nil,
         uuid: @escaping () -> UUID = UUID.init
     ) {
         self.client = client
         self.sessionID = sessionID
         self.clientMetadata = clientMetadata
         self.draftStore = draftStore
+        self.receiptJournal = receiptJournal ?? .shared
         self.uuid = uuid
     }
 
@@ -228,6 +232,11 @@ struct AgentOpsTurnTool {
         )
         let draft = try draftStore?.save(request)
         if let draft {
+            receiptJournal.record(
+                .draftSaved,
+                sessionID: sessionID,
+                draftCount: draftStore?.drafts.count
+            )
             try draftStore?.markAttempted(draftID: draft.id)
         }
         let result = try await client.performTurn(request)
@@ -240,6 +249,12 @@ struct AgentOpsTurnTool {
         }
         if let draft {
             try draftStore?.finish(draftID: draft.id, result: result)
+            receiptJournal.record(
+                .draftCompleted,
+                sessionID: sessionID,
+                taskID: result.task?.id,
+                draftCount: draftStore?.drafts.count
+            )
         }
         let encoded = try JSONEncoder.agentOps.encode(result)
         guard let output = String(data: encoded, encoding: .utf8) else {
@@ -261,6 +276,11 @@ struct AgentOpsTurnTool {
             throw AgentOpsTurnToolError.invalidArguments
         }
         try draftStore?.markAttempted(draftID: draft.id)
+        receiptJournal.record(
+            .draftReplayed,
+            sessionID: sessionID,
+            draftCount: draftStore?.drafts.count
+        )
         let result = try await client.performTurn(persisted)
         guard
             !result.speechText.trimmingCharacters(
@@ -270,6 +290,12 @@ struct AgentOpsTurnTool {
             throw AgentOpsTurnToolError.invalidResult
         }
         try draftStore?.finish(draftID: draft.id, result: result)
+        receiptJournal.record(
+            .draftCompleted,
+            sessionID: sessionID,
+            taskID: result.task?.id,
+            draftCount: draftStore?.drafts.count
+        )
         let encoded = try JSONEncoder.agentOps.encode(result)
         guard let output = String(data: encoded, encoding: .utf8) else {
             throw AgentOpsTurnToolError.invalidResult

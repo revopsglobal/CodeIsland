@@ -75,6 +75,7 @@
 		90DAB8AAF24A1084DF00B500 /* VoiceTurnDraftStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D3405BA545C84C943E99B9B /* VoiceTurnDraftStoreTests.swift */; };
 		918BED71A2A430BE1E1BD9BB /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = 466771A9FC33CB2A83749024 /* Auth */; };
 		91DE994E835A9FF0397C60EB /* VoiceSessionReducerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45D3534AA2188A05A177A6A9 /* VoiceSessionReducerTests.swift */; };
+		95753BF6C53384DFB5536762 /* AgentOpsMobileReceipt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E9432B601DB0748C7A2F526 /* AgentOpsMobileReceipt.swift */; };
 		967757FE0C6C075F82A21B2D /* RealtimeTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6212C19075888E301B655D4C /* RealtimeTransport.swift */; };
 		977FDE1B19E4DF1F5985EC0D /* QoderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5393F6AABCBEEDA6A832553 /* QoderView.swift */; };
 		9A46A7A4F1790AD9875A99D7 /* AgentOpsTurnTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05B71D7CD0657DCB80A1B6D4 /* AgentOpsTurnTool.swift */; };
@@ -114,6 +115,7 @@
 		DECE043D8EAE0EEEA3417557 /* PixelCharacterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6345881A14A90FBB79C7453 /* PixelCharacterView.swift */; };
 		DF8181D3224DFA462CB9E0FA /* TraeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A7D0B4EC41F3FEC24838746 /* TraeView.swift */; };
 		E04C1A6FD543058CDBC1754B /* KimiView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53EE587DE1B0740F9A5B0B19 /* KimiView.swift */; };
+		E141F7B4800478F3DE1382E3 /* AVKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8EA53FB358EA891BDEC01EE4 /* AVKit.framework */; };
 		E15456F718660AE320B7F65F /* CodeIslandLiveActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1079D20C61C1AF51C7F24A /* CodeIslandLiveActivityWidget.swift */; };
 		E1D6A16CF95EC09FD79F0DF7 /* SharedDraftInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE848A90520F8F624AFB92E9 /* SharedDraftInbox.swift */; };
 		E68821732380BF7CAF637D97 /* CodeIslandAppIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A50F00CEBB09C1710651A8C1 /* CodeIslandAppIntents.swift */; };
@@ -227,6 +229,7 @@
 		57B2DB14302DCA299AB4FE26 /* VoiceSessionCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceSessionCoordinatorTests.swift; sourceTree = "<group>"; };
 		5815B57D19C13FBC10974125 /* AgentOpsVoiceOrb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentOpsVoiceOrb.swift; sourceTree = "<group>"; };
 		5E057D1086992AC424E7A66F /* AgentOpsEventStream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentOpsEventStream.swift; sourceTree = "<group>"; };
+		5E9432B601DB0748C7A2F526 /* AgentOpsMobileReceipt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentOpsMobileReceipt.swift; sourceTree = "<group>"; };
 		5EF8F4C84C86055FEB1AFAA6 /* AudioSessionPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioSessionPolicyTests.swift; sourceTree = "<group>"; };
 		5F8B728EC484A892286E9460 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		5FBBD6446372CD56ADFCE130 /* CompanionCommandCenterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionCommandCenterView.swift; sourceTree = "<group>"; };
@@ -255,6 +258,7 @@
 		86411E3D8E6337F894A6840C /* CompanionPushPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanionPushPresentationTests.swift; sourceTree = "<group>"; };
 		8843E069F081B15AE433EA8D /* CodeIslandCompanionApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeIslandCompanionApp.swift; sourceTree = "<group>"; };
 		8DE9B49B0CC8560A642B3750 /* RemoteApprovalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteApprovalView.swift; sourceTree = "<group>"; };
+		8EA53FB358EA891BDEC01EE4 /* AVKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVKit.framework; path = System/Library/Frameworks/AVKit.framework; sourceTree = SDKROOT; };
 		8FFFA7546FE8E69105E1F7F0 /* VoiceSessionReducer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceSessionReducer.swift; sourceTree = "<group>"; };
 		910643DC6CFFA8D5B7009477 /* AgentOpsTaskView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentOpsTaskView.swift; sourceTree = "<group>"; };
 		92F2FBDC2CDC04ABD7B7CCB4 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
@@ -305,6 +309,7 @@
 			files = (
 				88529B6D10BD69574E792DC6 /* Auth in Frameworks */,
 				D91E181A929AA9ED8ABEE03E /* AppIntents.framework in Frameworks */,
+				E141F7B4800478F3DE1382E3 /* AVKit.framework in Frameworks */,
 				00C27C14DC7CD3479D678422 /* Speech.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -336,6 +341,7 @@
 				177C387B9636C1905C0B56F7 /* AgentOpsAuthStore.swift */,
 				BCA84EF648EA6FEF1B6F776C /* AgentOpsClient.swift */,
 				5E057D1086992AC424E7A66F /* AgentOpsEventStream.swift */,
+				5E9432B601DB0748C7A2F526 /* AgentOpsMobileReceipt.swift */,
 				6F61FEE04B4509044F26C063 /* AgentOpsModels.swift */,
 				74431D8C481861FD6FD7392F /* AgentOpsPushCoordinator.swift */,
 				80C9F6F9895FFF0B6D9295CF /* AgentOpsRootStore.swift */,
@@ -376,6 +382,7 @@
 			isa = PBXGroup;
 			children = (
 				1D6BFE9B5287EE06D2FB3938 /* AppIntents.framework */,
+				8EA53FB358EA891BDEC01EE4 /* AVKit.framework */,
 				D4056DAB08B8F703E6F5C71B /* Speech.framework */,
 			);
 			name = Frameworks;
@@ -725,6 +732,7 @@
 				74E713537176F063A83E6D2B /* AgentOpsAuthStore.swift in Sources */,
 				4B47C3A5E2708E74C568ED0F /* AgentOpsClient.swift in Sources */,
 				F23DC4A693EA37034809AE5C /* AgentOpsEventStream.swift in Sources */,
+				95753BF6C53384DFB5536762 /* AgentOpsMobileReceipt.swift in Sources */,
 				D62F806D7BADA0A0E8A17110 /* AgentOpsModels.swift in Sources */,
 				D06FE3E8C53522FFF6D087DA /* AgentOpsPushCoordinator.swift in Sources */,
 				DDCBBD7A935DB146F02BC61B /* AgentOpsRootStore.swift in Sources */,
