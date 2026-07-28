@@ -107,11 +107,13 @@ final class VoiceTurnDraftStoreTests: XCTestCase {
             credentials: DraftReplayCredentials(),
             transport: transport
         )
+        let journal = makeReceiptJournal()
         let tool = AgentOpsTurnTool(
             client: client,
             sessionID: request.sessionID,
             clientMetadata: request.client,
             draftStore: fixture.store,
+            receiptJournal: journal,
             uuid: { request.turnID }
         )
 
@@ -139,6 +141,24 @@ final class VoiceTurnDraftStoreTests: XCTestCase {
                 ).idempotencyKey
             },
             [request.idempotencyKey, request.idempotencyKey]
+        )
+        XCTAssertEqual(
+            journal.pending.map(\.kind),
+            [.draftSaved, .draftReplayed, .draftCompleted]
+        )
+        XCTAssertTrue(
+            try JSONEncoder().encode(journal.pending)
+                .range(of: Data(request.transcript.utf8)) == nil
+        )
+    }
+
+    private func makeReceiptJournal() -> AgentOpsMobileReceiptJournal {
+        let suite = "VoiceTurnDraftStoreTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        return AgentOpsMobileReceiptJournal(
+            defaults: defaults,
+            notificationCenter: NotificationCenter()
         )
     }
 }

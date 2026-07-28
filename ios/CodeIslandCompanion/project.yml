@@ -74,6 +74,7 @@ targets:
       - package: Supabase
         product: Auth
       - sdk: AppIntents.framework
+      - sdk: AVKit.framework
       - sdk: Speech.framework
   CodeIslandCompanionWidget:
     type: app-extension

@@ -10,6 +10,8 @@ final class AudioSessionPolicyTests: XCTestCase {
         XCTAssertEqual(configuration.category, .playAndRecord)
         XCTAssertEqual(configuration.mode, .measurement)
         XCTAssertTrue(configuration.options.contains(.defaultToSpeaker))
+        XCTAssertTrue(configuration.options.contains(.allowBluetoothHFP))
+        XCTAssertTrue(configuration.options.contains(.allowBluetoothA2DP))
         XCTAssertNotEqual(configuration.mode, .spokenAudio)
     }
 
@@ -26,5 +28,61 @@ final class AudioSessionPolicyTests: XCTestCase {
         XCTAssertTrue(result.contains(.allowBluetoothHFP))
         XCTAssertTrue(result.contains(.allowBluetoothA2DP))
         XCTAssertTrue(result.contains(.duckOthers))
+    }
+
+    func testAgentOpsVoicePlaybackSpeakerSupportsExternalRoutes() {
+        let configuration = agentOpsVoicePlaybackAudioSessionConfiguration(
+            preference: .speaker
+        )
+
+        XCTAssertEqual(configuration.category, .playAndRecord)
+        XCTAssertEqual(configuration.mode, .voiceChat)
+        XCTAssertTrue(configuration.options.contains(.defaultToSpeaker))
+        XCTAssertTrue(configuration.options.contains(.allowBluetoothHFP))
+        XCTAssertTrue(configuration.options.contains(.allowBluetoothA2DP))
+        XCTAssertTrue(configuration.options.contains(.allowAirPlay))
+    }
+
+    func testAgentOpsVoicePlaybackReceiverDoesNotForceSpeaker() {
+        let configuration = agentOpsVoicePlaybackAudioSessionConfiguration(
+            preference: .receiver
+        )
+
+        XCTAssertEqual(configuration.category, .playAndRecord)
+        XCTAssertEqual(configuration.mode, .voiceChat)
+        XCTAssertFalse(configuration.options.contains(.defaultToSpeaker))
+        XCTAssertTrue(configuration.options.contains(.allowBluetoothHFP))
+        XCTAssertTrue(configuration.options.contains(.allowBluetoothA2DP))
+        XCTAssertTrue(configuration.options.contains(.allowAirPlay))
+    }
+
+    func testExternalRouteIsNotOverriddenBySpeakerPreference() {
+        for route in [
+            AgentOpsAudioRouteKind.bluetooth,
+            .airplay,
+            .headphones,
+        ] {
+            XCTAssertFalse(
+                agentOpsVoiceShouldOverrideSpeaker(
+                    preference: .speaker,
+                    currentRoute: route
+                )
+            )
+        }
+    }
+
+    func testBuiltInRouteHonorsSpeakerPreference() {
+        XCTAssertTrue(
+            agentOpsVoiceShouldOverrideSpeaker(
+                preference: .speaker,
+                currentRoute: .receiver
+            )
+        )
+        XCTAssertFalse(
+            agentOpsVoiceShouldOverrideSpeaker(
+                preference: .receiver,
+                currentRoute: .speaker
+            )
+        )
     }
 }

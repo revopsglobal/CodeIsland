@@ -1,3 +1,4 @@
+import AVKit
 import SwiftUI
 
 struct AgentOpsVoiceView: View {
@@ -6,6 +7,7 @@ struct AgentOpsVoiceView: View {
 
     @EnvironmentObject private var agentOps: AgentOpsRootStore
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.scenePhase) private var scenePhase
     @State private var email = ""
     @State private var signInCode = ""
 
@@ -28,6 +30,13 @@ struct AgentOpsVoiceView: View {
         .scrollBounceBehavior(.basedOnSize)
         .task {
             model.configure(rootStore: agentOps)
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background {
+                model.setSceneActive(false)
+            } else if phase == .active {
+                model.resumeFromBackground()
+            }
         }
     }
 
@@ -104,6 +113,8 @@ struct AgentOpsVoiceView: View {
                 voiceControls
             }
 
+            outputControls
+
             if let result = model.latestResult {
                 AgentOpsVoiceResultCard(result: result)
             }
@@ -115,6 +126,47 @@ struct AgentOpsVoiceView: View {
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity)
                 .accessibilityIdentifier("agentops.voice.aiDisclosure")
+        }
+    }
+
+    private var outputControls: some View {
+        HStack(spacing: 12) {
+            Menu {
+                Button {
+                    model.setOutputPreference(.speaker)
+                } label: {
+                    Label(
+                        "Speaker",
+                        systemImage: model.outputPreference == .speaker
+                            ? "checkmark"
+                            : "speaker.wave.2"
+                    )
+                }
+                Button {
+                    model.setOutputPreference(.receiver)
+                } label: {
+                    Label(
+                        "iPhone",
+                        systemImage: model.outputPreference == .receiver
+                            ? "checkmark"
+                            : "iphone"
+                    )
+                }
+            } label: {
+                Label(model.outputLabel, systemImage: "speaker.wave.2")
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.bordered)
+            .accessibilityIdentifier("agentops.voice.output")
+
+            AgentOpsSystemRoutePicker()
+                .frame(width: 52, height: 44)
+                .background(
+                    Color.primary.opacity(0.06),
+                    in: RoundedRectangle(cornerRadius: 12)
+                )
+                .accessibilityLabel("Choose Bluetooth or AirPlay output")
+                .accessibilityIdentifier("agentops.voice.systemRoute")
         }
     }
 
@@ -258,6 +310,18 @@ struct AgentOpsVoiceView: View {
         }
         return false
     }
+}
+
+private struct AgentOpsSystemRoutePicker: UIViewRepresentable {
+    func makeUIView(context: Context) -> AVRoutePickerView {
+        let picker = AVRoutePickerView()
+        picker.prioritizesVideoDevices = false
+        picker.tintColor = .systemBlue
+        picker.activeTintColor = .systemBlue
+        return picker
+    }
+
+    func updateUIView(_ picker: AVRoutePickerView, context: Context) {}
 }
 
 private struct AgentOpsVoiceResultCard: View {

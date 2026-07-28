@@ -6,6 +6,7 @@ final class AgentOpsRootStore: ObservableObject {
     let auth: AgentOpsAuthStore
     let client: AgentOpsClient?
     let draftStore: VoiceTurnDraftStore?
+    let receiptJournal: AgentOpsMobileReceiptJournal
     private(set) var pushCoordinator: AgentOpsPushCoordinator?
 
     @Published private(set) var work: [AgentOpsWorkSummary] = []
@@ -23,11 +24,14 @@ final class AgentOpsRootStore: ObservableObject {
     init(
         auth: AgentOpsAuthStore,
         client: AgentOpsClient?,
-        draftStore: VoiceTurnDraftStore? = nil
+        draftStore: VoiceTurnDraftStore? = nil,
+        receiptJournal: AgentOpsMobileReceiptJournal? = nil
     ) {
         self.auth = auth
         self.client = client
         self.draftStore = draftStore
+        let receiptJournal = receiptJournal ?? .shared
+        self.receiptJournal = receiptJournal
         authObserver = auth.objectWillChange.sink { [weak self] _ in
             self?.objectWillChange.send()
         }
@@ -35,6 +39,7 @@ final class AgentOpsRootStore: ObservableObject {
             pushCoordinator = AgentOpsPushCoordinator(
                 client: client,
                 tokenStore: .shared,
+                receiptJournal: receiptJournal,
                 onWork: { [weak self] authoritative in
                     self?.acceptPush(work: authoritative)
                 },
@@ -87,6 +92,7 @@ final class AgentOpsRootStore: ObservableObject {
 
     func start() async {
         await auth.restore()
+        receiptJournal.record(.appForegrounded)
         guard isAuthenticated else { return }
         await activateAuthenticatedSession()
     }
@@ -113,7 +119,9 @@ final class AgentOpsRootStore: ObservableObject {
     }
 
     func setActive(_ active: Bool) {
+        guard isActive != active else { return }
         isActive = active
+        receiptJournal.record(active ? .appForegrounded : .appBackgrounded)
         if !active {
             client?.cancelNonessentialNetworkWork()
             eventStream?.setForeground(false)
@@ -176,9 +184,20 @@ final class AgentOpsRootStore: ObservableObject {
         else { return }
         for draft in draftStore.drafts {
             do {
+                receiptJournal.record(
+                    .draftReplayed,
+                    sessionID: draft.request.sessionID,
+                    draftCount: draftStore.drafts.count
+                )
                 try draftStore.markAttempted(draftID: draft.id)
                 let result = try await client.performTurn(draft.request)
                 try draftStore.finish(draftID: draft.id, result: result)
+                receiptJournal.record(
+                    .draftCompleted,
+                    sessionID: draft.request.sessionID,
+                    taskID: result.task?.id,
+                    draftCount: draftStore.drafts.count
+                )
                 recordTurnResult(result)
             } catch is CancellationError {
                 return

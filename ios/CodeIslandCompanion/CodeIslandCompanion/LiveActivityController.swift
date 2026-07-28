@@ -16,6 +16,7 @@ final class LiveActivityController: ObservableObject {
     private static let layoutVersionKey = "CodeIslandLiveActivityLayoutVersion"
     private static let currentLayoutVersion = "2026-07-17-private-lifecycle-v4"
     private static let followedTaskKey = "codeisland.liveActivity.followedTask.v1"
+    private let agentOpsReceiptJournal: AgentOpsMobileReceiptJournal
 
     @Published private(set) var activityID: String?
     @Published private(set) var lastError: String?
@@ -44,7 +45,10 @@ final class LiveActivityController: ObservableObject {
         pushToStartTokenTask?.cancel()
     }
 
-    init() {
+    init(
+        agentOpsReceiptJournal: AgentOpsMobileReceiptJournal? = nil
+    ) {
+        self.agentOpsReceiptJournal = agentOpsReceiptJournal ?? .shared
 #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-CodeIslandCompanionResetFollowedTask") {
             UserDefaults.standard.removeObject(forKey: Self.followedTaskKey)
@@ -351,6 +355,10 @@ final class LiveActivityController: ObservableObject {
             )
             if let activity {
                 await activity.update(content)
+                agentOpsReceiptJournal.record(
+                    .liveActivityUpdated,
+                    taskID: task.id
+                )
             } else if createIfNeeded {
                 let attributes = CodeIslandActivityAttributes(sessionId: taskID)
                 let created: Activity<CodeIslandActivityAttributes>
@@ -371,6 +379,10 @@ final class LiveActivityController: ObservableObject {
                 activityID = created.id
                 observeState(of: created)
                 observePushToken(of: created)
+                agentOpsReceiptJournal.record(
+                    .liveActivityStarted,
+                    taskID: task.id
+                )
             }
             lastContentState = contentState
             existingActivityCount =
@@ -635,6 +647,10 @@ final class LiveActivityController: ObservableObject {
                         taskID.uuidString.lowercased(),
                         forKey: Self.followedTaskKey
                     )
+                    self.agentOpsReceiptJournal.record(
+                        .liveActivityStarted,
+                        taskID: taskID
+                    )
                 }
                 guard let requestID = discovered.attributes.sessionId,
                       let kind = RemoteAttentionKind(rawValue: discovered.content.state.pendingAction ?? "")
@@ -720,12 +736,20 @@ final class LiveActivityController: ObservableObject {
 
     private func endAgentOpsActivity(taskID: UUID) async {
         let taskKey = taskID.uuidString.lowercased()
+        var ended = false
         for candidate in Activity<CodeIslandActivityAttributes>.activities
         where candidate.attributes.sessionId?.lowercased() == taskKey {
             await candidate.end(nil, dismissalPolicy: .immediate)
+            ended = true
             if candidate.id == activityID {
                 clearActivity(id: candidate.id, resetCursor: true)
             }
+        }
+        if ended {
+            agentOpsReceiptJournal.record(
+                .liveActivityEnded,
+                taskID: taskID
+            )
         }
         AgentOpsPushTokenStore.shared.removeLiveActivityToken(taskID: taskID)
         guard followedTaskID == taskID else { return }

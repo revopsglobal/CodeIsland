@@ -7,6 +7,11 @@ struct AgentOpsVoiceRecording: Equatable, Sendable {
     let contentType: String
 }
 
+enum AgentOpsVoiceOutputPreference: String, CaseIterable, Sendable {
+    case speaker
+    case receiver
+}
+
 func agentOpsVoiceRecordingAudioSessionConfiguration() -> (
     category: AVAudioSession.Category,
     mode: AVAudioSession.Mode,
@@ -15,15 +20,61 @@ func agentOpsVoiceRecordingAudioSessionConfiguration() -> (
     (
         category: .playAndRecord,
         mode: .measurement,
-        options: [.defaultToSpeaker]
+        options: [
+            .defaultToSpeaker,
+            .allowBluetoothHFP,
+            .allowBluetoothA2DP,
+        ]
     )
+}
+
+func agentOpsVoicePlaybackAudioSessionConfiguration(
+    preference: AgentOpsVoiceOutputPreference
+) -> (
+    category: AVAudioSession.Category,
+    mode: AVAudioSession.Mode,
+    options: AVAudioSession.CategoryOptions
+) {
+    var options: AVAudioSession.CategoryOptions = [
+        .allowBluetoothHFP,
+        .allowBluetoothA2DP,
+        .allowAirPlay,
+        .duckOthers,
+    ]
+    if preference == .speaker {
+        options.insert(.defaultToSpeaker)
+    }
+    return (
+        category: .playAndRecord,
+        mode: .voiceChat,
+        options: options
+    )
+}
+
+func agentOpsVoiceShouldOverrideSpeaker(
+    preference: AgentOpsVoiceOutputPreference,
+    currentRoute: AgentOpsAudioRouteKind
+) -> Bool {
+    guard preference == .speaker else { return false }
+    switch currentRoute {
+    case .bluetooth, .airplay, .headphones:
+        return false
+    case .speaker, .receiver, .other:
+        return true
+    }
 }
 
 @MainActor
 protocol AgentOpsVoiceAudioHandling: AnyObject {
+    var outputPreference: AgentOpsVoiceOutputPreference { get }
+    var currentRoute: AgentOpsAudioRouteKind { get }
     func startRecording() async throws
     func stopRecording() throws -> AgentOpsVoiceRecording
     func play(_ audio: Data) async throws
+    func setOutputPreference(_ preference: AgentOpsVoiceOutputPreference)
+    func setRouteChangeHandler(
+        _ handler: @escaping @MainActor (AgentOpsAudioRouteKind) -> Void
+    )
     func cancel()
 }
 
@@ -56,13 +107,48 @@ final class AgentOpsVoiceAudioController: NSObject,
     AgentOpsVoiceAudioHandling,
     AVAudioPlayerDelegate {
     private let audioSession: AVAudioSession
+    private let defaults: UserDefaults
+    private let notificationCenter: NotificationCenter
+    private var routeObserver: NSObjectProtocol?
+    private var routeChangeHandler:
+        (@MainActor (AgentOpsAudioRouteKind) -> Void)?
     private var recorder: AVAudioRecorder?
     private var recordingURL: URL?
     private var player: AVAudioPlayer?
     private var playbackContinuation: CheckedContinuation<Void, Error>?
+    private(set) var outputPreference: AgentOpsVoiceOutputPreference
 
-    init(audioSession: AVAudioSession = .sharedInstance()) {
+    var currentRoute: AgentOpsAudioRouteKind {
+        Self.routeKind(for: audioSession.currentRoute.outputs)
+    }
+
+    init(
+        audioSession: AVAudioSession = .sharedInstance(),
+        defaults: UserDefaults = .standard,
+        notificationCenter: NotificationCenter = .default
+    ) {
         self.audioSession = audioSession
+        self.defaults = defaults
+        self.notificationCenter = notificationCenter
+        outputPreference = defaults.string(
+            forKey: "agentops.voice.output-preference.v1"
+        ).flatMap(AgentOpsVoiceOutputPreference.init(rawValue:)) ?? .speaker
+        super.init()
+        routeObserver = notificationCenter.addObserver(
+            forName: AVAudioSession.routeChangeNotification,
+            object: audioSession,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.publishCurrentRoute()
+            }
+        }
+    }
+
+    deinit {
+        if let routeObserver {
+            notificationCenter.removeObserver(routeObserver)
+        }
     }
 
     func startRecording() async throws {
@@ -142,12 +228,22 @@ final class AgentOpsVoiceAudioController: NSObject,
         try await withCheckedThrowingContinuation { continuation in
             playbackContinuation = continuation
             do {
+                let configuration =
+                    agentOpsVoicePlaybackAudioSessionConfiguration(
+                        preference: outputPreference
+                    )
                 try audioSession.setCategory(
-                    .playback,
-                    mode: .spokenAudio,
-                    options: [.duckOthers]
+                    configuration.category,
+                    mode: configuration.mode,
+                    options: configuration.options
                 )
                 try audioSession.setActive(true)
+                try audioSession.overrideOutputAudioPort(
+                    Self.outputOverride(
+                        preference: outputPreference,
+                        currentRoute: currentRoute
+                    )
+                )
                 let player = try AVAudioPlayer(
                     data: audio,
                     fileTypeHint: AVFileType.mp3.rawValue
@@ -158,10 +254,53 @@ final class AgentOpsVoiceAudioController: NSObject,
                 guard player.prepareToPlay(), player.play() else {
                     throw AgentOpsVoiceAudioError.playbackFailed
                 }
+                publishCurrentRoute()
             } catch {
                 finishPlayback(error: error)
             }
         }
+    }
+
+    func setOutputPreference(_ preference: AgentOpsVoiceOutputPreference) {
+        guard outputPreference != preference else {
+            publishCurrentRoute()
+            return
+        }
+        outputPreference = preference
+        defaults.set(
+            preference.rawValue,
+            forKey: "agentops.voice.output-preference.v1"
+        )
+        guard player != nil else {
+            publishCurrentRoute()
+            return
+        }
+        do {
+            let configuration =
+                agentOpsVoicePlaybackAudioSessionConfiguration(
+                    preference: preference
+                )
+            try audioSession.setCategory(
+                configuration.category,
+                mode: configuration.mode,
+                options: configuration.options
+            )
+            try audioSession.overrideOutputAudioPort(
+                Self.outputOverride(
+                    preference: preference,
+                    currentRoute: currentRoute
+                )
+            )
+        } catch {
+            // Playback remains active on the last working route.
+        }
+        publishCurrentRoute()
+    }
+
+    func setRouteChangeHandler(
+        _ handler: @escaping @MainActor (AgentOpsAudioRouteKind) -> Void
+    ) {
+        routeChangeHandler = handler
     }
 
     func cancel() {
@@ -207,6 +346,40 @@ final class AgentOpsVoiceAudioController: NSObject,
             continuation.resume(throwing: error)
         } else {
             continuation.resume()
+        }
+    }
+
+    private func publishCurrentRoute() {
+        routeChangeHandler?(currentRoute)
+    }
+
+    private static func outputOverride(
+        preference: AgentOpsVoiceOutputPreference,
+        currentRoute: AgentOpsAudioRouteKind
+    ) -> AVAudioSession.PortOverride {
+        agentOpsVoiceShouldOverrideSpeaker(
+            preference: preference,
+            currentRoute: currentRoute
+        ) ? .speaker : .none
+    }
+
+    private static func routeKind(
+        for outputs: [AVAudioSessionPortDescription]
+    ) -> AgentOpsAudioRouteKind {
+        guard let output = outputs.first else { return .other }
+        switch output.portType {
+        case .builtInSpeaker:
+            return .speaker
+        case .builtInReceiver:
+            return .receiver
+        case .bluetoothA2DP, .bluetoothHFP, .bluetoothLE:
+            return .bluetooth
+        case .airPlay:
+            return .airplay
+        case .headphones, .headsetMic, .usbAudio:
+            return .headphones
+        default:
+            return .other
         }
     }
 }
@@ -293,10 +466,13 @@ final class AgentOpsVoiceViewModel: ObservableObject {
     @Published private(set) var latestResult: AgentOpsTurnResult?
     @Published private(set) var isRunning = false
     @Published private(set) var isRecording = false
+    @Published private(set) var outputPreference: AgentOpsVoiceOutputPreference
+    @Published private(set) var outputRoute: AgentOpsAudioRouteKind
 
     let mockScenario: AgentOpsVoiceMockScenario?
 
     private let audioController: any AgentOpsVoiceAudioHandling
+    private let receiptJournal: AgentOpsMobileReceiptJournal
     private var service: (any AgentOpsVoiceServicing)?
     private weak var rootStore: AgentOpsRootStore?
     private let sessionID = UUID()
@@ -305,11 +481,25 @@ final class AgentOpsVoiceViewModel: ObservableObject {
     init(
         mockScenario: AgentOpsVoiceMockScenario? = nil,
         audioController: (any AgentOpsVoiceAudioHandling)? = nil,
-        service: (any AgentOpsVoiceServicing)? = nil
+        service: (any AgentOpsVoiceServicing)? = nil,
+        receiptJournal: AgentOpsMobileReceiptJournal? = nil
     ) {
         self.mockScenario = mockScenario
-        self.audioController = audioController ?? AgentOpsVoiceAudioController()
+        let controller = audioController ?? AgentOpsVoiceAudioController()
+        self.audioController = controller
         self.service = service
+        self.receiptJournal = receiptJournal ?? .shared
+        outputPreference = controller.outputPreference
+        outputRoute = controller.currentRoute
+        controller.setRouteChangeHandler { [weak self] route in
+            guard let self else { return }
+            self.outputRoute = route
+            self.receiptJournal.record(
+                .audioRouteChanged,
+                sessionID: self.sessionID,
+                audioRoute: route
+            )
+        }
         if let mockScenario {
             applyMock(mockScenario)
         }
@@ -377,6 +567,18 @@ final class AgentOpsVoiceViewModel: ObservableObject {
         }
     }
 
+    var outputLabel: String {
+        switch outputRoute {
+        case .speaker: return "Speaker"
+        case .receiver: return "iPhone"
+        case .bluetooth: return "Bluetooth"
+        case .airplay: return "AirPlay"
+        case .headphones: return "Headphones"
+        case .other:
+            return outputPreference == .speaker ? "Speaker" : "iPhone"
+        }
+    }
+
     func configure(rootStore: AgentOpsRootStore) {
         self.rootStore = rootStore
         guard !isMock, service == nil, let client = rootStore.client else {
@@ -387,7 +589,8 @@ final class AgentOpsVoiceViewModel: ObservableObject {
             client: client,
             sessionID: sessionID,
             clientMetadata: .current(),
-            draftStore: rootStore.draftStore
+            draftStore: rootStore.draftStore,
+            receiptJournal: rootStore.receiptJournal
         )
         service = LiveAgentOpsVoiceService(
             client: client,
@@ -460,11 +663,43 @@ final class AgentOpsVoiceViewModel: ObservableObject {
     }
 
     func stopResponse() {
+        if phase == .speaking {
+            receiptJournal.record(
+                .voicePlaybackCancelled,
+                sessionID: sessionID,
+                taskID: latestResult?.task?.id
+            )
+        }
         activeTurn?.cancel()
         activeTurn = nil
         audioController.cancel()
         isRecording = false
         isRunning = false
+        phase = .idle
+    }
+
+    func setOutputPreference(_ preference: AgentOpsVoiceOutputPreference) {
+        outputPreference = preference
+        audioController.setOutputPreference(preference)
+    }
+
+    func setSceneActive(_ active: Bool) {
+        guard !active, isRunning || isRecording else { return }
+        receiptJournal.record(
+            .voiceBackgroundCancelled,
+            sessionID: sessionID,
+            taskID: latestResult?.task?.id
+        )
+        activeTurn?.cancel()
+        activeTurn = nil
+        audioController.cancel()
+        isRecording = false
+        isRunning = false
+        phase = .paused
+    }
+
+    func resumeFromBackground() {
+        guard phase == .paused else { return }
         phase = .idle
     }
 
@@ -508,6 +743,11 @@ final class AgentOpsVoiceViewModel: ObservableObject {
             try Task.checkCancellation()
             try await audioController.play(speech)
             try Task.checkCancellation()
+            receiptJournal.record(
+                .voiceTurnCompleted,
+                sessionID: sessionID,
+                taskID: execution.result.task?.id
+            )
             phase = .idle
             isRunning = false
         } catch is CancellationError {
@@ -516,6 +756,16 @@ final class AgentOpsVoiceViewModel: ObservableObject {
         } catch {
             let failedPhase = phase
             isRunning = false
+            if case .server(let code, _) = error as? AgentOpsClientError,
+               code.hasPrefix("claude_")
+                    || code == "orchestration_unavailable"
+            {
+                receiptJournal.record(
+                    .voiceProviderUnavailable,
+                    sessionID: sessionID,
+                    fallbackUsed: false
+                )
+            }
             switch failedPhase {
             case .thinking:
                 phase = .failed(
