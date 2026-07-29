@@ -1,0 +1,63 @@
+{
+  "schema": "testflight-feedback-state/1",
+  "app_key": "com.revopsglobal.codeisland.buddy",
+  "asc_app_id": "6791897500",
+  "repo": "revopsglobal/CodeIsland",
+  "path": "docs/testflight-feedback-state.json",
+  "purpose": "Index of TestFlight beta feedback that is already handled, read by the hourly testflight-loop scheduled task. Absence of a resource id from `feedback` means it is UNHANDLED and the loop may pick it up. This is a record of completed work, not a task queue: no claims, assignees, priorities, or scheduling. It is only ever changed by the pull request that ships the corresponding fix or that records an acceptance close, which keeps the fix and the state change atomic in one merge.",
+  "states": {
+    "resolved": "Fixed and accepted. Terminal.",
+    "awaiting_acceptance": "Fix merged and shipped; physical-device acceptance still open. The loop's acceptance sweep closes it via device evidence, Greg's explicit confirmation, or 72h quiet telemetry on the fix build or newer.",
+    "resolved_by_decommission": "The surface the feedback is about is being removed, so repairing it is discarded work. Terminal."
+  },
+  "privacy": "Resource id, resource type, creation timestamp, and fix reference only. Never tester identity, comment text, screenshot content or URLs, or credentials.",
+  "seeded": "2026-07-29",
+  "feedback": {
+    "AHnyCb2NHnW4lm4mJ1hDThI": {
+      "state": "resolved",
+      "type": "betaFeedbackScreenshotSubmissions",
+      "created": "2026-07-22T04:59:26.55Z",
+      "fix": "PR #148",
+      "basis": "migrated 2026-07-29 from the retired AgentOps queue"
+    },
+    "AILr-zj8zY1XvGVKJAfTQMU": {
+      "state": "resolved",
+      "type": "betaFeedbackScreenshotSubmissions",
+      "created": "2026-07-21T18:58:38.624Z",
+      "fix": "PR #148",
+      "basis": "migrated 2026-07-29 from the retired AgentOps queue; superseded by the PR #148 repair"
+    },
+    "AOQjZViZtOh4QH5-u7-vMF8": {
+      "state": "resolved",
+      "type": "betaFeedbackScreenshotSubmissions",
+      "created": "2026-07-21T15:39:16.826Z",
+      "fix": "PR #148",
+      "basis": "migrated 2026-07-29 from the retired AgentOps queue; superseded by the PR #148 repair"
+    },
+    "AKqHhtT5QC6fikTYKiysS9E": {
+      "state": "resolved_by_decommission",
+      "type": "betaFeedbackScreenshotSubmissions",
+      "created": "2026-07-25T16:54:18.698Z",
+      "basis": "AgentOps Voice surface is being stripped from the app (decision 2026-07-28); repairing it is discarded work"
+    },
+    "AODbcuwgLYRssikHyh4PwGo": {
+      "state": "resolved_by_decommission",
+      "type": "betaFeedbackScreenshotSubmissions",
+      "created": "2026-07-25T07:18:32.875Z",
+      "basis": "AgentOps Voice surface is being stripped from the app (decision 2026-07-28); repairing it is discarded work"
+    },
+    "AKftSKnP-gmbcW_KtTG0I-U": {
+      "state": "awaiting_acceptance",
+      "type": "betaFeedbackScreenshotSubmissions",
+      "created": "2026-07-23T20:04:43.715Z",
+      "fix": "branch codex/buddy-foreground-push-verdict",
+      "fix_build": "20260723222742",
+      "basis": "migrated 2026-07-29 from the retired AgentOps queue; fix merged and shipped in build 20260723222742, physical acceptance still open"
+    }
+  },
+  "nudged_builds": [
+    "20260723222742",
+    "20260724000850",
+    "20260728190143"
+  ]
+}
