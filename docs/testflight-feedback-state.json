@@ -53,12 +53,13 @@
       "basis": "AgentOps Voice surface is being stripped from the app (decision 2026-07-28); repairing it is discarded work"
     },
     "AKftSKnP-gmbcW_KtTG0I-U": {
-      "state": "awaiting_acceptance",
+      "state": "resolved",
       "type": "betaFeedbackScreenshotSubmissions",
       "created": "2026-07-23T20:04:43.715Z",
       "fix": "branch codex/buddy-foreground-push-verdict",
       "fix_build": "20260723222742",
-      "basis": "migrated 2026-07-29 from the retired AgentOps queue; fix merged and shipped in build 20260723222742, physical acceptance still open"
+      "basis": "fix_build 20260723222742 uploaded 2026-07-23T22:31:16Z: installedOnPhysicalDevice true, installCount 1, sessionCount 5, crashCount 0, feedbackCount 0. 5.75 days elapsed, well past the 72h window. The only App Store Connect feedback newer than that build is AKqHhtT5QC6fikTYKiysS9E and AODbcuwgLYRssikHyh4PwGo, both AgentOps Voice and already resolved_by_decommission -- a different symptom, so no new feedback matches this one.",
+      "closed_by": "quiet_telemetry"
     }
   },
   "nudged_builds": [
