@@ -38,14 +38,17 @@ struct CompanionCommandCenterView: View {
     @State private var destination: AgentOpsPrimaryDestination
     @State private var presentedSheet: AgentOpsShellSheet?
 
-    private let usesLegacyTestShell: Bool
+    private let usesAgentOpsShell: Bool
 
     init(topPadding: CGFloat) {
         self.topPadding = topPadding
         let arguments = ProcessInfo.processInfo.arguments
-        usesLegacyTestShell = arguments.contains {
-            $0.hasPrefix("-CodeIslandCompanion")
-        }
+        // AgentOps decommission (2026-07-28): the companion UI is the default
+        // surface again. The voice shell is opt-in only, via the explicit
+        // -AgentOpsShellEnabled launch argument or the UI-test voice mocks,
+        // until the full AgentOps removal lands.
+        usesAgentOpsShell = arguments.contains("-AgentOpsShellEnabled")
+            || arguments.contains("-AgentOpsVoiceMock")
         let scenario = AgentOpsVoiceMockScenario.from(arguments: arguments)
         _voiceModel = StateObject(
             wrappedValue: AgentOpsVoiceViewModel(mockScenario: scenario)
@@ -62,10 +65,10 @@ struct CompanionCommandCenterView: View {
     }
 
     var body: some View {
-        if usesLegacyTestShell {
-            LegacyCompanionCommandCenterView(topPadding: topPadding)
-        } else {
+        if usesAgentOpsShell {
             agentOpsShell
+        } else {
+            LegacyCompanionCommandCenterView(topPadding: topPadding)
         }
     }
 

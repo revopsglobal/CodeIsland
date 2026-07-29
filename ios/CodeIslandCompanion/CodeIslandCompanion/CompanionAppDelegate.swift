@@ -38,13 +38,12 @@ final class CompanionAppDelegate: NSObject, UIApplicationDelegate, UNUserNotific
     ) -> Bool {
         let center = UNUserNotificationCenter.current()
         center.delegate = self
-        // Do not surprise the user with a permission sheet at app launch.
-        // Existing authorized installs still register immediately; Task 14's
-        // explicit Attention opt-in owns the first permission request.
-        center.getNotificationSettings { settings in
-            guard [.authorized, .provisional, .ephemeral]
-                .contains(settings.authorizationStatus)
-            else { return }
+        // Buddy is the away-from-desk approval channel, so a fresh install
+        // must be able to alert immediately: request permission at launch,
+        // then register. Already-authorized installs see no prompt and
+        // register exactly as before.
+        center.requestAuthorization(options: [.alert, .badge, .sound]) { granted, _ in
+            guard granted else { return }
             DispatchQueue.main.async {
                 application.registerForRemoteNotifications()
             }
