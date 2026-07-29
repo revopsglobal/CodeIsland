@@ -122,8 +122,8 @@ class PanelWindowController: NSObject, NSWindowDelegate {
         // covers the header and usage footer.
         let requested = max(300, maxSessions * 110 + 70)
         // Never taller than the screen below the menu bar. Without this clamp a
-        // high maxVisibleSessions (or several tall rows) pushed the panel — and
-        // its Now/Today/Tools nav — off the top of the screen.
+        // high maxVisibleSessions (or several tall rows) pushed the panel off
+        // the top of the screen.
         let usable = max(300, screen.visibleFrame.height - 8)
         let maxH = min(requested, usable)
         let screenW = screen.frame.width

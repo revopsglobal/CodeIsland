@@ -669,7 +669,6 @@ final class PersonalHubDataModel: ObservableObject {
         guard result != nil else { return false }
         let optimistic = plan.optimisticPosition.map(media.updatingPosition) ?? media
         nowPlaying = optimistic
-        MediaHUDController.shared.showNowPlaying(optimistic)
         refreshNowPlaying()
         return true
     }
@@ -758,16 +757,12 @@ final class PersonalHubDataModel: ObservableObject {
             mediaPermissionError = nil
             return
         }
-        let previousTrackKey = nowPlaying?.trackKey
         Task { [weak self] in
             let result = await Task.detached(priority: .utility) {
                 Self.readNowPlaying(appName: appName)
             }.value
             guard let self else { return }
             self.nowPlaying = result
-            if let result, result.trackKey != previousTrackKey {
-                MediaHUDController.shared.showNowPlaying(result)
-            }
             self.mediaPermissionError = result == nil
                 ? "Allow CodeIsland to control \(appName) in Privacy & Security → Automation"
                 : nil
@@ -1248,15 +1243,10 @@ final class PersonalHubDataModel: ObservableObject {
     }
 
     func toggleMute() -> Bool {
-        let current = quickSettings ?? Self.readQuickSettings()
         let script = #"set volume output muted not (output muted of (get volume settings))"#
         guard ProcessRunner.run(path: "/usr/bin/osascript", args: ["-e", script], timeout: 5) != nil else {
             return false
         }
-        MediaHUDController.shared.showVolume(
-            percent: current.outputVolume ?? 0,
-            muted: !current.outputMuted
-        )
         refreshHostData()
         return true
     }
@@ -1272,7 +1262,6 @@ final class PersonalHubDataModel: ObservableObject {
         guard ProcessRunner.run(path: "/usr/bin/osascript", args: ["-e", script], timeout: 5) != nil else {
             return false
         }
-        MediaHUDController.shared.showVolume(percent: value, muted: false)
         refreshHostData()
         return true
     }
