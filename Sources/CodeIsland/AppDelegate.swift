@@ -43,19 +43,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                     FileHandle.standardError.write(Data("wrote \(name)\n".utf8))
                 }
-                // Secondary surfaces (M5) — dark only (panel is dark-only).
-                // Toggle first: it has no singleton dependencies, so it lands
-                // even if a later surface stalls on a shared model.
-                if let img = PanelSnapshot.renderToggle(selection: .glances) {
-                    PanelSnapshot.writePNG(img, to: dir.appendingPathComponent("toggle.png"))
-                }
-                if let img = PanelSnapshot.renderGlances() {
-                    PanelSnapshot.writePNG(img, to: dir.appendingPathComponent("glances.png"))
-                }
-                if let img = PanelSnapshot.renderHub() {
-                    PanelSnapshot.writePNG(img, to: dir.appendingPathComponent("hub.png"))
-                }
-                FileHandle.standardError.write(Data("wrote surfaces\n".utf8))
                 exit(0)
             }
             return
@@ -114,12 +101,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         panelController = PanelWindowController(appState: appState)
         panelController?.showPanel()
-
-        // Local personal-status signals (Downloads + accessory batteries).
-        // Monitoring is event-driven and only polls download progress while a
-        // partial file exists, so it stays useful without becoming background
-        // churn when the notch is idle.
-        PersonalUtilitiesModel.shared.start()
 
         appState.startSessionDiscovery()
         appState.startCodexAppServerWatcher()
@@ -233,7 +214,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         hookServer?.stop()
         appState.stopCodexAppServerWatcher()
         appState.stopSessionDiscovery()
-        PersonalUtilitiesModel.shared.stop()
         WindowLayoutDropController.shared.stop()
     }
 
@@ -310,10 +290,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             if let id = appState.activeSessionId, let session = appState.sessions[id] {
                 TerminalActivator.activate(session: session, sessionId: id)
             }
-        case .quickTask:
-            QuickJotWindowController.shared.show(destination: .task)
-        case .quickNote:
-            QuickJotWindowController.shared.show(destination: .note)
         }
     }
 

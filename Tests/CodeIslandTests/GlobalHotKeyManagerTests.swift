@@ -24,18 +24,6 @@ final class GlobalHotKeyManagerTests: XCTestCase {
         XCTAssertEqual(mods, UInt32(cmdKey))
     }
 
-    func testQuickJotDefaultsUseControlOptionTAndN() throws {
-        let task = try XCTUnwrap(ShortcutAction.quickTask.defaultBinding)
-        let note = try XCTUnwrap(ShortcutAction.quickNote.defaultBinding)
-
-        XCTAssertEqual(task.keyCode, UInt16(kVK_ANSI_T))
-        XCTAssertEqual(note.keyCode, UInt16(kVK_ANSI_N))
-        XCTAssertEqual(task.modifiers, [.control, .option])
-        XCTAssertEqual(note.modifiers, [.control, .option])
-        XCTAssertTrue(ShortcutAction.quickTask.defaultEnabled)
-        XCTAssertTrue(ShortcutAction.quickNote.defaultEnabled)
-    }
-
     func testDefaultShortcutRegistrationsAreConflictFree() {
         let bindings = ShortcutAction.allCases.compactMap(\.defaultBinding)
 

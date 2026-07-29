@@ -1,5 +1,15 @@
 # Changelog
 
+## [v1.0.66] - 2026-07-28
+
+### English
+- Restore the Mac notch to CodeIsland's base session-only interface. Remove the custom Now / Today / Tools navigation, Glances and Personal Hub views, personal download and battery status, and Quick Jot capture commands.
+- Remove the custom media HUD and its Music/Spotify and volume side effects. Buddy can still fetch media state from the Mac, but polling or changing tracks no longer makes CodeIsland display Now Playing at random.
+
+### 中文
+- 将 Mac 刘海界面恢复为 CodeIsland 的基础会话界面。移除自定义的 Now / Today / Tools 导航、Glances 与 Personal Hub 视图、下载与电池状态，以及 Quick Jot 快速记录命令。
+- 移除自定义媒体 HUD 及其音乐、Spotify 和音量弹层副作用。Buddy 仍可从 Mac 获取媒体状态，但轮询或切换曲目不会再让 CodeIsland 随机显示 Now Playing。
+
 ## [v1.0.65] - 2026-07-28
 
 ### English

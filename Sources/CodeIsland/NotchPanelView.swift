@@ -113,30 +113,27 @@ struct NotchPanelView: View {
     @AppStorage(SettingsKey.collapsedWidthScale) private var collapsedWidthScale = SettingsDefaults.collapsedWidthScale
     @AppStorage(SettingsKey.hapticOnHover) private var hapticOnHover = SettingsDefaults.hapticOnHover
     @AppStorage(SettingsKey.hapticIntensity) private var hapticIntensity = SettingsDefaults.hapticIntensity
-    @ObservedObject private var personalUtilities = PersonalUtilitiesModel.shared
-    @ObservedObject private var mediaHUD = MediaHUDController.shared
 
     /// Delayed hover: prevents accidental expansion when mouse passes through
     @State private var hoverTimer: Timer?
     @State private var isHovered = false
+    @State private var idleHovered = false
     /// Three-stage hover: collapsed → prehover (immediate ack) → expanded (after delay)
     @State private var hoverPhase: NotchHoverPhase = .collapsed
     /// Curtain animation for tool status toggle
     @State private var curtainOffset: CGFloat = 0
     @State private var curtainOpacity: Double = 1
     @State private var displayedToolStatus: Bool = SettingsDefaults.showToolStatus
-    /// Personal surfaces available above the session list.
-    @State private var homePanel: HomePanelSelection = .sessions
 
     private var isActive: Bool { !appState.sessions.isEmpty }
-    private var hasPersonalStatus: Bool { personalUtilities.hasCompactStatus }
-    /// The old CodeIsland shell used a non-expandable idle marker when no agents
-    /// were running. This personal build keeps the real bar available so Glances
-    /// and local utilities remain reachable all day.
+    /// First launch / no-session state should still render a visible marker so
+    /// CodeIsland does not disappear completely behind the physical notch.
+    private var showIdleIndicator: Bool {
+        !isActive && !hideWhenNoSession
+    }
     /// Whether the bar content should be visible (respects hideWhenNoSession)
     private var showBar: Bool {
-        if !isActive { return hasPersonalStatus || !hideWhenNoSession }
-        return hasPersonalStatus || !(hideWhenNoSession && appState.activeSessionCount == 0)
+        isActive && !(hideWhenNoSession && appState.activeSessionCount == 0)
     }
     private var shouldShowExpanded: Bool {
         showBar && appState.surface.isExpanded
@@ -166,19 +163,19 @@ struct NotchPanelView: View {
     private var panelWidth: CGFloat {
         let nw = effectiveNotchW
         let maxWidth = min(620, screenWidth - 40)
+        if showIdleIndicator { return idleHovered ? nw + compactWingWidth * 2 + 80 : nw + compactWingWidth * 2 }
         if shouldShowExpanded { return min(max(nw + 200, 580), maxWidth) }
-        if !isActive && !hasPersonalStatus { return nw + compactWingWidth * 2 }
+        if !isActive { return hasNotch ? nw - 20 : nw }
         let wing = compactWingWidth
         let extra: CGFloat = appState.status == .idle ? 0 : 20
         // Reserve space for tool status — proportional to screen width
         let toolExtra: CGFloat = displayedToolStatus ? (hasNotch ? screenWidth * 0.03 : screenWidth * 0.04) : 0
         // Immediate hover acknowledgement: a slight widen while the expand delay runs
         let prehoverExtra: CGFloat = shouldShowPrehover ? NotchHoverInteraction.prehoverWidthDelta : 0
-        let personalExtra: CGFloat = personalUtilities.hasCompactStatus ? 58 : 0
         // Room for the named attention pill, which replaced a bare bell glyph.
         let attentionExtra: CGFloat = (appState.status == .waitingApproval
             || appState.status == .waitingQuestion) ? 92 : 0
-        return nw + wing * 2 + extra + toolExtra + prehoverExtra + personalExtra + attentionExtra
+        return nw + wing * 2 + extra + toolExtra + prehoverExtra + attentionExtra
     }
 
     var body: some View {
@@ -199,6 +196,15 @@ struct NotchPanelView: View {
                         CompactRightWing(appState: appState, expanded: shouldShowExpanded, hasNotch: hasNotch)
                     }
                     .frame(height: notchHeight)
+                } else if showIdleIndicator {
+                    IdleIndicatorBar(
+                        mascotSize: mascotSize,
+                        compactWingWidth: compactWingWidth,
+                        notchW: effectiveNotchW,
+                        notchHeight: notchHeight,
+                        hasNotch: hasNotch,
+                        hovered: idleHovered
+                    )
                 } else {
                     // Idle: just the notch shell
                     Spacer()
@@ -268,19 +274,7 @@ struct NotchPanelView: View {
                         SessionListView(appState: appState, onlySessionId: appState.justCompletedSessionId)
                             .transition(.blurFade.combined(with: .move(edge: .top)))
                     case .sessionList:
-                        VStack(spacing: 0) {
-                            GlancesToggleRow(selection: $homePanel)
-                            switch homePanel {
-                            case .sessions:
-                                SessionListView(appState: appState, onlySessionId: nil)
-                            case .glances:
-                                GlancesView()
-                                    .transition(.blurFade)
-                            case .hub:
-                                PersonalHubMacView(appState: appState)
-                                    .transition(.blurFade)
-                            }
-                        }
+                        SessionListView(appState: appState, onlySessionId: nil)
                         .transition(.blurFade.combined(with: .move(edge: .top)))
                     case .collapsed:
                         EmptyView()
@@ -323,6 +317,23 @@ struct NotchPanelView: View {
             .scaleEffect(shouldShowPrehover ? NotchHoverInteraction.prehoverScale : 1, anchor: .top)
             .contentShape(Rectangle())
             .onHover { hovering in
+                // Idle indicator hover — delay un-hover to prevent oscillation
+                // when the animated width change crosses the mouse position.
+                if showIdleIndicator {
+                    if hovering {
+                        hoverTimer?.invalidate()
+                        hoverTimer = nil
+                        withAnimation(NotchAnimation.micro) { idleHovered = true }
+                    } else {
+                        hoverTimer?.invalidate()
+                        hoverTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: false) { _ in
+                            Task { @MainActor in
+                                withAnimation(NotchAnimation.micro) { idleHovered = false }
+                            }
+                        }
+                    }
+                    return
+                }
                 switch appState.surface {
                 case .approvalCard, .questionCard: return
                 case .completionCard:
@@ -424,112 +435,6 @@ struct NotchPanelView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .animation(NotchAnimation.open, value: appState.surface)
-        .overlay(alignment: .top) {
-            if let presentation = mediaHUD.presentation {
-                MediaHUDView(presentation: presentation) {
-                    mediaHUD.dismiss(id: presentation.id)
-                }
-                .padding(.top, notchHeight + 7)
-                .transition(.move(edge: .top).combined(with: .opacity))
-                .zIndex(20)
-            }
-        }
-        .animation(.snappy(duration: 0.28), value: mediaHUD.presentation?.id)
-    }
-}
-
-private struct MediaHUDView: View {
-    let presentation: MediaHUDController.Presentation
-    let dismiss: () -> Void
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    private var animateAmbient: Bool {
-        presentation.kind == .nowPlaying
-            && MediaHUDController.shouldAnimateAmbient(
-                reduceMotion: reduceMotion,
-                thermalState: ProcessInfo.processInfo.thermalState
-            )
-    }
-
-    var body: some View {
-        HStack(spacing: 11) {
-            if let artwork = presentation.artworkJPEG,
-               let image = NSImage(data: artwork) {
-                Image(nsImage: image)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: 48, height: 48)
-                    .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 11, style: .continuous)
-                            .stroke(Color.white.opacity(0.13), lineWidth: 1)
-                    )
-            } else {
-                Image(systemName: presentation.symbol)
-                    .font(.system(size: 19, weight: .bold))
-                    .foregroundStyle(Color.orange)
-                    .frame(width: 44, height: 44)
-                    .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 11))
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(presentation.title)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(.white.opacity(0.92))
-                    .lineLimit(1)
-                if let subtitle = presentation.subtitle, !subtitle.isEmpty {
-                    Text(subtitle)
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.42))
-                        .lineLimit(1)
-                }
-                if let level = presentation.level {
-                    ProgressView(value: min(max(level, 0), 1))
-                        .tint(.orange)
-                        .frame(width: 146)
-                }
-            }
-
-            if presentation.kind == .nowPlaying {
-                MediaAmbientBars(animate: animateAmbient)
-                    .frame(width: 28, height: 28)
-            }
-        }
-        .padding(.horizontal, 13)
-        .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.black.opacity(0.94))
-                .shadow(color: .black.opacity(0.5), radius: 18, y: 8)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.white.opacity(0.1), lineWidth: 1)
-        )
-        .contentShape(Rectangle())
-        .onTapGesture(perform: dismiss)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel([presentation.title, presentation.subtitle].compactMap { $0 }.joined(separator: ", "))
-    }
-}
-
-private struct MediaAmbientBars: View {
-    let animate: Bool
-
-    var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 12.0, paused: !animate)) { timeline in
-            let phase = timeline.date.timeIntervalSinceReferenceDate
-            HStack(alignment: .center, spacing: 3) {
-                ForEach(0..<4, id: \.self) { index in
-                    let wave = animate ? (sin(phase * 3.2 + Double(index) * 1.3) + 1) / 2 : 0.35
-                    Capsule()
-                        .fill(Color.orange.opacity(0.5 + wave * 0.45))
-                        .frame(width: 3, height: 7 + wave * 18)
-                }
-            }
-            .frame(maxHeight: .infinity)
-        }
     }
 }
 
@@ -647,7 +552,6 @@ private struct CompactRightWing: View {
     @AppStorage(SettingsKey.quietHoursEnabled) private var quietHoursEnabled = SettingsDefaults.quietHoursEnabled
     @AppStorage(SettingsKey.quietHoursStart) private var quietHoursStart = SettingsDefaults.quietHoursStart
     @AppStorage(SettingsKey.quietHoursEnd) private var quietHoursEnd = SettingsDefaults.quietHoursEnd
-    @ObservedObject private var personalUtilities = PersonalUtilitiesModel.shared
 
     /// The one session that needs a decision, named. Uses the same router that
     /// orders the expanded list, so the collapsed bar and the panel never
@@ -744,36 +648,6 @@ private struct CompactRightWing: View {
                     .foregroundStyle(Color(red: 1.0, green: 0.7, blue: 0.28))
                     .frame(maxWidth: 108, alignment: .trailing)
                     .help(pending.tooltip)
-                }
-
-                if let download = personalUtilities.primaryDownload {
-                    HStack(spacing: 3) {
-                        Image(systemName: download.isStalled ? "pause.fill" : "arrow.down")
-                        if let percent = download.percent {
-                            Text("\(percent)%")
-                        } else {
-                            Text(ByteCountFormatter.string(fromByteCount: download.bytesReceived, countStyle: .file))
-                        }
-                    }
-                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(download.isStalled ? .white.opacity(0.4) : Color(red: 0.3, green: 0.85, blue: 0.4))
-                    .lineLimit(1)
-                    .help("Downloading \(download.name)")
-                } else if let completed = personalUtilities.recentDownloadCompleted {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(Color(red: 0.3, green: 0.85, blue: 0.4))
-                        .help("\(completed) finished")
-                }
-
-                if let battery = personalUtilities.lowBattery {
-                    HStack(spacing: 2) {
-                        Image(systemName: "battery.25percent")
-                        Text("\(battery.primaryPercent)%")
-                    }
-                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(.orange)
-                    .help("\(battery.name): \(battery.summary)")
                 }
 
                 if showToolStatus {
@@ -953,6 +827,63 @@ private struct NotchIconButton: View {
         .buttonStyle(.plain)
         .onHover { h in withAnimation(NotchAnimation.micro) { hovering = h } }
         .help(tooltip ?? "")
+    }
+}
+
+// MARK: - Idle Indicator Bar
+
+private struct IdleIndicatorBar: View {
+    let mascotSize: CGFloat
+    let compactWingWidth: CGFloat
+    let notchW: CGFloat
+    let notchHeight: CGFloat
+    let hasNotch: Bool
+    let hovered: Bool
+    @ObservedObject private var l10n = L10n.shared
+    @AppStorage(SettingsKey.soundEnabled) private var soundEnabled = SettingsDefaults.soundEnabled
+    @AppStorage(SettingsKey.defaultSource) private var defaultSource = SettingsDefaults.defaultSource
+
+    var body: some View {
+        HStack(spacing: 0) {
+            HStack(spacing: 6) {
+                MascotView(source: defaultSource, status: .idle, size: mascotSize)
+                    .opacity(hovered ? 0.9 : 0.5)
+            }
+            .padding(.leading, 6)
+
+            Spacer(minLength: hasNotch ? notchW : 0)
+
+            if hovered {
+                HStack(spacing: 8) {
+                    Text("0")
+                        .font(.system(size: 13, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.white.opacity(0.4))
+
+                    HStack(spacing: 4) {
+                        NotchIconButton(
+                            icon: soundEnabled ? "speaker.wave.2" : "speaker.slash",
+                            tooltip: soundEnabled ? l10n["mute"] : l10n["enable_sound_tooltip"]
+                        ) {
+                            soundEnabled.toggle()
+                        }
+                        NotchIconButton(icon: "gearshape", tooltip: l10n["settings"]) {
+                            SettingsWindowController.shared.show()
+                        }
+                        NotchIconButton(
+                            icon: "power",
+                            tint: Color(red: 1.0, green: 0.4, blue: 0.4),
+                            tooltip: l10n["quit"]
+                        ) {
+                            NSApplication.shared.terminate(nil)
+                        }
+                    }
+                }
+                .padding(.trailing, 6)
+                .transition(.opacity)
+            }
+        }
+        .frame(height: notchHeight)
+        .animation(NotchAnimation.micro, value: hovered)
     }
 }
 
@@ -3555,30 +3486,6 @@ enum PanelSnapshot {
         .frame(width: 430, height: 38)
         .background(Color.black)
         return image(of: island, dark: dark, width: 430)
-    }
-
-    /// The Now/Today/Tools nav (M5): the selected tab moves off the alert
-    /// accent onto neutral ink. Rendered with a fixed selection.
-    static func renderToggle(selection: HomePanelSelection, width: CGFloat = 420) -> NSImage? {
-        image(of: GlancesToggleRow(selection: .constant(selection))
-                .frame(width: width, alignment: .leading),
-              dark: true, width: width)
-    }
-
-    /// The Today / Glances secondary surface (M5). Rendered in its empty state
-    /// (no run loop, so onAppear never fires) — which still exercises the amber
-    /// recovery buttons, section labels and dividers the migration touched.
-    static func renderGlances(width: CGFloat = 420) -> NSImage? {
-        image(of: GlancesView().frame(width: width, height: 520, alignment: .top),
-              dark: true, width: width)
-    }
-
-    /// The Tools / Hub secondary surface (M5). With no snapshot yet it shows the
-    /// mode strip — the exact site of the hardcoded black-on-amber button text.
-    static func renderHub(width: CGFloat = 420) -> NSImage? {
-        image(of: PersonalHubMacView(appState: AppState())
-                .frame(width: width, height: 120, alignment: .top),
-              dark: true, width: width)
     }
 
     private static func image<V: View>(of view: V, dark: Bool, width: CGFloat) -> NSImage? {
