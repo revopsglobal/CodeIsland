@@ -502,8 +502,33 @@ private struct CompanionSignalBoard: View {
     let connectionState: RemoteApprovalClient.ConnectionState
     let activeSessionStatus: CompanionStatus?
 
-    private var needsAttention: Bool {
+    private var remoteNeedsAttention: Bool {
         approvalCount + questionCount + urgentTaskCount > 0
+    }
+
+    private var sessionNeedsAttention: Bool {
+        guard let activeSessionStatus else { return false }
+        switch activeSessionStatus {
+        case .waitingApproval, .waitingQuestion: return true
+        case .running, .processing, .idle: return false
+        }
+    }
+
+    private var needsAttention: Bool {
+        remoteNeedsAttention || sessionNeedsAttention
+    }
+
+    private var attentionSubtitle: String {
+        if remoteNeedsAttention {
+            return "Review what needs Greg before anything else."
+        }
+        if sessionNeedsAttention {
+            return "A nearby session is waiting for you. Answer it from Sessions in the dock."
+        }
+        if activeTaskCount > 0 {
+            return "Your Mac is working. Routine updates stay in place."
+        }
+        return "No approvals, questions, or coding tasks are waiting."
     }
 
     private var connectionTitle: String {
@@ -540,7 +565,7 @@ private struct CompanionSignalBoard: View {
                     Text(needsAttention ? "Signal is hot" : (activeTaskCount > 0 ? "Work is moving" : "Signal is quiet"))
                         .font(.system(size: 16, weight: .black, design: .rounded))
                         .foregroundStyle(Color.ciForeground)
-                    Text(needsAttention ? "Review what needs Greg before anything else." : (activeTaskCount > 0 ? "Your Mac is working. Routine updates stay in place." : "No approvals, questions, or coding tasks are waiting."))
+                    Text(attentionSubtitle)
                         .font(.footnote.weight(.medium))
                         .foregroundStyle(Color.ciForeground.opacity(0.52))
                 }
@@ -592,7 +617,9 @@ private struct CompanionSignalBoard: View {
         )
         .accessibilityElement(children: .contain)
         .accessibilityLabel(needsAttention
-            ? "\(approvalCount) approvals, \(questionCount) questions, and \(urgentTaskCount) coding tasks need attention"
+            ? (remoteNeedsAttention
+                ? "\(approvalCount) approvals, \(questionCount) questions, and \(urgentTaskCount) coding tasks need attention"
+                : "A nearby session is waiting for you in Sessions.")
             : "No approvals, questions, or urgent coding tasks are waiting.")
         .accessibilityIdentifier("companion.signalBoard")
     }

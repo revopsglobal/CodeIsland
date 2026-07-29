@@ -13,6 +13,12 @@
   "privacy": "Resource id, resource type, creation timestamp, and fix reference only. Never tester identity, comment text, screenshot content or URLs, or credentials.",
   "seeded": "2026-07-29",
   "feedback": {
+    "AKboTx9vwPLfjVW2XOe5yTI": {
+      "state": "awaiting_acceptance",
+      "resource_type": "betaFeedbackScreenshotSubmissions",
+      "created": "2026-07-23T06:37:19.186Z",
+      "fix": "codex/tf-AKboTx9vwPLfjVW2XOe5yTI-what-needs-me"
+    },
     "AHnyCb2NHnW4lm4mJ1hDThI": {
       "state": "resolved",
       "type": "betaFeedbackScreenshotSubmissions",
