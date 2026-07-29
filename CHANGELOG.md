@@ -1,5 +1,15 @@
 # Changelog
 
+## [v1.0.65] - 2026-07-28
+
+### English
+- Restore the companion command center as the default app surface. The AgentOps voice shell no longer takes over launch; it is opt-in only, behind the `-AgentOpsShellEnabled` launch argument, pending full removal under the AgentOps decommission decided 2026-07-28.
+- Ask for notification permission at first launch again (alerts, sounds, badges) and register for push once granted. The AgentOps shell had deferred the request to its own opt-in surface, which left a fresh Buddy install silent.
+
+### 中文
+- 恢复伴侣指挥中心为应用默认界面。AgentOps 语音外壳不再接管启动，改为仅通过 `-AgentOpsShellEnabled` 启动参数显式启用，并将随 AgentOps 退役决定（2026-07-28）彻底移除。
+- 重新在首次启动时请求通知权限（提醒、声音、角标），获准后注册推送。此前 AgentOps 外壳将该请求推迟到其自身的启用界面，导致全新安装的 Buddy 收不到任何通知。
+
 ## [v1.0.64] - 2026-07-23
 
 ### English
