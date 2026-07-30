@@ -32,20 +32,23 @@ setup() {
   [ "$status" -ne 0 ]
 }
 
-@test "TestFlight regenerates and tests AgentOps Voice before archive" {
+@test "TestFlight regenerates the pinned project before archiving" {
   [ "$(tr -d '[:space:]' < "$REPO_ROOT/.xcodegen-version")" = "2.46.0" ]
 
   generate_line="$(grep -nF 'xcodegen generate --spec ios/CodeIslandCompanion/project.yml' "$WORKFLOW" | cut -d: -f1)"
-  resolve_line="$(grep -nF -- '-resolvePackageDependencies' "$WORKFLOW" | cut -d: -f1)"
-  voice_test_line="$(grep -nF 'Test AgentOps Voice before archive' "$WORKFLOW" | cut -d: -f1)"
+  drift_line="$(grep -nF 'ios/CodeIslandCompanion/CodeIslandCompanion.xcodeproj/project.pbxproj' "$WORKFLOW" | cut -d: -f1)"
   archive_line="$(grep -nF 'Archive signed iPhone app' "$WORKFLOW" | cut -d: -f1)"
 
-  [ "$generate_line" -lt "$resolve_line" ]
-  [ "$resolve_line" -lt "$voice_test_line" ]
-  [ "$voice_test_line" -lt "$archive_line" ]
+  [ "$generate_line" -lt "$drift_line" ]
+  [ "$drift_line" -lt "$archive_line" ]
 
-  grep -Fq -- '-onlyUsePackageVersionsFromResolvedFile' "$WORKFLOW"
-  grep -Fq -- '-disableAutomaticPackageResolution' "$WORKFLOW"
-  grep -Fq -- '-only-testing:CodeIslandCompanionTests' "$WORKFLOW"
+  grep -Fq -- 'git diff --exit-code' "$WORKFLOW"
   grep -Fq -- '"$RUNNER_TEMP/xcodegen/xcodegen/bin/xcodegen" --version' "$WORKFLOW"
+}
+
+@test "TestFlight carries no AgentOps Voice pilot machinery" {
+  run grep -Fqi 'agentops' "$WORKFLOW"
+  [ "$status" -ne 0 ]
+  run grep -Fqi 'agentops' "$PROJECT_SPEC"
+  [ "$status" -ne 0 ]
 }

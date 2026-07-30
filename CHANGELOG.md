@@ -1,5 +1,15 @@
 # Changelog
 
+## [v1.0.67] - 2026-07-30
+
+### English
+- Remove the AgentOps Voice pilot from Buddy. Its gateway was stopped on 2026-07-28 with the AgentOps decommission, so the voice shell, work and attention screens, event stream, push coordinator, mobile receipts, auth store, and the Supabase dependency they needed are all gone. The companion command center is now the app's only surface, with no launch-argument shell in front of it.
+- Drop the AgentOps build settings, Info.plist keys, and TestFlight secret from the release pipeline. Buddy no longer ships a gateway URL or a Supabase key, and the microphone permission text now describes the only remaining use: local dictation and the microphone pre-check.
+
+### 中文
+- 从 Buddy 中移除 AgentOps 语音试点。其网关已随 2026-07-28 的 AgentOps 退役停用，因此语音外壳、工作与待办界面、事件流、推送协调器、移动端回执、认证存储，以及它们依赖的 Supabase 组件全部删除。伴侣指挥中心现在是应用的唯一界面，前面不再有任何启动参数外壳。
+- 从发布流程中移除 AgentOps 构建设置、Info.plist 键值与 TestFlight 密钥。Buddy 不再内置网关地址或 Supabase 密钥，麦克风权限说明也改为描述唯一保留的用途：本地听写与麦克风预检。
+
 ## [v1.0.66] - 2026-07-28
 
 ### English

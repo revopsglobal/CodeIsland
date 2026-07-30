@@ -10,13 +10,6 @@ settings:
     CODE_SIGN_STYLE: Automatic
     CURRENT_PROJECT_VERSION: "4"
     MARKETING_VERSION: "1.0.0"
-    AGENTOPS_BASE_URL: "https://voice.agentops.revopsglobal.com"
-    AGENTOPS_SUPABASE_URL: "https://yyizocyaehmqrottmnaz.supabase.co"
-    AGENTOPS_SUPABASE_ANON_KEY: ""
-packages:
-  Supabase:
-    url: https://github.com/supabase/supabase-swift.git
-    exactVersion: 2.46.0
 targets:
   CodeIslandCompanion:
     type: application
@@ -71,10 +64,7 @@ targets:
         embed: true
       - target: CodeIslandShareExtension
         embed: true
-      - package: Supabase
-        product: Auth
       - sdk: AppIntents.framework
-      - sdk: AVKit.framework
       - sdk: Speech.framework
   CodeIslandCompanionWidget:
     type: app-extension
@@ -162,8 +152,6 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
     dependencies:
       - target: CodeIslandCompanion
-      - package: Supabase
-        product: Auth
 schemes:
   CodeIslandCompanion:
     build:
