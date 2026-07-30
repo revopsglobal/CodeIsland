@@ -248,6 +248,33 @@ jobs:
             -clonedSourcePackagesDirPath "$RUNNER_TEMP/SourcePackages" \
             -onlyUsePackageVersionsFromResolvedFile
 
+      # Pre-archive test gate. The retired voice-pilot step that used to live
+      # here ran -only-testing on the WHOLE CodeIslandCompanionTests target, so
+      # removing it outright would have left this workflow with no pre-archive
+      # test coverage at all. Same mechanism, no pilot coupling.
+      - name: Select test simulator
+        shell: bash
+        run: |
+          SIMULATOR_UDID="$(
+            xcrun simctl list devices available -j \
+              | jq -r '[.devices[][] | select(.name | startswith("iPhone"))][0].udid'
+          )"
+          if [ -z "$SIMULATOR_UDID" ] || [ "$SIMULATOR_UDID" = "null" ]; then
+            echo "::error::No available iPhone Simulator was found"
+            exit 1
+          fi
+          echo "COMPANION_TEST_SIMULATOR_UDID=$SIMULATOR_UDID" >> "$GITHUB_ENV"
+
+      - name: Test companion app before archive
+        run: |
+          xcodebuild test \
+            -project ios/CodeIslandCompanion/CodeIslandCompanion.xcodeproj \
+            -scheme CodeIslandCompanion \
+            -destination "platform=iOS Simulator,id=$COMPANION_TEST_SIMULATOR_UDID" \
+            -clonedSourcePackagesDirPath "$RUNNER_TEMP/SourcePackages" \
+            -disableAutomaticPackageResolution \
+            -only-testing:CodeIslandCompanionTests
+
       - name: Resolve build number
         shell: bash
         env:
