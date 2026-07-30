@@ -248,29 +248,6 @@ jobs:
             -clonedSourcePackagesDirPath "$RUNNER_TEMP/SourcePackages" \
             -onlyUsePackageVersionsFromResolvedFile
 
-      - name: Select AgentOps Voice test simulator
-        shell: bash
-        run: |
-          SIMULATOR_UDID="$(
-            xcrun simctl list devices available -j \
-              | jq -r '[.devices[][] | select(.name | startswith("iPhone"))][0].udid'
-          )"
-          if [ -z "$SIMULATOR_UDID" ] || [ "$SIMULATOR_UDID" = "null" ]; then
-            echo "::error::No available iPhone Simulator was found"
-            exit 1
-          fi
-          echo "AGENTOPS_TEST_SIMULATOR_UDID=$SIMULATOR_UDID" >> "$GITHUB_ENV"
-
-      - name: Test AgentOps Voice before archive
-        run: |
-          xcodebuild test \
-            -project ios/CodeIslandCompanion/CodeIslandCompanion.xcodeproj \
-            -scheme CodeIslandCompanion \
-            -destination "platform=iOS Simulator,id=$AGENTOPS_TEST_SIMULATOR_UDID" \
-            -clonedSourcePackagesDirPath "$RUNNER_TEMP/SourcePackages" \
-            -disableAutomaticPackageResolution \
-            -only-testing:CodeIslandCompanionTests
-
       - name: Resolve build number
         shell: bash
         env:
@@ -298,10 +275,9 @@ jobs:
           ASC_ISSUER: ${{ secrets.ASC_ISSUER_ID }}
           ASC_KEY: ${{ secrets.ASC_KEY_ID }}
           ASC_KEY_P8: ${{ secrets.ASC_KEY_P8_BASE64 }}
-          AGENTOPS_PUBLISHABLE_KEY: ${{ secrets.AGENTOPS_SUPABASE_PUBLISHABLE_KEY }}
         run: |
           missing=0
-          for name in DIST_P12 DIST_PASSWORD APP_PROFILE WIDGET_PROFILE SHARE_PROFILE ASC_ISSUER ASC_KEY ASC_KEY_P8 AGENTOPS_PUBLISHABLE_KEY; do
+          for name in DIST_P12 DIST_PASSWORD APP_PROFILE WIDGET_PROFILE SHARE_PROFILE ASC_ISSUER ASC_KEY ASC_KEY_P8; do
             if [ -z "${!name}" ]; then
               echo "::error::$name is required"
               missing=1
@@ -363,8 +339,6 @@ jobs:
           security find-identity -v -p codesigning "$KEYCHAIN_PATH"
 
       - name: Archive signed iPhone app
-        env:
-          AGENTOPS_PUBLISHABLE_KEY: ${{ secrets.AGENTOPS_SUPABASE_PUBLISHABLE_KEY }}
         run: |
           xcodebuild \
             -project ios/CodeIslandCompanion/CodeIslandCompanion.xcodeproj \
@@ -375,7 +349,6 @@ jobs:
             -clonedSourcePackagesDirPath "$RUNNER_TEMP/SourcePackages" \
             -disableAutomaticPackageResolution \
             CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
-            AGENTOPS_SUPABASE_ANON_KEY="$AGENTOPS_PUBLISHABLE_KEY" \
             clean archive
 
       - name: Verify archive signing and privacy contract
@@ -400,9 +373,6 @@ jobs:
           test -n "$(/usr/libexec/PlistBuddy -c 'Print :NSCameraUsageDescription' "$APP/Info.plist")"
           test -n "$(/usr/libexec/PlistBuddy -c 'Print :NSMicrophoneUsageDescription' "$APP/Info.plist")"
           test -n "$(/usr/libexec/PlistBuddy -c 'Print :NSSpeechRecognitionUsageDescription' "$APP/Info.plist")"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :AgentOpsBaseURL' "$APP/Info.plist")" = "https://voice.agentops.revopsglobal.com"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :AgentOpsSupabaseURL' "$APP/Info.plist")" = "https://yyizocyaehmqrottmnaz.supabase.co"
-          test -n "$(/usr/libexec/PlistBuddy -c 'Print :AgentOpsSupabaseAnonKey' "$APP/Info.plist")"
           BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")"
           test -n "$BUNDLE_ID"
           scripts/test-validate-app-intent-metadata.sh

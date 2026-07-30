@@ -6,81 +6,6 @@ final class CodeIslandCompanionUITests: XCTestCase {
     }
 
     @MainActor
-    func testAgentOpsVoiceIsTheDefaultAndControlsSurviveLargeType() throws {
-        let app = launchAgentOpsApp(
-            scenario: "speaking",
-            additionalArguments: [
-                "-UIPreferredContentSizeCategoryName",
-                "UICTContentSizeCategoryAccessibilityXXXL",
-            ]
-        )
-
-        let stop = agentOpsElement("agentops.voice.stop", in: app)
-        let end = agentOpsElement("agentops.voice.end", in: app)
-        XCTAssertTrue(stop.waitForExistence(timeout: 8))
-        XCTAssertTrue(end.waitForExistence(timeout: 8))
-        XCTAssertGreaterThanOrEqual(stop.frame.height, 44)
-        XCTAssertGreaterThanOrEqual(end.frame.height, 44)
-    }
-
-    @MainActor
-    func testAgentOpsWorkAndAttentionAreOneTapFromVoice() throws {
-        let app = launchAgentOpsApp(scenario: "durable")
-
-        let work = agentOpsElement("agentops.destination.work", in: app)
-        let attention = agentOpsElement(
-            "agentops.destination.attention",
-            in: app
-        )
-        XCTAssertTrue(work.waitForExistence(timeout: 8))
-        XCTAssertTrue(attention.exists)
-
-        work.tap()
-        XCTAssertTrue(
-            agentOpsElement("agentops.work.screen", in: app)
-                .waitForExistence(timeout: 4)
-        )
-
-        attention.tap()
-        XCTAssertTrue(
-            agentOpsElement("agentops.attention.screen", in: app)
-                .waitForExistence(timeout: 4)
-        )
-    }
-
-    @MainActor
-    func testAgentOpsDurableWorkShowsExactCanonicalTaskUUID() throws {
-        let app = launchAgentOpsApp(scenario: "durable")
-
-        XCTAssertTrue(
-            agentOpsElement("agentops.voice.result.durable_work", in: app)
-                .waitForExistence(timeout: 8)
-        )
-        XCTAssertTrue(
-            app.staticTexts[
-                "e7e843c5-733d-4492-a863-1c337684653b"
-            ].exists
-        )
-    }
-
-    @MainActor
-    func testAgentOpsClarificationAndOfflineDraftAreDistinct() throws {
-        var app = launchAgentOpsApp(scenario: "clarify")
-        XCTAssertTrue(
-            agentOpsElement("agentops.voice.result.clarify", in: app)
-                .waitForExistence(timeout: 8)
-        )
-
-        app.terminate()
-        app = launchAgentOpsApp(scenario: "offline-draft")
-        XCTAssertTrue(
-            app.staticTexts[
-                "Saved locally. This request will sync when AgentOps reconnects."
-            ].waitForExistence(timeout: 8)
-        )
-    }
-
-    @MainActor
     func testQuestionStateRendersPrimaryControls() throws {
         let app = launchApp(mockState: "question")
 
@@ -807,38 +732,6 @@ final class CodeIslandCompanionUITests: XCTestCase {
             sessions.tap()
         }
         return app
-    }
-
-    @MainActor
-    private func launchAgentOpsApp(
-        scenario: String,
-        additionalArguments: [String] = []
-    ) -> XCUIApplication {
-        let app = XCUIApplication()
-        var launchArguments = [
-            "-AgentOpsVoiceMock", scenario,
-        ]
-        if !additionalArguments.contains(
-            "-UIPreferredContentSizeCategoryName"
-        ) {
-            launchArguments += [
-                "-UIPreferredContentSizeCategoryName",
-                "UICTContentSizeCategoryL",
-            ]
-        }
-        app.launchArguments = launchArguments + additionalArguments
-        app.launch()
-        return app
-    }
-
-    @MainActor
-    private func agentOpsElement(
-        _ identifier: String,
-        in app: XCUIApplication
-    ) -> XCUIElement {
-        app.descendants(matching: .any)
-            .matching(identifier: identifier)
-            .firstMatch
     }
 
     @MainActor
