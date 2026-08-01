@@ -14,10 +14,11 @@
   "seeded": "2026-07-29",
   "feedback": {
     "AKboTx9vwPLfjVW2XOe5yTI": {
-      "state": "awaiting_acceptance",
+      "state": "resolved",
       "resource_type": "betaFeedbackScreenshotSubmissions",
       "created": "2026-07-23T06:37:19.186Z",
-      "fix": "PR #168 (branch codex/tf-AKboTx9vwPLfjVW2XOe5yTI-what-needs-me)"
+      "fix": "PR #168 (branch codex/tf-AKboTx9vwPLfjVW2XOe5yTI-what-needs-me)",
+      "basis": "quiet telemetry closed 2026-08-01: fix build 20260729163645 (PR #168, merge 493ceec, run 30471080682) uploaded 2026-07-29T16:39:59Z, buildBetaDetail 200 IN_BETA_TESTING and present in CodeIsland Internal; build-usage installCount 1 on a physical device, sessionCount 6, crashCount 0, feedbackCount 0; >72h elapsed with zero new feedback or crashes matching the symptom (newest live Buddy feedback is 2026-07-25, predating the fix build)"
     },
     "AHnyCb2NHnW4lm4mJ1hDThI": {
       "state": "resolved",
