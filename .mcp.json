@@ -29,12 +29,6 @@
         "x-brain-key:${OPEN_BRAIN_KEY}"
       ]
     },
-    "orchestrator": {
-      "command": "/Users/gregharned/.nvm/versions/node/v24.13.1/bin/node",
-      "args": [
-        "/Users/gregharned/work/team-brain/mcps/orchestrator/dist/index.js"
-      ]
-    },
     "knowledge": {
       "command": "/Users/gregharned/.nvm/versions/node/v24.13.1/bin/node",
       "args": [
@@ -79,15 +73,6 @@
         "GEMINI_API_KEY": "${GEMINI_API_KEY}"
       }
     },
-    "mistral-tts": {
-      "command": "/Users/gregharned/.nvm/versions/node/v24.13.1/bin/node",
-      "args": [
-        "/Users/gregharned/work/team-brain/mcps/mistral-tts/server.js"
-      ],
-      "env": {
-        "MISTRAL_API_KEY": "${MISTRAL_API_KEY}"
-      }
-    },
     "heygen": {
       "command": "/Users/gregharned/.nvm/versions/node/v24.13.1/bin/node",
       "args": [
@@ -113,14 +98,6 @@
         "SUPABASE_SERVICE_ROLE_KEY": "${SUPABASE_RGOS_SERVICE_KEY}",
         "SLACK_WORKSPACES": "${SLACK_WORKSPACES}"
       }
-    },
-    "playwright": {
-      "command": "npx",
-      "args": [
-        "@playwright/mcp@latest",
-        "--cdp-endpoint",
-        "http://localhost:9222"
-      ]
     },
     "context7": {
       "command": "npx",
@@ -210,14 +187,6 @@
         "x-access-key:${OB1_ACCESS_KEY}"
       ]
     },
-    "chrome-devtools": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "chrome-devtools-mcp",
-        "--autoConnect"
-      ]
-    },
     "vercel": {
       "command": "/Users/gregharned/.nvm/versions/node/v24.13.1/bin/node",
       "args": [
@@ -225,15 +194,6 @@
       ],
       "env": {
         "VERCEL_TOKEN": "${VERCEL_TOKEN}"
-      }
-    },
-    "hetzner": {
-      "command": "/Users/gregharned/.nvm/versions/node/v24.13.1/bin/node",
-      "args": [
-        "/Users/gregharned/work/team-brain/mcps/hetzner/dist/index.js"
-      ],
-      "env": {
-        "HETZNER_API_TOKEN": "${HETZNER_API_TOKEN}"
       }
     },
     "builtwith": {
