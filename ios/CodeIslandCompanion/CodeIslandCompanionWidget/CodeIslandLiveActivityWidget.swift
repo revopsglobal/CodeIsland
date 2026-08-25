@@ -37,19 +37,7 @@ private func activityAttentionURL(
     attributes: CodeIslandActivityAttributes,
     state: CodeIslandActivityAttributes.ContentState
 ) -> URL? {
-    if let taskID = state.taskID, UUID(uuidString: taskID) != nil {
-        var components = URLComponents()
-        components.scheme = "codeisland"
-        components.host = "tasks"
-        components.path = "/\(taskID)"
-        return components.url
-    }
-    guard state.pendingAction == "approval" || state.pendingAction == "question" else { return nil }
-    var components = URLComponents()
-    components.scheme = "codeisland"
-    components.host = state.pendingAction == "question" ? "questions" : "approvals"
-    components.path = "/\(attributes.sessionId ?? state.sessions.first?.sessionId ?? "pending")"
-    return components.url
+    CodeIslandActivityAttentionLink.url(attributes: attributes, state: state)
 }
 
 private struct MinimalMascotBadge: View {

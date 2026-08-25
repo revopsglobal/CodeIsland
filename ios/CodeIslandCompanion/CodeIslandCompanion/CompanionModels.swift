@@ -1,4 +1,475 @@
+import CryptoKit
 import Foundation
+
+enum LiveActivityPairingIdentity: Equatable {
+    case unpaired
+    case credentialPresentButIdentityMissing
+    case paired(String)
+
+    static func resolve(
+        credential: String?,
+        pairingDeviceID: String?
+    ) -> LiveActivityPairingIdentity {
+        guard credential != nil else { return .unpaired }
+        guard let pairingDeviceID = LiveActivityPairingScope.normalized(pairingDeviceID) else {
+            return .credentialPresentButIdentityMissing
+        }
+        return .paired(pairingDeviceID)
+    }
+
+    var pairingDeviceID: String? {
+        guard case .paired(let pairingDeviceID) = self else { return nil }
+        return LiveActivityPairingScope.normalized(pairingDeviceID)
+    }
+
+    var canRegisterHostScopedArtifacts: Bool {
+        pairingDeviceID != nil
+    }
+
+    var canCreateOwnedActivity: Bool {
+        switch self {
+        case .unpaired:
+            return true
+        case .credentialPresentButIdentityMissing:
+            return false
+        case .paired:
+            return pairingDeviceID != nil
+        }
+    }
+}
+
+enum RemotePairingIdentityStore {
+    static let pairingDeviceIDKey = "codeisland.remote.pairingDeviceID.v1"
+    private static let credentialFingerprintKey = "codeisland.remote.pairingCredentialFingerprint.v1"
+    static let runtimeIdentityRecordKey = "codeisland.remote.runtimePairingIdentity.v2"
+    private static let processNonce = UUID().uuidString
+    private static let ownershipLock = NSLock()
+
+    private struct RuntimeIdentityRecord: Codable {
+        let processNonce: String
+        let state: String
+        let pairingDeviceID: String?
+    }
+
+    static func current(
+        forCredential credential: String,
+        defaults: UserDefaults = .standard
+    ) -> String? {
+        ownershipLock.lock()
+        defer { ownershipLock.unlock() }
+        return currentUnlocked(forCredential: credential, defaults: defaults)
+    }
+
+    private static func currentUnlocked(
+        forCredential credential: String,
+        defaults: UserDefaults
+    ) -> String? {
+        guard defaults.string(forKey: credentialFingerprintKey) == fingerprint(credential) else {
+            return nil
+        }
+        return LiveActivityPairingScope.normalized(defaults.string(forKey: pairingDeviceIDKey))
+    }
+
+    static func store(
+        _ pairingDeviceID: String?,
+        forCredential credential: String?,
+        defaults: UserDefaults = .standard
+    ) {
+        ownershipLock.lock()
+        defer { ownershipLock.unlock() }
+        storeUnlocked(pairingDeviceID, forCredential: credential, defaults: defaults)
+    }
+
+    private static func storeUnlocked(
+        _ pairingDeviceID: String?,
+        forCredential credential: String?,
+        defaults: UserDefaults
+    ) {
+        guard let credential,
+              let pairingDeviceID = LiveActivityPairingScope.normalized(pairingDeviceID)
+        else {
+            defaults.removeObject(forKey: pairingDeviceIDKey)
+            defaults.removeObject(forKey: credentialFingerprintKey)
+            return
+        }
+        defaults.set(pairingDeviceID, forKey: pairingDeviceIDKey)
+        defaults.set(fingerprint(credential), forKey: credentialFingerprintKey)
+    }
+
+    /// A pairing replacement is a trust-boundary transition. Persisted state
+    /// owned by the old Mac must be gone before the new credential fingerprint
+    /// can become recoverable after a crash.
+    static func replace(
+        _ pairingDeviceID: String?,
+        forCredential credential: String?,
+        defaults: UserDefaults = .standard
+    ) {
+        ownershipLock.lock()
+        defer { ownershipLock.unlock() }
+        RemoteHostScopedArtifactStore.clear(defaults: defaults)
+        storeUnlocked(pairingDeviceID, forCredential: credential, defaults: defaults)
+    }
+
+    /// Atomically crosses the pairing trust boundary for process-local push
+    /// callbacks: an APNs callback can observe either the old identity and
+    /// finish before quarantine, or the fully persisted new identity after it.
+    /// No asynchronous work or NotificationCenter delivery occurs while held.
+    static func replaceAndPublish(
+        _ pairingDeviceID: String?,
+        forCredential credential: String?,
+        runtimeIdentity: LiveActivityPairingIdentity,
+        defaults: UserDefaults = .standard
+    ) {
+        ownershipLock.lock()
+        defer { ownershipLock.unlock() }
+        RemoteHostScopedArtifactStore.clear(defaults: defaults)
+        storeUnlocked(pairingDeviceID, forCredential: credential, defaults: defaults)
+        publishRuntimeIdentityUnlocked(runtimeIdentity, defaults: defaults)
+    }
+
+    static func publishRuntimeIdentity(
+        _ identity: LiveActivityPairingIdentity,
+        defaults: UserDefaults = .standard
+    ) {
+        ownershipLock.lock()
+        defer { ownershipLock.unlock() }
+        publishRuntimeIdentityUnlocked(identity, defaults: defaults)
+    }
+
+    private static func publishRuntimeIdentityUnlocked(
+        _ identity: LiveActivityPairingIdentity,
+        defaults: UserDefaults
+    ) {
+        let state: String
+        let pairingDeviceID: String?
+        switch identity {
+        case .unpaired:
+            state = "unpaired"
+            pairingDeviceID = nil
+        case .credentialPresentButIdentityMissing:
+            state = "pending"
+            pairingDeviceID = nil
+        case .paired(let rawPairingDeviceID):
+            if let normalized = LiveActivityPairingScope.normalized(rawPairingDeviceID) {
+                state = "paired"
+                pairingDeviceID = normalized
+            } else {
+                state = "pending"
+                pairingDeviceID = nil
+            }
+        }
+        let record = RuntimeIdentityRecord(
+            processNonce: processNonce,
+            state: state,
+            pairingDeviceID: pairingDeviceID
+        )
+        if let data = try? JSONEncoder().encode(record) {
+            defaults.set(data, forKey: runtimeIdentityRecordKey)
+        } else {
+            defaults.removeObject(forKey: runtimeIdentityRecordKey)
+        }
+    }
+
+    static func runtimeIdentity(defaults: UserDefaults = .standard) -> LiveActivityPairingIdentity {
+        ownershipLock.lock()
+        defer { ownershipLock.unlock() }
+        return runtimeIdentityUnlocked(defaults: defaults)
+    }
+
+    /// Serializes the full APNs ownership check and all host-scoped writes with
+    /// pairing replacement. The body must remain synchronous and must not post
+    /// notifications that could re-enter this boundary.
+    static func withRuntimeIdentityTransaction<T>(
+        defaults: UserDefaults = .standard,
+        _ body: (LiveActivityPairingIdentity) -> T
+    ) -> T {
+        ownershipLock.lock()
+        defer { ownershipLock.unlock() }
+        return body(runtimeIdentityUnlocked(defaults: defaults))
+    }
+
+    private static func runtimeIdentityUnlocked(
+        defaults: UserDefaults
+    ) -> LiveActivityPairingIdentity {
+        guard let data = defaults.data(forKey: runtimeIdentityRecordKey),
+              let record = try? JSONDecoder().decode(RuntimeIdentityRecord.self, from: data),
+              record.processNonce == processNonce
+        else { return .credentialPresentButIdentityMissing }
+        switch record.state {
+        case "unpaired":
+            guard record.pairingDeviceID == nil else {
+                return .credentialPresentButIdentityMissing
+            }
+            return .unpaired
+        case "pending":
+            guard record.pairingDeviceID == nil else {
+                return .credentialPresentButIdentityMissing
+            }
+            return .credentialPresentButIdentityMissing
+        case "paired":
+            guard let pairingDeviceID = LiveActivityPairingScope.normalized(
+                record.pairingDeviceID
+            ) else { return .credentialPresentButIdentityMissing }
+            return .paired(pairingDeviceID)
+        default:
+            return .credentialPresentButIdentityMissing
+        }
+    }
+
+    private static func fingerprint(_ credential: String) -> String {
+        SHA256.hash(data: Data(credential.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+}
+
+/// Persisted state whose request IDs and ActivityKit routes belong to one Mac.
+/// Global APNs and push-to-start tokens are intentionally excluded because the
+/// same iPhone route is republished to a newly paired device record.
+enum RemoteHostScopedArtifactStore {
+    static let pendingApprovalIDKey = "codeisland.remote.pendingApprovalID"
+    static let pendingQuestionIDKey = "codeisland.remote.pendingQuestionID"
+    static let liveActivityUpdateTokensKey = "codeisland.remote.liveActivity.updateTokens"
+    static let liveActivityReceiptsKey = "codeisland.remote.liveActivity.receipts.v1"
+    static let followedTaskIDKey = "codeisland.liveActivity.followedTask.v1"
+
+    static func clear(defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: pendingApprovalIDKey)
+        defaults.removeObject(forKey: pendingQuestionIDKey)
+        defaults.removeObject(forKey: liveActivityUpdateTokensKey)
+        defaults.removeObject(forKey: liveActivityReceiptsKey)
+        defaults.removeObject(forKey: followedTaskIDKey)
+    }
+
+    /// A cold launch without a proven exact pairing owner must not adopt state
+    /// left by a prior credential or by an interrupted transition.
+    @discardableResult
+    static func quarantineIfUnowned(
+        by identity: LiveActivityPairingIdentity,
+        defaults: UserDefaults = .standard
+    ) -> Bool {
+        guard identity.pairingDeviceID == nil else { return false }
+        clear(defaults: defaults)
+        return true
+    }
+}
+
+enum LiveActivityPairingScope {
+    static func normalized(_ pairingDeviceID: String?) -> String? {
+        guard let value = pairingDeviceID?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty
+        else { return nil }
+        return value
+    }
+
+    /// Existing TestFlight activities predate pairing-scoped attributes. They
+    /// remain recoverable only while this install also has no persisted pairing
+    /// identity. Once Buddy knows the current device record, exact identity is
+    /// required and legacy or other-Mac activities must be retired.
+    static func accepts(
+        activityPairingDeviceID: String?,
+        identity: LiveActivityPairingIdentity
+    ) -> Bool {
+        switch identity {
+        case .unpaired:
+            return normalized(activityPairingDeviceID) == nil
+        case .credentialPresentButIdentityMissing:
+            return false
+        case .paired(let current):
+            guard let activityPairingDeviceID = normalized(activityPairingDeviceID),
+                  let current = normalized(current)
+            else { return false }
+            return activityPairingDeviceID == current
+        }
+    }
+}
+
+/// Normal APNs metadata is host-scoped just like ActivityKit update tokens.
+/// Presentation remains backward compatible, but a receipt or in-app route is
+/// trusted only when the Mac named the exact paired device record.
+enum RemoteAttentionPushPairingScope {
+    static func acceptsHostScopedArtifacts(
+        payloadPairingDeviceID: String?,
+        identity: LiveActivityPairingIdentity
+    ) -> Bool {
+        guard case .paired(let currentPairingDeviceID) = identity,
+              let payloadPairingDeviceID = LiveActivityPairingScope.normalized(
+                payloadPairingDeviceID
+              ),
+              let currentPairingDeviceID = LiveActivityPairingScope.normalized(
+                currentPairingDeviceID
+              )
+        else { return false }
+        return payloadPairingDeviceID == currentPairingDeviceID
+    }
+}
+
+enum ScopedRemoteAttentionRoute: Equatable {
+    case pendingApproval(String?)
+    case pendingQuestion(String?)
+    case resolvedApproval(String?)
+    case resolvedQuestion(String?)
+    case task(UUID)
+
+    static func resolve(
+        requestID: String?,
+        kind: RemoteAttentionKind?,
+        state: RemoteAttentionState?,
+        eventPairingDeviceID: String?,
+        currentIdentity: LiveActivityPairingIdentity
+    ) -> ScopedRemoteAttentionRoute? {
+        guard RemoteAttentionPushPairingScope.acceptsHostScopedArtifacts(
+            payloadPairingDeviceID: eventPairingDeviceID,
+            identity: currentIdentity
+        ), let kind, let state else { return nil }
+
+        switch (kind, state) {
+        case (.approval, .pending): return .pendingApproval(requestID)
+        case (.question, .pending): return .pendingQuestion(requestID)
+        case (.approval, _): return .resolvedApproval(requestID)
+        case (.question, _): return .resolvedQuestion(requestID)
+        case (.task, _):
+            guard let requestID, let id = UUID(uuidString: requestID) else { return nil }
+            return .task(id)
+        }
+    }
+}
+
+enum RemoteDeepLinkPairingScope {
+    static func accepts(
+        url: URL,
+        route: PersonalHubDeepLink,
+        currentIdentity: LiveActivityPairingIdentity
+    ) -> Bool {
+        let routedPairingDeviceID = LiveActivityPairingScope.normalized(
+            URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                .queryItems?
+                .first(where: { $0.name == "pairingDeviceID" })?
+                .value
+        )
+        switch route {
+        case .task:
+            return LiveActivityPairingScope.accepts(
+                activityPairingDeviceID: routedPairingDeviceID,
+                identity: currentIdentity
+            )
+        case .pendingApproval(let id), .pendingQuestion(let id):
+            // Generic user-initiated shortcuts intentionally have no request ID
+            // and no owner. Any request-specific ActivityKit link must prove its
+            // exact immutable pairing owner.
+            if id == nil, routedPairingDeviceID == nil { return true }
+            return LiveActivityPairingScope.accepts(
+                activityPairingDeviceID: routedPairingDeviceID,
+                identity: currentIdentity
+            )
+        case .module, .quickJot, .newTask, .needsYou, .sessions:
+            return true
+        }
+    }
+}
+
+struct PairingIdentityGenerationScope: Equatable {
+    let generation: UInt64
+    let identity: LiveActivityPairingIdentity
+
+    func isCurrent(
+        generation currentGeneration: UInt64,
+        identity currentIdentity: LiveActivityPairingIdentity
+    ) -> Bool {
+        generation == currentGeneration && identity == currentIdentity
+    }
+}
+
+/// Nearby Multipeer/BLE payloads do not carry the authenticated remote device
+/// record ID. They may drive local, nil-owned activities only while Buddy is
+/// unpaired; once a remote credential exists, authenticated snapshots are the
+/// sole authority for Live Activity content.
+enum LocalTransportLiveActivityScope {
+    static func capture(
+        generation: UInt64,
+        identity: LiveActivityPairingIdentity
+    ) -> PairingIdentityGenerationScope? {
+        guard identity == .unpaired else { return nil }
+        return PairingIdentityGenerationScope(generation: generation, identity: identity)
+    }
+}
+
+struct AuthenticatedConnectionScope: Equatable {
+    let generation: UInt64
+    let credential: String
+    let baseURL: String
+
+    func isCurrent(
+        generation currentGeneration: UInt64,
+        credential currentCredential: String?,
+        baseURL currentBaseURL: String?
+    ) -> Bool {
+        generation == currentGeneration
+            && credential == currentCredential
+            && baseURL == currentBaseURL
+    }
+}
+
+struct RemotePushRegistrationState {
+    enum CredentialEvent {
+        case restored
+        case changed
+    }
+
+    private var clientMetadataRegistered = false
+
+    var needsCredentialRegistration: Bool {
+        !clientMetadataRegistered
+    }
+
+    func shouldRegisterClientMetadata(hasClientMetadata: Bool) -> Bool {
+        needsCredentialRegistration && hasClientMetadata
+    }
+
+    mutating func pairingCredentialDidChange() {
+        clientMetadataRegistered = false
+    }
+
+    mutating func markClientMetadataRegistered() {
+        clientMetadataRegistered = true
+    }
+
+    static func shouldRequeueHostScopedLiveActivityTokens(for event: CredentialEvent) -> Bool {
+        event == .restored
+    }
+}
+
+enum RemotePushTokenMailbox {
+    private static let pendingKey = "codeisland.remote.pendingPushToken"
+    private static let currentKey = "codeisland.remote.currentPushToken.v1"
+
+    static func store(_ token: String, defaults: UserDefaults = .standard) {
+        guard !token.isEmpty else { return }
+        defaults.set(token, forKey: pendingKey)
+        defaults.set(token, forKey: currentKey)
+    }
+
+    static func registrationToken(
+        republishCurrent: Bool,
+        defaults: UserDefaults = .standard
+    ) -> String? {
+        if let pending = defaults.string(forKey: pendingKey), !pending.isEmpty {
+            return pending
+        }
+        guard republishCurrent,
+              let current = defaults.string(forKey: currentKey),
+              !current.isEmpty
+        else { return nil }
+        return current
+    }
+
+    static func acknowledge(_ token: String?, defaults: UserDefaults = .standard) {
+        guard let token,
+              defaults.string(forKey: pendingKey) == token
+        else { return }
+        // The pending copy is delivery state; the current copy is retained so a
+        // newly paired Mac record can receive the same APNs route immediately.
+        defaults.removeObject(forKey: pendingKey)
+    }
+}
 
 enum CompanionStatus: String, Codable, Hashable {
     case idle

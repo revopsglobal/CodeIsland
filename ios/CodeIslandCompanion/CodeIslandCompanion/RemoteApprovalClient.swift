@@ -91,28 +91,38 @@ final class RemoteApprovalClient: ObservableObject {
     private static let serverURLKey = "codeisland.remote.serverURL.v1"
     private static let tokenService = "com.revopsglobal.codeisland.buddy.remote"
     private static let tokenAccount = "device-token"
-    private static let pendingPushTokenKey = "codeisland.remote.pendingPushToken"
-    private static let pendingApprovalIDKey = "codeisland.remote.pendingApprovalID"
-    private static let pendingQuestionIDKey = "codeisland.remote.pendingQuestionID"
+    private static let pendingApprovalIDKey = RemoteHostScopedArtifactStore.pendingApprovalIDKey
+    private static let pendingQuestionIDKey = RemoteHostScopedArtifactStore.pendingQuestionIDKey
     private static let selectedModeKey = "codeisland.hub.selectedMode.v1"
     static let invalidServerURLMessage = "Check the Mac connection URL in Connection settings"
 
     private let usesMockHub: Bool
     private let usesMockPairing: Bool
     private var deviceToken: String?
+    private(set) var pairingDeviceID: String?
+    private var connectionGeneration: UInt64 = 0
+    private var pairingAttemptGeneration: UInt64 = 0
     private var pollTask: Task<Void, Never>?
     private var isActive = true
-    private var clientMetadataRegisteredThisLaunch = false
+    private var pushRegistrationState = RemotePushRegistrationState()
     private var consecutiveApprovalRefreshFailures = 0
     private var notificationObservers: [NSObjectProtocol] = []
     private var pendingGenericDeepLink: RemoteAttentionKind?
     private let remoteTaskClient = RemoteTaskClient()
     private var remoteTaskCancellables: Set<AnyCancellable> = []
-    var onSnapshotReceived: ((RemoteApprovalSnapshot) -> Void)?
-    var onRemoteTasksReceived: (([RemoteTaskSummary]) -> Void)?
+    var onSnapshotReceived: (@MainActor (RemoteApprovalSnapshot) -> Void)?
+    var onRemoteTasksReceived: (@MainActor ([RemoteTaskSummary]) -> Void)?
+    var onPairingIdentityChanged: (@MainActor (LiveActivityPairingIdentity) async -> Void)?
 
     var hasPairingCredential: Bool {
         deviceToken != nil
+    }
+
+    var liveActivityPairingIdentity: LiveActivityPairingIdentity {
+        LiveActivityPairingIdentity.resolve(
+            credential: deviceToken,
+            pairingDeviceID: pairingDeviceID
+        )
     }
 
     /// A foreground poll should only present the blocking connection state
@@ -179,10 +189,16 @@ final class RemoteApprovalClient: ObservableObject {
         if usesMockPairing {
             deviceToken = nil
             state = .unpaired
+            RemotePairingIdentityStore.replaceAndPublish(
+                nil,
+                forCredential: nil,
+                runtimeIdentity: .unpaired
+            )
             return
         }
         if usesMockHub {
             deviceToken = "ui-test-device-token"
+            pairingDeviceID = "ui-test-device-id"
             state = .connected
             serverName = "Code Island UI Test Mac"
             lastUpdatedAt = Date()
@@ -196,12 +212,27 @@ final class RemoteApprovalClient: ObservableObject {
             if let url = Self.mockDeepLinkFromLaunchArguments() {
                 openDeepLink(url)
             }
+            RemotePairingIdentityStore.publishRuntimeIdentity(liveActivityPairingIdentity)
             return
         }
 #endif
 
         deviceToken = Self.readKeychainToken()
+        if let deviceToken {
+            pairingDeviceID = RemotePairingIdentityStore.current(forCredential: deviceToken)
+        } else {
+            pairingDeviceID = nil
+        }
         state = deviceToken == nil ? .unpaired : .connecting
+        if liveActivityPairingIdentity.pairingDeviceID == nil {
+            RemotePairingIdentityStore.replaceAndPublish(
+                nil,
+                forCredential: nil,
+                runtimeIdentity: liveActivityPairingIdentity
+            )
+        } else {
+            RemotePairingIdentityStore.publishRuntimeIdentity(liveActivityPairingIdentity)
+        }
 
         notificationObservers.append(NotificationCenter.default.addObserver(
             forName: .codeIslandPushTokenAvailable,
@@ -229,20 +260,34 @@ final class RemoteApprovalClient: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] notification in
+            let requestID = notification.userInfo?["requestId"] as? String
+            let kind = (notification.userInfo?["kind"] as? String).flatMap(RemoteAttentionKind.init(rawValue:))
+            let attentionState = (notification.userInfo?["state"] as? String).flatMap(RemoteAttentionState.init(rawValue:))
+            let eventPairingDeviceID = notification.userInfo?["pairingDeviceID"] as? String
             Task { @MainActor in
-                guard let self else { return }
-                let requestID = notification.userInfo?["requestId"] as? String
-                let kind = (notification.userInfo?["kind"] as? String).flatMap(RemoteAttentionKind.init(rawValue:))
-                let attentionState = (notification.userInfo?["state"] as? String).flatMap(RemoteAttentionState.init(rawValue:))
-                if attentionState == .pending, kind == .approval {
+                guard let self,
+                      let route = ScopedRemoteAttentionRoute.resolve(
+                        requestID: requestID,
+                        kind: kind,
+                        state: attentionState,
+                        eventPairingDeviceID: eventPairingDeviceID,
+                        currentIdentity: self.liveActivityPairingIdentity
+                      )
+                else { return }
+                switch route {
+                case .pendingApproval(let requestID):
                     self.highlightedApprovalID = requestID
-                } else if attentionState == .pending, kind == .question {
+                case .pendingQuestion(let requestID):
                     self.highlightedQuestionID = requestID
-                } else if kind == .approval, self.highlightedApprovalID == requestID {
-                    self.highlightedApprovalID = nil
-                } else if kind == .question, self.highlightedQuestionID == requestID {
-                    self.highlightedQuestionID = nil
-                } else if kind == .task, let requestID, let id = UUID(uuidString: requestID) {
+                case .resolvedApproval(let requestID):
+                    if self.highlightedApprovalID == requestID {
+                        self.highlightedApprovalID = nil
+                    }
+                case .resolvedQuestion(let requestID):
+                    if self.highlightedQuestionID == requestID {
+                        self.highlightedQuestionID = nil
+                    }
+                case .task(let id):
                     self.remoteTaskDeepLinkDestination = .detail(id)
                 }
                 await self.refresh()
@@ -278,10 +323,21 @@ final class RemoteApprovalClient: ObservableObject {
         }
 #endif
         guard pollTask == nil else { return }
+        if deviceToken != nil {
+            if liveActivityPairingIdentity == .credentialPresentButIdentityMissing {
+                LiveActivityTokenMailbox.clearHostScopedArtifacts()
+                UserDefaults.standard.removeObject(forKey: Self.pendingApprovalIDKey)
+                UserDefaults.standard.removeObject(forKey: Self.pendingQuestionIDKey)
+                highlightedApprovalID = nil
+                highlightedQuestionID = nil
+            }
+            requeueCurrentRegistrationArtifacts(for: .restored)
+        }
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
                 if self.isActive, self.deviceToken != nil {
+                    await self.registerPendingPushToken()
                     await self.refresh()
                 }
                 try? await Task.sleep(for: .seconds(4))
@@ -296,8 +352,8 @@ final class RemoteApprovalClient: ObservableObject {
                 highlightedQuestionID = pendingID
                 UserDefaults.standard.removeObject(forKey: Self.pendingQuestionIDKey)
             }
-            await refresh()
             await registerPendingPushToken()
+            await refresh()
         }
     }
 
@@ -324,6 +380,9 @@ final class RemoteApprovalClient: ObservableObject {
             state = .offline(Self.invalidServerURLMessage)
             return false
         }
+        pairingAttemptGeneration &+= 1
+        let attemptGeneration = pairingAttemptGeneration
+        let attemptBaseURL = normalizedServerURL?.absoluteString
         state = .connecting
 #if DEBUG
         if usesMockPairing {
@@ -339,8 +398,18 @@ final class RemoteApprovalClient: ObservableObject {
                 RemotePairRequest(code: trimmedCode, deviceName: deviceName ?? UIDevice.current.name)
             )
             let response: RemotePairResponse = try await perform(request, authenticated: false)
+            guard pairingAttemptGeneration == attemptGeneration,
+                  normalizedServerURL?.absoluteString == attemptBaseURL
+            else { return false }
             try Self.saveKeychainToken(response.deviceToken)
-            deviceToken = response.deviceToken
+            await replacePairingCredential(
+                with: response.deviceToken,
+                pairingDeviceID: response.deviceId
+            )
+            guard pairingAttemptGeneration == attemptGeneration,
+                  deviceToken == response.deviceToken,
+                  pairingDeviceID == LiveActivityPairingScope.normalized(response.deviceId)
+            else { return false }
             serverName = response.serverName
             consecutiveApprovalRefreshFailures = 0
             UserDefaults.standard.set(normalizedServerURL?.absoluteString, forKey: Self.serverURLKey)
@@ -349,6 +418,9 @@ final class RemoteApprovalClient: ObservableObject {
             await refresh()
             return true
         } catch {
+            guard pairingAttemptGeneration == attemptGeneration,
+                  normalizedServerURL?.absoluteString == attemptBaseURL
+            else { return false }
             let message = error.localizedDescription
             state = .offline(
                 message == "pairing code is invalid or expired"
@@ -362,9 +434,13 @@ final class RemoteApprovalClient: ObservableObject {
     private static let expiredPairingCodeMessage =
         "That code expired. Open Code Island Settings → Buddy on your Mac for the current code."
 
-    func unpair() {
-        Self.deleteKeychainToken()
-        deviceToken = nil
+    func unpair() async {
+        pairingAttemptGeneration &+= 1
+        await replacePairingCredential(
+            with: nil,
+            pairingDeviceID: nil,
+            deleteExistingKeychainAfterBoundary: true
+        )
         remoteTaskClient.clearConnection()
         approvals = []
         questions = []
@@ -379,6 +455,77 @@ final class RemoteApprovalClient: ObservableObject {
         locallyCancelledTaskIDs.removeAll()
         remoteTaskDrafts = remoteTaskClient.localDrafts
         state = .unpaired
+    }
+
+    private func replacePairingCredential(
+        with token: String?,
+        pairingDeviceID newPairingDeviceID: String?,
+        deleteExistingKeychainAfterBoundary: Bool = false
+    ) async {
+        let newPairingDeviceID = token == nil
+            ? nil
+            : LiveActivityPairingScope.normalized(newPairingDeviceID)
+        guard deviceToken != token || pairingDeviceID != newPairingDeviceID else {
+            if deleteExistingKeychainAfterBoundary { Self.deleteKeychainToken() }
+            return
+        }
+        connectionGeneration &+= 1
+        let replacementGeneration = connectionGeneration
+        deviceToken = token
+        pairingDeviceID = newPairingDeviceID
+        RemotePairingIdentityStore.replaceAndPublish(
+            newPairingDeviceID,
+            forCredential: token,
+            runtimeIdentity: liveActivityPairingIdentity
+        )
+        // The serialized boundary above clears old-host state before the bearer
+        // is deleted. No await occurs between those trust-boundary mutations.
+        if deleteExistingKeychainAfterBoundary { Self.deleteKeychainToken() }
+        pushRegistrationState.pairingCredentialDidChange()
+
+        // Activity update tokens and receipts bind to request IDs on the Mac
+        // that created them. Never carry those host-scoped artifacts across a
+        // new bearer credential, even when the user is pairing back to one Mac.
+        highlightedApprovalID = nil
+        highlightedQuestionID = nil
+        highlightedHubModuleID = nil
+        pendingGenericDeepLink = nil
+        remoteTaskDeepLinkDestination = nil
+        approvals = []
+        questions = []
+        serverName = nil
+        lastUpdatedAt = nil
+        hubSnapshot = nil
+        sessionsModule = nil
+        sessionsError = nil
+        hubError = nil
+        hubActionMessage = nil
+        remoteTaskError = nil
+        preparedAction = nil
+        locallyCancelledTaskIDs.removeAll()
+        remoteTaskClient.clearConnection()
+        state = token == nil ? .unpaired : .connecting
+        await onPairingIdentityChanged?(liveActivityPairingIdentity)
+        guard connectionGeneration == replacementGeneration,
+              deviceToken == token,
+              pairingDeviceID == newPairingDeviceID,
+              token != nil
+        else { return }
+        requeueCurrentRegistrationArtifacts(for: .changed)
+    }
+
+    private func requeueCurrentRegistrationArtifacts(
+        for event: RemotePushRegistrationState.CredentialEvent
+    ) {
+        // Successful delivery clears transient mailboxes. Re-publish every
+        // currently available route when a credential is new or restored.
+        LiveActivityTokenMailbox.requeueCurrentTokens(
+            includeHostScopedUpdateTokens:
+                RemotePushRegistrationState.shouldRequeueHostScopedLiveActivityTokens(for: event)
+                && liveActivityPairingIdentity.canRegisterHostScopedArtifacts,
+            pairingIdentity: liveActivityPairingIdentity
+        )
+        UIApplication.shared.registerForRemoteNotifications()
     }
 
     /// Applies optimistic local cancellations to a raw server task list, prunes
@@ -430,6 +577,8 @@ final class RemoteApprovalClient: ObservableObject {
             let _: RemoteDecisionResponse = try await perform(request, authenticated: true)
             highlightedApprovalID = nil
             await refresh()
+        } catch RemoteClientError.superseded {
+            return
         } catch {
             state = .offline(error.localizedDescription)
             await refresh()
@@ -453,6 +602,8 @@ final class RemoteApprovalClient: ObservableObject {
             let _: RemoteQuestionAnswerResponse = try await perform(request, authenticated: true)
             highlightedQuestionID = nil
             await refresh()
+        } catch RemoteClientError.superseded {
+            return
         } catch {
             state = .offline(error.localizedDescription)
             await refresh()
@@ -468,7 +619,7 @@ final class RemoteApprovalClient: ObservableObject {
             return
         }
 #endif
-        guard deviceToken != nil else {
+        guard let refreshCredential = deviceToken else {
             state = .unpaired
             approvals = []
             questions = []
@@ -489,6 +640,16 @@ final class RemoteApprovalClient: ObservableObject {
             request.httpMethod = "GET"
             request.cachePolicy = .reloadIgnoringLocalCacheData
             let snapshot: RemoteApprovalSnapshot = try await perform(request, authenticated: true)
+            if let authenticatedSnapshotDeviceID = LiveActivityPairingScope.normalized(snapshot.deviceId),
+               pairingDeviceID != authenticatedSnapshotDeviceID {
+                await replacePairingCredential(
+                    with: refreshCredential,
+                    pairingDeviceID: authenticatedSnapshotDeviceID
+                )
+                guard deviceToken == refreshCredential,
+                      pairingDeviceID == authenticatedSnapshotDeviceID
+                else { return }
+            }
             consecutiveApprovalRefreshFailures = 0
             approvals = snapshot.approvals
             questions = snapshot.questions
@@ -507,8 +668,10 @@ final class RemoteApprovalClient: ObservableObject {
             onSnapshotReceived?(snapshot)
             await refreshHub()
             await refreshRemoteTasks()
+        } catch RemoteClientError.superseded {
+            return
         } catch RemoteClientError.unauthorized {
-            unpair()
+            await unpair()
         } catch {
             consecutiveApprovalRefreshFailures += 1
             if let failureState = Self.refreshFailureState(
@@ -533,24 +696,31 @@ final class RemoteApprovalClient: ObservableObject {
 #if DEBUG
         if usesMockHub { return }
 #endif
-        guard let deviceToken, let baseURL = normalizedServerURL else {
+        guard let requestScope = authenticatedConnectionScope,
+              let baseURL = URL(string: requestScope.baseURL)
+        else {
             remoteTaskDrafts = remoteTaskClient.localDrafts
             return
         }
         let result = await remoteTaskClient.sync(
             baseURL: baseURL,
-            bearerToken: deviceToken,
+            bearerToken: requestScope.credential,
             force: force
         )
+        guard isCurrent(requestScope) else { return }
         publishRemoteTasks(remoteTaskClient.tasks)
         remoteTaskDrafts = remoteTaskClient.localDrafts
         remoteTaskError = remoteTaskClient.lastError
         if remoteTaskClient.workspaces.isEmpty {
-            _ = await remoteTaskClient.refreshWorkspaces(baseURL: baseURL, bearerToken: deviceToken)
+            _ = await remoteTaskClient.refreshWorkspaces(
+                baseURL: baseURL,
+                bearerToken: requestScope.credential
+            )
+            guard isCurrent(requestScope) else { return }
         }
         switch result {
         case .pairingRequired:
-            unpair()
+            await unpair()
         case .offline:
             if lastUpdatedAt == nil {
                 state = .offline(remoteTaskClient.lastError ?? "Mac offline")
@@ -561,14 +731,17 @@ final class RemoteApprovalClient: ObservableObject {
     }
 
     func followUpRemoteTask(taskID: UUID, text: String) async {
-        guard let deviceToken, let baseURL = normalizedServerURL else { return }
+        guard let requestScope = authenticatedConnectionScope,
+              let baseURL = URL(string: requestScope.baseURL)
+        else { return }
         let result = await remoteTaskClient.followUp(
             taskID: taskID,
             text: text,
             baseURL: baseURL,
-            bearerToken: deviceToken
+            bearerToken: requestScope.credential
         )
-        if result == .pairingRequired { unpair() }
+        guard isCurrent(requestScope) else { return }
+        if result == .pairingRequired { await unpair() }
     }
 
     func cancelRemoteTask(taskID: UUID) async {
@@ -579,13 +752,16 @@ final class RemoteApprovalClient: ObservableObject {
         locallyCancelledTaskIDs.insert(taskID)
         let reconciled = publishRemoteTasks(remoteTaskClient.tasks)
         onRemoteTasksReceived?(reconciled)
-        guard let deviceToken, let baseURL = normalizedServerURL else { return }
+        guard let requestScope = authenticatedConnectionScope,
+              let baseURL = URL(string: requestScope.baseURL)
+        else { return }
         let result = await remoteTaskClient.cancel(
             taskID: taskID,
             baseURL: baseURL,
-            bearerToken: deviceToken
+            bearerToken: requestScope.credential
         )
-        if result == .pairingRequired { unpair() }
+        guard isCurrent(requestScope) else { return }
+        if result == .pairingRequired { await unpair() }
     }
 
     func consumeRemoteTaskDeepLinkDestination() {
@@ -626,8 +802,10 @@ final class RemoteApprovalClient: ObservableObject {
             let snapshot: PersonalHubSnapshot = try await perform(request, authenticated: true)
             hubSnapshot = snapshot.companionFiltered
             hubError = nil
+        } catch RemoteClientError.superseded {
+            return
         } catch RemoteClientError.unauthorized {
-            unpair()
+            await unpair()
         } catch {
             hubError = error.localizedDescription
         }
@@ -662,8 +840,10 @@ final class RemoteApprovalClient: ObservableObject {
             let snapshot: PersonalHubSnapshot = try await perform(request, authenticated: true)
             sessionsModule = snapshot.modules.first(where: { $0.id == .agents })
             sessionsError = sessionsModule == nil ? "The Mac did not return session status" : nil
+        } catch RemoteClientError.superseded {
+            return
         } catch RemoteClientError.unauthorized {
-            unpair()
+            await unpair()
         } catch {
             sessionsError = error.localizedDescription
         }
@@ -702,8 +882,10 @@ final class RemoteApprovalClient: ObservableObject {
             )
             preparedAction = try await perform(request, authenticated: true)
             hubActionMessage = nil
+        } catch RemoteClientError.superseded {
+            return
         } catch RemoteClientError.unauthorized {
-            unpair()
+            await unpair()
         } catch {
             hubActionMessage = error.localizedDescription
         }
@@ -719,6 +901,11 @@ final class RemoteApprovalClient: ObservableObject {
 
     func openDeepLink(_ url: URL) {
         guard let route = PersonalHubDeepLink(url: url) else { return }
+        guard RemoteDeepLinkPairingScope.accepts(
+            url: url,
+            route: route,
+            currentIdentity: liveActivityPairingIdentity
+        ) else { return }
         switch route {
         case .pendingApproval(let id):
             if let id {
@@ -825,13 +1012,15 @@ final class RemoteApprovalClient: ObservableObject {
         pathAllowed.remove(charactersIn: "/")
         guard let encodedID = id.addingPercentEncoding(withAllowedCharacters: pathAllowed) else { return nil }
         let route = moduleID == .downloads ? "downloads" : "shelf"
-        guard let url = endpoint("/api/hub/\(route)/\(encodedID)/file"), let deviceToken else { return nil }
+        guard let url = endpoint("/api/hub/\(route)/\(encodedID)/file"),
+              let requestScope = authenticatedConnectionScope
+        else { return nil }
         do {
             var request = URLRequest(url: url)
             request.httpMethod = "GET"
             request.timeoutInterval = 45
-            request.setValue("Bearer \(deviceToken)", forHTTPHeaderField: "Authorization")
-            let (data, response) = try await URLSession.shared.data(for: request)
+            request.setValue("Bearer \(requestScope.credential)", forHTTPHeaderField: "Authorization")
+            let (data, response) = try await scopedData(for: request, scope: requestScope)
             guard let http = response as? HTTPURLResponse,
                   (200..<300).contains(http.statusCode) else {
                 throw RemoteClientError.server("Mac could not transfer the file")
@@ -844,6 +1033,8 @@ final class RemoteApprovalClient: ObservableObject {
             try data.write(to: fileURL, options: [.atomic])
             hubActionMessage = "Downloaded \(fileURL.lastPathComponent)"
             return fileURL
+        } catch RemoteClientError.superseded {
+            return nil
         } catch {
             hubActionMessage = error.localizedDescription
             return nil
@@ -878,8 +1069,10 @@ final class RemoteApprovalClient: ObservableObject {
             preparedAction = nil
             hubActionMessage = response.message
             await refreshHub()
+        } catch RemoteClientError.superseded {
+            return
         } catch RemoteClientError.unauthorized {
-            unpair()
+            await unpair()
         } catch {
             preparedAction = nil
             hubActionMessage = error.localizedDescription
@@ -891,20 +1084,31 @@ final class RemoteApprovalClient: ObservableObject {
 #if DEBUG
         if usesMockHub { return }
 #endif
-        guard deviceToken != nil, let url = endpoint("/api/push-token") else { return }
-        let pushToken = UserDefaults.standard.string(forKey: Self.pendingPushTokenKey)
+        guard let registrationCredential = deviceToken,
+              let url = endpoint("/api/push-token")
+        else { return }
+        let registrationIdentity = liveActivityPairingIdentity
+        let includeHostScopedArtifacts = registrationIdentity.canRegisterHostScopedArtifacts
         let pushToStartToken = UserDefaults.standard.string(
             forKey: LiveActivityTokenMailbox.pushToStartTokenKey
         )
-        let updateTokens = UserDefaults.standard.dictionary(
-            forKey: LiveActivityTokenMailbox.updateTokensKey
-        ) as? [String: String]
-        let receipts = LiveActivityTokenMailbox.pendingReceipts()
+        let updateTokens = includeHostScopedArtifacts
+            ? UserDefaults.standard.dictionary(
+                forKey: LiveActivityTokenMailbox.updateTokensKey
+              ) as? [String: String]
+            : nil
+        let receipts = includeHostScopedArtifacts
+            ? LiveActivityTokenMailbox.pendingReceipts()
+            : []
         let clientVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
         let clientBuild = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
-        let shouldRegisterClientMetadata = !clientMetadataRegisteredThisLaunch
-            && clientVersion?.isEmpty == false
-            && clientBuild?.isEmpty == false
+        let hasClientMetadata = clientVersion?.isEmpty == false && clientBuild?.isEmpty == false
+        let shouldRegisterClientMetadata = pushRegistrationState.shouldRegisterClientMetadata(
+            hasClientMetadata: hasClientMetadata
+        )
+        let pushToken = RemotePushTokenMailbox.registrationToken(
+            republishCurrent: pushRegistrationState.needsCredentialRegistration
+        )
         guard pushToken != nil || pushToStartToken != nil || updateTokens?.isEmpty == false
                 || !receipts.isEmpty || shouldRegisterClientMetadata
         else { return }
@@ -928,23 +1132,39 @@ final class RemoteApprovalClient: ObservableObject {
                     clientBuild: clientBuild
                 )
             )
-            let _: RegistrationResponse = try await perform(request, authenticated: true)
-            if clientVersion?.isEmpty == false, clientBuild?.isEmpty == false {
-                clientMetadataRegisteredThisLaunch = true
+            let response: RemotePushRegistrationResponse = try await perform(
+                request,
+                authenticated: true
+            )
+            // An older credential can finish while the user is re-pairing. Its
+            // response must never acknowledge the new credential's registration.
+            guard deviceToken == registrationCredential, response.registered else { return }
+            let authenticatedResponseDeviceID = LiveActivityPairingScope.normalized(response.deviceId)
+            if let authenticatedResponseDeviceID,
+               pairingDeviceID != authenticatedResponseDeviceID {
+                await replacePairingCredential(
+                    with: registrationCredential,
+                    pairingDeviceID: authenticatedResponseDeviceID
+                )
+                guard deviceToken == registrationCredential,
+                      pairingDeviceID == authenticatedResponseDeviceID
+                else { return }
             }
-            if UserDefaults.standard.string(forKey: Self.pendingPushTokenKey) == pushToken {
-                UserDefaults.standard.removeObject(forKey: Self.pendingPushTokenKey)
-            }
+            if hasClientMetadata { pushRegistrationState.markClientMetadataRegistered() }
+            RemotePushTokenMailbox.acknowledge(pushToken)
             if UserDefaults.standard.string(forKey: LiveActivityTokenMailbox.pushToStartTokenKey) == pushToStartToken {
                 UserDefaults.standard.removeObject(forKey: LiveActivityTokenMailbox.pushToStartTokenKey)
             }
-            if let updateTokens,
+            if authenticatedResponseDeviceID != nil,
+               let updateTokens,
                UserDefaults.standard.dictionary(forKey: LiveActivityTokenMailbox.updateTokensKey) as? [String: String] == updateTokens {
                 UserDefaults.standard.removeObject(forKey: LiveActivityTokenMailbox.updateTokensKey)
             }
-            LiveActivityTokenMailbox.clearReceipts(
-                eventIDs: Set(receipts.prefix(16).map(\.eventId))
-            )
+            if authenticatedResponseDeviceID != nil {
+                LiveActivityTokenMailbox.clearReceipts(
+                    eventIDs: Set(receipts.prefix(16).map(\.eventId))
+                )
+            }
             let remainingReceipts = LiveActivityTokenMailbox.pendingReceipts()
             if !remainingReceipts.isEmpty, remainingReceipts.count < receipts.count {
                 await registerPendingPushToken()
@@ -977,14 +1197,58 @@ final class RemoteApprovalClient: ObservableObject {
         }
     }
 
+    private var authenticatedConnectionScope: AuthenticatedConnectionScope? {
+        guard let deviceToken,
+              let baseURL = normalizedServerURL?.absoluteString
+        else { return nil }
+        return AuthenticatedConnectionScope(
+            generation: connectionGeneration,
+            credential: deviceToken,
+            baseURL: baseURL
+        )
+    }
+
+    private func isCurrent(_ scope: AuthenticatedConnectionScope) -> Bool {
+        scope.isCurrent(
+            generation: connectionGeneration,
+            credential: deviceToken,
+            baseURL: normalizedServerURL?.absoluteString
+        )
+    }
+
+    private func scopedData(
+        for request: URLRequest,
+        scope: AuthenticatedConnectionScope
+    ) async throws -> (Data, URLResponse) {
+        do {
+            let response = try await URLSession.shared.data(for: request)
+            guard isCurrent(scope) else { throw RemoteClientError.superseded }
+            return response
+        } catch {
+            guard isCurrent(scope) else { throw RemoteClientError.superseded }
+            throw error
+        }
+    }
+
     private func perform<T: Decodable>(_ request: URLRequest, authenticated: Bool) async throws -> T {
         var request = request
         request.timeoutInterval = 12
+        let requestScope: AuthenticatedConnectionScope?
         if authenticated {
-            guard let deviceToken else { throw RemoteClientError.unauthorized }
-            request.setValue("Bearer \(deviceToken)", forHTTPHeaderField: "Authorization")
+            guard let scope = authenticatedConnectionScope else {
+                throw RemoteClientError.unauthorized
+            }
+            requestScope = scope
+            request.setValue("Bearer \(scope.credential)", forHTTPHeaderField: "Authorization")
+        } else {
+            requestScope = nil
         }
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response): (Data, URLResponse)
+        if let requestScope {
+            (data, response) = try await scopedData(for: request, scope: requestScope)
+        } else {
+            (data, response) = try await URLSession.shared.data(for: request)
+        }
         guard let http = response as? HTTPURLResponse else { throw RemoteClientError.invalidResponse }
         if http.statusCode == 401 { throw RemoteClientError.unauthorized }
         guard (200..<300).contains(http.statusCode) else {
@@ -996,12 +1260,14 @@ final class RemoteApprovalClient: ObservableObject {
 
     private enum RemoteClientError: LocalizedError {
         case unauthorized
+        case superseded
         case invalidResponse
         case server(String)
 
         var errorDescription: String? {
             switch self {
             case .unauthorized: return "Pairing expired"
+            case .superseded: return "Pairing changed while the request was in flight"
             case .invalidResponse: return "Mac returned an invalid response"
             case .server(let message): return message
             }
@@ -1009,8 +1275,6 @@ final class RemoteApprovalClient: ObservableObject {
     }
 
     private struct ErrorResponse: Decodable { let error: String }
-    private struct RegistrationResponse: Decodable { let registered: Bool }
-
     private static let encoder: JSONEncoder = {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601

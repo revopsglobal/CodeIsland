@@ -4,6 +4,42 @@ import CryptoKit
 import Foundation
 import os.log
 
+struct APNSDeliveryBatchResult: Equatable {
+    let successfulTargetCount: Int
+    let failedTargetCount: Int
+    let reportedFailureDescriptions: [String]
+}
+
+enum APNSDeliveryBatchRunner {
+    private static let maximumReportedFailures = 3
+
+    static func run<T>(
+        _ targets: [T],
+        failureDescription: (Error) -> String = { _ in "delivery failed" },
+        operation: (T) async throws -> Void
+    ) async -> APNSDeliveryBatchResult {
+        var successfulTargetCount = 0
+        var failedTargetCount = 0
+        var reportedFailureDescriptions: [String] = []
+        for target in targets {
+            do {
+                try await operation(target)
+                successfulTargetCount += 1
+            } catch {
+                failedTargetCount += 1
+                if reportedFailureDescriptions.count < maximumReportedFailures {
+                    reportedFailureDescriptions.append(failureDescription(error))
+                }
+            }
+        }
+        return APNSDeliveryBatchResult(
+            successfulTargetCount: successfulTargetCount,
+            failedTargetCount: failedTargetCount,
+            reportedFailureDescriptions: reportedFailureDescriptions
+        )
+    }
+}
+
 @MainActor
 final class APNSNotificationSender: ObservableObject {
     static let shared = APNSNotificationSender()
@@ -78,100 +114,135 @@ final class APNSNotificationSender: ObservableObject {
         Task {
             do {
                 let jwt = try authorizationToken(configuration: configuration)
-                for device in targets {
-                    let environment = device.pushEnvironment ?? "production"
-                    let pushToken = device.pushToken.flatMap { $0.isEmpty ? nil : $0 }
-                    let pushToStartToken = device.liveActivityPushToStartToken.flatMap { $0.isEmpty ? nil : $0 }
-                    let updateToken = device.liveActivityUpdateTokens?[requestID].flatMap { $0.isEmpty ? nil : $0 }
-
-                    if envelope.kind == .task, let token = updateToken {
-                        if APNSNotificationPayloadBuilder.isVisibleAlert(envelope), let pushToken {
-                            try await send(
-                                envelope: envelope,
-                                token: pushToken,
-                                environment: environment,
-                                configuration: configuration,
-                                jwt: jwt
-                            )
-                        }
-                        let terminal = envelope.taskState?.isTerminal == true
-                        try await sendLiveActivity(
-                            payload: terminal
-                                ? APNSNotificationPayloadBuilder.liveActivityEndData(for: envelope)
-                                : APNSNotificationPayloadBuilder.liveActivityUpdateData(for: envelope),
-                            token: token,
-                            environment: environment,
-                            configuration: configuration,
-                            jwt: jwt,
-                            priority: terminal ? "5" : "10",
-                            expiration: envelope.expiresAt
-                        )
-                        continue
-                    }
-
-                    if APNSNotificationPayloadBuilder.shouldPushToStart(envelope), let token = pushToStartToken {
-                        do {
-                            try await sendLiveActivity(
-                                payload: APNSNotificationPayloadBuilder.liveActivityStartData(for: envelope),
-                                token: token,
-                                environment: environment,
-                                configuration: configuration,
-                                jwt: jwt,
-                                priority: "10",
-                                expiration: envelope.expiresAt
-                            )
-                        } catch {
-                            guard let fallbackToken = pushToken else { throw error }
-                            log.warning("Live Activity start failed; using the private notification fallback")
-                            try await send(
-                                envelope: envelope,
-                                token: fallbackToken,
-                                environment: environment,
-                                configuration: configuration,
-                                jwt: jwt
-                            )
-                        }
-                    } else if APNSNotificationPayloadBuilder.usesVisibleNotificationFallback(
-                        for: envelope,
-                        hasPushToStartToken: false
-                    ) {
-                        if let token = pushToken {
-                            try await send(
-                                envelope: envelope,
-                                token: token,
-                                environment: environment,
-                                configuration: configuration,
-                                jwt: jwt
-                            )
-                        }
-                    } else {
-                        if let token = pushToken {
-                            try await send(
-                                envelope: envelope,
-                                token: token,
-                                environment: environment,
-                                configuration: configuration,
-                                jwt: jwt
-                            )
-                        }
-                        if let token = updateToken {
-                            try await sendLiveActivity(
-                                payload: APNSNotificationPayloadBuilder.liveActivityEndData(for: envelope),
-                                token: token,
-                                environment: environment,
-                                configuration: configuration,
-                                jwt: jwt,
-                                priority: "5",
-                                expiration: envelope.expiresAt
-                            )
-                        }
-                    }
+                let result = await APNSDeliveryBatchRunner.run(
+                    targets,
+                    failureDescription: Self.safeFailureDescription
+                ) { device in
+                    try await self.deliver(
+                        envelope: envelope,
+                        requestID: requestID,
+                        to: device,
+                        configuration: configuration,
+                        jwt: jwt
+                    )
                 }
-                lastDeliveryAt = Date()
-                lastError = nil
+                if result.successfulTargetCount > 0 {
+                    lastDeliveryAt = Date()
+                }
+                if result.failedTargetCount == 0 {
+                    lastError = nil
+                } else {
+                    let details = result.reportedFailureDescriptions.joined(separator: "; ")
+                    let summary = "\(result.failedTargetCount) of \(targets.count) push targets failed"
+                    lastError = details.isEmpty ? summary : "\(summary): \(details)"
+                    log.error("\(summary, privacy: .public)")
+                }
             } catch {
                 lastError = error.localizedDescription
                 log.error("push delivery failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    private func deliver(
+        envelope: RemoteAttentionPushEnvelope,
+        requestID: String,
+        to device: RemoteApprovalDevice,
+        configuration: Configuration,
+        jwt: String
+    ) async throws {
+        let environment = device.pushEnvironment ?? "production"
+        let pushToken = device.pushToken.flatMap { $0.isEmpty ? nil : $0 }
+        let pushToStartToken = device.liveActivityPushToStartToken.flatMap { $0.isEmpty ? nil : $0 }
+        let updateToken = device.liveActivityUpdateTokens?[requestID].flatMap { $0.isEmpty ? nil : $0 }
+
+        if envelope.kind == .task, let token = updateToken {
+            if APNSNotificationPayloadBuilder.isVisibleAlert(envelope), let pushToken {
+                try await send(
+                    envelope: envelope,
+                    pairingDeviceID: device.id,
+                    token: pushToken,
+                    environment: environment,
+                    configuration: configuration,
+                    jwt: jwt
+                )
+            }
+            let terminal = envelope.taskState?.isTerminal == true
+            try await sendLiveActivity(
+                payload: terminal
+                    ? APNSNotificationPayloadBuilder.liveActivityEndData(for: envelope)
+                    : APNSNotificationPayloadBuilder.liveActivityUpdateData(for: envelope),
+                token: token,
+                environment: environment,
+                configuration: configuration,
+                jwt: jwt,
+                priority: terminal ? "5" : "10",
+                expiration: envelope.expiresAt
+            )
+            return
+        }
+
+        if APNSNotificationPayloadBuilder.shouldPushToStart(envelope), let token = pushToStartToken {
+            do {
+                try await sendLiveActivity(
+                    payload: APNSNotificationPayloadBuilder.liveActivityStartData(
+                        for: envelope,
+                        pairingDeviceID: device.id
+                    ),
+                    token: token,
+                    environment: environment,
+                    configuration: configuration,
+                    jwt: jwt,
+                    priority: "10",
+                    expiration: envelope.expiresAt
+                )
+            } catch {
+                guard let fallbackToken = pushToken else { throw error }
+                log.warning("Live Activity start failed; using the private notification fallback")
+                try await send(
+                    envelope: envelope,
+                    pairingDeviceID: device.id,
+                    token: fallbackToken,
+                    environment: environment,
+                    configuration: configuration,
+                    jwt: jwt
+                )
+            }
+        } else if APNSNotificationPayloadBuilder.usesVisibleNotificationFallback(
+            for: envelope,
+            hasPushToStartToken: false
+        ) {
+            if let token = pushToken {
+                try await send(
+                    envelope: envelope,
+                    pairingDeviceID: device.id,
+                    token: token,
+                    environment: environment,
+                    configuration: configuration,
+                    jwt: jwt
+                )
+            }
+        } else {
+            if let token = pushToken {
+                try await send(
+                    envelope: envelope,
+                    pairingDeviceID: device.id,
+                    token: token,
+                    environment: environment,
+                    configuration: configuration,
+                    jwt: jwt
+                )
+            }
+            if let token = updateToken {
+                try await sendLiveActivity(
+                    payload: APNSNotificationPayloadBuilder.liveActivityEndData(for: envelope),
+                    token: token,
+                    environment: environment,
+                    configuration: configuration,
+                    jwt: jwt,
+                    priority: "5",
+                    expiration: envelope.expiresAt
+                )
             }
         }
     }
@@ -197,6 +268,24 @@ final class APNSNotificationSender: ObservableObject {
             case .rejected(let status, let reason):
                 return "APNs rejected the notification (\(status)): \(reason)"
             }
+        }
+    }
+
+    nonisolated private static func safeFailureDescription(_ error: Error) -> String {
+        switch error {
+        case let error as PushError:
+            switch error {
+            case .incompleteConfiguration:
+                return "APNs configuration is incomplete"
+            case .invalidResponse:
+                return "APNs returned an invalid response"
+            case .rejected(let status, _):
+                return "APNs rejected a notification (\(status))"
+            }
+        case let error as URLError:
+            return "APNs network request failed (\(error.code.rawValue))"
+        default:
+            return "APNs delivery failed"
         }
     }
 
@@ -245,6 +334,7 @@ final class APNSNotificationSender: ObservableObject {
 
     private func send(
         envelope: RemoteAttentionPushEnvelope,
+        pairingDeviceID: String,
         token: String,
         environment: String,
         configuration: Configuration,
@@ -277,7 +367,10 @@ final class APNSNotificationSender: ObservableObject {
             forHTTPHeaderField: "apns-expiration"
         )
         request.setValue("application/json", forHTTPHeaderField: "content-type")
-        request.httpBody = try APNSNotificationPayloadBuilder.data(for: envelope)
+        request.httpBody = try APNSNotificationPayloadBuilder.data(
+            for: envelope,
+            pairingDeviceID: pairingDeviceID
+        )
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw PushError.invalidResponse }
@@ -342,8 +435,12 @@ enum APNSNotificationPayloadBuilder {
         isVisibleAlert(envelope) && (!shouldPushToStart(envelope) || !hasPushToStartToken)
     }
 
-    static func data(for envelope: RemoteAttentionPushEnvelope) throws -> Data {
+    static func data(
+        for envelope: RemoteAttentionPushEnvelope,
+        pairingDeviceID: String? = nil
+    ) throws -> Data {
         var object = envelope.payloadFields
+        if let pairingDeviceID { object["ciPairingDeviceId"] = pairingDeviceID }
         if isVisibleAlert(envelope) {
             let copy = notificationCopy(for: envelope)
             object["aps"] = [
@@ -377,13 +474,19 @@ enum APNSNotificationPayloadBuilder {
         isVisibleAlert(envelope) ? "10" : "5"
     }
 
-    static func liveActivityStartData(for envelope: RemoteAttentionPushEnvelope) throws -> Data {
+    static func liveActivityStartData(
+        for envelope: RemoteAttentionPushEnvelope,
+        pairingDeviceID: String
+    ) throws -> Data {
         let copy = notificationCopy(for: envelope)
         let aps: [String: Any] = [
             "timestamp": Int(envelope.issuedAt.timeIntervalSince1970),
             "event": "start",
             "attributes-type": "CodeIslandActivityAttributes",
-            "attributes": ["sessionId": envelope.requestID],
+            "attributes": [
+                "sessionId": envelope.requestID,
+                "pairingDeviceID": pairingDeviceID,
+            ],
             "content-state": try liveActivityContentState(for: envelope, status: pendingStatus(for: envelope.kind)),
             "input-push-token": 1,
             "stale-date": Int(envelope.expiresAt.timeIntervalSince1970),

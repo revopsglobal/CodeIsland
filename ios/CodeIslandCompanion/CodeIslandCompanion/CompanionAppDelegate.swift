@@ -2,13 +2,12 @@ import UIKit
 import UserNotifications
 
 final class CompanionAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
-    private static let pendingPushTokenKey = "codeisland.remote.pendingPushToken"
-    private static let pendingApprovalIDKey = "codeisland.remote.pendingApprovalID"
-    private static let pendingQuestionIDKey = "codeisland.remote.pendingQuestionID"
+    private static let pendingApprovalIDKey = RemoteHostScopedArtifactStore.pendingApprovalIDKey
+    private static let pendingQuestionIDKey = RemoteHostScopedArtifactStore.pendingQuestionIDKey
     private static let pushHistoryKey = "codeisland.remote.pushHistory.v1"
     private static let taskStateHistoryKey = "codeisland.remote.taskPushState.v1"
 
-    internal enum PushProcessingOutcome {
+    internal enum PushProcessingOutcome: Equatable {
         case accepted
         case rejectedStale
         case unrecognized
@@ -47,7 +46,7 @@ final class CompanionAppDelegate: NSObject, UIApplicationDelegate, UNUserNotific
 
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         let token = deviceToken.map { String(format: "%02x", $0) }.joined()
-        UserDefaults.standard.set(token, forKey: Self.pendingPushTokenKey)
+        RemotePushTokenMailbox.store(token)
         NotificationCenter.default.post(name: .codeIslandPushTokenAvailable, object: nil)
     }
 
@@ -92,8 +91,9 @@ final class CompanionAppDelegate: NSObject, UIApplicationDelegate, UNUserNotific
     }
 
     @discardableResult
-    private func processLegacy(
-        _ userInfo: [AnyHashable: Any]
+    internal func processLegacy(
+        _ userInfo: [AnyHashable: Any],
+        afterPairingValidation: (() -> Void)? = nil
     ) -> PushProcessingOutcome {
         let fields = Dictionary(uniqueKeysWithValues: userInfo.compactMap { key, value in
             (key as? String).map { ($0, value) }
@@ -102,85 +102,153 @@ final class CompanionAppDelegate: NSObject, UIApplicationDelegate, UNUserNotific
         guard let envelope = RemoteAttentionPushEnvelope(payloadFields: fields) else {
             // Backward compatibility with the first internal Buddy build.
             guard let approvalID = fields["approvalId"] as? String, !approvalID.isEmpty else { return .unrecognized }
-            UserDefaults.standard.set(approvalID, forKey: Self.pendingApprovalIDKey)
-            LiveActivityTokenMailbox.storeReceipt(
-                source: .notification,
-                requestID: approvalID,
-                kind: .approval,
-                attentionState: .pending,
-                activityState: nil
-            )
-            postAttention(kind: .approval, state: .pending, requestID: approvalID)
+            // It can still present, but cannot prove a pairing and therefore
+            // never emits a trusted in-app route or host receipt.
             return .accepted
         }
 
-        var history = UserDefaults.standard.dictionary(forKey: Self.pushHistoryKey) as? [String: Double] ?? [:]
-        let previous = history[envelope.requestKey].map(Date.init(timeIntervalSince1970:))
-        guard envelope.isFresh(lastIssuedAt: previous) else { return .rejectedStale }
-        if envelope.kind == .task, let incomingState = envelope.taskState {
-            var taskStates = UserDefaults.standard.dictionary(forKey: Self.taskStateHistoryKey) as? [String: String] ?? [:]
-            let previousState = taskStates[envelope.requestID].flatMap(RemoteTaskState.init(rawValue:))
-            guard RemoteTaskAttentionPolicy.accepts(previousState: previousState, incomingState: incomingState) else {
-                return .rejectedStale
-            }
-            taskStates[envelope.requestID] = incomingState.rawValue
-            if taskStates.count > 64 {
-                taskStates = Dictionary(uniqueKeysWithValues: taskStates.prefix(64).map { ($0.key, $0.value) })
-            }
-            UserDefaults.standard.set(taskStates, forKey: Self.taskStateHistoryKey)
+        let stagedPairingIdentity = RemotePairingIdentityStore.runtimeIdentity()
+        guard RemoteAttentionPushPairingScope.acceptsHostScopedArtifacts(
+            payloadPairingDeviceID: envelope.pairingDeviceID,
+            identity: stagedPairingIdentity
+        ) else {
+            return envelope.pairingDeviceID == nil ? .accepted : .rejectedStale
         }
-        history[envelope.requestKey] = envelope.issuedAt.timeIntervalSince1970
-        if history.count > 64 {
-            history = Dictionary(uniqueKeysWithValues: history
-                .sorted { $0.value > $1.value }
-                .prefix(64)
-                .map { ($0.key, $0.value) })
-        }
-        UserDefaults.standard.set(history, forKey: Self.pushHistoryKey)
-
-        switch (envelope.kind, envelope.state) {
-        case (.approval, .pending):
-            UserDefaults.standard.set(envelope.requestID, forKey: Self.pendingApprovalIDKey)
-        case (.question, .pending):
-            UserDefaults.standard.set(envelope.requestID, forKey: Self.pendingQuestionIDKey)
-        case (.approval, _):
-            if UserDefaults.standard.string(forKey: Self.pendingApprovalIDKey) == envelope.requestID {
-                UserDefaults.standard.removeObject(forKey: Self.pendingApprovalIDKey)
-            }
-        case (.question, _):
-            if UserDefaults.standard.string(forKey: Self.pendingQuestionIDKey) == envelope.requestID {
-                UserDefaults.standard.removeObject(forKey: Self.pendingQuestionIDKey)
-            }
-        case (.task, _):
-            break
-        }
-
-        LiveActivityTokenMailbox.storeReceipt(
+        guard let pairingDeviceID = LiveActivityPairingScope.normalized(
+            envelope.pairingDeviceID
+        ) else { return .rejectedStale }
+        // Test hooks and ActivityKit framework synchronization stay outside the
+        // ownership lock. The final transaction revalidates this exact identity
+        // before making any host-scoped mutation.
+        afterPairingValidation?()
+        let stagedReceipt = LiveActivityTokenMailbox.makeReceipt(
             source: .notification,
             requestID: envelope.requestID,
             kind: envelope.kind,
             attentionState: envelope.state,
-            activityState: nil
+            activityState: nil,
+            pairingIdentity: stagedPairingIdentity
         )
-        postAttention(
-            kind: envelope.kind,
-            state: envelope.state,
-            requestID: envelope.requestID,
-            taskState: envelope.taskState
-        )
-        return .accepted
+
+        var storedReceipt = false
+        var attentionEvent: (
+            kind: RemoteAttentionKind,
+            state: RemoteAttentionState,
+            requestID: String,
+            taskState: RemoteTaskState?,
+            pairingDeviceID: String
+        )?
+        let outcome: PushProcessingOutcome = RemotePairingIdentityStore.withRuntimeIdentityTransaction {
+            pairingIdentity in
+            guard pairingIdentity == stagedPairingIdentity,
+                  RemoteAttentionPushPairingScope.acceptsHostScopedArtifacts(
+                payloadPairingDeviceID: envelope.pairingDeviceID,
+                identity: pairingIdentity
+            ) else {
+                return .rejectedStale
+            }
+            let scopedRequestKey = "\(pairingDeviceID):\(envelope.requestKey)"
+
+            var history = UserDefaults.standard.dictionary(
+                forKey: Self.pushHistoryKey
+            ) as? [String: Double] ?? [:]
+            let previous = history[scopedRequestKey].map(Date.init(timeIntervalSince1970:))
+            guard envelope.isFresh(lastIssuedAt: previous) else { return .rejectedStale }
+            if envelope.kind == .task, let incomingState = envelope.taskState {
+                var taskStates = UserDefaults.standard.dictionary(
+                    forKey: Self.taskStateHistoryKey
+                ) as? [String: String] ?? [:]
+                let scopedTaskKey = "\(pairingDeviceID):\(envelope.requestID)"
+                let previousState = taskStates[scopedTaskKey].flatMap(
+                    RemoteTaskState.init(rawValue:)
+                )
+                guard RemoteTaskAttentionPolicy.accepts(
+                    previousState: previousState,
+                    incomingState: incomingState
+                ) else { return .rejectedStale }
+                taskStates[scopedTaskKey] = incomingState.rawValue
+                if taskStates.count > 64 {
+                    taskStates = Dictionary(uniqueKeysWithValues: taskStates.prefix(64).map {
+                        ($0.key, $0.value)
+                    })
+                }
+                UserDefaults.standard.set(taskStates, forKey: Self.taskStateHistoryKey)
+            }
+            history[scopedRequestKey] = envelope.issuedAt.timeIntervalSince1970
+            if history.count > 64 {
+                history = Dictionary(uniqueKeysWithValues: history
+                    .sorted { $0.value > $1.value }
+                    .prefix(64)
+                    .map { ($0.key, $0.value) })
+            }
+            UserDefaults.standard.set(history, forKey: Self.pushHistoryKey)
+
+            switch (envelope.kind, envelope.state) {
+            case (.approval, .pending):
+                UserDefaults.standard.set(envelope.requestID, forKey: Self.pendingApprovalIDKey)
+            case (.question, .pending):
+                UserDefaults.standard.set(envelope.requestID, forKey: Self.pendingQuestionIDKey)
+            case (.approval, _):
+                if UserDefaults.standard.string(forKey: Self.pendingApprovalIDKey) == envelope.requestID {
+                    UserDefaults.standard.removeObject(forKey: Self.pendingApprovalIDKey)
+                }
+            case (.question, _):
+                if UserDefaults.standard.string(forKey: Self.pendingQuestionIDKey) == envelope.requestID {
+                    UserDefaults.standard.removeObject(forKey: Self.pendingQuestionIDKey)
+                }
+            case (.task, _):
+                break
+            }
+
+            if let stagedReceipt {
+                storedReceipt = LiveActivityTokenMailbox.storePreparedReceipt(
+                    stagedReceipt,
+                    postNotification: false
+                )
+            }
+            attentionEvent = (
+                envelope.kind,
+                envelope.state,
+                envelope.requestID,
+                envelope.taskState,
+                pairingDeviceID
+            )
+            return .accepted
+        }
+
+        // NotificationCenter delivery stays outside the ownership lock. Every
+        // trusted event remains owner-tagged and the observer exact-checks that
+        // owner again at delivery, so an A event delivered after A→B is inert.
+        if storedReceipt {
+            NotificationCenter.default.post(
+                name: .codeIslandLiveActivityReceiptAvailable,
+                object: nil
+            )
+        }
+        if let attentionEvent {
+            postAttention(
+                kind: attentionEvent.kind,
+                state: attentionEvent.state,
+                requestID: attentionEvent.requestID,
+                taskState: attentionEvent.taskState,
+                pairingDeviceID: attentionEvent.pairingDeviceID
+            )
+        }
+        return outcome
     }
 
     private func postAttention(
         kind: RemoteAttentionKind,
         state: RemoteAttentionState,
         requestID: String,
-        taskState: RemoteTaskState? = nil
+        taskState: RemoteTaskState? = nil,
+        pairingDeviceID: String
     ) {
         var userInfo = [
             "kind": kind.rawValue,
             "state": state.rawValue,
             "requestId": requestID,
+            "pairingDeviceID": pairingDeviceID,
         ]
         if let taskState { userInfo["taskState"] = taskState.rawValue }
         NotificationCenter.default.post(
