@@ -217,6 +217,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         WindowLayoutDropController.shared.stop()
     }
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        ApplicationQuitController.shared.shouldTerminate() ? .terminateNow : .terminateCancel
+    }
+
     // MARK: - Global Shortcuts
 
     func setupGlobalShortcut() {
