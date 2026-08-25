@@ -24,6 +24,9 @@ public struct RemoteAttentionPushEnvelope: Codable, Equatable, Sendable {
     public let state: RemoteAttentionState
     public let requestID: String
     public let taskState: RemoteTaskState?
+    /// The exact paired-device record this APNs payload was routed to. Older
+    /// Buddy/Mac builds omit it, so it remains optional on the wire.
+    public let pairingDeviceID: String?
     public let issuedAt: Date
     public let expiresAt: Date
 
@@ -34,6 +37,7 @@ public struct RemoteAttentionPushEnvelope: Codable, Equatable, Sendable {
         state: RemoteAttentionState,
         requestID: String,
         taskState: RemoteTaskState? = nil,
+        pairingDeviceID: String? = nil,
         issuedAt: Date = Date(),
         expiresAt: Date
     ) {
@@ -43,6 +47,7 @@ public struct RemoteAttentionPushEnvelope: Codable, Equatable, Sendable {
         self.state = state
         self.requestID = requestID
         self.taskState = taskState
+        self.pairingDeviceID = pairingDeviceID
         self.issuedAt = issuedAt
         self.expiresAt = expiresAt
     }
@@ -58,6 +63,7 @@ public struct RemoteAttentionPushEnvelope: Codable, Equatable, Sendable {
             "ciExpiresAt": expiresAt.timeIntervalSince1970,
         ]
         if let taskState { fields["ciTaskState"] = taskState.rawValue }
+        if let pairingDeviceID { fields["ciPairingDeviceId"] = pairingDeviceID }
         return fields
     }
 
@@ -78,6 +84,9 @@ public struct RemoteAttentionPushEnvelope: Codable, Equatable, Sendable {
         else { return nil }
 
         let taskState = (payloadFields["ciTaskState"] as? String).flatMap(RemoteTaskState.init(rawValue:))
+        let pairingDeviceID = (payloadFields["ciPairingDeviceId"] as? String)?.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
         guard (kind == .task && UUID(uuidString: requestID) != nil && taskState != nil)
                 || (kind != .task && taskState == nil)
         else { return nil }
@@ -89,6 +98,7 @@ public struct RemoteAttentionPushEnvelope: Codable, Equatable, Sendable {
             state: state,
             requestID: requestID,
             taskState: taskState,
+            pairingDeviceID: pairingDeviceID?.isEmpty == false ? pairingDeviceID : nil,
             issuedAt: Date(timeIntervalSince1970: issuedAtValue),
             expiresAt: Date(timeIntervalSince1970: expiresAtValue)
         )
@@ -197,6 +207,7 @@ public struct RemoteApprovalSnapshot: Codable, Equatable, Sendable {
     public let serverName: String
     public let generatedAt: Date
     public let companionSequence: UInt64?
+    public let deviceId: String?
     public let approvals: [RemoteApprovalItem]
     public let questions: [RemoteQuestionItem]
 
@@ -205,6 +216,7 @@ public struct RemoteApprovalSnapshot: Codable, Equatable, Sendable {
         serverName: String,
         generatedAt: Date = Date(),
         companionSequence: UInt64? = nil,
+        deviceId: String? = nil,
         approvals: [RemoteApprovalItem],
         questions: [RemoteQuestionItem] = []
     ) {
@@ -212,6 +224,7 @@ public struct RemoteApprovalSnapshot: Codable, Equatable, Sendable {
         self.serverName = serverName
         self.generatedAt = generatedAt
         self.companionSequence = companionSequence
+        self.deviceId = deviceId
         self.approvals = approvals
         self.questions = questions
     }
@@ -221,6 +234,7 @@ public struct RemoteApprovalSnapshot: Codable, Equatable, Sendable {
         case serverName
         case generatedAt
         case companionSequence
+        case deviceId
         case approvals
         case questions
     }
@@ -231,6 +245,7 @@ public struct RemoteApprovalSnapshot: Codable, Equatable, Sendable {
         serverName = try container.decode(String.self, forKey: .serverName)
         generatedAt = try container.decode(Date.self, forKey: .generatedAt)
         companionSequence = try container.decodeIfPresent(UInt64.self, forKey: .companionSequence)
+        deviceId = try container.decodeIfPresent(String.self, forKey: .deviceId)
         approvals = try container.decode([RemoteApprovalItem].self, forKey: .approvals)
         questions = try container.decodeIfPresent([RemoteQuestionItem].self, forKey: .questions) ?? []
     }
@@ -326,6 +341,9 @@ public struct RemotePairRequest: Codable, Equatable, Sendable {
 }
 
 public struct RemotePairResponse: Codable, Equatable, Sendable {
+    /// Empty only when decoding a response from a pre-device-ID Mac. Buddy
+    /// normalizes that legacy sentinel to an unresolved pairing identity and
+    /// backfills it from the first authenticated vNext response.
     public let deviceId: String
     public let deviceToken: String
     public let serverName: String
@@ -334,6 +352,19 @@ public struct RemotePairResponse: Codable, Equatable, Sendable {
         self.deviceId = deviceId
         self.deviceToken = deviceToken
         self.serverName = serverName
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case deviceId
+        case deviceToken
+        case serverName
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        deviceId = try container.decodeIfPresent(String.self, forKey: .deviceId) ?? ""
+        deviceToken = try container.decode(String.self, forKey: .deviceToken)
+        serverName = try container.decode(String.self, forKey: .serverName)
     }
 }
 
@@ -461,6 +492,16 @@ public struct RemotePushRegistrationRequest: Codable, Equatable, Sendable {
         self.liveActivityReceipts = liveActivityReceipts
         self.clientVersion = clientVersion
         self.clientBuild = clientBuild
+    }
+}
+
+public struct RemotePushRegistrationResponse: Codable, Equatable, Sendable {
+    public let registered: Bool
+    public let deviceId: String?
+
+    public init(registered: Bool, deviceId: String? = nil) {
+        self.registered = registered
+        self.deviceId = deviceId
     }
 }
 

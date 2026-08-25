@@ -5,6 +5,273 @@ import CodeIslandCore
 
 @MainActor
 final class RemoteApprovalHTTPServerTests: XCTestCase {
+    func testReregisteredAPNSTokenRevokesOldCredentialWithoutTransferringActivityRoutes() throws {
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CodeIslandPairTransfer-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let store = RemoteApprovalDeviceStore(
+            stateURL: temporaryDirectory.appendingPathComponent("devices.json")
+        )
+        let first = try XCTUnwrap(store.pair(.init(code: store.pairingCode, deviceName: "iPhone")))
+        let route = String(repeating: "a", count: 64)
+        _ = store.registerPushToken(
+            .init(
+                token: route,
+                environment: "production",
+                liveActivityUpdateTokens: [
+                    "old-only": String(repeating: "d", count: 64),
+                    "shared": String(repeating: "e", count: 64),
+                ]
+            ),
+            deviceID: first.deviceId
+        )
+
+        let second = try XCTUnwrap(store.pair(.init(code: store.pairingCode, deviceName: "iPhone")))
+        _ = store.registerPushToken(
+            .init(
+                token: route,
+                environment: "production",
+                liveActivityUpdateTokens: [
+                    "new-only": String(repeating: "f", count: 64),
+                    "shared": String(repeating: "1", count: 64),
+                ]
+            ),
+            deviceID: second.deviceId
+        )
+
+        XCTAssertEqual(store.devices.map(\.id), [second.deviceId])
+        XCTAssertNil(store.authenticate(token: first.deviceToken))
+        let transferred = try XCTUnwrap(store.authenticate(token: second.deviceToken))
+        XCTAssertEqual(transferred.id, second.deviceId)
+        XCTAssertNil(transferred.liveActivityUpdateTokens?["old-only"])
+        XCTAssertEqual(transferred.liveActivityUpdateTokens?["new-only"], String(repeating: "f", count: 64))
+        XCTAssertEqual(
+            transferred.liveActivityUpdateTokens?["shared"],
+            String(repeating: "1", count: 64),
+            "Only the replacement pairing's current registration may own update-token state"
+        )
+    }
+
+    func testReregisteredPushToStartTokenTransfersRouteWithoutAPNS() throws {
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CodeIslandPushToStartTransfer-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let store = RemoteApprovalDeviceStore(
+            stateURL: temporaryDirectory.appendingPathComponent("devices.json")
+        )
+        let first = try XCTUnwrap(store.pair(.init(code: store.pairingCode, deviceName: "iPhone")))
+        let route = String(repeating: "c", count: 64)
+        _ = store.registerPushToken(
+            .init(environment: "production", liveActivityPushToStartToken: route),
+            deviceID: first.deviceId
+        )
+
+        let second = try XCTUnwrap(store.pair(.init(code: store.pairingCode, deviceName: "iPhone")))
+        _ = store.registerPushToken(
+            .init(environment: "production", liveActivityPushToStartToken: route),
+            deviceID: second.deviceId
+        )
+
+        XCTAssertEqual(store.devices.map(\.id), [second.deviceId])
+        XCTAssertNil(store.authenticate(token: first.deviceToken))
+        XCTAssertEqual(
+            store.authenticate(token: second.deviceToken)?.liveActivityPushToStartToken,
+            route
+        )
+    }
+
+    func testDistinctAPNSRoutesKeepIndependentPairedDevices() throws {
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CodeIslandDistinctRoutes-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let store = RemoteApprovalDeviceStore(
+            stateURL: temporaryDirectory.appendingPathComponent("devices.json")
+        )
+        let first = try XCTUnwrap(store.pair(.init(code: store.pairingCode, deviceName: "First iPhone")))
+        _ = store.registerPushToken(
+            .init(token: String(repeating: "a", count: 64), environment: "production"),
+            deviceID: first.deviceId
+        )
+        let second = try XCTUnwrap(store.pair(.init(code: store.pairingCode, deviceName: "Second iPhone")))
+        _ = store.registerPushToken(
+            .init(token: String(repeating: "b", count: 64), environment: "production"),
+            deviceID: second.deviceId
+        )
+
+        XCTAssertEqual(Set(store.devices.map(\.id)), Set([first.deviceId, second.deviceId]))
+        XCTAssertNotNil(store.authenticate(token: first.deviceToken))
+        XCTAssertNotNil(store.authenticate(token: second.deviceToken))
+    }
+
+    func testSameRouteInDifferentAPNSEnvironmentsRemainsIndependent() throws {
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CodeIslandEnvironmentRoutes-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let stateURL = temporaryDirectory.appendingPathComponent("devices.json")
+        let store = RemoteApprovalDeviceStore(stateURL: stateURL)
+        let route = String(repeating: "a", count: 64)
+        let production = try XCTUnwrap(store.pair(.init(
+            code: store.pairingCode,
+            deviceName: "Production iPhone"
+        )))
+        _ = store.registerPushToken(
+            .init(token: route, environment: "production"),
+            deviceID: production.deviceId
+        )
+        let development = try XCTUnwrap(store.pair(.init(
+            code: store.pairingCode,
+            deviceName: "Development iPhone"
+        )))
+        _ = store.registerPushToken(
+            .init(token: route, environment: "development"),
+            deviceID: development.deviceId
+        )
+
+        XCTAssertEqual(Set(store.devices.map(\.id)), Set([production.deviceId, development.deviceId]))
+        let reloaded = RemoteApprovalDeviceStore(stateURL: stateURL)
+        XCTAssertEqual(Set(reloaded.devices.map(\.id)), Set([production.deviceId, development.deviceId]))
+    }
+
+    func testLoadNormalizesTransitiveRoutesWithoutMergingPairingScopedUpdateTokens() throws {
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CodeIslandRouteNormalization-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let stateURL = temporaryDirectory.appendingPathComponent("devices.json")
+        let pushA = String(repeating: "a", count: 64)
+        let pushB = String(repeating: "b", count: 64)
+        let pushToStartX = String(repeating: "c", count: 64)
+        let pushToStartY = String(repeating: "d", count: 64)
+        let oldest = makePersistedDevice(
+            id: "oldest",
+            pairedAt: Date(timeIntervalSince1970: 100),
+            pushToken: pushA,
+            pushToStartToken: pushToStartX,
+            updateTokens: [
+                "old-only": String(repeating: "1", count: 64),
+                "shared": String(repeating: "2", count: 64),
+            ]
+        )
+        let middle = makePersistedDevice(
+            id: "middle",
+            pairedAt: Date(timeIntervalSince1970: 200),
+            pushToken: pushB,
+            pushToStartToken: pushToStartX,
+            updateTokens: [
+                "middle-only": String(repeating: "3", count: 64),
+                "shared": String(repeating: "4", count: 64),
+            ]
+        )
+        let newest = makePersistedDevice(
+            id: "newest",
+            pairedAt: Date(timeIntervalSince1970: 300),
+            pushToken: pushA,
+            pushToStartToken: pushToStartY,
+            updateTokens: [
+                "newest-only": String(repeating: "5", count: 64),
+                "shared": String(repeating: "6", count: 64),
+            ]
+        )
+        try encode(PersistedRemoteApprovalDeviceState(devices: [oldest, middle, newest]))
+            .write(to: stateURL, options: .atomic)
+
+        let store = RemoteApprovalDeviceStore(stateURL: stateURL)
+        XCTAssertEqual(store.devices.map(\.id), ["newest"])
+        let normalized = try XCTUnwrap(store.devices.first)
+        XCTAssertEqual(normalized.pushToken, pushA)
+        XCTAssertEqual(normalized.liveActivityPushToStartToken, pushToStartY)
+        XCTAssertNil(normalized.liveActivityUpdateTokens?["old-only"])
+        XCTAssertNil(normalized.liveActivityUpdateTokens?["middle-only"])
+        XCTAssertEqual(normalized.liveActivityUpdateTokens?["newest-only"], String(repeating: "5", count: 64))
+        XCTAssertEqual(normalized.liveActivityUpdateTokens?["shared"], String(repeating: "6", count: 64))
+
+        let reloaded = RemoteApprovalDeviceStore(stateURL: stateURL)
+        XCTAssertEqual(reloaded.devices, store.devices, "Load repair must persist the normalized state")
+    }
+
+    func testHTTPRejectsOldBearerAfterRouteTransfersToNewPair() async throws {
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CodeIslandRouteBearerRevocation-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let deviceStore = RemoteApprovalDeviceStore(
+            stateURL: temporaryDirectory.appendingPathComponent("devices.json")
+        )
+        let service = RemoteApprovalService(
+            deviceStore: deviceStore,
+            coordinator: RemoteApprovalCoordinator(
+                auditURL: temporaryDirectory.appendingPathComponent("audit.jsonl")
+            ),
+            localPortOverride: 0,
+            enabledOverride: true,
+            tailscaleConfigurator: { _, _ in "https://codeisland-route-revocation.invalid" }
+        )
+        let appState = makeTestAppState()
+        service.start(appState: appState)
+        defer { service.stop() }
+        let port = try await waitForPort(service)
+        let route = String(repeating: "a", count: 64)
+
+        let first = try XCTUnwrap(deviceStore.pair(.init(
+            code: deviceStore.pairingCode,
+            deviceName: "Old iPhone pair"
+        )))
+        let firstRegistration = try await send(
+            port: port,
+            method: "POST",
+            path: "/api/push-token",
+            bearer: first.deviceToken,
+            body: try encode(RemotePushRegistrationRequest(token: route, environment: "production"))
+        )
+        XCTAssertEqual(firstRegistration.response.statusCode, 200)
+        XCTAssertEqual(
+            try decode(RemotePushRegistrationResponse.self, from: firstRegistration.data),
+            RemotePushRegistrationResponse(registered: true, deviceId: first.deviceId)
+        )
+
+        let second = try XCTUnwrap(deviceStore.pair(.init(
+            code: deviceStore.pairingCode,
+            deviceName: "New iPhone pair"
+        )))
+        let secondRegistration = try await send(
+            port: port,
+            method: "POST",
+            path: "/api/push-token",
+            bearer: second.deviceToken,
+            body: try encode(RemotePushRegistrationRequest(token: route, environment: "production"))
+        )
+        XCTAssertEqual(secondRegistration.response.statusCode, 200)
+        XCTAssertEqual(
+            try decode(RemotePushRegistrationResponse.self, from: secondRegistration.data),
+            RemotePushRegistrationResponse(registered: true, deviceId: second.deviceId)
+        )
+
+        let oldBearer = try await send(
+            port: port,
+            method: "GET",
+            path: "/api/approvals",
+            bearer: first.deviceToken
+        )
+        XCTAssertEqual(oldBearer.response.statusCode, 401)
+        let currentBearer = try await send(
+            port: port,
+            method: "GET",
+            path: "/api/approvals",
+            bearer: second.deviceToken
+        )
+        XCTAssertEqual(currentBearer.response.statusCode, 200)
+    }
+
     func testHealthExposesReadOnlyPrivacyDiagnostics() async throws {
         let temporaryDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("CodeIslandHealthDiagnostics-\(UUID().uuidString)", isDirectory: true)
@@ -859,6 +1126,30 @@ final class RemoteApprovalHTTPServerTests: XCTestCase {
         XCTAssertTrue(audit.contains("\"activeActivityCount\":1"))
     }
 
+    private func makePersistedDevice(
+        id: String,
+        pairedAt: Date,
+        pushToken: String,
+        pushToStartToken: String,
+        updateTokens: [String: String]
+    ) -> RemoteApprovalDevice {
+        RemoteApprovalDevice(
+            id: id,
+            name: id,
+            tokenHash: "hash-\(id)",
+            pairedAt: pairedAt,
+            lastSeenAt: pairedAt,
+            pushToken: pushToken,
+            pushEnvironment: "production",
+            liveActivityPushToStartToken: pushToStartToken,
+            liveActivityUpdateTokens: updateTokens,
+            lastLiveActivityReceipt: nil,
+            recentLiveActivityReceiptIDs: nil,
+            clientVersion: nil,
+            clientBuild: nil
+        )
+    }
+
     private func waitForPort(_ service: RemoteApprovalService) async throws -> UInt16 {
         for _ in 0..<100 {
             if service.running, let port = service.boundLocalPort { return port }
@@ -944,4 +1235,8 @@ final class RemoteApprovalHTTPServerTests: XCTestCase {
         let answers = try XCTUnwrap(updatedInput["answers"] as? [String: Any])
         return try XCTUnwrap(answers["Continue the E2E run?"] as? String)
     }
+}
+
+private struct PersistedRemoteApprovalDeviceState: Encodable {
+    let devices: [RemoteApprovalDevice]
 }

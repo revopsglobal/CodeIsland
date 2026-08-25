@@ -86,7 +86,7 @@ struct ContentView: View {
             }
             .onChange(of: connection.latestState?.sequence) { _, _ in
                 guard liveActivity.isRunning, let state = connection.latestState else { return }
-                liveActivity.startOrUpdate(with: state)
+                liveActivity.startOrUpdateFromNearby(with: state)
             }
             .animation(reduceMotion ? nil : CodeIslandMotion.open, value: remoteApprovals.hubActionMessage)
         }
@@ -1194,7 +1194,7 @@ private struct CommandRow: View {
                         tint: Color(red: 0.25, green: 0.76, blue: 1.0),
                         accessibilityIdentifier: "companion.liveActivity.primaryButton"
                     ) {
-                        liveActivity.startOrUpdate(with: state)
+                        liveActivity.startOrUpdateFromNearby(with: state)
                     }
                 }
 
@@ -1227,7 +1227,7 @@ private struct LiveActivityInlineButton: View {
             if liveActivity.isRunning {
                 liveActivity.stop()
             } else {
-                liveActivity.startOrUpdate(with: state)
+                liveActivity.startOrUpdateFromNearby(with: state)
             }
         } label: {
             Label(
@@ -1512,7 +1512,7 @@ private struct StandByIsland: View {
                         connection.send(.focus)
                     }
                     IconIslandButton(icon: liveActivity.isRunning ? "arrow.clockwise" : "bolt.horizontal.fill", tint: Color(red: 0.25, green: 0.76, blue: 1.0)) {
-                        liveActivity.startOrUpdate(with: state)
+                        liveActivity.startOrUpdateFromNearby(with: state)
                     }
                     if state.pendingAction != nil {
                         IconIslandButton(icon: "checkmark", tint: .orange) {

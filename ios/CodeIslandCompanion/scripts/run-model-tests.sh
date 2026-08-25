@@ -12,5 +12,6 @@ swiftc -o "$TMP/model-tests" \
   ../../../Sources/CodeIslandCore/CommandRisk.swift \
   ../../../Sources/CodeIslandCore/RemoteTaskProtocol.swift \
   ../../../Sources/CodeIslandCore/RemoteApprovalProtocol.swift \
+  ../../../Sources/CodeIslandCore/PersonalHubProtocol.swift \
   "$TMP/main.swift"
 "$TMP/model-tests"

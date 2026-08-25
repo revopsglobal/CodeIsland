@@ -149,4 +149,63 @@ struct CodeIslandActivityAttributes: ActivityAttributes {
     }
 
     var sessionId: String?
+    /// Exact `RemoteApprovalDevice.id` that owns this activity. Optional so an
+    /// already-running activity created by an older Buddy build still decodes.
+    var pairingDeviceID: String? = nil
+}
+
+enum CodeIslandActivityAttentionLink {
+    static let pairingDeviceIDQueryName = "pairingDeviceID"
+
+    static func url(
+        host: String,
+        path: String,
+        pairingDeviceID: String?
+    ) -> URL? {
+        var components = URLComponents()
+        components.scheme = "codeisland"
+        components.host = host
+        components.path = path.hasPrefix("/") ? path : "/\(path)"
+        if let pairingDeviceID = normalized(pairingDeviceID) {
+            components.queryItems = [
+                URLQueryItem(name: pairingDeviceIDQueryName, value: pairingDeviceID),
+            ]
+        }
+        return components.url
+    }
+
+    static func url(
+        attributes: CodeIslandActivityAttributes,
+        state: CodeIslandActivityAttributes.ContentState
+    ) -> URL? {
+        if let taskID = state.taskID, UUID(uuidString: taskID) != nil {
+            return url(
+                host: "tasks",
+                path: taskID,
+                pairingDeviceID: attributes.pairingDeviceID
+            )
+        }
+        guard state.pendingAction == "approval" || state.pendingAction == "question" else {
+            return nil
+        }
+        return url(
+            host: state.pendingAction == "question" ? "questions" : "approvals",
+            path: attributes.sessionId ?? state.sessions.first?.sessionId ?? "pending",
+            pairingDeviceID: attributes.pairingDeviceID
+        )
+    }
+
+    static func pairingDeviceID(from url: URL) -> String? {
+        normalized(URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?
+            .first(where: { $0.name == pairingDeviceIDQueryName })?
+            .value)
+    }
+
+    private static func normalized(_ value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty
+        else { return nil }
+        return value
+    }
 }

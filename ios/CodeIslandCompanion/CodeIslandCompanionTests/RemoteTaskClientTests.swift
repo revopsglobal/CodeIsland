@@ -189,6 +189,108 @@ final class RemoteTaskClientTests: XCTestCase {
             $0.value(forHTTPHeaderField: "Authorization") == "Bearer secret"
         })
     }
+
+    func testOldConnectionSuccessCannotPublishTasksAfterNewConnectionBegins() async throws {
+        let fixture = try ClientFixture()
+        defer { fixture.remove() }
+        let oldTask = fixture.summary(clientTaskID: UUID(), idempotencyKey: UUID())
+        fixture.transport.suspendNextResponse = true
+
+        let oldSync = Task { @MainActor in
+            await fixture.client.sync(
+                baseURL: URL(string: "https://mac-a.test")!,
+                bearerToken: "credential-a",
+                force: true
+            )
+        }
+        await waitForSuspendedRequest(fixture.transport)
+        let newSync = await fixture.client.sync(
+            baseURL: URL(string: "https://mac-b.test")!,
+            bearerToken: "credential-b",
+            force: true
+        )
+        XCTAssertEqual(newSync, .deferred)
+
+        fixture.transport.resumeSuspendedResponse(.json(
+            status: 200,
+            fixture.snapshot([oldTask])
+        ))
+        let oldResult = await oldSync.value
+        XCTAssertEqual(oldResult, .deferred)
+        XCTAssertTrue(fixture.client.tasks.isEmpty)
+        XCTAssertNil(fixture.client.lastError)
+    }
+
+    func testOldConnectionUnauthorizedCannotRequestPairingAfterNewConnectionBegins() async throws {
+        let fixture = try ClientFixture()
+        defer { fixture.remove() }
+        fixture.transport.suspendNextResponse = true
+
+        let oldSync = Task { @MainActor in
+            await fixture.client.sync(
+                baseURL: URL(string: "https://mac-a.test")!,
+                bearerToken: "credential-a",
+                force: true
+            )
+        }
+        await waitForSuspendedRequest(fixture.transport)
+        _ = await fixture.client.sync(
+            baseURL: URL(string: "https://mac-b.test")!,
+            bearerToken: "credential-b",
+            force: true
+        )
+
+        fixture.transport.resumeSuspendedResponse(.json(
+            status: 401,
+            ErrorPayload(error: "expired-a")
+        ))
+        let oldResult = await oldSync.value
+        XCTAssertEqual(oldResult, .deferred)
+        XCTAssertNil(fixture.client.lastError)
+    }
+
+    func testOldConnectionTransportFailureCannotPublishErrorOrBackoffAfterNewConnectionBegins() async throws {
+        let fixture = try ClientFixture()
+        defer { fixture.remove() }
+        let baseB = URL(string: "https://mac-b.test")!
+        fixture.transport.suspendNextResponse = true
+
+        let oldSync = Task { @MainActor in
+            await fixture.client.sync(
+                baseURL: URL(string: "https://mac-a.test")!,
+                bearerToken: "credential-a",
+                force: true
+            )
+        }
+        await waitForSuspendedRequest(fixture.transport)
+        _ = await fixture.client.sync(
+            baseURL: baseB,
+            bearerToken: "credential-b",
+            force: true
+        )
+
+        fixture.transport.resumeSuspendedError(URLError(.notConnectedToInternet))
+        let oldResult = await oldSync.value
+        XCTAssertEqual(oldResult, .deferred)
+        XCTAssertNil(fixture.client.lastError)
+
+        fixture.transport.responses = [
+            .json(status: 200, fixture.snapshot([])),
+        ]
+        let currentResult = await fixture.client.sync(
+            baseURL: baseB,
+            bearerToken: "credential-b"
+        )
+        XCTAssertEqual(currentResult, .success, "stale A failure must not back off B")
+        XCTAssertNil(fixture.client.lastError)
+    }
+
+    private func waitForSuspendedRequest(_ transport: MockTaskTransport) async {
+        for _ in 0..<100 where !transport.hasSuspendedRequest {
+            await Task.yield()
+        }
+        XCTAssertTrue(transport.hasSuspendedRequest)
+    }
 }
 
 private struct ErrorPayload: Codable { let error: String }
@@ -251,6 +353,10 @@ private final class MockTaskTransport: RemoteTaskTransport {
     var requests: [URLRequest] = []
     var responses: [RemoteTaskTransportResponse] = []
     var failuresRemaining = 0
+    var suspendNextResponse = false
+    private var suspendedContinuation: CheckedContinuation<RemoteTaskTransportResponse, Error>?
+
+    var hasSuspendedRequest: Bool { suspendedContinuation != nil }
 
     func data(for request: URLRequest) async throws -> RemoteTaskTransportResponse {
         requests.append(request)
@@ -258,8 +364,26 @@ private final class MockTaskTransport: RemoteTaskTransport {
             failuresRemaining -= 1
             throw URLError(.notConnectedToInternet)
         }
+        if suspendNextResponse {
+            suspendNextResponse = false
+            return try await withCheckedThrowingContinuation { continuation in
+                suspendedContinuation = continuation
+            }
+        }
         guard !responses.isEmpty else { throw URLError(.badServerResponse) }
         return responses.removeFirst()
+    }
+
+    func resumeSuspendedResponse(_ response: RemoteTaskTransportResponse) {
+        let continuation = suspendedContinuation
+        suspendedContinuation = nil
+        continuation?.resume(returning: response)
+    }
+
+    func resumeSuspendedError(_ error: Error) {
+        let continuation = suspendedContinuation
+        suspendedContinuation = nil
+        continuation?.resume(throwing: error)
     }
 }
 

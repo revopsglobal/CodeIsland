@@ -3,6 +3,26 @@ import XCTest
 import CodeIslandCore
 
 final class APNSNotificationSenderTests: XCTestCase {
+    func testDeliveryBatchContinuesAfterTargetFailureAndBoundsDiagnostics() async {
+        var attemptedTargets: [Int] = []
+
+        let result = await APNSDeliveryBatchRunner.run([1, 2, 3, 4, 5]) { target in
+            attemptedTargets.append(target)
+            guard target == 2 else {
+                throw NSError(
+                    domain: "APNSNotificationSenderTests",
+                    code: target,
+                    userInfo: [NSLocalizedDescriptionKey: "target failed"]
+                )
+            }
+        }
+
+        XCTAssertEqual(attemptedTargets, [1, 2, 3, 4, 5])
+        XCTAssertEqual(result.successfulTargetCount, 1)
+        XCTAssertEqual(result.failedTargetCount, 4)
+        XCTAssertEqual(result.reportedFailureDescriptions, Array(repeating: "delivery failed", count: 3))
+    }
+
     func testTaskNeedsYouPayloadIsGenericAndDeepLinkSafe() throws {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let id = UUID()
@@ -14,22 +34,68 @@ final class APNSNotificationSenderTests: XCTestCase {
             issuedAt: now,
             expiresAt: now.addingTimeInterval(600)
         )
-        let data = try APNSNotificationPayloadBuilder.data(for: envelope)
+        let data = try APNSNotificationPayloadBuilder.data(
+            for: envelope,
+            pairingDeviceID: "paired-device-task"
+        )
         let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
         let aps = try XCTUnwrap(object["aps"] as? [String: Any])
         XCTAssertNotNil(aps["alert"])
         XCTAssertEqual(object["ciTaskState"] as? String, "needs-you")
+        XCTAssertEqual(object["ciPairingDeviceId"] as? String, "paired-device-task")
         let text = try XCTUnwrap(String(data: data, encoding: .utf8))
         XCTAssertFalse(text.localizedCaseInsensitiveContains("workspace"))
         XCTAssertFalse(text.localizedCaseInsensitiveContains("prompt"))
 
         let start = try XCTUnwrap(try JSONSerialization.jsonObject(
-            with: APNSNotificationPayloadBuilder.liveActivityStartData(for: envelope)
+            with: APNSNotificationPayloadBuilder.liveActivityStartData(
+                for: envelope,
+                pairingDeviceID: "paired-device-task"
+            )
         ) as? [String: Any])
         let startAPS = try XCTUnwrap(start["aps"] as? [String: Any])
+        let startAttributes = try XCTUnwrap(startAPS["attributes"] as? [String: Any])
+        XCTAssertEqual(startAttributes["pairingDeviceID"] as? String, "paired-device-task")
         let content = try XCTUnwrap(startAPS["content-state"] as? [String: Any])
         XCTAssertEqual(content["taskID"] as? String, id.uuidString.lowercased())
         XCTAssertEqual(content["taskState"] as? String, "needs-you")
+    }
+
+    func testNormalAndPushToStartPayloadsAreScopedPerTargetDevice() throws {
+        let issuedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let envelope = RemoteAttentionPushEnvelope(
+            kind: .approval,
+            state: .pending,
+            requestID: "approval-device-scope",
+            issuedAt: issuedAt,
+            expiresAt: issuedAt.addingTimeInterval(600)
+        )
+
+        let normalA = try XCTUnwrap(try JSONSerialization.jsonObject(
+            with: APNSNotificationPayloadBuilder.data(for: envelope, pairingDeviceID: "device-a")
+        ) as? [String: Any])
+        let normalB = try XCTUnwrap(try JSONSerialization.jsonObject(
+            with: APNSNotificationPayloadBuilder.data(for: envelope, pairingDeviceID: "device-b")
+        ) as? [String: Any])
+        XCTAssertEqual(normalA["ciPairingDeviceId"] as? String, "device-a")
+        XCTAssertEqual(normalB["ciPairingDeviceId"] as? String, "device-b")
+
+        let startA = try XCTUnwrap(try JSONSerialization.jsonObject(
+            with: APNSNotificationPayloadBuilder.liveActivityStartData(
+                for: envelope,
+                pairingDeviceID: "device-a"
+            )
+        ) as? [String: Any])
+        let startB = try XCTUnwrap(try JSONSerialization.jsonObject(
+            with: APNSNotificationPayloadBuilder.liveActivityStartData(
+                for: envelope,
+                pairingDeviceID: "device-b"
+            )
+        ) as? [String: Any])
+        let attributesA = try XCTUnwrap((startA["aps"] as? [String: Any])?["attributes"] as? [String: Any])
+        let attributesB = try XCTUnwrap((startB["aps"] as? [String: Any])?["attributes"] as? [String: Any])
+        XCTAssertEqual(attributesA["pairingDeviceID"] as? String, "device-a")
+        XCTAssertEqual(attributesB["pairingDeviceID"] as? String, "device-b")
     }
 
     func testTaskVerifiedPayloadIsVisibleOnlyBecauseHostTargetsFollowedDevice() throws {
@@ -143,7 +209,10 @@ final class APNSNotificationSenderTests: XCTestCase {
 
         let object = try XCTUnwrap(
             try JSONSerialization.jsonObject(
-                with: APNSNotificationPayloadBuilder.liveActivityStartData(for: envelope)
+                with: APNSNotificationPayloadBuilder.liveActivityStartData(
+                    for: envelope,
+                    pairingDeviceID: "paired-device-question"
+                )
             ) as? [String: Any]
         )
         let aps = try XCTUnwrap(object["aps"] as? [String: Any])
@@ -152,6 +221,7 @@ final class APNSNotificationSenderTests: XCTestCase {
         XCTAssertEqual((aps["input-push-token"] as? NSNumber)?.intValue, 1)
         let attributes = try XCTUnwrap(aps["attributes"] as? [String: Any])
         XCTAssertEqual(attributes["sessionId"] as? String, "opaque-question-id")
+        XCTAssertEqual(attributes["pairingDeviceID"] as? String, "paired-device-question")
         let content = try XCTUnwrap(aps["content-state"] as? [String: Any])
         XCTAssertEqual(content["status"] as? String, "waitingQuestion")
         XCTAssertEqual(content["pendingAction"] as? String, "question")

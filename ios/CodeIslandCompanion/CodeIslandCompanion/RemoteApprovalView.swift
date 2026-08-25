@@ -538,7 +538,9 @@ private struct RemoteOfflineCard: View {
                 Button("Retry") { Task { await client.refresh() } }
                     .buttonStyle(.borderedProminent)
                     .tint(.orange)
-                Button("Pair again", role: .destructive) { client.unpair() }
+                Button("Pair again", role: .destructive) {
+                    Task { await client.unpair() }
+                }
                     .buttonStyle(.bordered)
             }
         }

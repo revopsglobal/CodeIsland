@@ -135,7 +135,35 @@ let legacyRemoteApproval = """
 do {
     let snapshot = try decoder.decode(RemoteApprovalSnapshot.self, from: legacyRemoteApproval)
     check("legacy remote snapshot defaults questions", snapshot.questions.isEmpty)
+    check("legacy remote snapshot leaves pairing identity unresolved", snapshot.deviceId == nil)
 } catch { check("legacy remote snapshot still decodes", false) }
+
+let legacyPushRegistration = #"{"registered":true}"#.data(using: .utf8)!
+do {
+    let response = try decoder.decode(RemotePushRegistrationResponse.self, from: legacyPushRegistration)
+    check("legacy push registration response decodes without device id", response.deviceId == nil)
+} catch { check("legacy push registration response still decodes", false) }
+
+let legacyPairResponse = #"{"deviceToken":"legacy-token","serverName":"Old Mac"}"#
+    .data(using: .utf8)!
+do {
+    let response = try decoder.decode(RemotePairResponse.self, from: legacyPairResponse)
+    let unresolved = LiveActivityPairingIdentity.resolve(
+        credential: response.deviceToken,
+        pairingDeviceID: response.deviceId
+    )
+    check("legacy pair response decodes without device id", response.deviceId.isEmpty)
+    check(
+        "legacy pair remains unresolved and quarantines host artifacts",
+        unresolved == .credentialPresentButIdentityMissing
+            && !unresolved.canRegisterHostScopedArtifacts
+    )
+    let backfilled = LiveActivityPairingIdentity.resolve(
+        credential: response.deviceToken,
+        pairingDeviceID: "backfilled-device"
+    )
+    check("authenticated device id backfills legacy pairing", backfilled == .paired("backfilled-device"))
+} catch { check("legacy pair response still decodes", false) }
 
 let codexRunning = CompanionSessionPreview(
     sessionId: "codex",
@@ -172,6 +200,324 @@ check(
 check(
     "action-required session ordering still wins over routine work",
     CompanionSessionOrdering.ordered([codexRunning, approval, claudeRunning]).first?.id == "approval"
+)
+
+// 10. A new pairing credential must not inherit the old device record's
+// successful metadata-registration state.
+var pushRegistration = RemotePushRegistrationState()
+check(
+    "new launch needs client metadata registration",
+    pushRegistration.shouldRegisterClientMetadata(hasClientMetadata: true)
+)
+pushRegistration.markClientMetadataRegistered()
+check(
+    "successful registration suppresses duplicate metadata",
+    !pushRegistration.shouldRegisterClientMetadata(hasClientMetadata: true)
+)
+pushRegistration.pairingCredentialDidChange()
+check(
+    "pairing credential change requeues client metadata",
+    pushRegistration.shouldRegisterClientMetadata(hasClientMetadata: true)
+)
+check(
+    "restored credential can recover active Live Activity routes",
+    RemotePushRegistrationState.shouldRequeueHostScopedLiveActivityTokens(for: .restored)
+)
+check(
+    "new credential cannot inherit host-scoped Live Activity routes",
+    !RemotePushRegistrationState.shouldRequeueHostScopedLiveActivityTokens(for: .changed)
+)
+
+// 11. APNs delivery acknowledgement clears retry state but retains the current
+// route for a same-process unpair/re-pair.
+let pushDefaultsName = "CodeIslandCompanionModelTests.\(UUID().uuidString)"
+let pushDefaults = UserDefaults(suiteName: pushDefaultsName)!
+defer { pushDefaults.removePersistentDomain(forName: pushDefaultsName) }
+RemotePushTokenMailbox.store("a1b2c3", defaults: pushDefaults)
+check(
+    "pending APNs route is available to the current pairing",
+    RemotePushTokenMailbox.registrationToken(
+        republishCurrent: false,
+        defaults: pushDefaults
+    ) == "a1b2c3"
+)
+RemotePushTokenMailbox.acknowledge("a1b2c3", defaults: pushDefaults)
+check(
+    "delivered APNs route leaves no pending retry",
+    RemotePushTokenMailbox.registrationToken(
+        republishCurrent: false,
+        defaults: pushDefaults
+    ) == nil
+)
+check(
+    "delivered APNs route remains available to a new pairing",
+    RemotePushTokenMailbox.registrationToken(
+        republishCurrent: true,
+        defaults: pushDefaults
+    ) == "a1b2c3"
+)
+
+// 12. Live Activity ownership is permissive only for the pre-migration state
+// where Buddy does not yet know its pairing record. Once known, exact identity
+// is required and nil/other-Mac attributes are rejected.
+check(
+    "unpaired local mode accepts legacy nil activity",
+    LiveActivityPairingScope.accepts(
+        activityPairingDeviceID: nil,
+        identity: .unpaired
+    )
+)
+check(
+    "current pairing accepts its exact Live Activity",
+    LiveActivityPairingScope.accepts(
+        activityPairingDeviceID: "device-a",
+        identity: .paired("device-a")
+    )
+)
+check(
+    "current pairing rejects a legacy unscoped Live Activity",
+    !LiveActivityPairingScope.accepts(
+        activityPairingDeviceID: nil,
+        identity: .paired("device-a")
+    )
+)
+check(
+    "current pairing rejects another Mac's Live Activity",
+    !LiveActivityPairingScope.accepts(
+        activityPairingDeviceID: "device-b",
+        identity: .paired("device-a")
+    )
+)
+check(
+    "unpaired mode rejects a previously paired scoped activity",
+    !LiveActivityPairingScope.accepts(
+        activityPairingDeviceID: "device-a",
+        identity: .unpaired
+    )
+)
+check(
+    "pending authenticated identity rejects every activity",
+    !LiveActivityPairingScope.accepts(
+        activityPairingDeviceID: nil,
+        identity: .credentialPresentButIdentityMissing
+    ) && !LiveActivityPairingScope.accepts(
+        activityPairingDeviceID: "device-a",
+        identity: .credentialPresentButIdentityMissing
+    )
+)
+check(
+    "pending authenticated identity cannot create or register host-scoped activity state",
+    !LiveActivityPairingIdentity.credentialPresentButIdentityMissing.canCreateOwnedActivity
+        && !LiveActivityPairingIdentity.credentialPresentButIdentityMissing.canRegisterHostScopedArtifacts
+)
+check(
+    "invalid paired identity fails closed",
+    !LiveActivityPairingScope.accepts(
+        activityPairingDeviceID: nil,
+        identity: .paired("  ")
+    ) && !LiveActivityPairingIdentity.paired("  ").canCreateOwnedActivity
+        && !LiveActivityPairingIdentity.paired("").canRegisterHostScopedArtifacts
+)
+
+let pairingDefaultsName = "CodeIslandCompanionPairingModelTests.\(UUID().uuidString)"
+let pairingDefaults = UserDefaults(suiteName: pairingDefaultsName)!
+defer { pairingDefaults.removePersistentDomain(forName: pairingDefaultsName) }
+RemotePairingIdentityStore.store(
+    " device-a ",
+    forCredential: "credential-a",
+    defaults: pairingDefaults
+)
+check(
+    "pairing device id persists in normalized form",
+    RemotePairingIdentityStore.current(
+        forCredential: "credential-a",
+        defaults: pairingDefaults
+    ) == "device-a"
+)
+check(
+    "pairing device id is rejected for a different credential",
+    RemotePairingIdentityStore.current(
+        forCredential: "credential-b",
+        defaults: pairingDefaults
+    ) == nil
+)
+RemotePairingIdentityStore.store(nil, forCredential: nil, defaults: pairingDefaults)
+check(
+    "clearing a pairing removes the persisted device id",
+    RemotePairingIdentityStore.current(
+        forCredential: "credential-a",
+        defaults: pairingDefaults
+    ) == nil
+)
+
+check(
+    "normal APNs host artifacts require exact paired target",
+    RemoteAttentionPushPairingScope.acceptsHostScopedArtifacts(
+        payloadPairingDeviceID: "device-a",
+        identity: .paired("device-a")
+    ) && !RemoteAttentionPushPairingScope.acceptsHostScopedArtifacts(
+        payloadPairingDeviceID: "device-b",
+        identity: .paired("device-a")
+    ) && !RemoteAttentionPushPairingScope.acceptsHostScopedArtifacts(
+        payloadPairingDeviceID: nil,
+        identity: .paired("device-a")
+    )
+)
+let scopedAttentionTaskID = UUID()
+check(
+    "queued old-pairing attention cannot route after identity switch",
+    ScopedRemoteAttentionRoute.resolve(
+        requestID: scopedAttentionTaskID.uuidString,
+        kind: .task,
+        state: .pending,
+        eventPairingDeviceID: "device-a",
+        currentIdentity: .paired("device-b")
+    ) == nil && ScopedRemoteAttentionRoute.resolve(
+        requestID: scopedAttentionTaskID.uuidString,
+        kind: .task,
+        state: .pending,
+        eventPairingDeviceID: "device-b",
+        currentIdentity: .paired("device-b")
+    ) == .task(scopedAttentionTaskID)
+)
+let oldActivityTap = URL(
+    string: "codeisland://tasks/\(scopedAttentionTaskID.uuidString)?pairingDeviceID=device-a"
+)!
+check(
+    "old pairing Live Activity tap cannot route into current pairing",
+    PersonalHubDeepLink(url: oldActivityTap).map {
+        !RemoteDeepLinkPairingScope.accepts(
+            url: oldActivityTap,
+            route: $0,
+            currentIdentity: .paired("device-b")
+        )
+    } == true
+)
+let localActivityTap = URL(
+    string: "codeisland://tasks/\(scopedAttentionTaskID.uuidString)"
+)!
+check(
+    "nil-owner Live Activity tap remains local to unpaired mode",
+    PersonalHubDeepLink(url: localActivityTap).map {
+        RemoteDeepLinkPairingScope.accepts(
+            url: localActivityTap,
+            route: $0,
+            currentIdentity: .unpaired
+        ) && !RemoteDeepLinkPairingScope.accepts(
+            url: localActivityTap,
+            route: $0,
+            currentIdentity: .credentialPresentButIdentityMissing
+        ) && !RemoteDeepLinkPairingScope.accepts(
+            url: localActivityTap,
+            route: $0,
+            currentIdentity: .paired("device-b")
+        )
+    } == true
+)
+
+let transitionSuite = "companion-model.transition.\(UUID().uuidString)"
+let transitionDefaults = UserDefaults(suiteName: transitionSuite)!
+RemotePairingIdentityStore.store(
+    "device-a",
+    forCredential: "credential-a",
+    defaults: transitionDefaults
+)
+transitionDefaults.set(
+    ["old-request": "old-token"],
+    forKey: RemoteHostScopedArtifactStore.liveActivityUpdateTokensKey
+)
+transitionDefaults.set(
+    "old-approval",
+    forKey: RemoteHostScopedArtifactStore.pendingApprovalIDKey
+)
+RemotePairingIdentityStore.replace(
+    "device-b",
+    forCredential: "credential-b",
+    defaults: transitionDefaults
+)
+check(
+    "pairing transition quarantines host state before persisting new identity",
+    transitionDefaults.object(
+        forKey: RemoteHostScopedArtifactStore.liveActivityUpdateTokensKey
+    ) == nil
+        && transitionDefaults.object(
+            forKey: RemoteHostScopedArtifactStore.pendingApprovalIDKey
+        ) == nil
+        && RemotePairingIdentityStore.current(
+            forCredential: "credential-b",
+            defaults: transitionDefaults
+        ) == "device-b"
+)
+transitionDefaults.set(
+    ["stale-request": "stale-token"],
+    forKey: RemoteHostScopedArtifactStore.liveActivityUpdateTokensKey
+)
+check(
+    "cold unresolved identity quarantines persisted host state",
+    RemoteHostScopedArtifactStore.quarantineIfUnowned(
+        by: .credentialPresentButIdentityMissing,
+        defaults: transitionDefaults
+    ) && transitionDefaults.object(
+        forKey: RemoteHostScopedArtifactStore.liveActivityUpdateTokensKey
+    ) == nil
+)
+transitionDefaults.removePersistentDomain(forName: transitionSuite)
+
+let controllerScope = PairingIdentityGenerationScope(
+    generation: 7,
+    identity: .paired("device-a")
+)
+check(
+    "controller continuation requires unchanged generation and identity",
+    controllerScope.isCurrent(generation: 7, identity: .paired("device-a"))
+        && !controllerScope.isCurrent(generation: 8, identity: .paired("device-a"))
+        && !controllerScope.isCurrent(generation: 7, identity: .paired("device-b"))
+)
+let nearbyScope = LocalTransportLiveActivityScope.capture(
+    generation: 11,
+    identity: .unpaired
+)
+check(
+    "nearby transport drives activities only while unpaired",
+    nearbyScope != nil
+        && LocalTransportLiveActivityScope.capture(
+            generation: 11,
+            identity: .credentialPresentButIdentityMissing
+        ) == nil
+        && LocalTransportLiveActivityScope.capture(
+            generation: 11,
+            identity: .paired("device-b")
+        ) == nil
+)
+check(
+    "queued nearby state is invalidated by remote pairing transition",
+    nearbyScope?.isCurrent(generation: 12, identity: .paired("device-b")) == false
+)
+
+let connectionScope = AuthenticatedConnectionScope(
+    generation: 4,
+    credential: "credential-a",
+    baseURL: "https://mac-a.test"
+)
+check(
+    "authenticated continuation requires unchanged generation credential and host",
+    connectionScope.isCurrent(
+        generation: 4,
+        credential: "credential-a",
+        baseURL: "https://mac-a.test"
+    ) && !connectionScope.isCurrent(
+        generation: 5,
+        credential: "credential-a",
+        baseURL: "https://mac-a.test"
+    ) && !connectionScope.isCurrent(
+        generation: 4,
+        credential: "credential-b",
+        baseURL: "https://mac-a.test"
+    ) && !connectionScope.isCurrent(
+        generation: 4,
+        credential: "credential-a",
+        baseURL: "https://mac-b.test"
+    )
 )
 
 print("ALL PASS")

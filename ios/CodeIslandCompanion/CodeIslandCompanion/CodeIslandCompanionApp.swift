@@ -10,23 +10,24 @@ struct CodeIslandCompanionApp: App {
 
     init() {
         let connection = CompanionConnection()
-        let liveActivity = LiveActivityController()
         let remoteApprovals = RemoteApprovalClient()
+        let liveActivity = LiveActivityController(
+            pairingIdentity: remoteApprovals.liveActivityPairingIdentity
+        )
         connection.onStateReceived = { [weak liveActivity] state in
-            Task { @MainActor in
-                liveActivity?.updateIfRunning(with: state)
-            }
+            // Capture the unpaired generation synchronously. A queued nearby
+            // update from Mac A is then invalidated if Buddy pairs to Mac B.
+            liveActivity?.updateFromNearbyIfRunning(with: state)
         }
         remoteApprovals.onSnapshotReceived = { [weak liveActivity] snapshot in
             guard let state = CompanionStatePayload(remoteApprovalSnapshot: snapshot) else { return }
-            Task { @MainActor in
-                liveActivity?.syncAttention(with: state)
-            }
+            liveActivity?.syncAttention(with: state)
         }
         remoteApprovals.onRemoteTasksReceived = { [weak liveActivity] tasks in
-            Task { @MainActor in
-                liveActivity?.syncRemoteTasks(tasks)
-            }
+            liveActivity?.syncRemoteTasks(tasks)
+        }
+        remoteApprovals.onPairingIdentityChanged = { [weak liveActivity] pairingIdentity in
+            await liveActivity?.pairingIdentityDidChange(to: pairingIdentity)
         }
 #if DEBUG
         Self.configureSmokeTestHooks(connection: connection, liveActivity: liveActivity)
@@ -65,7 +66,7 @@ struct CodeIslandCompanionApp: App {
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 700_000_000)
             if let state = connection.latestState {
-                liveActivity.startOrUpdate(with: state)
+                liveActivity.startOrUpdateFromNearby(with: state)
             }
 
             guard let flagIndex = arguments.firstIndex(of: "-CodeIslandCompanionSmokeDelayedState"),

@@ -734,7 +734,13 @@ final class RemoteApprovalService: ObservableObject {
                 deviceName: authenticated.name
             )
             syncPublishedState()
-            return .json(status: 200, object: ["registered": true])
+            return .json(
+                status: 200,
+                encodable: RemotePushRegistrationResponse(
+                    registered: true,
+                    deviceId: authenticated.id
+                )
+            )
         }
 
         let prefix = "/api/approvals/"
@@ -1194,13 +1200,51 @@ final class RemoteApprovalDeviceStore {
         _ registration: RemotePushRegistrationRequest,
         deviceID: String
     ) -> [RemoteLiveActivityReceipt] {
+        guard let originalIndex = devices.firstIndex(where: { $0.id == deviceID }) else { return [] }
+        let environment = registration.environment.lowercased()
+        let pushToken = registration.token?.lowercased()
+        let pushToStartToken = registration.liveActivityPushToStartToken?.lowercased()
+
+        // APNs and push-to-start routes identify one installed app instance in
+        // one APNs environment. If that instance re-pairs, transfer ownership
+        // of only those global routes to the new record and revoke stale bearer
+        // credentials. Live Activity update tokens and receipts are pairing-ID
+        // scoped and must never cross into the replacement device record.
+        var stagedDevices = devices
+        stagedDevices[originalIndex].pushEnvironment = environment
+        if let pushToken { stagedDevices[originalIndex].pushToken = pushToken }
+        if let pushToStartToken {
+            stagedDevices[originalIndex].liveActivityPushToStartToken = pushToStartToken
+        }
+        let component = Self.globalRouteComponents(in: stagedDevices)
+            .first(where: { $0.contains(originalIndex) }) ?? [originalIndex]
+        let duplicateDevices = component
+            .filter { $0 != originalIndex }
+            .map { devices[$0] }
+        let duplicateIDs = Set(duplicateDevices.map(\.id))
+        if !duplicateIDs.isEmpty {
+            devices.removeAll { duplicateIDs.contains($0.id) }
+            for id in duplicateIDs { lastSavedSeenAt.removeValue(forKey: id) }
+        }
+
         guard let index = devices.firstIndex(where: { $0.id == deviceID }) else { return [] }
-        if let token = registration.token {
-            devices[index].pushToken = token.lowercased()
+        devices[index].liveActivityUpdateTokens = Self.trimmedUpdateTokens(
+            (devices[index].liveActivityUpdateTokens ?? [:]).mapValues { $0.lowercased() }
+        )
+        if devices[index].pushToken == nil {
+            devices[index].pushToken = duplicateDevices
+                .sorted(by: Self.newestDeviceFirst)
+                .compactMap(\.pushToken)
+                .first
         }
-        if let token = registration.liveActivityPushToStartToken {
-            devices[index].liveActivityPushToStartToken = token.lowercased()
+        if devices[index].liveActivityPushToStartToken == nil {
+            devices[index].liveActivityPushToStartToken = duplicateDevices
+                .sorted(by: Self.newestDeviceFirst)
+                .compactMap(\.liveActivityPushToStartToken)
+                .first
         }
+        if let pushToken { devices[index].pushToken = pushToken }
+        if let pushToStartToken { devices[index].liveActivityPushToStartToken = pushToStartToken }
         if let version = registration.clientVersion,
            let build = registration.clientBuild {
             devices[index].clientVersion = version
@@ -1211,12 +1255,7 @@ final class RemoteApprovalDeviceStore {
             for (requestID, token) in updates {
                 merged[requestID] = token.lowercased()
             }
-            if merged.count > 128 {
-                for key in merged.keys.sorted().prefix(merged.count - 128) {
-                    merged.removeValue(forKey: key)
-                }
-            }
-            devices[index].liveActivityUpdateTokens = merged
+            devices[index].liveActivityUpdateTokens = Self.trimmedUpdateTokens(merged)
         }
         var acceptedReceipts: [RemoteLiveActivityReceipt] = []
         var receiptIDs = devices[index].recentLiveActivityReceiptIDs ?? []
@@ -1244,7 +1283,7 @@ final class RemoteApprovalDeviceStore {
         if !receiptIDs.isEmpty {
             devices[index].recentLiveActivityReceiptIDs = receiptIDs
         }
-        devices[index].pushEnvironment = registration.environment.lowercased()
+        devices[index].pushEnvironment = environment
         devices[index].lastSeenAt = Date()
         save()
         return acceptedReceipts
@@ -1281,7 +1320,123 @@ final class RemoteApprovalDeviceStore {
         guard let data = try? Data(contentsOf: stateURL),
               let state = try? JSONDecoder.remoteApproval.decode(PersistedState.self, from: data)
         else { return }
-        devices = state.devices
+        devices = Self.normalizedGlobalRoutes(state.devices)
+        if devices != state.devices { save() }
+    }
+
+    private static func normalizedGlobalRoutes(
+        _ source: [RemoteApprovalDevice]
+    ) -> [RemoteApprovalDevice] {
+        var replacements: [Int: RemoteApprovalDevice] = [:]
+        var removedIndices = Set<Int>()
+
+        for component in globalRouteComponents(in: source) where component.count > 1 {
+            let ordered = component.sorted { oldestDeviceFirst(source[$0], source[$1]) }
+            guard let oldestIndex = ordered.first else { continue }
+            var merged = source[oldestIndex]
+            for index in ordered.dropFirst() {
+                merged = mergingGlobalRouteState(winner: source[index], loser: merged)
+            }
+            guard let winnerIndex = component.first(where: { source[$0].id == merged.id }) else {
+                continue
+            }
+            replacements[winnerIndex] = merged
+            removedIndices.formUnion(component.filter { $0 != winnerIndex })
+        }
+
+        return source.indices.compactMap { index in
+            guard !removedIndices.contains(index) else { return nil }
+            return replacements[index] ?? source[index]
+        }
+    }
+
+    private static func globalRouteComponents(
+        in devices: [RemoteApprovalDevice]
+    ) -> [[Int]] {
+        guard !devices.isEmpty else { return [] }
+        var visited = Array(repeating: false, count: devices.count)
+        var components: [[Int]] = []
+
+        for start in devices.indices where !visited[start] {
+            var component: [Int] = []
+            var queue = [start]
+            var cursor = 0
+            visited[start] = true
+
+            while cursor < queue.count {
+                let current = queue[cursor]
+                cursor += 1
+                component.append(current)
+                for candidate in devices.indices where !visited[candidate] {
+                    if sharesGlobalRoute(devices[current], devices[candidate]) {
+                        visited[candidate] = true
+                        queue.append(candidate)
+                    }
+                }
+            }
+            components.append(component)
+        }
+        return components
+    }
+
+    private static func sharesGlobalRoute(
+        _ lhs: RemoteApprovalDevice,
+        _ rhs: RemoteApprovalDevice
+    ) -> Bool {
+        guard let lhsEnvironment = lhs.pushEnvironment?.lowercased(),
+              let rhsEnvironment = rhs.pushEnvironment?.lowercased(),
+              lhsEnvironment == rhsEnvironment
+        else { return false }
+        let sharesPush = lhs.pushToken.flatMap { token in
+            token.isEmpty ? nil : rhs.pushToken.map { $0.caseInsensitiveCompare(token) == .orderedSame }
+        } ?? false
+        let sharesPushToStart = lhs.liveActivityPushToStartToken.flatMap { token in
+            token.isEmpty ? nil : rhs.liveActivityPushToStartToken.map {
+                $0.caseInsensitiveCompare(token) == .orderedSame
+            }
+        } ?? false
+        return sharesPush || sharesPushToStart
+    }
+
+    private static func mergingGlobalRouteState(
+        winner: RemoteApprovalDevice,
+        loser: RemoteApprovalDevice
+    ) -> RemoteApprovalDevice {
+        var winner = winner
+        if winner.pushToken == nil { winner.pushToken = loser.pushToken }
+        if winner.liveActivityPushToStartToken == nil {
+            winner.liveActivityPushToStartToken = loser.liveActivityPushToStartToken
+        }
+        winner.liveActivityUpdateTokens = trimmedUpdateTokens(
+            (winner.liveActivityUpdateTokens ?? [:]).mapValues { $0.lowercased() }
+        )
+        return winner
+    }
+
+    private static func trimmedUpdateTokens(_ tokens: [String: String]) -> [String: String]? {
+        guard !tokens.isEmpty else { return nil }
+        var result = tokens
+        if result.count > 128 {
+            for key in result.keys.sorted().prefix(result.count - 128) {
+                result.removeValue(forKey: key)
+            }
+        }
+        return result
+    }
+
+    private static func newestDeviceFirst(
+        _ lhs: RemoteApprovalDevice,
+        _ rhs: RemoteApprovalDevice
+    ) -> Bool {
+        if lhs.pairedAt == rhs.pairedAt { return lhs.id > rhs.id }
+        return lhs.pairedAt > rhs.pairedAt
+    }
+
+    private static func oldestDeviceFirst(
+        _ lhs: RemoteApprovalDevice,
+        _ rhs: RemoteApprovalDevice
+    ) -> Bool {
+        newestDeviceFirst(rhs, lhs)
     }
 
     private func save() {
@@ -1463,6 +1618,7 @@ final class RemoteApprovalCoordinator {
         return RemoteApprovalSnapshot(
             serverName: Host.current().localizedName ?? "CodeIsland Mac",
             companionSequence: companionSequence,
+            deviceId: deviceID,
             approvals: approvals,
             questions: questions
         )
