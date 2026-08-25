@@ -117,6 +117,6 @@ final class StatusItemController: NSObject {
     }
 
     @objc private func quitApp() {
-        NSApp.terminate(nil)
+        ApplicationQuitController.shared.requestQuit()
     }
 }

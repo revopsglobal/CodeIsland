@@ -612,7 +612,7 @@ private struct CompactRightWing: View {
                     SettingsWindowController.shared.show()
                 }
                 NotchIconButton(icon: "power", tint: Color(red: 1.0, green: 0.4, blue: 0.4), tooltip: l10n["quit"]) {
-                    NSApplication.shared.terminate(nil)
+                    ApplicationQuitController.shared.requestQuit()
                 }
             } else {
                 // Quiet hours active — explains why event sounds are silent.
@@ -874,7 +874,7 @@ private struct IdleIndicatorBar: View {
                             tint: Color(red: 1.0, green: 0.4, blue: 0.4),
                             tooltip: l10n["quit"]
                         ) {
-                            NSApplication.shared.terminate(nil)
+                            ApplicationQuitController.shared.requestQuit()
                         }
                     }
                 }
